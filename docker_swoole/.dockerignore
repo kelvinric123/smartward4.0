@@ -30,12 +30,11 @@ yarn-error.log*
 .phpunit.result.cache
 phpunit.xml
 
-# Local Environment (keep .env.example for Docker builds)
+# Local Environment
 .env
 .env.local
 .env.*.local
 .env.backup
-!.env.example
 
 # Docker (avoid recursion)
 /docker_swoole
