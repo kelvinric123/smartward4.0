@@ -8,7 +8,7 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win",
+    "build": "set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder --win",
     "build:portable": "electron-builder --win portable",
     "pack": "electron-builder --dir"
   },
@@ -30,7 +30,8 @@
         }
       ],
       "icon": "assets/icon.ico",
-      "artifactName": "smartward4.0.${ext}"
+      "artifactName": "smartward4.0.${ext}",
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
