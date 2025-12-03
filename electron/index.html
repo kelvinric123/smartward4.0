@@ -365,6 +365,37 @@
       color: var(--status-stopped);
     }
 
+    /* ===== Dashboard Button ===== */
+    .dashboard-btn {
+      flex-direction: row;
+      padding: 16px 24px;
+      background: linear-gradient(135deg, #4dabf7, #228be6);
+      border-color: transparent;
+      color: white;
+      gap: 12px;
+    }
+
+    .dashboard-btn svg {
+      width: 28px;
+      height: 28px;
+    }
+
+    .dashboard-btn .btn-label {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .dashboard-btn:hover:not(:disabled) {
+      background: linear-gradient(135deg, #339af0, #1c7ed6);
+      box-shadow: 0 0 30px rgba(77, 171, 247, 0.3);
+      transform: translateY(-2px);
+    }
+
+    .dashboard-btn:disabled {
+      background: var(--bg-tertiary);
+      border-color: var(--border-color);
+    }
+
     /* ===== Logs Section ===== */
     .logs-section {
       flex: 1;
@@ -798,6 +829,12 @@
         <span class="btn-label">Open App</span>
       </button>
     </div>
+
+    <!-- Ward Dashboard Button - Full Width -->
+    <button class="btn dashboard-btn" id="btn-ward-dashboard">
+      <svg viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/><path d="M6 8h4M6 12h8"/></svg>
+      <span class="btn-label">Ward Dashboard (Fullscreen)</span>
+    </button>
 
     <!-- Secondary Actions -->
     <div class="actions">

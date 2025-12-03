@@ -10,6 +10,7 @@ if (!gotTheLock) {
 }
 
 let mainWindow = null;
+let dashboardWindow = null;
 let tray = null;
 let dockerProcess = null;
 let isQuitting = false;
@@ -111,6 +112,10 @@ function createTray() {
         const port = store.get('appPort', 80);
         shell.openExternal(`http://localhost:${port}`);
       }
+    },
+    { 
+      label: 'Ward Dashboard (Fullscreen)', 
+      click: () => openWardDashboard()
     },
     { type: 'separator' },
     { 
@@ -281,6 +286,70 @@ async function rebuildDocker() {
   }
 }
 
+// Open Ward Dashboard in fullscreen mode
+function openWardDashboard() {
+  // Close existing dashboard window if open
+  if (dashboardWindow && !dashboardWindow.isDestroyed()) {
+    dashboardWindow.focus();
+    return { success: true };
+  }
+
+  const port = store.get('appPort', 80);
+  const dashboardUrl = `http://localhost:${port}/ward-dashboard`;
+
+  dashboardWindow = new BrowserWindow({
+    width: 1920,
+    height: 1080,
+    fullscreen: true,
+    kiosk: false, // Set to false so user can exit with F11 or Escape
+    autoHideMenuBar: true,
+    frame: true, // Keep frame for exit controls
+    backgroundColor: '#0a0a0f',
+    icon: path.join(__dirname, 'assets', 'icon.ico'),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload-dashboard.js')
+    }
+  });
+
+  dashboardWindow.loadURL(dashboardUrl);
+
+  // Enable F11 to toggle fullscreen and Escape to exit fullscreen
+  dashboardWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F11') {
+      dashboardWindow.setFullScreen(!dashboardWindow.isFullScreen());
+    }
+    if (input.key === 'Escape' && dashboardWindow.isFullScreen()) {
+      dashboardWindow.setFullScreen(false);
+    }
+  });
+
+  dashboardWindow.on('closed', () => {
+    dashboardWindow = null;
+  });
+
+  return { success: true };
+}
+
+// Toggle fullscreen for dashboard window
+function toggleDashboardFullscreen() {
+  if (dashboardWindow && !dashboardWindow.isDestroyed()) {
+    dashboardWindow.setFullScreen(!dashboardWindow.isFullScreen());
+    return { success: true, fullscreen: dashboardWindow.isFullScreen() };
+  }
+  return { success: false };
+}
+
+// Close dashboard window
+function closeDashboard() {
+  if (dashboardWindow && !dashboardWindow.isDestroyed()) {
+    dashboardWindow.close();
+    return { success: true };
+  }
+  return { success: false };
+}
+
 // Send message to renderer
 function sendToRenderer(channel, data) {
   if (mainWindow && mainWindow.webContents) {
@@ -326,6 +395,18 @@ function setupIPC() {
     const port = store.get('appPort', 80);
     shell.openExternal(`http://localhost:${port}`);
     return { success: true };
+  });
+
+  ipcMain.handle('open-ward-dashboard', async () => {
+    return openWardDashboard();
+  });
+
+  ipcMain.handle('toggle-dashboard-fullscreen', async () => {
+    return toggleDashboardFullscreen();
+  });
+
+  ipcMain.handle('close-dashboard', async () => {
+    return closeDashboard();
   });
 
   ipcMain.handle('open-logs-folder', async () => {

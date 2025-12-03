@@ -75,6 +75,11 @@ class SmartWardApp {
       await window.electronAPI.openBrowser();
     });
 
+    // Ward Dashboard button (fullscreen)
+    document.getElementById('btn-ward-dashboard').addEventListener('click', async () => {
+      await window.electronAPI.openWardDashboard();
+    });
+
     // Rebuild button
     document.getElementById('btn-rebuild').addEventListener('click', async () => {
       if (confirm('This will rebuild the container from scratch. Continue?')) {
@@ -234,17 +239,20 @@ class SmartWardApp {
     const stopBtn = document.getElementById('btn-stop');
     const restartBtn = document.getElementById('btn-restart');
     const openBtn = document.getElementById('btn-open');
+    const dashboardBtn = document.getElementById('btn-ward-dashboard');
 
     if (this.isRunning) {
       startBtn.disabled = true;
       stopBtn.disabled = false;
       restartBtn.disabled = false;
       openBtn.disabled = false;
+      dashboardBtn.disabled = false;
     } else {
       startBtn.disabled = false;
       stopBtn.disabled = true;
       restartBtn.disabled = true;
       openBtn.disabled = true;
+      dashboardBtn.disabled = true;
     }
   }
 

@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // App operations
   openBrowser: () => ipcRenderer.invoke('open-browser'),
   openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
+  openWardDashboard: () => ipcRenderer.invoke('open-ward-dashboard'),
+  toggleDashboardFullscreen: () => ipcRenderer.invoke('toggle-dashboard-fullscreen'),
+  closeDashboard: () => ipcRenderer.invoke('close-dashboard'),
   
   // Settings
   getSettings: () => ipcRenderer.invoke('get-settings'),
