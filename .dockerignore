@@ -1,0 +1,74 @@
+# =============================================================================
+# Docker Ignore - SmartWard 4.0
+# =============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE and editors
+.idea
+.vscode
+*.swp
+*.swo
+
+# Node modules (we rebuild in Docker)
+node_modules
+
+# Vendor (we rebuild in Docker)
+vendor
+
+# Testing
+tests
+phpunit.xml
+.phpunit.result.cache
+
+# Development files
+.env
+.env.local
+.env.*.local
+docker/.env
+
+# Logs
+storage/logs/*
+!storage/logs/.gitkeep
+
+# Cache
+storage/framework/cache/*
+!storage/framework/cache/.gitkeep
+storage/framework/sessions/*
+!storage/framework/sessions/.gitkeep
+storage/framework/views/*
+!storage/framework/views/.gitkeep
+bootstrap/cache/*
+!bootstrap/cache/.gitkeep
+
+# Database
+database/*.sqlite
+database/database.sqlite
+
+# Documentation
+*.md
+!README.md
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Windows RoadRunner binary (we use Linux in Docker)
+rr.exe
+*.bat
+
+# Build artifacts
+public/build
+public/hot
+
+# Misc
+stderr
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+

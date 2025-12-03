@@ -1,0 +1,77 @@
+# =============================================================================
+# Docker Ignore File
+# =============================================================================
+
+# Version Control
+.git
+.gitignore
+.gitattributes
+
+# IDE & Editors
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Dependencies (will be installed fresh)
+/node_modules
+/vendor
+
+# Build artifacts
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+/coverage
+.phpunit.result.cache
+phpunit.xml
+
+# Local Environment
+.env
+.env.local
+.env.*.local
+.env.backup
+
+# Docker (avoid recursion)
+/docker_swoole
+
+# Laravel Development Files
+/storage/logs/*
+!/storage/logs/.gitignore
+/storage/framework/cache/*
+!/storage/framework/cache/.gitignore
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitignore
+/storage/framework/views/*
+!/storage/framework/views/.gitignore
+/storage/debugbar
+/storage/app/public/*
+!/storage/app/public/.gitignore
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+
+# Compiled assets (will be built fresh)
+/public/hot
+/public/build
+
+# Documentation
+*.md
+!README.md
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Testing Tools
+tests
+phpunit.xml
+.php-cs-fixer.cache
+phpstan.neon
+psalm.xml
+

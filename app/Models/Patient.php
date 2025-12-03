@@ -1,0 +1,124 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Patient extends Model
+{
+    use HasFactory;
+
+    protected $fillable = [
+        'name',
+        'mrn',
+        'rn',
+        'ic_passport',
+        'age',
+        'gender',
+        'phone',
+        'is_active',
+        'ward_id',
+        'bed_number',
+        'consultant_id',
+        'nurse_id',
+        'anaesthetist_id',
+        'admitted_at',
+        'booked_at',
+        'status',
+        'nursing_level',
+        'diet_type',
+        'fall_risk',
+        'isolation_type',
+        'allergies',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
+        'admitted_at' => 'datetime',
+        'booked_at' => 'datetime',
+        'allergies' => 'array',
+    ];
+
+    public function ward()
+    {
+        return $this->belongsTo(Ward::class);
+    }
+
+    public function consultant()
+    {
+        return $this->belongsTo(Consultant::class);
+    }
+
+    public function nurse()
+    {
+        return $this->belongsTo(Nurse::class);
+    }
+
+    public function anaesthetist()
+    {
+        return $this->belongsTo(Anaesthetist::class);
+    }
+
+    public function bed()
+    {
+        return $this->hasOne(Bed::class, 'patient_id');
+    }
+
+    public function consultants()
+    {
+        return $this->hasManyThrough(
+            Consultant::class,
+            Bed::class,
+            'patient_id',
+            'id',
+            'id',
+            'consultant_id'
+        )->join('bed_consultant', 'consultants.id', '=', 'bed_consultant.consultant_id')
+         ->where('bed_consultant.bed_id', '=', function($query) {
+             $query->select('id')
+                   ->from('beds')
+                   ->whereColumn('beds.patient_id', 'patients.id');
+         });
+    }
+
+    public function movements(): HasMany
+    {
+        return $this->hasMany(PatientMovement::class);
+    }
+
+    public function referrals(): HasMany
+    {
+        return $this->hasMany(PatientReferral::class);
+    }
+
+    public function vitalSigns(): HasMany
+    {
+        return $this->hasMany(VitalSign::class);
+    }
+
+    /**
+     * Get the current admission ID for this patient
+     */
+    public function getCurrentAdmissionId(): ?string
+    {
+        if ($this->status === 'admitted' && $this->admitted_at) {
+            return 'ADM-' . $this->id . '-' . $this->admitted_at->format('YmdHis');
+        }
+        return null;
+    }
+
+    /**
+     * Get all unique admission IDs for this patient from vital signs
+     */
+    public function getAdmissionHistory(): array
+    {
+        return $this->vitalSigns()
+            ->whereNotNull('admission_id')
+            ->distinct()
+            ->pluck('admission_id')
+            ->toArray();
+    }
+}
+
