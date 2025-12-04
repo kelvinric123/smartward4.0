@@ -31,7 +31,7 @@ yarn-error.log*
 phpunit.xml
 
 # Local Environment
-.env
+# .env  # Removed - Laravel needs .env file, docker-compose env_file alone is not enough
 .env.local
 .env.*.local
 .env.backup

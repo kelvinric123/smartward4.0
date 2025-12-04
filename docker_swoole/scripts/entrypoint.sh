@@ -159,34 +159,61 @@ PRELOAD
         chown www:www bootstrap/cache/opcache-preload.php
     fi
     
-    # Ensure .env exists
+    # Ensure .env exists with Docker-compatible values
     if [ ! -f ".env" ]; then
-        if [ -f ".env.example" ]; then
-            log_info "No .env found, copying from .env.example..."
-            cp .env.example .env
-        else
-            log_warn "No .env or .env.example found, creating minimal .env..."
-            cat > .env <<'ENVFILE'
-APP_NAME=SmartWard
-APP_ENV=production
-APP_KEY=
-APP_DEBUG=false
-APP_URL=http://localhost
+        log_info "No .env found, creating Docker-compatible .env..."
+        cat > .env <<ENVFILE
+APP_NAME=${APP_NAME:-SmartWard}
+APP_ENV=${APP_ENV:-production}
+APP_KEY=${APP_KEY:-}
+APP_DEBUG=${APP_DEBUG:-false}
+APP_URL=${APP_URL:-http://localhost}
+
+APP_LOCALE=en
+APP_FALLBACK_LOCALE=en
+APP_FAKER_LOCALE=en_US
+
+BCRYPT_ROUNDS=12
 
 LOG_CHANNEL=stack
+LOG_STACK=single
+LOG_LEVEL=${LOG_LEVEL:-warning}
 
 DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
-DB_DATABASE=smartward
-DB_USERNAME=root
-DB_PASSWORD=smartward_secret
+DB_DATABASE=${DB_DATABASE:-smartward}
+DB_USERNAME=${DB_USERNAME:-root}
+DB_PASSWORD=${DB_PASSWORD:-smartward_secret}
 
+SESSION_DRIVER=redis
+SESSION_LIFETIME=120
+SESSION_ENCRYPT=false
+SESSION_PATH=/
+SESSION_DOMAIN=null
+
+BROADCAST_CONNECTION=log
+FILESYSTEM_DISK=local
+QUEUE_CONNECTION=redis
+
+CACHE_STORE=redis
+
+REDIS_CLIENT=phpredis
 REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=${REDIS_PASSWORD:-null}
 REDIS_PORT=6379
+
+MAIL_MAILER=log
+
+OCTANE_SERVER=swoole
+OCTANE_WORKERS=${OCTANE_WORKERS:-auto}
+OCTANE_TASK_WORKERS=${OCTANE_TASK_WORKERS:-auto}
+OCTANE_MAX_REQUESTS=${OCTANE_MAX_REQUESTS:-1000}
 ENVFILE
-        fi
         chown www:www .env || true
+        log_info ".env created with Docker-compatible settings"
+    else
+        log_info ".env file exists, using existing configuration"
     fi
 
     # Generate APP_KEY if not set
