@@ -170,23 +170,36 @@ RUN echo "APP_NAME=SmartWard" > /app/.env \
 
 # Run database migrations and seeders during build
 # Start MySQL temporarily, run migrations, then stop
-RUN mkdir -p /var/run/mysqld /var/lib/mysql /var/log/mysql \
-    && chown -R mysql:mysql /var/run/mysqld /var/lib/mysql /var/log/mysql \
-    && chmod 755 /var/run/mysqld \
-    && mysql_install_db --user=mysql --datadir=/var/lib/mysql \
-    && /usr/bin/mariadbd --user=mysql --datadir=/var/lib/mysql --socket=/var/run/mysqld/mysqld.sock --skip-grant-tables & \
-    && sleep 10 \
-    && mysql -u root --socket=/var/run/mysqld/mysqld.sock -e "FLUSH PRIVILEGES; ALTER USER 'root'@'localhost' IDENTIFIED BY 'smartward_secret'; CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY 'smartward_secret'; GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION; FLUSH PRIVILEGES; CREATE DATABASE IF NOT EXISTS smartward;" \
-    && pkill mariadbd || true \
-    && sleep 3 \
-    && /usr/bin/mariadbd --user=mysql --datadir=/var/lib/mysql --socket=/var/run/mysqld/mysqld.sock --port=3306 & \
-    && sleep 10 \
-    && echo "Running migrations and seeders..." \
-    && php artisan migrate:fresh --seed --force \
-    && echo "Migrations and seeders completed successfully!" \
-    && pkill mariadbd || true \
-    && sleep 3 \
-    && rm -f /var/run/mysqld/mysqld.pid /var/run/mysqld/mysqld.sock
+RUN bash -c '\
+    set -e; \
+    mkdir -p /var/run/mysqld /var/lib/mysql /var/log/mysql; \
+    chown -R mysql:mysql /var/run/mysqld /var/lib/mysql /var/log/mysql; \
+    chmod 755 /var/run/mysqld; \
+    mysql_install_db --user=mysql --datadir=/var/lib/mysql; \
+    \
+    echo "Starting MariaDB for initial setup..."; \
+    /usr/bin/mariadbd --user=mysql --datadir=/var/lib/mysql --socket=/var/run/mysqld/mysqld.sock --skip-grant-tables & \
+    sleep 10; \
+    \
+    echo "Configuring database users..."; \
+    mysql -u root --socket=/var/run/mysqld/mysqld.sock -e "FLUSH PRIVILEGES; ALTER USER '\''root'\''@'\''localhost'\'' IDENTIFIED BY '\''smartward_secret'\''; CREATE USER IF NOT EXISTS '\''root'\''@'\''%'\'' IDENTIFIED BY '\''smartward_secret'\''; GRANT ALL PRIVILEGES ON *.* TO '\''root'\''@'\''%'\'' WITH GRANT OPTION; FLUSH PRIVILEGES; CREATE DATABASE IF NOT EXISTS smartward;"; \
+    \
+    pkill mariadbd || true; \
+    sleep 3; \
+    \
+    echo "Starting MariaDB for migrations..."; \
+    /usr/bin/mariadbd --user=mysql --datadir=/var/lib/mysql --socket=/var/run/mysqld/mysqld.sock --port=3306 & \
+    sleep 10; \
+    \
+    echo "Running migrations and seeders..."; \
+    php artisan migrate:fresh --seed --force; \
+    echo "Migrations and seeders completed successfully!"; \
+    \
+    pkill mariadbd || true; \
+    sleep 3; \
+    rm -f /var/run/mysqld/mysqld.pid /var/run/mysqld/mysqld.sock; \
+    echo "Database setup complete!" \
+    '
 
 # Remove build-time .env (entrypoint will create proper one)
 RUN rm -f /app/.env
