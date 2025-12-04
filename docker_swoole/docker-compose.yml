@@ -14,8 +14,7 @@ services:
         REDIS_MAXMEMORY: "256mb"
     container_name: smartward-app
     restart: unless-stopped
-    env_file:
-      - ../.env
+    # env_file not required - all values have defaults below, and entrypoint creates .env in container
     ports:
       - "${APP_PORT:-80}:80"
       - "${DB_PORT:-3307}:3306"
