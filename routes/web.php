@@ -14,6 +14,7 @@ use App\Http\Controllers\VitalSignController;
 use App\Http\Controllers\LdapConfigurationController;
 use App\Http\Controllers\VitalSignIntegrationController;
 use App\Http\Controllers\InfusionIntegrationController;
+use App\Http\Controllers\AdtConfigurationController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -112,6 +113,21 @@ Route::middleware('auth')->group(function () {
     // Ward Infusion Overview (iframe)
     Route::get('/ward-dashboard/infusion-overview', [InfusionIntegrationController::class, 'wardOverview'])->name('ward.infusion-overview');
     Route::get('/ward-dashboard/patient-infusions', [InfusionIntegrationController::class, 'patientInfusions'])->name('ward.patient-infusions');
+
+    // ADT Integration Routes
+    Route::get('/adt', [AdtConfigurationController::class, 'index'])->name('adt.index');
+    Route::put('/adt/configuration', [AdtConfigurationController::class, 'updateConfiguration'])->name('adt.update-configuration');
+    Route::get('/adt/test-connection', [AdtConfigurationController::class, 'testConnection'])->name('adt.test-connection');
+    Route::get('/adt/logs', [AdtConfigurationController::class, 'getLogs'])->name('adt.logs');
+    Route::get('/adt/logs/{log}', [AdtConfigurationController::class, 'viewLog'])->name('adt.logs.view');
+    Route::post('/adt/logs/clear', [AdtConfigurationController::class, 'clearLogs'])->name('adt.logs.clear');
+    Route::get('/adt/log-files', [AdtConfigurationController::class, 'readLogFiles'])->name('adt.log-files');
+    Route::post('/adt/hospital-mapping', [AdtConfigurationController::class, 'storeHospitalMapping'])->name('adt.hospital-mapping.store');
+    Route::delete('/adt/hospital-mapping/{hospitalMapping}', [AdtConfigurationController::class, 'destroyHospitalMapping'])->name('adt.hospital-mapping.destroy');
+    Route::post('/adt/ward-mapping', [AdtConfigurationController::class, 'storeWardMapping'])->name('adt.ward-mapping.store');
+    Route::delete('/adt/ward-mapping/{wardMapping}', [AdtConfigurationController::class, 'destroyWardMapping'])->name('adt.ward-mapping.destroy');
+    Route::post('/adt/bed-mapping', [AdtConfigurationController::class, 'storeBedMapping'])->name('adt.bed-mapping.store');
+    Route::delete('/adt/bed-mapping/{bedMapping}', [AdtConfigurationController::class, 'destroyBedMapping'])->name('adt.bed-mapping.destroy');
 });
 
 // Public API Routes for Vital Sign Gateway (no CSRF, no auth)

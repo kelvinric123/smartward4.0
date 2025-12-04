@@ -5,7 +5,7 @@
     wardManagementOpen: {{ request()->routeIs('wards.*') || request()->routeIs('beds.*') ? 'true' : 'false' }},
     vitalSignOpen: {{ request()->routeIs('vital-signs.*') ? 'true' : 'false' }},
     wardDashboardOpen: {{ request()->routeIs('ward.dashboard') ? 'true' : 'false' }},
-    integrationOpen: {{ request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') ? 'true' : 'false' }}
+    integrationOpen: {{ request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*') ? 'true' : 'false' }}
 }" 
 @toggle-sidebar.window="sidebarOpen = $event.detail.open"
 class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 transition-all duration-300 min-h-screen flex flex-col flex-shrink-0 shadow-xl" :class="sidebarOpen ? 'w-64' : 'w-20'">
@@ -177,7 +177,7 @@ class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 tran
 
         <!-- Integration Section -->
         <div class="pt-2">
-            <button @click="integrationOpen = !integrationOpen" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') ? 'bg-white/20' : '' }}">
+            <button @click="integrationOpen = !integrationOpen" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*') ? 'bg-white/20' : '' }}">
                 <div class="flex items-center">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/>
@@ -209,6 +209,13 @@ class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 tran
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
                     </svg>
                     <span class="ml-2">Infusion Integration</span>
+                </a>
+                
+                <a href="{{ route('adt.index') }}" class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('adt.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                    </svg>
+                    <span class="ml-2">ADT Config</span>
                 </a>
             </div>
         </div>
