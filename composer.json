@@ -7,11 +7,10 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "ext-swoole": "*",
         "laravel/framework": "^12.0",
         "laravel/octane": "^2.13",
-        "laravel/tinker": "^2.10.1",
-        "spiral/roadrunner-cli": "^2.7",
-        "spiral/roadrunner-http": "^3.6"
+        "laravel/tinker": "^2.10.1"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
@@ -83,6 +82,9 @@
         "allow-plugins": {
             "pestphp/pest-plugin": true,
             "php-http/discovery": true
+        },
+        "platform": {
+            "php": "8.2.26"
         }
     },
     "minimum-stability": "stable",
