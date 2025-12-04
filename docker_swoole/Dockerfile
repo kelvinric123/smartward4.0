@@ -132,22 +132,22 @@ COPY --chown=www:www . /app
 # Remove docker_swoole folder from the container to avoid recursion
 RUN rm -rf /app/docker_swoole
 
-# Install dependencies (production only, no dev)
+# Install Node.js for building frontend assets
+RUN apk add --no-cache nodejs npm
+
+# Install PHP dependencies (production only, no dev)
 # Ensure opcache preload file exists so PHP doesn't fail on startup during build
 RUN touch /app/bootstrap/cache/opcache-preload.php \
     && composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
-# Build frontend assets only if not already built (saves memory during build)
-RUN if [ -f "package.json" ] && [ ! -d "public/build" ]; then \
-        echo "Building frontend assets..." \
-        && apk add --no-cache nodejs npm \
-        && npm ci --production=false \
-        && npm run build \
-        && apk del nodejs npm \
-        && rm -rf node_modules; \
-    else \
-        echo "Skipping npm build - assets already exist or no package.json"; \
-    fi
+# Always build frontend assets fresh (ensures local fonts are used, no external CDN dependencies)
+RUN echo "Building frontend assets..." \
+    && npm ci --production=false \
+    && npm run build \
+    && rm -rf node_modules
+
+# Clean up Node.js after build to reduce image size
+RUN apk del nodejs npm
 
 # Set permissions
 RUN chown -R www:www /app \
