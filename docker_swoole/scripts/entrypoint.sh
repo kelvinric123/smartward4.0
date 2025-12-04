@@ -234,9 +234,16 @@ ENVFILE
     # Wait for Redis to be ready
     wait_for_service 127.0.0.1 6379 "Redis"
     
-    # Run migrations
-    log_info "Running database migrations..."
-    php artisan migrate --force || log_warn "Migrations failed or already up to date"
+    # Migrations are run during docker build with migrate:fresh --seed
+    # Check if database has tables (in case volume was reset/empty)
+    TABLE_COUNT=$(mysql -u root -p"${DB_PASSWORD}" -h 127.0.0.1 -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_DATABASE}';" 2>/dev/null || echo "0")
+    
+    if [ "$TABLE_COUNT" -eq "0" ] || [ "$TABLE_COUNT" = "0" ]; then
+        log_warn "Database is empty - running migrations and seeders..."
+        php artisan migrate:fresh --seed --force || log_warn "Migrations failed"
+    else
+        log_info "Database already has $TABLE_COUNT tables - skipping migrations (already run during Docker build)"
+    fi
     
     # Cache configurations for production
     if [ "$APP_ENV" = "production" ]; then

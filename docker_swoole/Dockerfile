@@ -149,7 +149,49 @@ RUN echo "Building frontend assets..." \
 # Clean up Node.js after build to reduce image size
 RUN apk del nodejs npm
 
-# Set permissions
+# Set permissions before running migrations
+RUN chown -R www:www /app \
+    && chmod -R 755 /app/storage /app/bootstrap/cache
+
+# Create .env file for build-time migrations
+RUN echo "APP_NAME=SmartWard" > /app/.env \
+    && echo "APP_ENV=production" >> /app/.env \
+    && echo "APP_KEY=" >> /app/.env \
+    && echo "APP_DEBUG=false" >> /app/.env \
+    && echo "DB_CONNECTION=mysql" >> /app/.env \
+    && echo "DB_HOST=127.0.0.1" >> /app/.env \
+    && echo "DB_PORT=3306" >> /app/.env \
+    && echo "DB_DATABASE=smartward" >> /app/.env \
+    && echo "DB_USERNAME=root" >> /app/.env \
+    && echo "DB_PASSWORD=smartward_secret" >> /app/.env \
+    && echo "CACHE_STORE=file" >> /app/.env \
+    && echo "SESSION_DRIVER=file" >> /app/.env \
+    && php artisan key:generate --force
+
+# Run database migrations and seeders during build
+# Start MySQL temporarily, run migrations, then stop
+RUN mkdir -p /var/run/mysqld /var/lib/mysql /var/log/mysql \
+    && chown -R mysql:mysql /var/run/mysqld /var/lib/mysql /var/log/mysql \
+    && chmod 755 /var/run/mysqld \
+    && mysql_install_db --user=mysql --datadir=/var/lib/mysql \
+    && /usr/bin/mariadbd --user=mysql --datadir=/var/lib/mysql --socket=/var/run/mysqld/mysqld.sock --skip-grant-tables & \
+    && sleep 10 \
+    && mysql -u root --socket=/var/run/mysqld/mysqld.sock -e "FLUSH PRIVILEGES; ALTER USER 'root'@'localhost' IDENTIFIED BY 'smartward_secret'; CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY 'smartward_secret'; GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION; FLUSH PRIVILEGES; CREATE DATABASE IF NOT EXISTS smartward;" \
+    && pkill mariadbd || true \
+    && sleep 3 \
+    && /usr/bin/mariadbd --user=mysql --datadir=/var/lib/mysql --socket=/var/run/mysqld/mysqld.sock --port=3306 & \
+    && sleep 10 \
+    && echo "Running migrations and seeders..." \
+    && php artisan migrate:fresh --seed --force \
+    && echo "Migrations and seeders completed successfully!" \
+    && pkill mariadbd || true \
+    && sleep 3 \
+    && rm -f /var/run/mysqld/mysqld.pid /var/run/mysqld/mysqld.sock
+
+# Remove build-time .env (entrypoint will create proper one)
+RUN rm -f /app/.env
+
+# Reset permissions after migrations
 RUN chown -R www:www /app \
     && chmod -R 755 /app/storage /app/bootstrap/cache
 
