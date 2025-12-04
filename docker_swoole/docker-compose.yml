@@ -11,7 +11,7 @@ services:
       args:
         SWOOLE_VERSION: "5.1.1"
         MYSQL_ROOT_PASSWORD: "${DB_PASSWORD:-smartward_secret}"
-        REDIS_MAXMEMORY: "256mb"
+        REDIS_MAXMEMORY: "1gb"
     container_name: smartward-app
     restart: unless-stopped
     # env_file not required - all values have defaults below, and entrypoint creates .env in container
@@ -26,11 +26,11 @@ services:
       APP_DEBUG: "${APP_DEBUG:-false}"
       APP_URL: "${APP_URL:-http://localhost}"
       
-      # Octane/Swoole
+      # Octane/Swoole (Aggressive settings)
       OCTANE_SERVER: "swoole"
-      OCTANE_WORKERS: "${OCTANE_WORKERS:-auto}"
-      OCTANE_TASK_WORKERS: "${OCTANE_TASK_WORKERS:-auto}"
-      OCTANE_MAX_REQUESTS: "${OCTANE_MAX_REQUESTS:-1000}"
+      OCTANE_WORKERS: "${OCTANE_WORKERS:-16}"
+      OCTANE_TASK_WORKERS: "${OCTANE_TASK_WORKERS:-16}"
+      OCTANE_MAX_REQUESTS: "${OCTANE_MAX_REQUESTS:-500}"
       
       # Database (internal MySQL)
       DB_CONNECTION: "mysql"
@@ -70,11 +70,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${DOCKER_CPU_LIMIT:-4}"
-          memory: "${DOCKER_MEMORY_LIMIT:-4G}"
+          cpus: "${DOCKER_CPU_LIMIT:-8}"
+          memory: "${DOCKER_MEMORY_LIMIT:-8G}"
         reservations:
-          cpus: "0.5"
-          memory: "1G"
+          cpus: "2"
+          memory: "2G"
     logging:
       driver: "json-file"
       options:

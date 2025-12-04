@@ -25,11 +25,17 @@ log_error() {
 }
 
 # =============================================================================
-# Environment Defaults
+# Environment Defaults (Aggressive settings for high-performance servers)
 # =============================================================================
-export OCTANE_WORKERS=${OCTANE_WORKERS:-auto}
-export OCTANE_TASK_WORKERS=${OCTANE_TASK_WORKERS:-auto}
-export OCTANE_MAX_REQUESTS=${OCTANE_MAX_REQUESTS:-1000}
+# Auto-detect CPU cores for worker count
+CPU_CORES=$(nproc 2>/dev/null || echo 4)
+# Use 2x CPU cores for workers (aggressive)
+DEFAULT_WORKERS=$((CPU_CORES * 2))
+DEFAULT_TASK_WORKERS=$((CPU_CORES * 2))
+
+export OCTANE_WORKERS=${OCTANE_WORKERS:-$DEFAULT_WORKERS}
+export OCTANE_TASK_WORKERS=${OCTANE_TASK_WORKERS:-$DEFAULT_TASK_WORKERS}
+export OCTANE_MAX_REQUESTS=${OCTANE_MAX_REQUESTS:-500}
 export DB_DATABASE=${DB_DATABASE:-smartward}
 export DB_USERNAME=${DB_USERNAME:-root}
 export DB_PASSWORD=${DB_PASSWORD:-smartward_secret}
@@ -206,9 +212,9 @@ REDIS_PORT=6379
 MAIL_MAILER=log
 
 OCTANE_SERVER=swoole
-OCTANE_WORKERS=${OCTANE_WORKERS:-auto}
-OCTANE_TASK_WORKERS=${OCTANE_TASK_WORKERS:-auto}
-OCTANE_MAX_REQUESTS=${OCTANE_MAX_REQUESTS:-1000}
+OCTANE_WORKERS=${OCTANE_WORKERS}
+OCTANE_TASK_WORKERS=${OCTANE_TASK_WORKERS}
+OCTANE_MAX_REQUESTS=${OCTANE_MAX_REQUESTS}
 ENVFILE
         chown www:www .env || true
         log_info ".env created with Docker-compatible settings"
