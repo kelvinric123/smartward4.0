@@ -4,7 +4,18 @@
 # Target: Ubuntu 22.04 LTS
 # =============================================================================
 
-set -euo pipefail
+# Ensure we're running with bash
+if [ -z "$BASH_VERSION" ]; then
+    echo "This script requires bash. Re-running with bash..."
+    exec bash "$0" "$@"
+    exit $?
+fi
+
+# Set error handling
+set -e
+set -u
+# pipefail is bash-specific, make it optional
+set -o pipefail 2>/dev/null || true
 
 # =============================================================================
 # Configuration Variables - Modify as needed

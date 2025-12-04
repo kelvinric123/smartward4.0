@@ -3,7 +3,15 @@
 # SSL Certificate Setup Script (Let's Encrypt)
 # =============================================================================
 
-set -euo pipefail
+# Ensure we're running with bash
+if [ -z "$BASH_VERSION" ]; then
+    exec bash "$0" "$@"
+    exit $?
+fi
+
+set -e
+set -u
+set -o pipefail 2>/dev/null || true
 
 # Colors
 RED='\033[0;31m'
