@@ -135,10 +135,10 @@ RUN rm -rf /app/docker_swoole
 # Install Node.js for building frontend assets
 RUN apk add --no-cache nodejs npm
 
-# Install PHP dependencies (production only, no dev)
+# Install ALL PHP dependencies (including dev for Faker - needed for seeding)
 # Ensure opcache preload file exists so PHP doesn't fail on startup during build
 RUN touch /app/bootstrap/cache/opcache-preload.php \
-    && composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+    && composer install --optimize-autoloader --no-interaction --prefer-dist
 
 # Always build frontend assets fresh (ensures local fonts are used, no external CDN dependencies)
 RUN echo "Building frontend assets..." \
@@ -168,7 +168,7 @@ RUN echo "APP_NAME=SmartWard" > /app/.env \
     && echo "SESSION_DRIVER=file" >> /app/.env \
     && php artisan key:generate --force
 
-# Run database migrations and seeders during build
+# Run database migrations and seeders during build (Faker is available from dev dependencies)
 # Start MySQL temporarily, run migrations, then stop
 RUN bash -c '\
     set -e; \
@@ -203,6 +203,9 @@ RUN bash -c '\
 
 # Remove build-time .env (entrypoint will create proper one)
 RUN rm -f /app/.env
+
+# Remove dev dependencies (Faker etc.) for production - no longer needed after seeding
+RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
 # Reset permissions after migrations
 RUN chown -R www:www /app \
