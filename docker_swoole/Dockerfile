@@ -137,13 +137,16 @@ RUN rm -rf /app/docker_swoole
 RUN touch /app/bootstrap/cache/opcache-preload.php \
     && composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
-# Build frontend assets (if npm is available)
-RUN if [ -f "package.json" ]; then \
-        apk add --no-cache nodejs npm \
+# Build frontend assets only if not already built (saves memory during build)
+RUN if [ -f "package.json" ] && [ ! -d "public/build" ]; then \
+        echo "Building frontend assets..." \
+        && apk add --no-cache nodejs npm \
         && npm ci --production=false \
         && npm run build \
         && apk del nodejs npm \
         && rm -rf node_modules; \
+    else \
+        echo "Skipping npm build - assets already exist or no package.json"; \
     fi
 
 # Set permissions

@@ -71,11 +71,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${DOCKER_CPU_LIMIT:-2}"
-          memory: "${DOCKER_MEMORY_LIMIT:-2G}"
+          cpus: "${DOCKER_CPU_LIMIT:-4}"
+          memory: "${DOCKER_MEMORY_LIMIT:-4G}"
         reservations:
           cpus: "0.5"
-          memory: "512M"
+          memory: "1G"
     logging:
       driver: "json-file"
       options:

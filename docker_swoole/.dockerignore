@@ -54,9 +54,9 @@ phpunit.xml
 /bootstrap/cache/*
 !/bootstrap/cache/.gitignore
 
-# Compiled assets (will be built fresh)
+# Compiled assets
 /public/hot
-/public/build
+# /public/build  # Keep pre-built assets to avoid npm build in container (saves memory)
 
 # Documentation
 *.md
