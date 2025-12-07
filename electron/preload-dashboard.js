@@ -42,3 +42,8 @@ window.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => hint.classList.remove('visible'), 4000);
 });
 
+
+
+
+
+

@@ -1,0 +1,9 @@
+# HL7 Message Received: 2025-12-07 20:31:43
+# Message Type: ADT^A01^ADT_A01
+# Event Type: A01
+# Patient MRN: 123456789
+# Patient Name: 
+# Control ID: efe4c5bd-1db8-463f-b6b5-7495a8edd562
+#============================================================
+
+MSH|^~\&|HIS|PHKL|ADT|12333|20250227145411|xxx|ADT^A01^ADT_A01|efe4c5bd-1db8-463f-b6b5-7495a8edd562|P|2.8EVN||20250227145411PID||123456789^^^MYS^MR|88888|Doe^John^^^Mr.||19850615|M||^Chinese|123 Main St.^Kuala Lumpur^Wilayah Persekutuan^51000^MYS^P||||||BUD||||||||||||||||^PRS^^^^^EXT123^^^^+601822400114PV1||R^^^||E|DOCTOR0|DOCTOR1|DOCTOR2||||||1|DOCTOR3|VISITNO|||||||||||||||||VEGETARIAN||^^B2||20250227145411PV2|||||||||20250227205411|6||||||||||||||1|||||||||||||SAL1|1|DA|PENICILLIN|MIAL1|2|DA|PARACETAMOL|MOZAT|FR|FALL RISKZIT|DAC|Droplet, Airborne and ContactZFR|1

@@ -32,3 +32,8 @@ class VitalSignApiLog extends Model
     }
 }
 
+
+
+
+
+

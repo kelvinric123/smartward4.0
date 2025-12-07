@@ -36,6 +36,9 @@ phpunit.xml
 .env.*.local
 .env.backup
 
+# Docker env file - NOT ignored (needed for build)
+!docker.env
+
 # Docker (avoid recursion)
 /docker_swoole
 

@@ -18,11 +18,11 @@ class WardSeeder extends Seeder
         
         if (!$hospital) {
             $hospital = \App\Models\Hospital::create([
-                'name' => 'Pusat Hemodialisis Klinik Lim (PHKL)',
-                'address' => 'Malaysia',
-                'phone' => '+60-000-0000',
-                'email' => 'info@phkl.com',
-                'description' => 'Main hospital facility',
+                'name' => 'Pantai Hospital Kuala Lumpur (PHKL)',
+                'address' => 'Kuala Lumpur, Malaysia',
+                'phone' => '+603-2296-0888',
+                'email' => 'info@phkl.com.my',
+                'description' => 'Premier hospital in Kuala Lumpur providing comprehensive healthcare services.',
                 'is_active' => true,
             ]);
         }

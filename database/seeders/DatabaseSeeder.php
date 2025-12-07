@@ -29,6 +29,7 @@ class DatabaseSeeder extends Seeder
             WardSeeder::class,
             BedSeeder::class,
             PatientSeeder::class,
+            AdtConfigurationSeeder::class,
         ]);
     }
 }

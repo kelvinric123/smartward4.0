@@ -15,11 +15,11 @@ class AdminManagementSeeder extends Seeder
     {
         // Create PHKL Hospital
         $hospital = Hospital::create([
-            'name' => 'Pusat Hemodialisis Kota Laksamana (PHKL)',
-            'address' => 'Jalan Kota Laksamana, 75200 Melaka, Malaysia',
-            'phone' => '+606-283-5555',
+            'name' => 'Pantai Hospital Kuala Lumpur (PHKL)',
+            'address' => 'Kuala Lumpur, Malaysia',
+            'phone' => '+603-2296-0888',
             'email' => 'info@phkl.com.my',
-            'description' => 'Premier dialysis center in Melaka providing comprehensive hemodialysis services with state-of-the-art facilities and experienced medical professionals dedicated to kidney care.',
+            'description' => 'Premier hospital in Kuala Lumpur providing comprehensive healthcare services with state-of-the-art facilities and experienced medical professionals.',
             'is_active' => true,
         ]);
 
@@ -126,7 +126,7 @@ class AdminManagementSeeder extends Seeder
         }
 
         $this->command->info('Admin Management data seeded successfully!');
-        $this->command->info('- 1 Hospital (PHKL - Pusat Hemodialisis Kota Laksamana)');
+        $this->command->info('- 1 Hospital (PHKL - Pantai Hospital Kuala Lumpur)');
         $this->command->info('- 10 Specialties');
         $this->command->info('- 20 Consultants (2 per specialty)');
         $this->command->info('- 20 Nurses');

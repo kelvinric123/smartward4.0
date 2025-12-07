@@ -128,6 +128,9 @@ Route::middleware('auth')->group(function () {
     Route::delete('/adt/ward-mapping/{wardMapping}', [AdtConfigurationController::class, 'destroyWardMapping'])->name('adt.ward-mapping.destroy');
     Route::post('/adt/bed-mapping', [AdtConfigurationController::class, 'storeBedMapping'])->name('adt.bed-mapping.store');
     Route::delete('/adt/bed-mapping/{bedMapping}', [AdtConfigurationController::class, 'destroyBedMapping'])->name('adt.bed-mapping.destroy');
+    Route::post('/adt/doctor-mapping', [AdtConfigurationController::class, 'storeDoctorMapping'])->name('adt.doctor-mapping.store');
+    Route::delete('/adt/doctor-mapping/{doctorMapping}', [AdtConfigurationController::class, 'destroyDoctorMapping'])->name('adt.doctor-mapping.destroy');
+    Route::get('/adt/unmapped-codes', [AdtConfigurationController::class, 'getUnmappedCodes'])->name('adt.unmapped-codes');
 });
 
 // Public API Routes for Vital Sign Gateway (no CSRF, no auth)
@@ -144,6 +147,12 @@ Route::prefix('api/infusion')->group(function () {
     Route::post('/logout', [InfusionIntegrationController::class, 'apiLogout']);
     Route::post('/status', [InfusionIntegrationController::class, 'apiReceiveStatus']);
     Route::post('/batch-status', [InfusionIntegrationController::class, 'apiReceiveBatchStatus']);
+});
+
+// Public API Routes for ADT HL7 Integration (no CSRF, no auth)
+Route::prefix('api/adt')->group(function () {
+    Route::post('/message', [\App\Http\Controllers\AdtApiController::class, 'receiveMessage']);
+    Route::get('/debug', [\App\Http\Controllers\AdtApiController::class, 'debug']);
 });
 
 require __DIR__.'/auth.php';

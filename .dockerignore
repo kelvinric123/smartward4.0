@@ -30,6 +30,9 @@ phpunit.xml
 .env.*.local
 docker/.env
 
+# Docker env file - NOT ignored (needed for build)
+!docker_swoole/docker.env
+
 # Logs
 storage/logs/*
 !storage/logs/.gitkeep
@@ -70,5 +73,7 @@ stderr
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+
 
 

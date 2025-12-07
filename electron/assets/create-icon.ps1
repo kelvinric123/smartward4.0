@@ -38,3 +38,8 @@ if ($imageMagick) {
     Write-Host "You can use online tools like https://icoconvert.com/ to create an icon"
 }
 
+
+
+
+
+

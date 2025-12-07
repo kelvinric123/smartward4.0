@@ -208,9 +208,18 @@
                 </div>
 
                 <!-- Patient Additional Info - Clinical Indicators -->
+                @php
+                    // Normalize allergies - convert object array to string array for UI
+                    $allergyStrings = collect($patient->allergies ?? [])->map(function($a) {
+                        if (is_array($a)) {
+                            return $a['allergen'] ?? $a['allergen_code'] ?? json_encode($a);
+                        }
+                        return $a;
+                    })->values()->toArray();
+                @endphp
                 <div x-show="activeTab === 'additional'" x-cloak
                      x-data="{
-                        allergies: @json($patient->allergies ?? []),
+                        allergies: @json($allergyStrings),
                         newAllergy: '',
                         addAllergy() {
                             if (this.newAllergy.trim() && !this.allergies.includes(this.newAllergy.trim())) {

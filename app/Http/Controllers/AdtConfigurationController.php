@@ -6,10 +6,12 @@ use App\Models\AdtConfiguration;
 use App\Models\AdtHospitalMapping;
 use App\Models\AdtWardMapping;
 use App\Models\AdtBedMapping;
+use App\Models\AdtDoctorMapping;
 use App\Models\AdtMessageLog;
 use App\Models\Hospital;
 use App\Models\Ward;
 use App\Models\Bed;
+use App\Models\Consultant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -47,6 +49,10 @@ class AdtConfigurationController extends Controller
             ->where('adt_configuration_id', $configuration->id)
             ->get();
 
+        $doctorMappings = AdtDoctorMapping::with('consultant')
+            ->where('adt_configuration_id', $configuration->id)
+            ->get();
+
         // Get recent logs
         $recentLogs = AdtMessageLog::with(['patient', 'bed'])
             ->latest()
@@ -65,21 +71,26 @@ class AdtConfigurationController extends Controller
         $hospitals = Hospital::where('is_active', true)->orderBy('name')->get();
         $wards = Ward::with('hospital')->where('is_active', true)->orderBy('ward_name')->get();
         $beds = Bed::with('ward.hospital')->where('is_active', true)->orderBy('bed_number')->get();
+        $consultants = Consultant::where('is_active', true)->orderBy('name')->get();
 
         // Event types for filter
         $eventTypes = AdtMessageLog::EVENT_TYPES;
+        $doctorTypes = AdtDoctorMapping::TYPES;
 
         return view('integration.adt.index', compact(
             'configuration',
             'hospitalMappings',
             'wardMappings',
             'bedMappings',
+            'doctorMappings',
             'recentLogs',
             'stats',
             'hospitals',
             'wards',
             'beds',
-            'eventTypes'
+            'consultants',
+            'eventTypes',
+            'doctorTypes'
         ));
     }
 
@@ -241,6 +252,51 @@ class AdtConfigurationController extends Controller
     }
 
     /**
+     * Store a new doctor mapping.
+     */
+    public function storeDoctorMapping(Request $request)
+    {
+        $validated = $request->validate([
+            'adt_doctor_code' => 'required|string|max:255',
+            'adt_doctor_name' => 'nullable|string|max:255',
+            'doctor_type' => 'required|string|in:attending,referring,consulting,admitting',
+            'consultant_id' => 'required|exists:consultants,id',
+        ]);
+
+        $configuration = AdtConfiguration::firstOrFail();
+
+        // Check for duplicate
+        $existing = AdtDoctorMapping::where('adt_configuration_id', $configuration->id)
+            ->where('adt_doctor_code', $validated['adt_doctor_code'])
+            ->where('doctor_type', $validated['doctor_type'])
+            ->exists();
+
+        if ($existing) {
+            return redirect()->route('adt.index')
+                ->with('error', 'A mapping for this ADT doctor code and type already exists.');
+        }
+
+        AdtDoctorMapping::create([
+            'adt_configuration_id' => $configuration->id,
+            ...$validated,
+        ]);
+
+        return redirect()->route('adt.index')
+            ->with('success', 'Doctor mapping created successfully.');
+    }
+
+    /**
+     * Delete a doctor mapping.
+     */
+    public function destroyDoctorMapping(AdtDoctorMapping $doctorMapping)
+    {
+        $doctorMapping->delete();
+
+        return redirect()->route('adt.index')
+            ->with('success', 'Doctor mapping deleted successfully.');
+    }
+
+    /**
      * Get message logs via AJAX.
      */
     public function getLogs(Request $request)
@@ -373,6 +429,139 @@ class AdtConfigurationController extends Controller
         return response()->json([
             'success' => true,
             'logs' => $logs,
+        ]);
+    }
+
+    /**
+     * Get unmapped codes from recent ADT messages for smart mapping suggestions.
+     */
+    public function getUnmappedCodes()
+    {
+        $configuration = AdtConfiguration::first();
+        
+        if (!$configuration) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No ADT configuration found',
+            ]);
+        }
+
+        // Get existing mappings
+        $existingHospitals = $configuration->hospitalMappings()->pluck('adt_hospital_code')->toArray();
+        $existingWards = $configuration->wardMappings()->pluck('adt_ward_code')->toArray();
+        $existingBeds = $configuration->bedMappings()->pluck('adt_bed_code')->toArray();
+        $existingDoctors = $configuration->doctorMappings()->pluck('adt_doctor_code')->toArray();
+
+        // Analyze recent messages for unmapped codes
+        $recentLogs = AdtMessageLog::whereNotNull('parsed_data')
+            ->latest()
+            ->limit(100)
+            ->get();
+
+        $unmappedHospitals = [];
+        $unmappedWards = [];
+        $unmappedBeds = [];
+        $unmappedDoctors = [];
+
+        foreach ($recentLogs as $log) {
+            $parsed = $log->parsed_data;
+            
+            // Check sending facility (hospital)
+            $facility = $parsed['msh']['sending_facility'] ?? null;
+            if ($facility && !in_array($facility, $existingHospitals) && !isset($unmappedHospitals[$facility])) {
+                $unmappedHospitals[$facility] = [
+                    'code' => $facility,
+                    'count' => 0,
+                    'last_seen' => $log->created_at,
+                ];
+            }
+            if ($facility && isset($unmappedHospitals[$facility])) {
+                $unmappedHospitals[$facility]['count']++;
+            }
+
+            // Check ward from PV1
+            $pv1 = $parsed['pv1'] ?? [];
+            $ward = $pv1['ward'] ?? null;
+            if ($ward && !in_array($ward, $existingWards) && !isset($unmappedWards[$ward])) {
+                $unmappedWards[$ward] = [
+                    'code' => $ward,
+                    'count' => 0,
+                    'last_seen' => $log->created_at,
+                ];
+            }
+            if ($ward && isset($unmappedWards[$ward])) {
+                $unmappedWards[$ward]['count']++;
+            }
+
+            // Check bed from PV1 (from location or bed_status)
+            $bed = $pv1['bed'] ?? null;
+            if ($bed && !in_array($bed, $existingBeds) && !isset($unmappedBeds[$bed])) {
+                $unmappedBeds[$bed] = [
+                    'code' => $bed,
+                    'count' => 0,
+                    'last_seen' => $log->created_at,
+                    'source' => 'pv1_bed',
+                ];
+            }
+            if ($bed && isset($unmappedBeds[$bed])) {
+                $unmappedBeds[$bed]['count']++;
+            }
+
+            // Also check bed_status field for bed codes
+            $bedStatus = $pv1['bed_status'] ?? null;
+            if ($bedStatus && preg_match('/\^*([A-Z0-9]+)$/i', $bedStatus, $matches)) {
+                $bedCode = $matches[1];
+                if (!in_array($bedCode, $existingBeds) && !isset($unmappedBeds[$bedCode])) {
+                    $unmappedBeds[$bedCode] = [
+                        'code' => $bedCode,
+                        'count' => 0,
+                        'last_seen' => $log->created_at,
+                        'source' => 'pv1_bed_status',
+                    ];
+                }
+                if (isset($unmappedBeds[$bedCode])) {
+                    $unmappedBeds[$bedCode]['count']++;
+                }
+            }
+
+            // Check doctors from PV1
+            $doctors = [
+                'attending' => $pv1['attending_doctor_id'] ?? null,
+                'referring' => $pv1['referring_doctor'] ?? null,
+                'consulting' => $pv1['consulting_doctor'] ?? null,
+                'admitting' => $pv1['admitting_doctor'] ?? null,
+            ];
+
+            foreach ($doctors as $type => $doctorCode) {
+                if ($doctorCode && !in_array($doctorCode, $existingDoctors)) {
+                    $key = $doctorCode . '_' . $type;
+                    if (!isset($unmappedDoctors[$key])) {
+                        $unmappedDoctors[$key] = [
+                            'code' => $doctorCode,
+                            'type' => $type,
+                            'count' => 0,
+                            'last_seen' => $log->created_at,
+                        ];
+                    }
+                    $unmappedDoctors[$key]['count']++;
+                }
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'unmapped' => [
+                'hospitals' => array_values($unmappedHospitals),
+                'wards' => array_values($unmappedWards),
+                'beds' => array_values($unmappedBeds),
+                'doctors' => array_values($unmappedDoctors),
+            ],
+            'totals' => [
+                'hospitals' => count($unmappedHospitals),
+                'wards' => count($unmappedWards),
+                'beds' => count($unmappedBeds),
+                'doctors' => count($unmappedDoctors),
+            ],
         ]);
     }
 }

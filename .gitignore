@@ -3,6 +3,9 @@
 .env
 .env.backup
 .env.production
+
+# Docker env file - TRACKED (not ignored)
+!docker_swoole/docker.env
 .phpactor.json
 .phpunit.result.cache
 /.fleet

@@ -52,7 +52,10 @@ RUN apk add --no-cache \
     shadow \
     libcap \
     # For healthchecks
-    netcat-openbsd
+    netcat-openbsd \
+    # Python with pip for HL7 ADT listener
+    python3 \
+    py3-pip
 
 # Install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
@@ -137,8 +140,9 @@ RUN apk add --no-cache nodejs npm
 
 # Install ALL PHP dependencies (including dev for Faker - needed for seeding)
 # Ensure opcache preload file exists so PHP doesn't fail on startup during build
+# Use composer update to get latest compatible versions
 RUN touch /app/bootstrap/cache/opcache-preload.php \
-    && composer install --optimize-autoloader --no-interaction --prefer-dist
+    && composer update --optimize-autoloader --no-interaction --prefer-dist
 
 # Always build frontend assets fresh (ensures local fonts are used, no external CDN dependencies)
 RUN echo "Building frontend assets..." \
@@ -153,23 +157,20 @@ RUN apk del nodejs npm
 RUN chown -R www:www /app \
     && chmod -R 755 /app/storage /app/bootstrap/cache
 
-# Create .env file for build-time migrations
-RUN echo "APP_NAME=SmartWard" > /app/.env \
-    && echo "APP_ENV=production" >> /app/.env \
-    && echo "APP_KEY=" >> /app/.env \
-    && echo "APP_DEBUG=false" >> /app/.env \
-    && echo "DB_CONNECTION=mysql" >> /app/.env \
-    && echo "DB_HOST=127.0.0.1" >> /app/.env \
-    && echo "DB_PORT=3306" >> /app/.env \
-    && echo "DB_DATABASE=smartward" >> /app/.env \
-    && echo "DB_USERNAME=root" >> /app/.env \
-    && echo "DB_PASSWORD=smartward_secret" >> /app/.env \
+# Copy docker.env and create .env file for build-time migrations
+# Use Unix socket for build-time DB connection (more reliable than TCP in Docker build)
+COPY docker_swoole/docker.env /app/docker.env
+RUN cp /app/docker.env /app/.env \
+    && echo "" >> /app/.env \
+    && echo "# Build-time overrides for migrations" >> /app/.env \
     && echo "CACHE_STORE=file" >> /app/.env \
     && echo "SESSION_DRIVER=file" >> /app/.env \
-    && php artisan key:generate --force
+    && echo "DB_SOCKET=/var/run/mysqld/mysqld.sock" >> /app/.env \
+    && php artisan key:generate --force \
+    && php artisan config:clear
 
 # Run database migrations and seeders during build (Faker is available from dev dependencies)
-# Start MySQL temporarily, run migrations, then stop
+# Start MySQL temporarily using SOCKET connection (more reliable for Docker build), run migrations, then stop
 RUN bash -c '\
     set -e; \
     mkdir -p /var/run/mysqld /var/lib/mysql /var/log/mysql; \
@@ -177,35 +178,50 @@ RUN bash -c '\
     chmod 755 /var/run/mysqld; \
     mysql_install_db --user=mysql --datadir=/var/lib/mysql; \
     \
-    echo "Starting MariaDB for initial setup..."; \
-    /usr/bin/mariadbd --user=mysql --datadir=/var/lib/mysql --socket=/var/run/mysqld/mysqld.sock --skip-grant-tables & \
-    sleep 10; \
+    echo "Starting MariaDB..."; \
+    /usr/bin/mariadbd --user=mysql --datadir=/var/lib/mysql --socket=/var/run/mysqld/mysqld.sock --port=3306 --skip-grant-tables & \
+    MARIADB_PID=$!; \
+    \
+    echo "Waiting for MariaDB socket to be ready..."; \
+    for i in $(seq 1 30); do \
+        if [ -S /var/run/mysqld/mysqld.sock ]; then \
+            echo "MariaDB socket ready after $i seconds"; \
+            break; \
+        fi; \
+        sleep 1; \
+    done; \
+    sleep 3; \
     \
     echo "Configuring database users..."; \
     mysql -u root --socket=/var/run/mysqld/mysqld.sock -e "FLUSH PRIVILEGES; ALTER USER '\''root'\''@'\''localhost'\'' IDENTIFIED BY '\''smartward_secret'\''; CREATE USER IF NOT EXISTS '\''root'\''@'\''%'\'' IDENTIFIED BY '\''smartward_secret'\''; GRANT ALL PRIVILEGES ON *.* TO '\''root'\''@'\''%'\'' WITH GRANT OPTION; FLUSH PRIVILEGES; CREATE DATABASE IF NOT EXISTS smartward;"; \
     \
-    pkill mariadbd || true; \
-    sleep 3; \
+    echo "Verifying database connection via socket..."; \
+    mysql -u root -psmartward_secret --socket=/var/run/mysqld/mysqld.sock -e "SELECT 1" || { echo "Database connection failed!"; exit 1; }; \
     \
-    echo "Starting MariaDB for migrations..."; \
-    /usr/bin/mariadbd --user=mysql --datadir=/var/lib/mysql --socket=/var/run/mysqld/mysqld.sock --port=3306 & \
-    sleep 10; \
-    \
-    echo "Running migrations and seeders..."; \
+    echo "Running migrations and seeders (using socket connection)..."; \
     php artisan migrate:fresh --seed --force; \
     echo "Migrations and seeders completed successfully!"; \
     \
-    pkill mariadbd || true; \
+    echo "Stopping MariaDB..."; \
+    kill $MARIADB_PID 2>/dev/null || pkill mariadbd || true; \
     sleep 3; \
     rm -f /var/run/mysqld/mysqld.pid /var/run/mysqld/mysqld.sock; \
     echo "Database setup complete!" \
     '
 
-# Remove build-time .env (entrypoint will create proper one)
-RUN rm -f /app/.env
+# Clear all Laravel caches (must be done BEFORE removing .env)
+# Note: skip cache:clear as it requires active cache driver connection
+RUN php artisan config:clear \
+    && php artisan route:clear \
+    && php artisan view:clear \
+    && php artisan event:clear
+
+# Remove build-time .env and docker.env (entrypoint will create proper one at runtime)
+RUN rm -f /app/.env /app/docker.env
 
 # Remove dev dependencies (Faker etc.) for production - no longer needed after seeding
-RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+# Use composer update to ensure latest compatible versions
+RUN composer update --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
 # Reset permissions after migrations
 RUN chown -R www:www /app \

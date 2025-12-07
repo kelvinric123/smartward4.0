@@ -144,14 +144,21 @@
         };
     @endphp
 
-    <div class="py-6" x-data="{ 
+    @php
+        // Helper function to check if field is visible - defined here so it's accessible for all bed types
+        $isVisible = function($key) use ($bedBoxConfig) {
+            return isset($bedBoxConfig[$key]) && ($bedBoxConfig[$key]['visible'] ?? true);
+        };
+    @endphp
+
+    <div class="py-6 flex flex-col" x-data="{ 
         customFullscreen: localStorage.getItem('wardDashboardFullscreen') === 'true', 
         fullscreenGrid: '{{ $fullscreenGrid }}', 
         fullscreenTextClass: '{{ $fullscreenTextClass }}' 
-    }" @toggle-custom-fullscreen.window="customFullscreen = $event.detail.enabled" :class="customFullscreen ? fullscreenTextClass : ''"
-        <div class="mx-auto sm:px-6 lg:px-8" :class="customFullscreen ? 'max-w-full px-2' : 'max-w-7xl'">
+    }" @toggle-custom-fullscreen.window="customFullscreen = $event.detail.enabled" :class="[customFullscreen ? fullscreenTextClass : '', customFullscreen ? 'h-[calc(100vh-80px)] overflow-hidden' : '']">
+        <div class="mx-auto px-[5%] flex-1 flex flex-col overflow-hidden w-full" :class="customFullscreen ? 'px-2' : ''">
             <!-- Tabs and Action Buttons -->
-            <div class="mb-6 flex items-center justify-between">
+            <div class="flex-shrink-0 mb-4 flex items-center justify-between" :class="customFullscreen ? 'mb-2' : 'mb-6'">
                 <div class="flex items-center space-x-2">
                     <button onclick="clearBedFilters(); filterBySection(null)" class="px-4 py-2 bg-white text-gray-700 rounded-lg font-medium shadow-sm hover:bg-gray-50 border border-gray-300">
                         All
@@ -196,8 +203,9 @@
                 </div>
             </div>
 
-            <!-- Beds Grid -->
-            <div class="grid gap-4 mb-6" :class="customFullscreen ? fullscreenGrid : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'"
+            <!-- Beds Grid - scrollable area -->
+            <div class="flex-1 overflow-y-auto pb-4" :class="customFullscreen ? 'pr-2' : ''">
+            <div class="grid gap-4" :class="customFullscreen ? fullscreenGrid : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'"
                 @if($selectedWard && count($beds) > 0)
                 @foreach($beds as $bed)
                     @if($bed['status'] === 'occupied' && !empty($bed['is_outside']))
@@ -270,11 +278,6 @@
                             $genderColor = strtolower($bed['gender']) === 'female' ? 'red' : 'blue';
                             $borderClass = strtolower($bed['gender']) === 'female' ? 'border-red-500' : 'border-blue-500';
                             $bgClass = strtolower($bed['gender']) === 'female' ? 'bg-red-500' : 'bg-blue-500';
-                            
-                            // Helper function to check if field is visible
-                            $isVisible = function($key) use ($bedBoxConfig) {
-                                return isset($bedBoxConfig[$key]) && ($bedBoxConfig[$key]['visible'] ?? true);
-                            };
                         @endphp
                         <div
                             class="bed-card bg-white rounded-lg shadow-md border-2 {{ $borderClass }} overflow-hidden transition-all duration-300 h-[280px] flex flex-col"
@@ -460,7 +463,12 @@
 
                                     {{-- Allergies --}}
                                     @if($showPatientInfo('allergies') && !empty($bed['allergies']) && is_array($bed['allergies']) && count($bed['allergies']) > 0)
-                                    <span class="px-1 py-0.5 bg-pink-100 text-pink-700 text-xs rounded font-medium flex items-center" title="Allergies: {{ implode(', ', $bed['allergies']) }}">
+                                    @php
+                                        $allergyNames = collect($bed['allergies'])->map(function($a) {
+                                            return is_array($a) ? ($a['allergen'] ?? $a['allergen_code'] ?? 'Unknown') : $a;
+                                        })->implode(', ');
+                                    @endphp
+                                    <span class="px-1 py-0.5 bg-pink-100 text-pink-700 text-xs rounded font-medium flex items-center" title="Allergies: {{ $allergyNames }}">
                                         <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                                         </svg>
@@ -612,18 +620,22 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                                     </svg>
                                     <p class="text-gray-500 text-sm mb-4">No Patient</p>
+                                    @if($isVisible('admit_button'))
                                     <button onclick="window.dispatchEvent(new CustomEvent('open-admit-modal', { detail: { bedNumber: '{{ $bed['number'] }}', wardId: {{ $selectedWard->id }} } }))" class="w-full px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-colors shadow mb-2">
                                         <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                                         </svg>
                                         Admit Patient
                                     </button>
+                                    @endif
+                                    @if($isVisible('prebook_button'))
                                     <button onclick="window.dispatchEvent(new CustomEvent('open-prebook-modal', { detail: { bedNumber: '{{ $bed['number'] }}', wardId: {{ $selectedWard->id }} } }))" class="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow">
                                         <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                                         </svg>
                                         Prebook
                                     </button>
+                                    @endif
                                 </div>
                             </div>
                         </div>
@@ -639,9 +651,10 @@
                     </div>
                 @endif
             </div>
+            </div>
 
-            <!-- Statistics Bar (sticky at bottom of scrollable area) -->
-            <div class="sticky bottom-0 z-10 mt-4">
+            <!-- Statistics Bar (fixed at bottom) -->
+            <div class="flex-shrink-0 z-10 mt-2">
                 <div class="bg-gradient-to-r from-gray-700 to-gray-800 rounded-lg shadow-lg p-4">
                 <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
                     <!-- Available -->

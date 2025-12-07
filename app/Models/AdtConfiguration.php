@@ -53,6 +53,14 @@ class AdtConfiguration extends Model
     }
 
     /**
+     * Get the doctor mappings for this configuration.
+     */
+    public function doctorMappings(): HasMany
+    {
+        return $this->hasMany(AdtDoctorMapping::class);
+    }
+
+    /**
      * Get the message logs for this configuration.
      */
     public function messageLogs(): HasMany
@@ -105,6 +113,20 @@ class AdtConfiguration extends Model
             ->first();
 
         return $mapping?->bed;
+    }
+
+    /**
+     * Find consultant by ADT doctor code.
+     */
+    public function findConsultantByAdtCode(string $code, string $type = 'attending'): ?Consultant
+    {
+        $mapping = $this->doctorMappings()
+            ->where('adt_doctor_code', $code)
+            ->where('doctor_type', $type)
+            ->where('is_active', true)
+            ->first();
+
+        return $mapping?->consultant;
     }
 }
 

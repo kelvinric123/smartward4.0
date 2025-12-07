@@ -323,8 +323,120 @@
                 </div>
             </div>
 
+            <!-- Smart Mapping Suggestions -->
+            <div x-show="unmappedCodes && (unmappedCodes.beds?.length > 0 || unmappedCodes.doctors?.length > 0 || unmappedCodes.wards?.length > 0 || unmappedCodes.hospitals?.length > 0)" 
+                 class="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-2xl shadow-lg overflow-hidden">
+                <div class="p-4 border-b border-amber-200 bg-gradient-to-r from-amber-100 to-yellow-100">
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center">
+                            <div class="p-2 bg-amber-500 rounded-lg mr-3">
+                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-md font-bold text-amber-800">Smart Mapping Suggestions</h3>
+                                <p class="text-xs text-amber-600">Unmapped codes detected from ADT messages</p>
+                            </div>
+                        </div>
+                        <button @click="loadUnmappedCodes()" class="p-2 bg-amber-200 hover:bg-amber-300 text-amber-700 rounded-lg transition-colors">
+                            <svg class="w-5 h-5" :class="{ 'animate-spin': loadingUnmapped }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="p-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <!-- Unmapped Beds -->
+                        <div x-show="unmappedCodes.beds?.length > 0">
+                            <h4 class="text-sm font-bold text-amber-800 mb-2 flex items-center">
+                                <span class="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                                Beds (<span x-text="unmappedCodes.beds?.length || 0"></span>)
+                            </h4>
+                            <div class="space-y-2 max-h-32 overflow-y-auto">
+                                <template x-for="bed in unmappedCodes.beds" :key="bed.code">
+                                    <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-amber-100">
+                                        <div>
+                                            <span class="font-mono text-sm font-bold text-gray-800" x-text="bed.code"></span>
+                                            <span class="text-xs text-gray-500 ml-1">(<span x-text="bed.count"></span>x)</span>
+                                        </div>
+                                        <button @click="quickMapBed(bed.code)" class="text-xs px-2 py-1 bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors">
+                                            Map
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Unmapped Wards -->
+                        <div x-show="unmappedCodes.wards?.length > 0">
+                            <h4 class="text-sm font-bold text-amber-800 mb-2 flex items-center">
+                                <span class="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                                Wards (<span x-text="unmappedCodes.wards?.length || 0"></span>)
+                            </h4>
+                            <div class="space-y-2 max-h-32 overflow-y-auto">
+                                <template x-for="ward in unmappedCodes.wards" :key="ward.code">
+                                    <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-amber-100">
+                                        <div>
+                                            <span class="font-mono text-sm font-bold text-gray-800" x-text="ward.code"></span>
+                                            <span class="text-xs text-gray-500 ml-1">(<span x-text="ward.count"></span>x)</span>
+                                        </div>
+                                        <button @click="quickMapWard(ward.code)" class="text-xs px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors">
+                                            Map
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Unmapped Doctors -->
+                        <div x-show="unmappedCodes.doctors?.length > 0">
+                            <h4 class="text-sm font-bold text-amber-800 mb-2 flex items-center">
+                                <span class="w-2 h-2 bg-purple-500 rounded-full mr-2"></span>
+                                Doctors (<span x-text="unmappedCodes.doctors?.length || 0"></span>)
+                            </h4>
+                            <div class="space-y-2 max-h-32 overflow-y-auto">
+                                <template x-for="doctor in unmappedCodes.doctors" :key="doctor.code + '_' + doctor.type">
+                                    <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-amber-100">
+                                        <div>
+                                            <span class="font-mono text-sm font-bold text-gray-800" x-text="doctor.code"></span>
+                                            <span class="text-xs text-purple-600 ml-1" x-text="doctor.type"></span>
+                                        </div>
+                                        <button @click="quickMapDoctor(doctor.code, doctor.type)" class="text-xs px-2 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded transition-colors">
+                                            Map
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Unmapped Hospitals -->
+                        <div x-show="unmappedCodes.hospitals?.length > 0">
+                            <h4 class="text-sm font-bold text-amber-800 mb-2 flex items-center">
+                                <span class="w-2 h-2 bg-orange-500 rounded-full mr-2"></span>
+                                Hospitals (<span x-text="unmappedCodes.hospitals?.length || 0"></span>)
+                            </h4>
+                            <div class="space-y-2 max-h-32 overflow-y-auto">
+                                <template x-for="hospital in unmappedCodes.hospitals" :key="hospital.code">
+                                    <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-amber-100">
+                                        <div>
+                                            <span class="font-mono text-sm font-bold text-gray-800" x-text="hospital.code"></span>
+                                            <span class="text-xs text-gray-500 ml-1">(<span x-text="hospital.count"></span>x)</span>
+                                        </div>
+                                        <button @click="quickMapHospital(hospital.code)" class="text-xs px-2 py-1 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded transition-colors">
+                                            Map
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Mappings Section -->
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
                 <!-- Hospital Mapping -->
                 <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-orange-100">
                     <div class="p-4 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50">
@@ -450,6 +562,48 @@
                         @endforelse
                     </div>
                 </div>
+
+                <!-- Doctor Mapping -->
+                <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-purple-100">
+                    <div class="p-4 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-violet-50">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center">
+                                <div class="p-2 bg-purple-500 rounded-lg mr-3">
+                                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                    </svg>
+                                </div>
+                                <h3 class="text-md font-bold text-gray-800">Doctor Mapping</h3>
+                            </div>
+                            <button @click="showDoctorModal = true" class="p-2 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-4 max-h-64 overflow-y-auto">
+                        @forelse($doctorMappings as $mapping)
+                            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-2">
+                                <div class="flex-1 min-w-0">
+                                    <p class="text-sm font-medium text-gray-800 truncate">{{ $mapping->adt_doctor_code }}</p>
+                                    <p class="text-xs text-gray-500 truncate">→ {{ $mapping->consultant->name ?? 'N/A' }} ({{ ucfirst($mapping->doctor_type) }})</p>
+                                </div>
+                                <form action="{{ route('adt.doctor-mapping.destroy', $mapping) }}" method="POST" class="ml-2">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="text-red-500 hover:text-red-700" onclick="return confirm('Delete this mapping?')">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                        </svg>
+                                    </button>
+                                </form>
+                            </div>
+                        @empty
+                            <p class="text-sm text-gray-500 text-center py-4">No doctor mappings configured</p>
+                        @endforelse
+                    </div>
+                </div>
             </div>
 
             <!-- Message Logs Section -->
@@ -560,7 +714,7 @@
         <!-- Hospital Mapping Modal -->
         <div x-show="showHospitalModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showHospitalModal = false"></div>
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showHospitalModal = false; quickMapCode = '';"></div>
                 <div class="relative bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
                     <h3 class="text-lg font-bold text-gray-800 mb-4">Add Hospital Mapping</h3>
                     <form action="{{ route('adt.hospital-mapping.store') }}" method="POST">
@@ -569,8 +723,9 @@
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">ADT Hospital Code *</label>
                                 <input type="text" name="adt_hospital_code" required placeholder="e.g., PHKL, HKL"
-                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500">
-                                <p class="text-xs text-gray-500 mt-1">The sending_facility code from HL7 messages</p>
+                                       :value="quickMapCode"
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 font-mono">
+                                <p class="text-xs text-gray-500 mt-1">The sending_facility code from HL7 messages (MSH-4)</p>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">ADT Hospital Name</label>
@@ -588,7 +743,7 @@
                             </div>
                         </div>
                         <div class="mt-6 flex justify-end space-x-3">
-                            <button type="button" @click="showHospitalModal = false" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg">Cancel</button>
+                            <button type="button" @click="showHospitalModal = false; quickMapCode = '';" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg">Cancel</button>
                             <button type="submit" class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg">Add Mapping</button>
                         </div>
                     </form>
@@ -599,7 +754,7 @@
         <!-- Ward Mapping Modal -->
         <div x-show="showWardModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showWardModal = false"></div>
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showWardModal = false; quickMapCode = '';"></div>
                 <div class="relative bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
                     <h3 class="text-lg font-bold text-gray-800 mb-4">Add Ward Mapping</h3>
                     <form action="{{ route('adt.ward-mapping.store') }}" method="POST">
@@ -608,7 +763,8 @@
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">ADT Ward Code *</label>
                                 <input type="text" name="adt_ward_code" required placeholder="e.g., 5A, ICU1, W5"
-                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                       :value="quickMapCode"
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono">
                                 <p class="text-xs text-gray-500 mt-1">The ward/unit code from PV1-3 location field</p>
                             </div>
                             <div>
@@ -627,7 +783,7 @@
                             </div>
                         </div>
                         <div class="mt-6 flex justify-end space-x-3">
-                            <button type="button" @click="showWardModal = false" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg">Cancel</button>
+                            <button type="button" @click="showWardModal = false; quickMapCode = '';" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg">Cancel</button>
                             <button type="submit" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg">Add Mapping</button>
                         </div>
                     </form>
@@ -638,7 +794,7 @@
         <!-- Bed Mapping Modal -->
         <div x-show="showBedModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showBedModal = false"></div>
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showBedModal = false; quickMapCode = '';"></div>
                 <div class="relative bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
                     <h3 class="text-lg font-bold text-gray-800 mb-4">Add Bed Mapping</h3>
                     <form action="{{ route('adt.bed-mapping.store') }}" method="POST">
@@ -646,9 +802,10 @@
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">ADT Bed Code *</label>
-                                <input type="text" name="adt_bed_code" required placeholder="e.g., 5A-01, BED001"
-                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500">
-                                <p class="text-xs text-gray-500 mt-1">The bed identifier from PV1-3 location field</p>
+                                <input type="text" name="adt_bed_code" required placeholder="e.g., B2, B01, BED001"
+                                       :value="quickMapCode"
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 font-mono">
+                                <p class="text-xs text-gray-500 mt-1">The bed identifier from PV1-40 (e.g., ^^B2 → B2)</p>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">ADT Bed Name</label>
@@ -663,11 +820,61 @@
                                         <option value="{{ $bed->id }}">{{ $bed->bed_number }} - {{ $bed->ward->ward_name ?? 'N/A' }}</option>
                                     @endforeach
                                 </select>
+                                <p class="text-xs text-gray-500 mt-1">💡 Select the SmartWard bed that matches this HIS code</p>
                             </div>
                         </div>
                         <div class="mt-6 flex justify-end space-x-3">
-                            <button type="button" @click="showBedModal = false" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg">Cancel</button>
+                            <button type="button" @click="showBedModal = false; quickMapCode = '';" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg">Cancel</button>
                             <button type="submit" class="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg">Add Mapping</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Doctor Mapping Modal -->
+        <div x-show="showDoctorModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showDoctorModal = false; quickMapCode = ''; quickMapType = '';"></div>
+                <div class="relative bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">Add Doctor Mapping</h3>
+                    <form action="{{ route('adt.doctor-mapping.store') }}" method="POST">
+                        @csrf
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">ADT Doctor Code *</label>
+                                <input type="text" name="adt_doctor_code" required placeholder="e.g., DOCTOR1, DR001"
+                                       :value="quickMapCode"
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 font-mono">
+                                <p class="text-xs text-gray-500 mt-1">The doctor code from PV1 (Attending/Referring/Consulting)</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">ADT Doctor Name</label>
+                                <input type="text" name="adt_doctor_name" placeholder="Optional description"
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Doctor Type *</label>
+                                <select name="doctor_type" required class="w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
+                                        x-init="$watch('quickMapType', value => { if(value) $el.value = value; })">
+                                    @foreach($doctorTypes as $key => $label)
+                                        <option value="{{ $key }}" :selected="quickMapType === '{{ $key }}'">{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Map to Consultant *</label>
+                                <select name="consultant_id" required class="w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500">
+                                    <option value="">Select consultant...</option>
+                                    @foreach($consultants as $consultant)
+                                        <option value="{{ $consultant->id }}">{{ $consultant->name }} ({{ $consultant->specialty->name ?? 'N/A' }})</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mt-6 flex justify-end space-x-3">
+                            <button type="button" @click="showDoctorModal = false; quickMapCode = ''; quickMapType = '';" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg">Cancel</button>
+                            <button type="submit" class="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-lg">Add Mapping</button>
                         </div>
                     </form>
                 </div>
@@ -761,11 +968,21 @@
                 showHospitalModal: false,
                 showWardModal: false,
                 showBedModal: false,
+                showDoctorModal: false,
                 showLogModal: false,
                 logDetail: null,
                 testing: false,
                 connectionStatus: null,
                 loadingLogs: false,
+                loadingUnmapped: false,
+                unmappedCodes: {
+                    beds: [],
+                    wards: [],
+                    doctors: [],
+                    hospitals: []
+                },
+                quickMapCode: '',
+                quickMapType: '',
                 toast: {
                     show: false,
                     success: true,
@@ -774,6 +991,62 @@
 
                 init() {
                     this.testConnection();
+                    this.loadUnmappedCodes();
+                },
+
+                async loadUnmappedCodes() {
+                    this.loadingUnmapped = true;
+                    try {
+                        const response = await fetch('{{ route('adt.unmapped-codes') }}');
+                        const data = await response.json();
+                        if (data.success) {
+                            this.unmappedCodes = data.unmapped;
+                        }
+                    } catch (error) {
+                        console.error('Failed to load unmapped codes:', error);
+                    } finally {
+                        this.loadingUnmapped = false;
+                    }
+                },
+
+                quickMapBed(code) {
+                    this.quickMapCode = code;
+                    this.showBedModal = true;
+                    // Pre-fill the bed code field
+                    this.$nextTick(() => {
+                        const input = document.querySelector('input[name="adt_bed_code"]');
+                        if (input) input.value = code;
+                    });
+                },
+
+                quickMapWard(code) {
+                    this.quickMapCode = code;
+                    this.showWardModal = true;
+                    this.$nextTick(() => {
+                        const input = document.querySelector('input[name="adt_ward_code"]');
+                        if (input) input.value = code;
+                    });
+                },
+
+                quickMapDoctor(code, type) {
+                    this.quickMapCode = code;
+                    this.quickMapType = type;
+                    this.showDoctorModal = true;
+                    this.$nextTick(() => {
+                        const codeInput = document.querySelector('input[name="adt_doctor_code"]');
+                        const typeSelect = document.querySelector('select[name="doctor_type"]');
+                        if (codeInput) codeInput.value = code;
+                        if (typeSelect) typeSelect.value = type;
+                    });
+                },
+
+                quickMapHospital(code) {
+                    this.quickMapCode = code;
+                    this.showHospitalModal = true;
+                    this.$nextTick(() => {
+                        const input = document.querySelector('input[name="adt_hospital_code"]');
+                        if (input) input.value = code;
+                    });
                 },
 
                 async testConnection() {

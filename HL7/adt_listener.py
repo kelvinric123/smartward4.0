@@ -2,14 +2,17 @@
 """
 HL7 ADT Message Listener
 Listens for ADT (Admit, Discharge, Transfer) messages via MLLP protocol
+Parses messages and forwards to Laravel API for processing
 """
 
 import socket
 import logging
 import sys
 import os
+import json
+import requests
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Dict, Any
 import threading
 import signal
 
@@ -22,6 +25,10 @@ MLLP_CARRIAGE_RETURN = b'\x0d'  # CR
 HOST = os.getenv('HL7_HOST', '0.0.0.0')
 PORT = int(os.getenv('HL7_PORT', '3000'))
 BUFFER_SIZE = 65536
+
+# Laravel API Configuration
+LARAVEL_API_URL = os.getenv('LARAVEL_API_URL', 'http://localhost:80/api/adt/message')
+LARAVEL_API_KEY = os.getenv('LARAVEL_API_KEY', '')
 
 # ADT Event Types
 ADT_EVENTS = {
@@ -165,30 +172,26 @@ class HL7Logger:
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
         # Get event type for filename
-        msg_type = parsed.get('parsed', {}).get('message_type', 'UNKNOWN')
-        event_code = ''
-        if '^' in msg_type:
-            parts = msg_type.split('^')
-            event_code = parts[1] if len(parts) > 1 else 'UNK'
-        else:
-            event_code = 'UNK'
+        msg_type = parsed.get('msh', {}).get('message_type', 'UNKNOWN')
+        event_code = parsed.get('msh', {}).get('event_type', 'UNK')
         
-        # Get patient ID for filename
-        patient_id = parsed.get('parsed', {}).get('patient_id', 'NOID')
-        # Clean patient ID for filename (remove special chars)
-        patient_id = ''.join(c for c in patient_id if c.isalnum() or c in '-_')[:20]
+        # Get patient MRN for filename
+        patient_mrn = parsed.get('pid', {}).get('mrn', 'NOID')
+        # Clean patient MRN for filename (remove special chars)
+        patient_mrn = ''.join(c for c in str(patient_mrn) if c.isalnum() or c in '-_')[:20]
         
         # Create filename
-        filename = f"{timestamp}_{event_code}_{patient_id}_{msg_count:05d}.hl7"
+        filename = f"{timestamp}_{event_code}_{patient_mrn}_{msg_count:05d}.hl7"
         filepath = os.path.join(self.data_dir, filename)
         
         # Write message to file
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(f"# HL7 Message Received: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"# Message Type: {msg_type}\n")
-            f.write(f"# Patient ID: {parsed.get('parsed', {}).get('patient_id', 'N/A')}\n")
-            f.write(f"# Patient Name: {parsed.get('parsed', {}).get('patient_name', 'N/A')}\n")
-            f.write(f"# Control ID: {parsed.get('parsed', {}).get('message_control_id', 'N/A')}\n")
+            f.write(f"# Event Type: {event_code}\n")
+            f.write(f"# Patient MRN: {parsed.get('pid', {}).get('mrn', 'N/A')}\n")
+            f.write(f"# Patient Name: {parsed.get('pid', {}).get('name', 'N/A')}\n")
+            f.write(f"# Control ID: {parsed.get('msh', {}).get('message_control_id', 'N/A')}\n")
             f.write("#" + "="*60 + "\n\n")
             f.write(msg)
         
@@ -197,86 +200,633 @@ class HL7Logger:
 
 
 class HL7Parser:
-    """Simple HL7 v2.x message parser"""
+    """Enhanced HL7 v2.x message parser for ADT messages"""
     
     def __init__(self, logger: HL7Logger):
         self.logger = logger
     
     def parse(self, raw_message: str) -> dict:
-        """Parse HL7 message and extract key fields"""
+        """Parse HL7 message and extract all relevant fields"""
         result = {
             'raw': raw_message,
             'segments': {},
-            'parsed': {}
+            'msh': {},
+            'evn': {},
+            'pid': {},
+            'pv1': {},
+            'pv2': {},
+            'allergies': [],
+            'custom': {},
         }
         
         try:
             # Split message into segments
             segments = raw_message.strip().split('\r')
-            if not segments:
+            if len(segments) == 1:
                 segments = raw_message.strip().split('\n')
             
+            # Store raw segments
             for segment in segments:
                 if not segment.strip():
                     continue
-                    
-                # Get segment name and fields
                 fields = segment.split('|')
                 segment_name = fields[0] if fields else ''
-                
                 if segment_name:
-                    result['segments'][segment_name] = fields
+                    # Handle multiple segments with same name (like AL1)
+                    if segment_name in result['segments']:
+                        if isinstance(result['segments'][segment_name], list):
+                            result['segments'][segment_name].append(fields)
+                        else:
+                            result['segments'][segment_name] = [result['segments'][segment_name], fields]
+                    else:
+                        result['segments'][segment_name] = fields
             
-            # Parse MSH (Message Header) segment
-            if 'MSH' in result['segments']:
-                msh = result['segments']['MSH']
-                result['parsed']['sending_application'] = msh[2] if len(msh) > 2 else ''
-                result['parsed']['sending_facility'] = msh[3] if len(msh) > 3 else ''
-                result['parsed']['receiving_application'] = msh[4] if len(msh) > 4 else ''
-                result['parsed']['receiving_facility'] = msh[5] if len(msh) > 5 else ''
-                result['parsed']['message_datetime'] = msh[6] if len(msh) > 6 else ''
-                result['parsed']['message_type'] = msh[8] if len(msh) > 8 else ''
-                result['parsed']['message_control_id'] = msh[9] if len(msh) > 9 else ''
-                result['parsed']['processing_id'] = msh[10] if len(msh) > 10 else ''
-                result['parsed']['version'] = msh[11] if len(msh) > 11 else ''
-            
-            # Parse EVN (Event Type) segment
-            if 'EVN' in result['segments']:
-                evn = result['segments']['EVN']
-                result['parsed']['event_type_code'] = evn[1] if len(evn) > 1 else ''
-                result['parsed']['recorded_datetime'] = evn[2] if len(evn) > 2 else ''
-            
-            # Parse PID (Patient Identification) segment
-            if 'PID' in result['segments']:
-                pid = result['segments']['PID']
-                result['parsed']['patient_id'] = pid[3] if len(pid) > 3 else ''
-                result['parsed']['patient_name'] = pid[5] if len(pid) > 5 else ''
-                result['parsed']['dob'] = pid[7] if len(pid) > 7 else ''
-                result['parsed']['gender'] = pid[8] if len(pid) > 8 else ''
-                result['parsed']['address'] = pid[11] if len(pid) > 11 else ''
-                result['parsed']['phone'] = pid[13] if len(pid) > 13 else ''
-            
-            # Parse PV1 (Patient Visit) segment
-            if 'PV1' in result['segments']:
-                pv1 = result['segments']['PV1']
-                result['parsed']['patient_class'] = pv1[2] if len(pv1) > 2 else ''
-                result['parsed']['assigned_location'] = pv1[3] if len(pv1) > 3 else ''
-                result['parsed']['admission_type'] = pv1[4] if len(pv1) > 4 else ''
-                result['parsed']['attending_doctor'] = pv1[7] if len(pv1) > 7 else ''
-                result['parsed']['visit_number'] = pv1[19] if len(pv1) > 19 else ''
-                result['parsed']['admit_datetime'] = pv1[44] if len(pv1) > 44 else ''
-                result['parsed']['discharge_datetime'] = pv1[45] if len(pv1) > 45 else ''
-            
-            # Parse PV2 (Patient Visit - Additional Info) segment
-            if 'PV2' in result['segments']:
-                pv2 = result['segments']['PV2']
-                result['parsed']['admit_reason'] = pv2[3] if len(pv2) > 3 else ''
+            # Parse each segment type
+            result['msh'] = self._parse_msh(result['segments'].get('MSH', []))
+            result['evn'] = self._parse_evn(result['segments'].get('EVN', []))
+            result['pid'] = self._parse_pid(result['segments'].get('PID', []))
+            result['pv1'] = self._parse_pv1(result['segments'].get('PV1', []))
+            result['pv2'] = self._parse_pv2(result['segments'].get('PV2', []))
+            result['allergies'] = self._parse_al1(result['segments'].get('AL1', []))
+            result['custom'] = self._parse_custom_segments(result['segments'])
             
         except Exception as e:
             self.logger.error(f"Error parsing HL7 message: {str(e)}")
             result['error'] = str(e)
         
         return result
+    
+    def _get_field(self, fields: list, index: int, default: str = '') -> str:
+        """Safely get a field from the fields list"""
+        try:
+            return fields[index] if len(fields) > index else default
+        except:
+            return default
+    
+    def _parse_component(self, field: str, index: int, default: str = '') -> str:
+        """Parse a component from a field (separated by ^)"""
+        try:
+            parts = field.split('^')
+            return parts[index] if len(parts) > index else default
+        except:
+            return default
+    
+    def _parse_msh(self, msh: list) -> dict:
+        """Parse MSH (Message Header) segment"""
+        if not msh:
+            return {}
+        
+        # MSH is special - field separator is MSH-1, but it's also the delimiter
+        # So MSH fields are offset by 1 compared to how we split
+        message_type_full = self._get_field(msh, 8)
+        event_type = ''
+        if '^' in message_type_full:
+            parts = message_type_full.split('^')
+            event_type = parts[1] if len(parts) > 1 else ''
+        
+        return {
+            'field_separator': '|',
+            'encoding_characters': self._get_field(msh, 1),
+            'sending_application': self._get_field(msh, 2),
+            'sending_facility': self._get_field(msh, 3),
+            'receiving_application': self._get_field(msh, 4),
+            'receiving_facility': self._get_field(msh, 5),
+            'message_datetime': self._get_field(msh, 6),
+            'security': self._get_field(msh, 7),
+            'message_type': message_type_full,
+            'event_type': event_type,
+            'message_control_id': self._get_field(msh, 9),
+            'processing_id': self._get_field(msh, 10),
+            'version': self._get_field(msh, 11),
+        }
+    
+    def _parse_evn(self, evn: list) -> dict:
+        """Parse EVN (Event Type) segment"""
+        if not evn:
+            return {}
+        
+        return {
+            'event_type_code': self._get_field(evn, 1),
+            'recorded_datetime': self._get_field(evn, 2),
+            'planned_event_datetime': self._get_field(evn, 3),
+            'event_reason_code': self._get_field(evn, 4),
+            'operator_id': self._get_field(evn, 5),
+        }
+    
+    def _parse_pid(self, pid: list) -> dict:
+        """Parse PID (Patient Identification) segment - Enhanced for non-standard HIS"""
+        if not pid:
+            return {}
+        
+        # PID-2: Patient ID (External) - may contain MRN
+        patient_id_external = self._get_field(pid, 2)
+        
+        # PID-3: Patient Identifier List (Internal) - main identifier
+        patient_id_internal = self._get_field(pid, 3)
+        
+        # Extract MRN from PID-2 or PID-3 (whichever has the MRN format)
+        mrn = ''
+        mrn_type = ''
+        
+        # Check PID-2 first (format: 123456789^^^MYS^MR)
+        if '^^^' in patient_id_external:
+            parts = patient_id_external.split('^^^')
+            mrn = parts[0]
+            if len(parts) > 1:
+                type_parts = parts[1].split('^')
+                mrn_type = type_parts[1] if len(type_parts) > 1 else type_parts[0]
+        elif patient_id_external:
+            mrn = patient_id_external
+        
+        # If MRN not found in PID-2, check PID-3
+        if not mrn and patient_id_internal:
+            if '^^^' in patient_id_internal:
+                parts = patient_id_internal.split('^^^')
+                mrn = parts[0]
+            else:
+                mrn = patient_id_internal
+        
+        # PID-4: Alternate Patient ID (could be IC/Passport or name in some HIS)
+        pid_4_value = self._get_field(pid, 4)
+        
+        # PID-5: Patient Name (Last^First^Middle^Suffix^Prefix)
+        patient_name_raw = self._get_field(pid, 5)
+        
+        # Detect non-standard HIS format where:
+        # - Name is in PID-4 instead of PID-5
+        # - This causes DOB to be at PID-6 instead of PID-7, Sex at PID-7 instead of PID-8, etc.
+        field_offset = 0  # Offset for subsequent fields
+        alternate_id = ''
+        
+        if not patient_name_raw and pid_4_value and '^' in pid_4_value:
+            # PID-4 contains name-like data (has ^ separator and alphabetic chars)
+            first_component = pid_4_value.split('^')[0]
+            if first_component and any(c.isalpha() for c in first_component):
+                # This is a name, adjust parsing
+                patient_name_raw = pid_4_value
+                field_offset = -1  # Subsequent fields are shifted by 1
+                # Use PID-3 as alternate ID (IC) if it's numeric
+                if patient_id_internal and patient_id_internal.replace('-', '').isdigit():
+                    alternate_id = patient_id_internal
+        
+        if not alternate_id and pid_4_value and not ('^' in pid_4_value and any(c.isalpha() for c in pid_4_value.split('^')[0])):
+            # Standard case - PID-4 is alternate ID (numeric or doesn't look like name)
+            alternate_id = pid_4_value
+        
+        # If we still don't have alternate_id, try PID-3 (if it looks like IC/number)
+        if not alternate_id and patient_id_internal:
+            if patient_id_internal.replace('-', '').isdigit() and '^^^' not in patient_id_internal:
+                alternate_id = patient_id_internal
+        
+        # Parse patient name (Last^First^Middle^Suffix^Prefix)
+        name_parts = patient_name_raw.split('^') if patient_name_raw else []
+        last_name = name_parts[0] if len(name_parts) > 0 else ''
+        first_name = name_parts[1] if len(name_parts) > 1 else ''
+        middle_name = name_parts[2] if len(name_parts) > 2 else ''
+        suffix = name_parts[3] if len(name_parts) > 3 else ''
+        prefix = name_parts[4] if len(name_parts) > 4 else ''
+        
+        # Construct full name
+        full_name = f"{first_name} {middle_name} {last_name}".strip()
+        full_name = ' '.join(full_name.split())  # Remove extra spaces
+        if prefix:
+            full_name = f"{prefix} {full_name}"
+        
+        # PID-7: Date of Birth (YYYYMMDD) - may be at PID-6 in non-standard HIS
+        dob_raw = self._get_field(pid, 7 + field_offset)
+        dob = None
+        age = None
+        
+        # Validate DOB looks like a date (8 digits starting with 19 or 20)
+        if dob_raw and len(dob_raw) >= 8 and dob_raw[:2] in ('19', '20'):
+            try:
+                dob = f"{dob_raw[0:4]}-{dob_raw[4:6]}-{dob_raw[6:8]}"
+                birth_date = datetime.strptime(dob_raw[0:8], '%Y%m%d')
+                today = datetime.today()
+                age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+            except:
+                pass
+        
+        # PID-8: Sex - apply field_offset
+        sex_raw = self._get_field(pid, 8 + field_offset)
+        gender_map = {'M': 'Male', 'F': 'Female', 'O': 'Other', 'U': 'Unknown'}
+        gender = gender_map.get(sex_raw.upper(), sex_raw) if sex_raw else ''
+        
+        # PID-10: Race - apply field_offset
+        race_field = self._get_field(pid, 10 + field_offset)
+        race = self._parse_component(race_field, 1) or self._parse_component(race_field, 0)
+        
+        # PID-11: Address (Street^City^State^Postal^Country^Type) - apply field_offset
+        address_raw = self._get_field(pid, 11 + field_offset)
+        address_parts = address_raw.split('^') if address_raw else []
+        address = {
+            'street': address_parts[0] if len(address_parts) > 0 else '',
+            'city': address_parts[1] if len(address_parts) > 1 else '',
+            'state': address_parts[2] if len(address_parts) > 2 else '',
+            'postal_code': address_parts[3] if len(address_parts) > 3 else '',
+            'country': address_parts[4] if len(address_parts) > 4 else '',
+            'type': address_parts[5] if len(address_parts) > 5 else '',
+        }
+        
+        # PID-13: Phone Number (Home) - apply field_offset
+        phone_home = self._get_field(pid, 13 + field_offset)
+        
+        # PID-14: Phone Number (Business) - apply field_offset
+        phone_business = self._get_field(pid, 14 + field_offset)
+        
+        # PID-17: Religion - apply field_offset
+        religion = self._get_field(pid, 17 + field_offset)
+        
+        # PID-30 or later: Extended patient info with phone
+        # Format: ^PRS^^^^^EXT123^^^^+601822400114
+        phone_extended = ''
+        for i in range(30, min(len(pid), 35)):
+            field = self._get_field(pid, i)
+            if field and ('+' in field or field.replace('-', '').replace(' ', '').isdigit()):
+                # Extract phone from component
+                parts = field.split('^')
+                for part in parts:
+                    if '+' in part or (part.replace('-', '').replace(' ', '').isdigit() and len(part) > 8):
+                        phone_extended = part
+                        break
+                if phone_extended:
+                    break
+        
+        # Determine best phone number
+        phone = phone_extended or phone_home or phone_business
+        # Clean phone number
+        if phone:
+            phone = phone.replace(' ', '').replace('-', '')
+        
+        return {
+            'set_id': self._get_field(pid, 1),
+            'patient_id_external': patient_id_external,
+            'patient_id_internal': patient_id_internal,
+            'mrn': mrn,
+            'mrn_type': mrn_type,
+            'alternate_id': alternate_id,  # IC/Passport
+            'name_raw': patient_name_raw,
+            'name': full_name,
+            'last_name': last_name,
+            'first_name': first_name,
+            'middle_name': middle_name,
+            'prefix': prefix,
+            'suffix': suffix,
+            'dob': dob,
+            'dob_raw': dob_raw,
+            'age': age,
+            'gender_raw': sex_raw,
+            'gender': gender,
+            'race': race,
+            'address': address,
+            'address_full': f"{address['street']}, {address['city']}, {address['state']} {address['postal_code']}, {address['country']}".strip(', '),
+            'phone_home': phone_home,
+            'phone_business': phone_business,
+            'phone': phone,
+            'religion': religion,
+        }
+    
+    def _parse_pv1(self, pv1: list) -> dict:
+        """Parse PV1 (Patient Visit) segment - Enhanced"""
+        if not pv1:
+            return {}
+        
+        # PV1-2: Patient Class
+        patient_class_raw = self._get_field(pv1, 2)
+        patient_class_map = {
+            'I': 'Inpatient',
+            'O': 'Outpatient',
+            'E': 'Emergency',
+            'P': 'Preadmit',
+            'R': 'Recurring',
+            'B': 'Obstetrics',
+            'C': 'Commercial',
+            'N': 'Not Applicable',
+            'U': 'Unknown',
+        }
+        patient_class = patient_class_map.get(patient_class_raw.upper(), patient_class_raw) if patient_class_raw else ''
+        
+        # PV1-3: Assigned Patient Location (Ward^Room^Bed^Facility^LocationStatus^PersonLocationType^Building^Floor)
+        location_raw = self._get_field(pv1, 3)
+        location_parts = location_raw.split('^') if location_raw else []
+        
+        # PV1-7: Attending Doctor
+        attending_raw = self._get_field(pv1, 7)
+        attending_parts = attending_raw.split('^') if attending_raw else []
+        
+        # PV1-8: Referring Doctor
+        referring_raw = self._get_field(pv1, 8)
+        
+        # PV1-9: Consulting Doctor
+        consulting_raw = self._get_field(pv1, 9)
+        
+        # PV1-14: Admit Source
+        admit_source = self._get_field(pv1, 14)
+        
+        # PV1-15: Admitting Doctor - Note: In the sample message, DOCTOR3 is at position 14
+        admitting_raw = self._get_field(pv1, 17) or self._get_field(pv1, 14)
+        
+        # PV1-19: Visit Number - Note: In sample message, VISITNO is at position 15
+        visit_number = self._get_field(pv1, 19) or self._get_field(pv1, 15)
+        
+        # PV1-38: Diet Type - Some HIS put it at PV1-36
+        diet_type = self._get_field(pv1, 38) or self._get_field(pv1, 36)
+        
+        # PV1-40: Bed Status (may contain bed info like ^^B2)
+        # Some HIS systems put bed at PV1-38 instead of PV1-40
+        bed_from_status = ''
+        bed_status_raw = ''
+        
+        # Try multiple positions for bed status (^^B2 format)
+        for bed_field_idx in [40, 38, 39, 41]:
+            field_val = self._get_field(pv1, bed_field_idx)
+            if field_val and ('^' in field_val or field_val.startswith('B') or field_val[0:1].isalpha()):
+                bed_status_raw = field_val
+                # Extract bed from ^^B2 format (get last non-empty component)
+                parts = field_val.split('^')
+                for part in reversed(parts):
+                    if part and (part[0].isalpha() or part[0].isdigit()):
+                        bed_from_status = part
+                        break
+                if bed_from_status:
+                    break
+        
+        # PV1-44: Admit DateTime - Some HIS put it at PV1-40 or PV1-42
+        admit_datetime_raw = ''
+        admit_datetime = None
+        
+        # Try multiple positions for admit datetime (YYYYMMDDHHMMSS format)
+        for dt_field_idx in [44, 40, 42, 41]:
+            field_val = self._get_field(pv1, dt_field_idx)
+            if field_val and len(field_val) >= 8 and field_val[:4].isdigit() and field_val[4:6].isdigit():
+                # Looks like a datetime
+                admit_datetime_raw = field_val
+                break
+        
+        if admit_datetime_raw and len(admit_datetime_raw) >= 8:
+            try:
+                admit_datetime = f"{admit_datetime_raw[0:4]}-{admit_datetime_raw[4:6]}-{admit_datetime_raw[6:8]}"
+                if len(admit_datetime_raw) >= 14:
+                    admit_datetime += f" {admit_datetime_raw[8:10]}:{admit_datetime_raw[10:12]}:{admit_datetime_raw[12:14]}"
+            except:
+                pass
+        
+        # PV1-45: Discharge DateTime
+        discharge_datetime_raw = self._get_field(pv1, 45)
+        discharge_datetime = None
+        if discharge_datetime_raw and len(discharge_datetime_raw) >= 8:
+            try:
+                discharge_datetime = f"{discharge_datetime_raw[0:4]}-{discharge_datetime_raw[4:6]}-{discharge_datetime_raw[6:8]}"
+                if len(discharge_datetime_raw) >= 14:
+                    discharge_datetime += f" {discharge_datetime_raw[8:10]}:{discharge_datetime_raw[10:12]}:{discharge_datetime_raw[12:14]}"
+            except:
+                pass
+        
+        return {
+            'set_id': self._get_field(pv1, 1),
+            'patient_class_raw': patient_class_raw,
+            'patient_class': patient_class,
+            'location_raw': location_raw,
+            'ward': location_parts[0] if len(location_parts) > 0 else '',
+            'room': location_parts[1] if len(location_parts) > 1 else '',
+            'bed': location_parts[2] if len(location_parts) > 2 else bed_from_status,
+            'facility': location_parts[3] if len(location_parts) > 3 else '',
+            'admission_type': self._get_field(pv1, 4),
+            'preadmit_number': self._get_field(pv1, 5),
+            'prior_location': self._get_field(pv1, 6),
+            'attending_doctor_raw': attending_raw,
+            'attending_doctor_id': attending_parts[0] if attending_parts else attending_raw,
+            'attending_doctor_name': f"{attending_parts[1]} {attending_parts[2]}".strip() if len(attending_parts) > 2 else '',
+            'referring_doctor': referring_raw,
+            'consulting_doctor': consulting_raw,
+            'hospital_service': self._get_field(pv1, 10),
+            'admit_source': admit_source,
+            'admitting_doctor': admitting_raw,
+            'visit_number': visit_number,
+            'financial_class': self._get_field(pv1, 20),
+            'diet_type': diet_type,
+            'bed_status': bed_status_raw,
+            'admit_datetime_raw': admit_datetime_raw,
+            'admit_datetime': admit_datetime,
+            'discharge_datetime_raw': discharge_datetime_raw,
+            'discharge_datetime': discharge_datetime,
+        }
+    
+    def _parse_pv2(self, pv2: list) -> dict:
+        """Parse PV2 (Patient Visit - Additional Info) segment"""
+        if not pv2:
+            return {}
+        
+        # PV2-8: Expected Admit DateTime
+        expected_admit_raw = self._get_field(pv2, 8)
+        
+        # PV2-9: Expected Discharge DateTime
+        expected_discharge_raw = self._get_field(pv2, 9)
+        expected_discharge = None
+        if expected_discharge_raw and len(expected_discharge_raw) >= 8:
+            try:
+                expected_discharge = f"{expected_discharge_raw[0:4]}-{expected_discharge_raw[4:6]}-{expected_discharge_raw[6:8]}"
+                if len(expected_discharge_raw) >= 14:
+                    expected_discharge += f" {expected_discharge_raw[8:10]}:{expected_discharge_raw[10:12]}:{expected_discharge_raw[12:14]}"
+            except:
+                pass
+        
+        # PV2-10: Estimated Length of Stay
+        length_of_stay = self._get_field(pv2, 10)
+        try:
+            length_of_stay = int(length_of_stay) if length_of_stay else None
+        except:
+            length_of_stay = None
+        
+        # PV2-22: Visit Protection Indicator
+        visit_protection = self._get_field(pv2, 22)
+        
+        # PV2-38: Mode of Arrival
+        mode_of_arrival = self._get_field(pv2, 38)
+        
+        return {
+            'prior_pending_location': self._get_field(pv2, 1),
+            'accommodation_code': self._get_field(pv2, 2),
+            'admit_reason': self._get_field(pv2, 3),
+            'transfer_reason': self._get_field(pv2, 4),
+            'expected_admit_datetime': expected_admit_raw,
+            'expected_discharge_datetime_raw': expected_discharge_raw,
+            'expected_discharge_datetime': expected_discharge,
+            'estimated_length_of_stay': length_of_stay,
+            'visit_protection_indicator': visit_protection,
+            'clinic_organization': self._get_field(pv2, 23),
+            'patient_status_code': self._get_field(pv2, 24),
+            'mode_of_arrival': mode_of_arrival,
+        }
+    
+    def _parse_al1(self, al1_data) -> List[Dict[str, Any]]:
+        """Parse AL1 (Allergy) segments - handles multiple AL1 segments"""
+        allergies = []
+        
+        if not al1_data:
+            return allergies
+        
+        # Ensure we have a list of AL1 segments
+        if isinstance(al1_data, list) and al1_data and isinstance(al1_data[0], str):
+            # Single AL1 segment
+            al1_list = [al1_data]
+        elif isinstance(al1_data, list):
+            al1_list = al1_data
+        else:
+            return allergies
+        
+        allergy_type_map = {
+            'DA': 'Drug Allergy',
+            'FA': 'Food Allergy',
+            'MA': 'Miscellaneous Allergy',
+            'MC': 'Miscellaneous Contraindication',
+            'EA': 'Environmental Allergy',
+            'AA': 'Animal Allergy',
+            'PA': 'Plant Allergy',
+            'LA': 'Pollen Allergy',
+        }
+        
+        severity_map = {
+            'MI': 'Mild',
+            'MO': 'Moderate',
+            'SV': 'Severe',
+            'U': 'Unknown',
+        }
+        
+        for al1 in al1_list:
+            if not al1 or len(al1) < 4:
+                continue
+            
+            allergy_type_code = self._get_field(al1, 2)
+            severity_code = self._get_field(al1, 4)
+            
+            allergies.append({
+                'set_id': self._get_field(al1, 1),
+                'type_code': allergy_type_code,
+                'type': allergy_type_map.get(allergy_type_code, allergy_type_code),
+                'allergen_code': self._get_field(al1, 3),
+                'allergen': self._get_field(al1, 3),
+                'severity_code': severity_code,
+                'severity': severity_map.get(severity_code, severity_code),
+                'reaction': self._get_field(al1, 5) if len(al1) > 5 else '',
+            })
+        
+        return allergies
+    
+    def _parse_custom_segments(self, segments: dict) -> dict:
+        """Parse custom Z-segments"""
+        custom = {
+            'fall_risk': False,
+            'fall_risk_description': '',
+            'isolation_type': '',
+            'isolation_description': '',
+            'attributes': [],
+        }
+        
+        # Parse ZAT (Patient Attributes)
+        zat = segments.get('ZAT', [])
+        if zat:
+            if isinstance(zat[0], list):
+                # Multiple ZAT segments
+                for z in zat:
+                    self._process_zat(z, custom)
+            else:
+                self._process_zat(zat, custom)
+        
+        # Parse ZIT (Isolation Type)
+        zit = segments.get('ZIT', [])
+        if zit:
+            if isinstance(zit, list) and zit and isinstance(zit[0], str):
+                custom['isolation_type'] = self._get_field(zit, 1)
+                custom['isolation_description'] = self._get_field(zit, 2)
+        
+        # Parse ZFR (Fall Risk Flag)
+        zfr = segments.get('ZFR', [])
+        if zfr:
+            if isinstance(zfr, list) and zfr and isinstance(zfr[0], str):
+                zfr_value = self._get_field(zfr, 1)
+                if zfr_value == '1' or zfr_value.upper() == 'Y':
+                    custom['fall_risk'] = True
+        
+        return custom
+    
+    def _process_zat(self, zat: list, custom: dict):
+        """Process a single ZAT segment"""
+        if not zat or len(zat) < 2:
+            return
+        
+        attr_code = self._get_field(zat, 1)
+        attr_desc = self._get_field(zat, 2)
+        
+        custom['attributes'].append({
+            'code': attr_code,
+            'description': attr_desc,
+        })
+        
+        # Check for specific attributes
+        if attr_code == 'FR' or 'FALL' in attr_desc.upper():
+            custom['fall_risk'] = True
+            custom['fall_risk_description'] = attr_desc
+
+
+class LaravelAPIClient:
+    """Client for sending parsed ADT data to Laravel API"""
+    
+    def __init__(self, logger: HL7Logger, api_url: str = LARAVEL_API_URL, api_key: str = LARAVEL_API_KEY):
+        self.logger = logger
+        self.api_url = api_url
+        self.api_key = api_key
+    
+    def send_adt_message(self, parsed_data: dict, source_ip: str) -> dict:
+        """Send parsed ADT message to Laravel API"""
+        try:
+            # Prepare payload
+            payload = {
+                'msh': parsed_data.get('msh', {}),
+                'evn': parsed_data.get('evn', {}),
+                'pid': parsed_data.get('pid', {}),
+                'pv1': parsed_data.get('pv1', {}),
+                'pv2': parsed_data.get('pv2', {}),
+                'allergies': parsed_data.get('allergies', []),
+                'custom': parsed_data.get('custom', {}),
+                'raw_message': parsed_data.get('raw', ''),
+                'source_ip': source_ip,
+            }
+            
+            headers = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+            }
+            
+            if self.api_key:
+                headers['X-API-Key'] = self.api_key
+            
+            self.logger.info(f"Sending ADT data to Laravel API: {self.api_url}")
+            
+            response = requests.post(
+                self.api_url,
+                json=payload,
+                headers=headers,
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                self.logger.info(f"Laravel API response: {result.get('message', 'Success')}")
+                return result
+            else:
+                self.logger.error(f"Laravel API error: {response.status_code} - {response.text}")
+                return {'success': False, 'error': f"HTTP {response.status_code}: {response.text}"}
+                
+        except requests.exceptions.ConnectionError:
+            self.logger.warning(f"Cannot connect to Laravel API at {self.api_url} - Message logged only")
+            return {'success': False, 'error': 'Connection refused'}
+        except requests.exceptions.Timeout:
+            self.logger.error("Laravel API request timeout")
+            return {'success': False, 'error': 'Timeout'}
+        except Exception as e:
+            self.logger.error(f"Error sending to Laravel API: {str(e)}")
+            return {'success': False, 'error': str(e)}
 
 
 class HL7ADTListener:
@@ -287,6 +837,7 @@ class HL7ADTListener:
         self.port = port
         self.logger = HL7Logger()
         self.parser = HL7Parser(self.logger)
+        self.api_client = LaravelAPIClient(self.logger)
         self.running = False
         self.server_socket = None
         self.message_count = 0
@@ -295,12 +846,13 @@ class HL7ADTListener:
         """Create HL7 ACK (Acknowledgment) message"""
         timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
         
-        sending_app = parsed_msg.get('parsed', {}).get('receiving_application', 'HL7_LISTENER')
-        sending_fac = parsed_msg.get('parsed', {}).get('receiving_facility', 'SMARTWARD')
-        receiving_app = parsed_msg.get('parsed', {}).get('sending_application', '')
-        receiving_fac = parsed_msg.get('parsed', {}).get('sending_facility', '')
-        msg_control_id = parsed_msg.get('parsed', {}).get('message_control_id', '')
-        version = parsed_msg.get('parsed', {}).get('version', '2.5')
+        msh = parsed_msg.get('msh', {})
+        sending_app = msh.get('receiving_application', 'HL7_LISTENER') or 'HL7_LISTENER'
+        sending_fac = msh.get('receiving_facility', 'SMARTWARD') or 'SMARTWARD'
+        receiving_app = msh.get('sending_application', '')
+        receiving_fac = msh.get('sending_facility', '')
+        msg_control_id = msh.get('message_control_id', '')
+        version = msh.get('version', '2.5')
         
         ack_message = (
             f"MSH|^~\\&|{sending_app}|{sending_fac}|{receiving_app}|{receiving_fac}|"
@@ -355,6 +907,7 @@ class HL7ADTListener:
     def process_message(self, raw_message: str, client_socket: socket.socket, client_address: Tuple[str, int]):
         """Process received HL7 message"""
         self.message_count += 1
+        start_time = datetime.now()
         
         self.logger.info(f"{'='*60}")
         self.logger.info(f"MESSAGE #{self.message_count} RECEIVED")
@@ -375,64 +928,101 @@ class HL7ADTListener:
         # Log parsed information
         self.log_parsed_message(parsed)
         
+        # Send to Laravel API
+        api_result = self.api_client.send_adt_message(parsed, client_address[0])
+        
+        # Calculate processing time
+        processing_time = (datetime.now() - start_time).total_seconds() * 1000
+        self.logger.info(f"Processing time: {processing_time:.2f}ms")
+        
         # Send acknowledgment
         try:
-            ack = self.create_ack(parsed)
+            ack_code = 'AA' if api_result.get('success', True) else 'AE'
+            ack = self.create_ack(parsed, ack_code)
             client_socket.send(ack)
-            self.logger.info("ACK sent successfully")
+            self.logger.info(f"ACK ({ack_code}) sent successfully")
         except Exception as e:
             self.logger.error(f"Failed to send ACK: {str(e)}")
     
     def log_parsed_message(self, parsed: dict):
         """Log parsed message details"""
-        p = parsed.get('parsed', {})
+        msh = parsed.get('msh', {})
+        pid = parsed.get('pid', {})
+        pv1 = parsed.get('pv1', {})
+        pv2 = parsed.get('pv2', {})
+        allergies = parsed.get('allergies', [])
+        custom = parsed.get('custom', {})
         
-        # Message type info
-        msg_type = p.get('message_type', 'Unknown')
-        event_code = ''
-        if '^' in msg_type:
-            parts = msg_type.split('^')
-            event_code = parts[1] if len(parts) > 1 else ''
-        
+        event_code = msh.get('event_type', '')
         event_description = ADT_EVENTS.get(event_code, 'Unknown Event')
         
         self.logger.info(f"\n{'─'*40}")
         self.logger.info(f"MESSAGE DETAILS")
         self.logger.info(f"{'─'*40}")
-        self.logger.info(f"Message Type     : {msg_type}")
+        self.logger.info(f"Message Type     : {msh.get('message_type', 'N/A')}")
         self.logger.info(f"Event            : {event_code} - {event_description}")
-        self.logger.info(f"Control ID       : {p.get('message_control_id', 'N/A')}")
-        self.logger.info(f"HL7 Version      : {p.get('version', 'N/A')}")
-        self.logger.info(f"Message DateTime : {p.get('message_datetime', 'N/A')}")
+        self.logger.info(f"Control ID       : {msh.get('message_control_id', 'N/A')}")
+        self.logger.info(f"HL7 Version      : {msh.get('version', 'N/A')}")
+        self.logger.info(f"Message DateTime : {msh.get('message_datetime', 'N/A')}")
         
         self.logger.info(f"\n{'─'*40}")
         self.logger.info(f"ROUTING INFORMATION")
         self.logger.info(f"{'─'*40}")
-        self.logger.info(f"Sending App      : {p.get('sending_application', 'N/A')}")
-        self.logger.info(f"Sending Facility : {p.get('sending_facility', 'N/A')}")
-        self.logger.info(f"Receiving App    : {p.get('receiving_application', 'N/A')}")
-        self.logger.info(f"Receiving Fac    : {p.get('receiving_facility', 'N/A')}")
+        self.logger.info(f"Sending App      : {msh.get('sending_application', 'N/A')}")
+        self.logger.info(f"Sending Facility : {msh.get('sending_facility', 'N/A')}")
+        self.logger.info(f"Receiving App    : {msh.get('receiving_application', 'N/A')}")
+        self.logger.info(f"Receiving Fac    : {msh.get('receiving_facility', 'N/A')}")
         
-        if p.get('patient_id') or p.get('patient_name'):
+        if pid:
             self.logger.info(f"\n{'─'*40}")
             self.logger.info(f"PATIENT INFORMATION")
             self.logger.info(f"{'─'*40}")
-            self.logger.info(f"Patient ID       : {p.get('patient_id', 'N/A')}")
-            self.logger.info(f"Patient Name     : {p.get('patient_name', 'N/A')}")
-            self.logger.info(f"DOB              : {p.get('dob', 'N/A')}")
-            self.logger.info(f"Gender           : {p.get('gender', 'N/A')}")
+            self.logger.info(f"MRN              : {pid.get('mrn', 'N/A')}")
+            self.logger.info(f"IC/Passport      : {pid.get('alternate_id', 'N/A')}")
+            self.logger.info(f"Name             : {pid.get('name', 'N/A')}")
+            self.logger.info(f"DOB              : {pid.get('dob', 'N/A')}")
+            self.logger.info(f"Age              : {pid.get('age', 'N/A')}")
+            self.logger.info(f"Gender           : {pid.get('gender', 'N/A')}")
+            self.logger.info(f"Phone            : {pid.get('phone', 'N/A')}")
+            self.logger.info(f"Race             : {pid.get('race', 'N/A')}")
+            self.logger.info(f"Religion         : {pid.get('religion', 'N/A')}")
+            self.logger.info(f"Address          : {pid.get('address_full', 'N/A')}")
         
-        if p.get('assigned_location') or p.get('patient_class'):
+        if pv1:
             self.logger.info(f"\n{'─'*40}")
             self.logger.info(f"VISIT INFORMATION")
             self.logger.info(f"{'─'*40}")
-            self.logger.info(f"Patient Class    : {p.get('patient_class', 'N/A')}")
-            self.logger.info(f"Location         : {p.get('assigned_location', 'N/A')}")
-            self.logger.info(f"Admission Type   : {p.get('admission_type', 'N/A')}")
-            self.logger.info(f"Visit Number     : {p.get('visit_number', 'N/A')}")
-            self.logger.info(f"Attending Doctor : {p.get('attending_doctor', 'N/A')}")
-            self.logger.info(f"Admit DateTime   : {p.get('admit_datetime', 'N/A')}")
-            self.logger.info(f"Discharge DT     : {p.get('discharge_datetime', 'N/A')}")
+            self.logger.info(f"Patient Class    : {pv1.get('patient_class', 'N/A')}")
+            self.logger.info(f"Ward             : {pv1.get('ward', 'N/A')}")
+            self.logger.info(f"Room             : {pv1.get('room', 'N/A')}")
+            self.logger.info(f"Bed              : {pv1.get('bed', 'N/A')}")
+            self.logger.info(f"Visit Number     : {pv1.get('visit_number', 'N/A')}")
+            self.logger.info(f"Attending Doctor : {pv1.get('attending_doctor_id', 'N/A')}")
+            self.logger.info(f"Diet Type        : {pv1.get('diet_type', 'N/A')}")
+            self.logger.info(f"Admit DateTime   : {pv1.get('admit_datetime', 'N/A')}")
+        
+        if pv2:
+            self.logger.info(f"\n{'─'*40}")
+            self.logger.info(f"ADDITIONAL VISIT INFO")
+            self.logger.info(f"{'─'*40}")
+            self.logger.info(f"Expected Discharge: {pv2.get('expected_discharge_datetime', 'N/A')}")
+            self.logger.info(f"Length of Stay    : {pv2.get('estimated_length_of_stay', 'N/A')} days")
+        
+        if allergies:
+            self.logger.info(f"\n{'─'*40}")
+            self.logger.info(f"ALLERGIES ({len(allergies)} found)")
+            self.logger.info(f"{'─'*40}")
+            for allergy in allergies:
+                self.logger.info(f"  • {allergy.get('allergen', 'N/A')} ({allergy.get('type', 'N/A')}) - Severity: {allergy.get('severity', 'N/A')}")
+        
+        if custom.get('fall_risk') or custom.get('isolation_type'):
+            self.logger.info(f"\n{'─'*40}")
+            self.logger.info(f"CLINICAL INDICATORS")
+            self.logger.info(f"{'─'*40}")
+            if custom.get('fall_risk'):
+                self.logger.info(f"⚠️  FALL RISK: Yes")
+            if custom.get('isolation_type'):
+                self.logger.info(f"🔒 Isolation: {custom.get('isolation_type')} - {custom.get('isolation_description', '')}")
         
         # Log all segments found
         segments = list(parsed.get('segments', {}).keys())
@@ -461,6 +1051,7 @@ class HL7ADTListener:
             self.logger.info(f"Host: {self.host}")
             self.logger.info(f"Port: {self.port}")
             self.logger.info(f"Protocol: MLLP (Minimal Lower Layer Protocol)")
+            self.logger.info(f"Laravel API: {self.api_client.api_url}")
             self.logger.info(f"Listening for ADT messages...")
             self.logger.info(f"Press Ctrl+C to stop")
             self.logger.info(f"{'='*60}\n")
@@ -511,12 +1102,13 @@ def main():
     """Main entry point"""
     print("""
     ╔═══════════════════════════════════════════════════════════╗
-    ║           HL7 ADT Message Listener v1.0                   ║
+    ║           HL7 ADT Message Listener v2.0                   ║
     ║        SmartWard Healthcare Integration                   ║
     ╠═══════════════════════════════════════════════════════════╣
     ║  Supported Events: A01-A62 (ADT Messages)                 ║
     ║  Protocol: MLLP over TCP/IP                               ║
     ║  Default Port: 3000                                       ║
+    ║  Features: Enhanced PID/PV1 parsing, AL1, Z-segments      ║
     ╚═══════════════════════════════════════════════════════════╝
     """)
     
@@ -530,4 +1122,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

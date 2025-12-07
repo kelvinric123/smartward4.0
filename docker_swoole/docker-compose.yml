@@ -12,9 +12,11 @@ services:
         SWOOLE_VERSION: "5.1.1"
         MYSQL_ROOT_PASSWORD: "${DB_PASSWORD:-smartward_secret}"
         REDIS_MAXMEMORY: "1gb"
-    container_name: smartward-app
+    container_name: smartward4
     restart: unless-stopped
-    # env_file not required - all values have defaults below, and entrypoint creates .env in container
+    # Load environment from docker.env file (tracked in git)
+    env_file:
+      - docker.env
     ports:
       - "${APP_PORT:-80}:80"
       - "${DB_PORT:-3307}:3306"

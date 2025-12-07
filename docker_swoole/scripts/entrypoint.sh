@@ -168,7 +168,26 @@ PRELOAD
     # Ensure .env exists with Docker-compatible values
     if [ ! -f ".env" ]; then
         log_info "No .env found, creating Docker-compatible .env..."
-        cat > .env <<ENVFILE
+        
+        # Use docker.env as base if available, otherwise create from scratch
+        if [ -f "/app/docker.env" ]; then
+            log_info "Using docker.env as base configuration..."
+            cp /app/docker.env .env
+            # Override with runtime environment variables
+            sed -i "s/^APP_NAME=.*/APP_NAME=${APP_NAME:-SmartWard}/" .env
+            sed -i "s/^APP_ENV=.*/APP_ENV=${APP_ENV:-production}/" .env
+            sed -i "s/^APP_DEBUG=.*/APP_DEBUG=${APP_DEBUG:-false}/" .env
+            sed -i "s/^APP_URL=.*/APP_URL=${APP_URL:-http:\/\/localhost}/" .env
+            sed -i "s/^LOG_LEVEL=.*/LOG_LEVEL=${LOG_LEVEL:-warning}/" .env
+            sed -i "s/^DB_DATABASE=.*/DB_DATABASE=${DB_DATABASE:-smartward}/" .env
+            sed -i "s/^DB_USERNAME=.*/DB_USERNAME=${DB_USERNAME:-root}/" .env
+            sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD:-smartward_secret}/" .env
+            sed -i "s/^REDIS_PASSWORD=.*/REDIS_PASSWORD=${REDIS_PASSWORD:-null}/" .env
+            sed -i "s/^OCTANE_WORKERS=.*/OCTANE_WORKERS=${OCTANE_WORKERS}/" .env
+            sed -i "s/^OCTANE_TASK_WORKERS=.*/OCTANE_TASK_WORKERS=${OCTANE_TASK_WORKERS}/" .env
+            sed -i "s/^OCTANE_MAX_REQUESTS=.*/OCTANE_MAX_REQUESTS=${OCTANE_MAX_REQUESTS}/" .env
+        else
+            cat > .env <<ENVFILE
 APP_NAME=${APP_NAME:-SmartWard}
 APP_ENV=${APP_ENV:-production}
 APP_KEY=${APP_KEY:-}
@@ -216,6 +235,7 @@ OCTANE_WORKERS=${OCTANE_WORKERS}
 OCTANE_TASK_WORKERS=${OCTANE_TASK_WORKERS}
 OCTANE_MAX_REQUESTS=${OCTANE_MAX_REQUESTS}
 ENVFILE
+        fi
         chown www:www .env || true
         log_info ".env created with Docker-compatible settings"
     else
@@ -245,18 +265,23 @@ ENVFILE
         log_info "Database already has $TABLE_COUNT tables - skipping migrations (already run during Docker build)"
     fi
     
+    # Clear all caches first to ensure clean state
+    log_info "Clearing all caches..."
+    php artisan config:clear
+    php artisan cache:clear
+    php artisan route:clear
+    php artisan view:clear
+    php artisan event:clear
+    
     # Cache configurations for production
     if [ "$APP_ENV" = "production" ]; then
-        log_info "Caching Laravel configurations..."
+        log_info "Caching Laravel configurations for production..."
         php artisan config:cache
         php artisan route:cache
         php artisan view:cache
         php artisan event:cache
     else
-        log_info "Clearing caches for development..."
-        php artisan config:clear
-        php artisan route:clear
-        php artisan view:clear
+        log_info "Development mode - caches cleared and not rebuilt"
     fi
     
     # Create storage link if it doesn't exist

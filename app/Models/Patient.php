@@ -17,7 +17,11 @@ class Patient extends Model
         'ic_passport',
         'age',
         'gender',
+        'date_of_birth',
+        'race',
+        'religion',
         'phone',
+        'address',
         'is_active',
         'ward_id',
         'bed_number',
@@ -25,8 +29,12 @@ class Patient extends Model
         'nurse_id',
         'anaesthetist_id',
         'admitted_at',
+        'expected_discharge_at',
+        'estimated_length_of_stay',
         'booked_at',
         'status',
+        'visit_number',
+        'patient_class',
         'nursing_level',
         'diet_type',
         'fall_risk',
@@ -37,8 +45,11 @@ class Patient extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'admitted_at' => 'datetime',
+        'expected_discharge_at' => 'datetime',
         'booked_at' => 'datetime',
+        'date_of_birth' => 'date',
         'allergies' => 'array',
+        'address' => 'array',
     ];
 
     public function ward()
