@@ -64,3 +64,7 @@ class AdtDoctorMapping extends Model
         return $mapping?->consultant;
     }
 }
+
+
+
+

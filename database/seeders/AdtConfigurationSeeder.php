@@ -187,3 +187,7 @@ class AdtConfigurationSeeder extends Seeder
         $this->command->info('  cd HL7 && python sample_adt_sender.py');
     }
 }
+
+
+
+

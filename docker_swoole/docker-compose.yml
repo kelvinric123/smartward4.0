@@ -1,6 +1,6 @@
 # =============================================================================
 # Docker Compose - Laravel Swoole Production
-# Single container with PHP-Swoole, MySQL, Redis
+# Single container with PHP-Swoole, MySQL, Redis + ADT Listener
 # =============================================================================
 
 services:
@@ -56,6 +56,12 @@ services:
       # Logging
       LOG_CHANNEL: "stack"
       LOG_LEVEL: "${LOG_LEVEL:-warning}"
+      
+      # ADT HL7 Listener (Docker service name for inter-container communication)
+      ADT_HOST: "adt"
+      ADT_PORT: "3000"
+    depends_on:
+      - adt
     volumes:
       # Persistent data
       - smartward_mysql:/var/lib/mysql
@@ -83,6 +89,45 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # HL7 ADT Listener Container
+  adt:
+    build:
+      context: ..
+      dockerfile: HL7/Dockerfile
+    container_name: smartward4-adt
+    restart: unless-stopped
+    ports:
+      - "${HL7_PORT:-3000}:3000"
+    environment:
+      HL7_HOST: "0.0.0.0"
+      HL7_PORT: "3000"
+      # Connect to smartward container via internal network
+      LARAVEL_API_URL: "http://smartward:80/api/adt/message"
+      LARAVEL_API_KEY: "${LARAVEL_API_KEY:-}"
+    volumes:
+      # Persist logs and received messages
+      - adt_logs:/app/HL7/logs
+      - adt_messages:/app/HL7/received_messages
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: "256M"
+        reservations:
+          cpus: "0.25"
+          memory: "64M"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   smartward_mysql:
     driver: local
@@ -91,6 +136,10 @@ volumes:
   smartward_storage:
     driver: local
   smartward_logs:
+    driver: local
+  adt_logs:
+    driver: local
+  adt_messages:
     driver: local
 
 networks:

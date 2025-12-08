@@ -39,3 +39,7 @@ return new class extends Migration
         Schema::dropIfExists('adt_doctor_mappings');
     }
 };
+
+
+
+

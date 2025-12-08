@@ -155,4 +155,12 @@ Route::prefix('api/adt')->group(function () {
     Route::get('/debug', [\App\Http\Controllers\AdtApiController::class, 'debug']);
 });
 
+// Public API V1 Routes for Vital Sign Gateway (Raspberry Pi - comennc5)
+// Uses X-Passphrase header + username/password per-request authentication
+Route::prefix('api/v1')->group(function () {
+    Route::post('/vital-signs', [\App\Http\Controllers\VitalSignApiV1Controller::class, 'receiveVitalSigns']);
+    Route::get('/patients/{patientCode}', [\App\Http\Controllers\VitalSignApiV1Controller::class, 'searchPatient']);
+    Route::post('/device/login', [\App\Http\Controllers\VitalSignApiV1Controller::class, 'deviceLogin']);
+});
+
 require __DIR__.'/auth.php';

@@ -26,7 +26,33 @@ class VitalSignIntegrationController extends Controller
             ->limit(20)
             ->get();
 
-        return view('integration.vital-sign.index', compact('apiUsers', 'recentLogs'));
+        // Get gateway configuration for display
+        $gatewayConfig = [
+            'passphrase' => config('services.vital_sign_api.passphrase', 'qmedno1'),
+            'api_base_url' => url('/api/v1'),
+            'server_url' => url('/'),
+            'server_ip' => request()->server('SERVER_ADDR') ?: $this->getServerIp(),
+            'server_port' => request()->server('SERVER_PORT') ?: '80',
+        ];
+
+        return view('integration.vital-sign.index', compact('apiUsers', 'recentLogs', 'gatewayConfig'));
+    }
+
+    /**
+     * Get server IP address for gateway configuration.
+     */
+    private function getServerIp(): string
+    {
+        // Try to get the local IP address
+        $hostname = gethostname();
+        $ip = gethostbyname($hostname);
+        
+        // If we got a valid IP (not the hostname back), return it
+        if ($ip !== $hostname && filter_var($ip, FILTER_VALIDATE_IP)) {
+            return $ip;
+        }
+        
+        return '127.0.0.1';
     }
 
     /**
@@ -242,7 +268,7 @@ class VitalSignIntegrationController extends Controller
                 'temperature' => $reading['temperature'] ?? null,
                 'spo2' => $reading['spo2'] ?? null,
                 'respiratory_rate' => $reading['respiratory_rate'] ?? null,
-                'reading_type' => 'gateway',
+                'reading_type' => 'single', // gateway source tracked in notes
                 'notes' => 'Received via Gateway API' . (isset($reading['device_id']) ? ' (Device: ' . $reading['device_id'] . ')' : ''),
                 'recorded_at' => isset($reading['recorded_at']) ? $reading['recorded_at'] : now(),
             ]);
@@ -371,7 +397,7 @@ class VitalSignIntegrationController extends Controller
             'temperature' => $request->temperature,
             'spo2' => $request->spo2,
             'respiratory_rate' => $request->respiratory_rate,
-            'reading_type' => 'gateway',
+            'reading_type' => 'single', // gateway source tracked in notes
             'notes' => 'Received via Gateway API' . ($request->device_id ? ' (Device: ' . $request->device_id . ')' : ''),
             'recorded_at' => $request->recorded_at ?? now(),
         ]);
@@ -506,6 +532,9 @@ class VitalSignIntegrationController extends Controller
             ->with('success', 'API logs cleared successfully.');
     }
 }
+
+
+
 
 
 

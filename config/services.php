@@ -35,4 +35,33 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Vital Sign API (Raspberry Pi Gateway)
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for the Vital Sign API V1 used by the Raspberry Pi
+    | gateway (comennc5). The passphrase must match the API_PASSPHRASE
+    | configured in the Python client's config.py.
+    |
+    */
+    'vital_sign_api' => [
+        'passphrase' => env('VITAL_SIGN_API_PASSPHRASE', 'qmedno1'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | ADT HL7 Listener
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for connecting to the ADT HL7 listener service.
+    | In Docker deployments, ADT_HOST should be the Docker service name (e.g., 'adt').
+    | For local development, use '127.0.0.1' or leave empty to auto-detect.
+    |
+    */
+    'adt' => [
+        'host' => env('ADT_HOST', null),
+        'port' => env('ADT_PORT', 3000),
+    ],
+
 ];

@@ -376,10 +376,26 @@ class AdtConfigurationController extends Controller
             ]);
         }
 
+        // Determine the host to connect to:
+        // 1. If ADT_HOST env is set (Docker), use that (connects to the 'adt' service container)
+        // 2. Otherwise, use listener_host from config, defaulting 0.0.0.0 to 127.0.0.1
+        $adtHost = config('services.adt.host');
+        $adtPort = config('services.adt.port') ?: $configuration->listener_port;
+        
+        if ($adtHost) {
+            // Docker environment - use the configured ADT service host
+            $connectHost = $adtHost;
+            $connectPort = $adtPort;
+        } else {
+            // Local development - use the configured listener settings
+            $connectHost = $configuration->listener_host === '0.0.0.0' ? '127.0.0.1' : $configuration->listener_host;
+            $connectPort = $configuration->listener_port;
+        }
+
         // Try to connect to the listener port
         $socket = @fsockopen(
-            $configuration->listener_host === '0.0.0.0' ? '127.0.0.1' : $configuration->listener_host,
-            $configuration->listener_port,
+            $connectHost,
+            $connectPort,
             $errno,
             $errstr,
             2 // 2 second timeout
@@ -392,14 +408,16 @@ class AdtConfigurationController extends Controller
                 'message' => "ADT Listener is running on port {$configuration->listener_port}",
                 'host' => $configuration->listener_host,
                 'port' => $configuration->listener_port,
+                'connected_to' => "{$connectHost}:{$connectPort}",
             ]);
         }
 
         return response()->json([
             'success' => false,
-            'message' => "Cannot connect to ADT Listener on port {$configuration->listener_port}. Error: {$errstr}",
+            'message' => "Cannot connect to ADT Listener. Error: {$errstr}",
             'host' => $configuration->listener_host,
             'port' => $configuration->listener_port,
+            'tried_connecting_to' => "{$connectHost}:{$connectPort}",
         ]);
     }
 
