@@ -37,3 +37,4 @@ class AdtBedMapping extends Model
 }
 
 
+

@@ -36,7 +36,7 @@ ZIT|DAC|Droplet, Airborne and Contact
 ZFR|1"""
 
 
-def send_hl7_message(host: str, port: int, message: str) -> str:
+def send_hl7_message(host, port, message):
     """
     Send HL7 message via MLLP (Minimal Lower Layer Protocol) and return response
     """
@@ -86,7 +86,7 @@ def send_hl7_message(host: str, port: int, message: str) -> str:
         return f"ERROR: {str(e)}"
 
 
-def print_message_breakdown(message: str):
+def print_message_breakdown(message):
     """Print a detailed breakdown of the HL7 message segments"""
     print("\n" + "="*80)
     print("MESSAGE SEGMENT BREAKDOWN")
@@ -206,6 +206,42 @@ def print_message_breakdown(message: str):
         print(f"└" + "─"*79)
 
 
+def ask_for_ip_and_port():
+    """
+    Prompt user for IP address and port to send HL7 message to.
+    Shows default values from .env as hints.
+    Returns tuple of (host, port)
+    """
+    print("\n" + "="*80)
+    print("CONNECTION SETTINGS")
+    print("="*80)
+    
+    # Show defaults from .env
+    print(f"\nDefault from .env: {DEFAULT_HOST}:{DEFAULT_PORT}")
+    print("(Press Enter to use defaults, or enter custom values)\n")
+    
+    # Ask for IP address
+    ip_input = input(f"Enter IP address or hostname [{DEFAULT_HOST}]: ").strip()
+    host = ip_input if ip_input else DEFAULT_HOST
+    
+    # Ask for port
+    while True:
+        port_input = input(f"Enter port [{DEFAULT_PORT}]: ").strip()
+        if not port_input:
+            port = DEFAULT_PORT
+            break
+        try:
+            port = int(port_input)
+            if 1 <= port <= 65535:
+                break
+            else:
+                print("  ⚠️  Port must be between 1 and 65535. Please try again.")
+        except ValueError:
+            print("  ⚠️  Invalid port number. Please enter a number between 1 and 65535.")
+    
+    return host, port
+
+
 def main():
     """Main entry point"""
     print("""
@@ -218,11 +254,16 @@ def main():
 ╚══════════════════════════════════════════════════════════════════════════════╝
     """)
     
-    # Get target from command line or environment
-    host = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_HOST
-    port = int(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_PORT
+    # Get target from command line, interactive input, or environment
+    if len(sys.argv) > 1:
+        # Use command line arguments if provided
+        host = sys.argv[1]
+        port = int(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_PORT
+    else:
+        # Ask user for IP and port interactively
+        host, port = ask_for_ip_and_port()
     
-    print(f"Target: {host}:{port}")
+    print(f"\nTarget: {host}:{port}")
     
     # Print message breakdown
     print_message_breakdown(SAMPLE_ADT_A01)
