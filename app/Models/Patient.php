@@ -30,6 +30,8 @@ class Patient extends Model
         'anaesthetist_id',
         'admitted_at',
         'expected_discharge_at',
+        'pending_discharge_at',
+        'discharged_at',
         'estimated_length_of_stay',
         'booked_at',
         'status',
@@ -42,15 +44,42 @@ class Patient extends Model
         'allergies',
     ];
 
+    /**
+     * Patient status constants
+     */
+    const STATUS_PREBOOK = 'prebook';
+    const STATUS_ADMITTED = 'admitted';
+    const STATUS_PENDING_DISCHARGE = 'pending_discharge';
+    const STATUS_DISCHARGED = 'discharged';
+    const STATUS_CANCELLED = 'cancelled';
+
     protected $casts = [
         'is_active' => 'boolean',
         'admitted_at' => 'datetime',
         'expected_discharge_at' => 'datetime',
+        'pending_discharge_at' => 'datetime',
+        'discharged_at' => 'datetime',
         'booked_at' => 'datetime',
         'date_of_birth' => 'date',
         'allergies' => 'array',
         'address' => 'array',
     ];
+
+    /**
+     * Check if patient is pending discharge
+     */
+    public function isPendingDischarge(): bool
+    {
+        return $this->status === self::STATUS_PENDING_DISCHARGE || $this->pending_discharge_at !== null;
+    }
+
+    /**
+     * Check if patient is currently admitted
+     */
+    public function isAdmitted(): bool
+    {
+        return in_array($this->status, [self::STATUS_ADMITTED, self::STATUS_PENDING_DISCHARGE]);
+    }
 
     public function ward()
     {

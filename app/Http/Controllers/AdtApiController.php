@@ -76,6 +76,10 @@ class AdtApiController extends Controller
                 'A03' => $this->handleA03Discharge($messageLog, $configuration, $pid, $pv1),
                 'A04' => $this->handleA04Register($messageLog, $configuration, $pid, $pv1, $pv2, $allergies, $custom),
                 'A08' => $this->handleA08Update($messageLog, $configuration, $pid, $pv1, $pv2, $allergies, $custom),
+                'A11' => $this->handleA11CancelAdmit($messageLog, $configuration, $pid, $pv1),
+                'A13' => $this->handleA13CancelDischarge($messageLog, $configuration, $pid, $pv1),
+                'A16' => $this->handleA16PendingDischarge($messageLog, $configuration, $pid, $pv1),
+                'A25' => $this->handleA25CancelPendingDischarge($messageLog, $configuration, $pid, $pv1),
                 default => $this->handleUnknownEvent($messageLog, $eventType),
             };
             
@@ -175,8 +179,10 @@ class AdtApiController extends Controller
             $this->updatePatientVisitInfo($patient, $pv1, $pv2);
             
             // Set patient status to admitted
-            $patient->status = 'admitted';
+            $patient->status = Patient::STATUS_ADMITTED;
             $patient->admitted_at = $this->parseDateTime($pv1['admit_datetime_raw'] ?? null) ?? now();
+            $patient->pending_discharge_at = null; // Clear any pending discharge flag
+            $patient->discharged_at = null; // Clear discharged timestamp
             
             // Find and assign bed
             $bed = $this->findAndAssignBed($patient, $pv1, $configuration);
@@ -398,10 +404,12 @@ class AdtApiController extends Controller
             }
             
             // Update patient status
-            $patient->status = 'discharged';
+            $patient->status = Patient::STATUS_DISCHARGED;
             $patient->ward_id = null;
             $patient->bed_number = null;
             $patient->is_active = false;
+            $patient->discharged_at = now();
+            $patient->pending_discharge_at = null; // Clear pending discharge if was set
             $patient->save();
             $actions[] = 'patient_discharged';
             
@@ -508,6 +516,323 @@ class AdtApiController extends Controller
     }
     
     /**
+     * Handle A11 - Cancel Admit/Cancel Visit
+     * Reverses a previously sent A01 message
+     */
+    protected function handleA11CancelAdmit(
+        AdtMessageLog $messageLog,
+        ?AdtConfiguration $configuration,
+        array $pid,
+        array $pv1
+    ): array {
+        $actions = [];
+        
+        Log::info("ADT A11 Cancel Admit - Processing", [
+            'mrn' => $pid['mrn'] ?? 'N/A',
+            'visit_number' => $pv1['visit_number'] ?? 'N/A',
+        ]);
+        
+        try {
+            DB::beginTransaction();
+            
+            $mrn = $pid['mrn'] ?? null;
+            $visitNumber = $pv1['visit_number'] ?? null;
+            
+            // Find patient by MRN and optionally visit number
+            $query = Patient::where('mrn', $mrn);
+            if ($visitNumber) {
+                $query->where('visit_number', $visitNumber);
+            }
+            $patient = $query->first();
+            
+            if (!$patient) {
+                $messageLog->update([
+                    'status' => 'failed',
+                    'error_message' => 'Patient not found for cancel admit',
+                ]);
+                DB::commit();
+                return [
+                    'success' => false,
+                    'message' => 'Patient not found',
+                    'actions' => [],
+                ];
+            }
+            
+            // Release bed
+            $bed = Bed::where('patient_id', $patient->id)->first();
+            if ($bed) {
+                $bed->update([
+                    'patient_id' => null,
+                    'status' => 'available',
+                ]);
+                $actions[] = 'bed_released';
+            }
+            
+            // Update patient status to cancelled
+            $patient->status = Patient::STATUS_CANCELLED;
+            $patient->ward_id = null;
+            $patient->bed_number = null;
+            $patient->is_active = false;
+            $patient->admitted_at = null;
+            $patient->save();
+            $actions[] = 'admission_cancelled';
+            
+            $messageLog->update([
+                'status' => 'processed',
+                'action_taken' => $actions,
+                'patient_id_ref' => $patient->id,
+            ]);
+            
+            DB::commit();
+            
+            Log::info("ADT A11 Cancel Admit - SUCCESS", ['actions' => $actions]);
+            
+            return [
+                'success' => true,
+                'message' => 'Admission cancelled successfully',
+                'patient_id' => $patient->id,
+                'actions' => $actions,
+            ];
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("ADT A11 Cancel Admit - FAILED: " . $e->getMessage());
+            $messageLog->update([
+                'status' => 'failed',
+                'error_message' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
+    }
+    
+    /**
+     * Handle A13 - Cancel Discharge
+     * Reopens a visit by cancelling a prior discharge event
+     */
+    protected function handleA13CancelDischarge(
+        AdtMessageLog $messageLog,
+        ?AdtConfiguration $configuration,
+        array $pid,
+        array $pv1
+    ): array {
+        $actions = [];
+        
+        Log::info("ADT A13 Cancel Discharge - Processing", [
+            'mrn' => $pid['mrn'] ?? 'N/A',
+            'visit_number' => $pv1['visit_number'] ?? 'N/A',
+        ]);
+        
+        try {
+            DB::beginTransaction();
+            
+            $mrn = $pid['mrn'] ?? null;
+            $patient = $mrn ? Patient::where('mrn', $mrn)->first() : null;
+            
+            if (!$patient) {
+                $messageLog->update([
+                    'status' => 'failed',
+                    'error_message' => 'Patient not found for cancel discharge',
+                ]);
+                DB::commit();
+                return [
+                    'success' => false,
+                    'message' => 'Patient not found',
+                    'actions' => [],
+                ];
+            }
+            
+            // Re-admit patient - restore status
+            $patient->status = Patient::STATUS_ADMITTED;
+            $patient->is_active = true;
+            $patient->discharged_at = null;
+            $patient->pending_discharge_at = null;
+            
+            // Try to reassign bed from PV1
+            $bed = $this->findAndAssignBed($patient, $pv1, $configuration);
+            if ($bed) {
+                $patient->ward_id = $bed->ward_id;
+                $patient->bed_number = $bed->bed_number;
+                $bed->update([
+                    'patient_id' => $patient->id,
+                    'status' => 'occupied',
+                ]);
+                $actions[] = 'bed_reassigned';
+            }
+            
+            $patient->save();
+            $actions[] = 'discharge_cancelled';
+            $actions[] = 'patient_readmitted';
+            
+            $messageLog->update([
+                'status' => 'processed',
+                'action_taken' => $actions,
+                'patient_id_ref' => $patient->id,
+                'bed_id_ref' => $bed?->id,
+            ]);
+            
+            DB::commit();
+            
+            Log::info("ADT A13 Cancel Discharge - SUCCESS", ['actions' => $actions]);
+            
+            return [
+                'success' => true,
+                'message' => 'Discharge cancelled, patient readmitted',
+                'patient_id' => $patient->id,
+                'actions' => $actions,
+            ];
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("ADT A13 Cancel Discharge - FAILED: " . $e->getMessage());
+            $messageLog->update([
+                'status' => 'failed',
+                'error_message' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
+    }
+    
+    /**
+     * Handle A16 - Pending Discharge
+     * Indicates the patient is awaiting discharge
+     */
+    protected function handleA16PendingDischarge(
+        AdtMessageLog $messageLog,
+        ?AdtConfiguration $configuration,
+        array $pid,
+        array $pv1
+    ): array {
+        $actions = [];
+        
+        Log::info("ADT A16 Pending Discharge - Processing", [
+            'mrn' => $pid['mrn'] ?? 'N/A',
+            'visit_number' => $pv1['visit_number'] ?? 'N/A',
+        ]);
+        
+        try {
+            DB::beginTransaction();
+            
+            $mrn = $pid['mrn'] ?? null;
+            $patient = $mrn ? Patient::where('mrn', $mrn)->first() : null;
+            
+            if (!$patient) {
+                $messageLog->update([
+                    'status' => 'failed',
+                    'error_message' => 'Patient not found for pending discharge',
+                ]);
+                DB::commit();
+                return [
+                    'success' => false,
+                    'message' => 'Patient not found',
+                    'actions' => [],
+                ];
+            }
+            
+            // Update patient status to pending discharge
+            $patient->status = Patient::STATUS_PENDING_DISCHARGE;
+            $patient->pending_discharge_at = now();
+            $patient->save();
+            $actions[] = 'pending_discharge_flagged';
+            
+            $messageLog->update([
+                'status' => 'processed',
+                'action_taken' => $actions,
+                'patient_id_ref' => $patient->id,
+            ]);
+            
+            DB::commit();
+            
+            Log::info("ADT A16 Pending Discharge - SUCCESS", ['actions' => $actions]);
+            
+            return [
+                'success' => true,
+                'message' => 'Patient flagged as pending discharge',
+                'patient_id' => $patient->id,
+                'actions' => $actions,
+            ];
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("ADT A16 Pending Discharge - FAILED: " . $e->getMessage());
+            $messageLog->update([
+                'status' => 'failed',
+                'error_message' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
+    }
+    
+    /**
+     * Handle A25 - Cancel Pending Discharge
+     * Reverses a pending discharge previously flagged by an A16
+     */
+    protected function handleA25CancelPendingDischarge(
+        AdtMessageLog $messageLog,
+        ?AdtConfiguration $configuration,
+        array $pid,
+        array $pv1
+    ): array {
+        $actions = [];
+        
+        Log::info("ADT A25 Cancel Pending Discharge - Processing", [
+            'mrn' => $pid['mrn'] ?? 'N/A',
+            'visit_number' => $pv1['visit_number'] ?? 'N/A',
+        ]);
+        
+        try {
+            DB::beginTransaction();
+            
+            $mrn = $pid['mrn'] ?? null;
+            $patient = $mrn ? Patient::where('mrn', $mrn)->first() : null;
+            
+            if (!$patient) {
+                $messageLog->update([
+                    'status' => 'failed',
+                    'error_message' => 'Patient not found for cancel pending discharge',
+                ]);
+                DB::commit();
+                return [
+                    'success' => false,
+                    'message' => 'Patient not found',
+                    'actions' => [],
+                ];
+            }
+            
+            // Restore patient status to admitted
+            $patient->status = Patient::STATUS_ADMITTED;
+            $patient->pending_discharge_at = null;
+            $patient->save();
+            $actions[] = 'pending_discharge_cancelled';
+            
+            $messageLog->update([
+                'status' => 'processed',
+                'action_taken' => $actions,
+                'patient_id_ref' => $patient->id,
+            ]);
+            
+            DB::commit();
+            
+            Log::info("ADT A25 Cancel Pending Discharge - SUCCESS", ['actions' => $actions]);
+            
+            return [
+                'success' => true,
+                'message' => 'Pending discharge cancelled',
+                'patient_id' => $patient->id,
+                'actions' => $actions,
+            ];
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("ADT A25 Cancel Pending Discharge - FAILED: " . $e->getMessage());
+            $messageLog->update([
+                'status' => 'failed',
+                'error_message' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
+    }
+    
+    /**
      * Handle unknown event type
      */
     protected function handleUnknownEvent(AdtMessageLog $messageLog, string $eventType): array
@@ -604,30 +929,100 @@ class AdtApiController extends Controller
             $patient->fall_risk = 'yes';
         }
         
-        // Isolation Type
+        // Isolation Type from RMI segment or custom
         if (!empty($custom['isolation_type'])) {
             // Map isolation codes to SmartWard values
+            // Based on HL7 ADT Integration Document - RMI segment contains isolation info
+            // Example: CI^Contact Isolation, DI^Droplet Isolation
             $isolationMap = [
+                // Standard codes
                 'DAC' => 'droplet_airborne_contact',
                 'D' => 'droplet',
+                'DI' => 'droplet',
                 'A' => 'airborne',
+                'AI' => 'airborne',
                 'C' => 'contact',
+                'CI' => 'contact',
+                // Combined codes
+                'DAC' => 'droplet_airborne_contact',
+                'DC' => 'droplet_contact',
+                'AC' => 'airborne_contact',
+                // Full names
+                'CONTACT' => 'contact',
+                'DROPLET' => 'droplet',
+                'AIRBORNE' => 'airborne',
+                'CONTACT ISOLATION' => 'contact',
+                'DROPLET ISOLATION' => 'droplet',
+                'AIRBORNE ISOLATION' => 'airborne',
             ];
-            $patient->isolation_type = $isolationMap[$custom['isolation_type']] ?? $custom['isolation_type'];
+            
+            $isolationType = strtoupper($custom['isolation_type']);
+            $patient->isolation_type = $isolationMap[$isolationType] ?? strtolower(str_replace(' ', '_', $custom['isolation_type']));
+            
+            Log::info("ADT - Isolation type set", [
+                'raw' => $custom['isolation_type'],
+                'mapped' => $patient->isolation_type,
+            ]);
         }
         
-        // Diet Type from PV1
+        // Diet Type from PV1-38 (diet_type field)
+        // Example from document: DMD, REGD^DIABETIC DIET, REGULAR DIET
         if (!empty($pv1['diet_type'])) {
-            // Map diet type or use as-is
+            // Parse diet type - may contain multiple diets separated by comma
+            $dietRaw = $pv1['diet_type'];
+            
+            // If it contains ^, take the code part (before ^)
+            if (strpos($dietRaw, '^') !== false) {
+                $parts = explode('^', $dietRaw);
+                $dietRaw = trim($parts[0]);
+            }
+            
+            // Take the first diet if multiple
+            if (strpos($dietRaw, ',') !== false) {
+                $dietRaw = trim(explode(',', $dietRaw)[0]);
+            }
+            
+            // Map diet type codes
             $dietMap = [
+                // Codes
+                'NPO' => 'npo',
+                'DMD' => 'diabetic',
+                'REGD' => 'regular',
+                'VEG' => 'vegetarian',
+                'HAL' => 'halal',
+                'KOS' => 'kosher',
+                'RD' => 'renal',
+                'LS' => 'low_salt',
+                'CF' => 'clear_fluid',
+                'FF' => 'full_fluid',
+                'SD' => 'soft_diet',
+                'GF' => 'gluten_free',
+                // Full names
                 'VEGETARIAN' => 'vegetarian',
                 'HALAL' => 'halal',
                 'KOSHER' => 'kosher',
                 'DIABETIC' => 'diabetic',
-                'LOW_SODIUM' => 'low_sodium',
-                'NPO' => 'npo',
+                'DIABETIC DIET' => 'diabetic',
+                'LOW_SODIUM' => 'low_salt',
+                'LOW SALT' => 'low_salt',
+                'REGULAR' => 'regular',
+                'REGULAR DIET' => 'regular',
+                'RENAL' => 'renal',
+                'RENAL DIET' => 'renal',
+                'CLEAR FLUID' => 'clear_fluid',
+                'FULL FLUID' => 'full_fluid',
+                'SOFT DIET' => 'soft_diet',
+                'GLUTEN FREE' => 'gluten_free',
             ];
-            $patient->diet_type = $dietMap[strtoupper($pv1['diet_type'])] ?? strtolower($pv1['diet_type']);
+            
+            $dietUpper = strtoupper(trim($dietRaw));
+            $patient->diet_type = $dietMap[$dietUpper] ?? strtolower(str_replace(' ', '_', $dietRaw));
+            
+            Log::info("ADT - Diet type set", [
+                'raw' => $pv1['diet_type'],
+                'parsed' => $dietRaw,
+                'mapped' => $patient->diet_type,
+            ]);
         }
     }
     

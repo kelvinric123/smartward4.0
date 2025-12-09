@@ -274,21 +274,41 @@
                         </div>
                     @elseif($bed['status'] === 'occupied')
                         <!-- Occupied Bed - Color based on Gender: Red for Female, Blue for Male -->
+                        <!-- Pending Discharge: Green border and header -->
                         @php
-                            $genderColor = strtolower($bed['gender']) === 'female' ? 'red' : 'blue';
-                            $borderClass = strtolower($bed['gender']) === 'female' ? 'border-red-500' : 'border-blue-500';
-                            $bgClass = strtolower($bed['gender']) === 'female' ? 'bg-red-500' : 'bg-blue-500';
+                            $isPendingDischarge = $bed['is_pending_discharge'] ?? false;
+                            if ($isPendingDischarge) {
+                                // Pending discharge - use green theme
+                                $borderClass = 'border-green-500';
+                                $bgClass = 'bg-gradient-to-r from-green-500 to-emerald-600';
+                            } else {
+                                // Normal - color based on gender
+                                $genderColor = strtolower($bed['gender']) === 'female' ? 'red' : 'blue';
+                                $borderClass = strtolower($bed['gender']) === 'female' ? 'border-red-500' : 'border-blue-500';
+                                $bgClass = strtolower($bed['gender']) === 'female' ? 'bg-red-500' : 'bg-blue-500';
+                            }
                         @endphp
                         <div
-                            class="bed-card bg-white rounded-lg shadow-md border-2 {{ $borderClass }} overflow-hidden transition-all duration-300 h-[280px] flex flex-col"
+                            class="bed-card bg-white rounded-lg shadow-md border-2 {{ $borderClass }} overflow-hidden transition-all duration-300 h-[280px] flex flex-col {{ $isPendingDischarge ? 'ring-2 ring-green-300' : '' }}"
                             data-section="{{ $bed['section'] ?? 1 }}"
                             data-next-movement-time="{{ $bed['next_movement_time_iso'] ?? '' }}"
                             data-next-movement-location="{{ $bed['next_movement_location'] ?? '' }}"
                             data-patient-name="{{ $bed['patient_name'] ?? '' }}"
                             data-bed-number="{{ $bed['number'] }}"
+                            data-pending-discharge="{{ $isPendingDischarge ? 'true' : 'false' }}"
                         >
                             <div class="px-4 py-2 {{ $bgClass }} text-white flex items-center justify-between">
-                                <span class="font-bold bed-number cursor-pointer" onclick='highlightAndFilterBeds(@json([$bed["number"]]), "bed")'>{{ $bed['number'] }}</span>
+                                <div class="flex items-center">
+                                    <span class="font-bold bed-number cursor-pointer" onclick='highlightAndFilterBeds(@json([$bed["number"]]), "bed")'>{{ $bed['number'] }}</span>
+                                    @if($isPendingDischarge)
+                                    <span class="ml-2 px-1.5 py-0.5 bg-white/20 text-white text-xs rounded font-medium flex items-center" title="Pending Discharge since {{ $bed['pending_discharge_at'] ?? 'N/A' }}">
+                                        <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                                        </svg>
+                                        PD
+                                    </span>
+                                    @endif
+                                </div>
                                 @if($isVisible('mrn'))
                                 <span class="text-sm">MRN: {{ $bed['mrn'] }}</span>
                                 @endif
@@ -343,6 +363,16 @@
 
                                 <!-- Clinical Indicators Row -->
                                 <div class="flex items-center flex-wrap gap-1 pt-2">
+                                    {{-- Pending Discharge Status Badge --}}
+                                    @if($bed['is_pending_discharge'] ?? false)
+                                    <span class="px-1.5 py-0.5 bg-green-500 text-white text-xs rounded font-bold flex items-center" title="Pending Discharge since {{ $bed['pending_discharge_at'] ?? 'N/A' }}">
+                                        <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                                        </svg>
+                                        PENDING DC
+                                    </span>
+                                    @endif
+                                    
                                     @if($isVisible('ews'))
                                         @if($bed['ews_has_vitals'] && $bed['ews'] !== null)
                                             @php

@@ -376,10 +376,42 @@
                             <p x-show="allergies.length === 0" class="text-xs text-gray-400 italic">No allergies recorded</p>
                         </div>
 
+                        <!-- Patient Status -->
+                        @if($patient->status === 'pending_discharge' || $patient->pending_discharge_at)
+                        <div class="border-t pt-6">
+                            <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                                <div class="flex items-center">
+                                    <svg class="w-6 h-6 text-green-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                                    </svg>
+                                    <div>
+                                        <h4 class="text-sm font-bold text-green-800">Pending Discharge</h4>
+                                        <p class="text-xs text-green-700">
+                                            Patient is awaiting discharge
+                                            @if($patient->pending_discharge_at)
+                                                since {{ $patient->pending_discharge_at->format('d M Y, H:i') }}
+                                            @endif
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        @endif
+
                         <!-- Current Clinical Status Summary -->
                         <div class="border-t pt-6">
                             <h4 class="text-sm font-semibold text-gray-700 mb-3">Current Clinical Status</h4>
-                            <div class="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+                            <div class="grid grid-cols-2 md:grid-cols-6 gap-3 text-xs">
+                                <div class="rounded-lg p-3 text-center {{ ($patient->status === 'pending_discharge' || $patient->pending_discharge_at) ? 'bg-green-100 border-2 border-green-300' : 'bg-gray-50' }}">
+                                    <div class="{{ ($patient->status === 'pending_discharge' || $patient->pending_discharge_at) ? 'text-green-700' : 'text-gray-600' }} font-semibold">Status</div>
+                                    <div class="text-gray-800 mt-1 capitalize font-medium">
+                                        @if($patient->status === 'pending_discharge' || $patient->pending_discharge_at)
+                                            Pending DC
+                                        @else
+                                            {{ str_replace('_', ' ', $patient->status ?? 'Unknown') }}
+                                        @endif
+                                    </div>
+                                </div>
                                 <div class="bg-purple-50 rounded-lg p-3 text-center">
                                     <div class="text-purple-600 font-semibold">Nursing Level</div>
                                     <div class="text-gray-800 mt-1 capitalize">{{ str_replace('_', ' ', $patient->nursing_level ?? 'None') }}</div>
