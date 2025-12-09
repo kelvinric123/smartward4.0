@@ -537,6 +537,11 @@ class AdtApiController extends Controller
         // IC/Passport - use alternate_id field
         if (!empty($pid['alternate_id'])) {
             $patient->ic_passport = $pid['alternate_id'];
+        } elseif (empty($patient->ic_passport)) {
+            // Provide a default IC/Passport if not available
+            // Use MRN as fallback to ensure unique constraint is satisfied
+            $patient->ic_passport = 'IC-' . ($pid['mrn'] ?? $patient->mrn ?? uniqid());
+            Log::info("ADT - Generated default ic_passport for patient: {$patient->ic_passport}");
         }
         
         // Generate RN if not exists

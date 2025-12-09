@@ -27,3 +27,7 @@ Homestead.yaml
 Thumbs.db
 rr
 .rr.yaml
+
+# Local development files
+HL7/adt_listener_8000.py
+HL7/received_messages/*.hl7

@@ -271,6 +271,36 @@ class HL7Parser:
         except:
             return default
     
+    def _extract_phone_number(self, phone_field: str) -> str:
+        """Extract phone number from HL7 phone field
+        
+        Handles formats like:
+        - 0105656947 (just the number)
+        - 0^0105656947 (type^number)
+        - +60123456789
+        - (603) 1234-5678
+        """
+        if not phone_field:
+            return ''
+        
+        # If field contains ^, extract the most phone-like component
+        if '^' in phone_field:
+            parts = phone_field.split('^')
+            for part in parts:
+                # Find the part that looks most like a phone number (longer digit string)
+                cleaned = part.replace('-', '').replace(' ', '').replace('(', '').replace(')', '')
+                if cleaned.startswith('+'):
+                    return part  # International format
+                if len(cleaned) >= 8 and cleaned.isdigit():
+                    return part  # Looks like a phone number
+            # If no good match found, try to find any digit string with 8+ chars
+            for part in parts:
+                cleaned = ''.join(c for c in part if c.isdigit())
+                if len(cleaned) >= 8:
+                    return cleaned
+        
+        return phone_field
+    
     def _parse_msh(self, msh: list) -> dict:
         """Parse MSH (Message Header) segment"""
         if not msh:
@@ -358,10 +388,23 @@ class HL7Parser:
         field_offset = 0  # Offset for subsequent fields
         alternate_id = ''
         
+        # Check for ICN (IC Number) format in PID-4: ICN^<IC_NUMBER>
+        # This is used by CEREBRALPLUS HIS
+        if pid_4_value and '^' in pid_4_value:
+            pid_4_parts = pid_4_value.split('^')
+            # Check if first part is an identifier type code (ICN, IC, NRIC, PASSPORT, etc.)
+            id_type_codes = ['ICN', 'IC', 'NRIC', 'PP', 'PASSPORT', 'PPN', 'DL', 'NI', 'PRC', 'PI']
+            if pid_4_parts[0].upper() in id_type_codes and len(pid_4_parts) > 1:
+                # Extract the actual ID value (second component)
+                alternate_id = pid_4_parts[1].strip() if pid_4_parts[1] else ''
+                self.logger.debug(f"Extracted IC/Passport from PID-4 format {pid_4_parts[0]}: {alternate_id}")
+        
         if not patient_name_raw and pid_4_value and '^' in pid_4_value:
             # PID-4 contains name-like data (has ^ separator and alphabetic chars)
             first_component = pid_4_value.split('^')[0]
-            if first_component and any(c.isalpha() for c in first_component):
+            # Make sure it's not an identifier type code
+            id_type_codes = ['ICN', 'IC', 'NRIC', 'PP', 'PASSPORT', 'PPN', 'DL', 'NI', 'PRC', 'PI']
+            if first_component and any(c.isalpha() for c in first_component) and first_component.upper() not in id_type_codes:
                 # This is a name, adjust parsing
                 patient_name_raw = pid_4_value
                 field_offset = -1  # Subsequent fields are shifted by 1
@@ -429,10 +472,13 @@ class HL7Parser:
         }
         
         # PID-13: Phone Number (Home) - apply field_offset
-        phone_home = self._get_field(pid, 13 + field_offset)
+        phone_home_raw = self._get_field(pid, 13 + field_offset)
+        # Parse phone - may be in format: 0^0105656947 or just the number
+        phone_home = self._extract_phone_number(phone_home_raw)
         
         # PID-14: Phone Number (Business) - apply field_offset
-        phone_business = self._get_field(pid, 14 + field_offset)
+        phone_business_raw = self._get_field(pid, 14 + field_offset)
+        phone_business = self._extract_phone_number(phone_business_raw)
         
         # PID-17: Religion - apply field_offset
         religion = self._get_field(pid, 17 + field_offset)
