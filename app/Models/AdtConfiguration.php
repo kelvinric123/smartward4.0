@@ -61,6 +61,22 @@ class AdtConfiguration extends Model
     }
 
     /**
+     * Get the diet mappings for this configuration.
+     */
+    public function dietMappings(): HasMany
+    {
+        return $this->hasMany(AdtDietMapping::class);
+    }
+
+    /**
+     * Get the isolation mappings for this configuration.
+     */
+    public function isolationMappings(): HasMany
+    {
+        return $this->hasMany(AdtIsolationMapping::class);
+    }
+
+    /**
      * Get the message logs for this configuration.
      */
     public function messageLogs(): HasMany

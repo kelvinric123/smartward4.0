@@ -278,12 +278,20 @@ class WardDashboardController extends Controller
     private function generateBedData($ward, $wardPatients, $consultants, $nurses, $movementsByPatient)
     {
         $beds = [];
-        $totalBeds = $ward->capacity;
+        // Use actual ward beds (aligns with Beds index)
+        $wardBeds = Bed::where('ward_id', $ward->id)
+            ->where('is_active', true)
+            ->orderBy('bed_number')
+            ->get();
         
-        // Create bed numbers array
-        $bedNumbers = [];
-        for ($i = 1; $i <= $totalBeds; $i++) {
-            $bedNumbers[] = 'B' . str_pad($i, 2, '0', STR_PAD_LEFT);
+        // If no beds are defined, fallback to capacity-based placeholders (legacy)
+        if ($wardBeds->isEmpty() && $ward->capacity > 0) {
+            for ($i = 1; $i <= $ward->capacity; $i++) {
+                $wardBeds->push(new Bed([
+                    'bed_number' => 'B' . str_pad($i, 2, '0', STR_PAD_LEFT),
+                    'status' => 'available',
+                ]));
+            }
         }
         
         // Create a mapping of bed numbers to patients
@@ -295,8 +303,9 @@ class WardDashboardController extends Controller
         }
         
         // Each "section" groups 9 beds together (Section 1 = beds 1-9, Section 2 = 10-18, etc.)
-        foreach ($bedNumbers as $index => $bedNumber) {
+        foreach ($wardBeds as $index => $wardBed) {
             $section = (int) floor($index / 9) + 1;
+            $bedNumber = $wardBed->bed_number;
             if (isset($bedPatientMap[$bedNumber])) {
                 $patient = $bedPatientMap[$bedNumber];
 
@@ -380,7 +389,7 @@ class WardDashboardController extends Controller
             } else {
                 $beds[] = [
                     'number' => $bedNumber,
-                    'status' => 'available',
+                    'status' => $wardBed->status ?? 'available',
                     'patient_status' => null,
                     'is_pending_discharge' => false,
                     'pending_discharge_at' => null,
@@ -743,6 +752,11 @@ class WardDashboardController extends Controller
     public function admissionLogs(Request $request)
     {
         $wardId = $request->input('ward_id');
+        $action = $request->input('action');
+        $bedNumber = trim((string) $request->input('bed_number', ''));
+        $search = trim((string) $request->input('search', ''));
+        $fromDate = $request->input('from_date');
+        $toDate = $request->input('to_date');
         
         $query = AdmissionLog::with(['patient', 'ward', 'user'])
             ->orderBy('created_at', 'desc');
@@ -751,10 +765,39 @@ class WardDashboardController extends Controller
             $query->where('ward_id', $wardId);
         }
         
-        $logs = $query->paginate(50);
-        $wards = Ward::where('is_active', true)->get();
+        if ($action) {
+            $query->where('action', $action);
+        }
         
-        return view('wards.admission-logs', compact('logs', 'wards', 'wardId'));
+        if ($bedNumber !== '') {
+            $query->where('bed_number', 'like', '%' . $bedNumber . '%');
+        }
+        
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('mrn', 'like', '%' . $search . '%')
+                    ->orWhere('patient_name', 'like', '%' . $search . '%');
+            });
+        }
+        
+        if ($fromDate) {
+            $query->whereDate('created_at', '>=', $fromDate);
+        }
+        
+        if ($toDate) {
+            $query->whereDate('created_at', '<=', $toDate);
+        }
+        
+        $logs = $query->paginate(50)->withQueryString();
+        $wards = Ward::where('is_active', true)->get();
+        $actions = AdmissionLog::select('action')->distinct()->pluck('action')->filter()->values();
+        
+        return view('wards.admission-logs', [
+            'logs' => $logs,
+            'wards' => $wards,
+            'wardId' => $wardId,
+            'actions' => $actions,
+        ]);
     }
 
     /**

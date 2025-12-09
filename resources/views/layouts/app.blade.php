@@ -17,15 +17,15 @@
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body class="font-sans antialiased bg-gradient-to-br from-blue-50 via-cyan-50 to-teal-50">
-        <div class="flex h-screen" x-data="{ hideNav: false, hideFooter: false }" 
+    <body class="font-sans antialiased bg-gradient-to-br from-blue-50 via-cyan-50 to-teal-50 overflow-hidden">
+        <div class="flex h-screen min-h-0" x-data="{ hideNav: false, hideFooter: false }" 
              @fullscreenchange.window="hideNav = !!document.fullscreenElement"
              @toggle-custom-fullscreen.window="hideNav = $event.detail.enabled; hideFooter = $event.detail.enabled">
             <div x-show="!hideNav" x-transition:enter="transition ease-out duration-200" x-transition:leave="transition ease-in duration-200">
                 @include('layouts.navigation')
             </div>
 
-            <div class="flex-1 flex flex-col overflow-hidden">
+            <div class="flex-1 flex flex-col overflow-hidden min-h-0">
                 <!-- Page Heading -->
                 @isset($header)
                     <header class="bg-white/80 backdrop-blur-sm shadow-sm border-b border-blue-100">
@@ -36,7 +36,7 @@
                 @endisset
 
                 <!-- Page Content -->
-                <main class="flex-1 overflow-x-hidden overflow-y-auto">
+                <main class="flex-1 overflow-x-hidden overflow-y-auto overscroll-contain min-h-0">
                     {{ $slot }}
                 </main>
                 

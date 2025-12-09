@@ -7,6 +7,8 @@ use App\Models\AdtHospitalMapping;
 use App\Models\AdtWardMapping;
 use App\Models\AdtBedMapping;
 use App\Models\AdtDoctorMapping;
+use App\Models\AdtDietMapping;
+use App\Models\AdtIsolationMapping;
 use App\Models\AdtMessageLog;
 use App\Models\Hospital;
 use App\Models\Ward;
@@ -20,7 +22,7 @@ class AdtConfigurationController extends Controller
     /**
      * Display the ADT Configuration page.
      */
-    public function index()
+    public function index(Request $request)
     {
         // Get or create default configuration
         $configuration = AdtConfiguration::firstOrCreate(
@@ -53,17 +55,47 @@ class AdtConfigurationController extends Controller
             ->where('adt_configuration_id', $configuration->id)
             ->get();
 
-        // Get recent logs
-        $recentLogs = AdtMessageLog::with(['patient', 'bed'])
-            ->latest()
-            ->limit(50)
-            ->get();
+        $dietMappings = AdtDietMapping::where('adt_configuration_id', $configuration->id)->get();
+        $isolationMappings = AdtIsolationMapping::where('adt_configuration_id', $configuration->id)->get();
+
+        // Build query for recent logs with filters
+        $logsQuery = AdtMessageLog::with(['patient', 'bed.ward']);
+        
+        // Apply filters
+        if ($request->filled('status')) {
+            $logsQuery->where('status', $request->status);
+        }
+        
+        if ($request->filled('event_type')) {
+            $logsQuery->where('event_type', $request->event_type);
+        }
+        
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $logsQuery->where(function ($q) use ($search) {
+                $q->where('patient_name', 'like', "%{$search}%")
+                    ->orWhere('patient_mrn', 'like', "%{$search}%")
+                    ->orWhere('patient_id', 'like', "%{$search}%")
+                    ->orWhere('message_control_id', 'like', "%{$search}%");
+            });
+        }
+        
+        if ($request->filled('date_from')) {
+            $logsQuery->whereDate('created_at', '>=', $request->date_from);
+        }
+        
+        if ($request->filled('date_to')) {
+            $logsQuery->whereDate('created_at', '<=', $request->date_to);
+        }
+        
+        $recentLogs = $logsQuery->latest()->limit(100)->get();
 
         // Get statistics
         $stats = [
             'total_messages' => AdtMessageLog::count(),
             'processed' => AdtMessageLog::where('status', 'processed')->count(),
             'failed' => AdtMessageLog::where('status', 'failed')->count(),
+            'unmapped' => AdtMessageLog::where('status', 'unmapped')->count(),
             'today' => AdtMessageLog::whereDate('created_at', today())->count(),
         ];
 
@@ -83,6 +115,8 @@ class AdtConfigurationController extends Controller
             'wardMappings',
             'bedMappings',
             'doctorMappings',
+            'dietMappings',
+            'isolationMappings',
             'recentLogs',
             'stats',
             'hospitals',
@@ -90,6 +124,65 @@ class AdtConfigurationController extends Controller
             'beds',
             'consultants',
             'eventTypes',
+            'doctorTypes'
+        ));
+    }
+
+    /**
+     * Render mappings-only view (for iframe).
+     */
+    public function mappingsFrame()
+    {
+        $configuration = AdtConfiguration::firstOrCreate(
+            ['id' => 1],
+            [
+                'name' => 'Default ADT Configuration',
+                'listener_host' => '0.0.0.0',
+                'listener_port' => 3000,
+                'is_active' => true,
+                'auto_admit' => true,
+                'auto_discharge' => true,
+                'auto_transfer' => true,
+            ]
+        );
+
+        $hospitalMappings = AdtHospitalMapping::with('hospital')
+            ->where('adt_configuration_id', $configuration->id)
+            ->get();
+
+        $wardMappings = AdtWardMapping::with('ward.hospital')
+            ->where('adt_configuration_id', $configuration->id)
+            ->get();
+
+        $bedMappings = AdtBedMapping::with('bed.ward')
+            ->where('adt_configuration_id', $configuration->id)
+            ->get();
+
+        $doctorMappings = AdtDoctorMapping::with('consultant')
+            ->where('adt_configuration_id', $configuration->id)
+            ->get();
+
+        $dietMappings = AdtDietMapping::where('adt_configuration_id', $configuration->id)->get();
+        $isolationMappings = AdtIsolationMapping::where('adt_configuration_id', $configuration->id)->get();
+
+        $hospitals = Hospital::where('is_active', true)->orderBy('name')->get();
+        $wards = Ward::with('hospital')->where('is_active', true)->orderBy('ward_name')->get();
+        $beds = Bed::with('ward.hospital')->where('is_active', true)->orderBy('bed_number')->get();
+        $consultants = Consultant::where('is_active', true)->orderBy('name')->get();
+        $doctorTypes = AdtDoctorMapping::TYPES;
+
+        return view('integration.adt.mappings', compact(
+            'configuration',
+            'hospitalMappings',
+            'wardMappings',
+            'bedMappings',
+            'doctorMappings',
+            'dietMappings',
+            'isolationMappings',
+            'hospitals',
+            'wards',
+            'beds',
+            'consultants',
             'doctorTypes'
         ));
     }
@@ -285,6 +378,80 @@ class AdtConfigurationController extends Controller
             ->with('success', 'Doctor mapping created successfully.');
     }
 
+    public function storeDietMapping(Request $request)
+    {
+        $validated = $request->validate([
+            'adt_diet_code' => 'required|string|max:255',
+            'adt_diet_name' => 'nullable|string|max:255',
+            'mapped_diet' => 'nullable|string|max:255',
+        ]);
+
+        $configuration = AdtConfiguration::firstOrFail();
+
+        $existing = AdtDietMapping::where('adt_configuration_id', $configuration->id)
+            ->where('adt_diet_code', $validated['adt_diet_code'])
+            ->exists();
+
+        if ($existing) {
+            return redirect()->route('adt.index')
+                ->with('error', 'A mapping for this ADT diet code already exists.');
+        }
+
+        AdtDietMapping::create([
+            'adt_configuration_id' => $configuration->id,
+            ...$validated,
+            'is_active' => true,
+        ]);
+
+        return redirect()->route('adt.index')
+            ->with('success', 'Diet mapping created successfully.');
+    }
+
+    public function destroyDietMapping(AdtDietMapping $dietMapping)
+    {
+        $dietMapping->delete();
+
+        return redirect()->route('adt.index')
+            ->with('success', 'Diet mapping deleted successfully.');
+    }
+
+    public function storeIsolationMapping(Request $request)
+    {
+        $validated = $request->validate([
+            'adt_isolation_code' => 'required|string|max:255',
+            'adt_isolation_name' => 'nullable|string|max:255',
+            'mapped_isolation' => 'nullable|string|max:255',
+        ]);
+
+        $configuration = AdtConfiguration::firstOrFail();
+
+        $existing = AdtIsolationMapping::where('adt_configuration_id', $configuration->id)
+            ->where('adt_isolation_code', $validated['adt_isolation_code'])
+            ->exists();
+
+        if ($existing) {
+            return redirect()->route('adt.index')
+                ->with('error', 'A mapping for this ADT isolation code already exists.');
+        }
+
+        AdtIsolationMapping::create([
+            'adt_configuration_id' => $configuration->id,
+            ...$validated,
+            'is_active' => true,
+        ]);
+
+        return redirect()->route('adt.index')
+            ->with('success', 'Isolation mapping created successfully.');
+    }
+
+    public function destroyIsolationMapping(AdtIsolationMapping $isolationMapping)
+    {
+        $isolationMapping->delete();
+
+        return redirect()->route('adt.index')
+            ->with('success', 'Isolation mapping deleted successfully.');
+    }
+
     /**
      * Delete a doctor mapping.
      */
@@ -447,139 +614,6 @@ class AdtConfigurationController extends Controller
         return response()->json([
             'success' => true,
             'logs' => $logs,
-        ]);
-    }
-
-    /**
-     * Get unmapped codes from recent ADT messages for smart mapping suggestions.
-     */
-    public function getUnmappedCodes()
-    {
-        $configuration = AdtConfiguration::first();
-        
-        if (!$configuration) {
-            return response()->json([
-                'success' => false,
-                'message' => 'No ADT configuration found',
-            ]);
-        }
-
-        // Get existing mappings
-        $existingHospitals = $configuration->hospitalMappings()->pluck('adt_hospital_code')->toArray();
-        $existingWards = $configuration->wardMappings()->pluck('adt_ward_code')->toArray();
-        $existingBeds = $configuration->bedMappings()->pluck('adt_bed_code')->toArray();
-        $existingDoctors = $configuration->doctorMappings()->pluck('adt_doctor_code')->toArray();
-
-        // Analyze recent messages for unmapped codes
-        $recentLogs = AdtMessageLog::whereNotNull('parsed_data')
-            ->latest()
-            ->limit(100)
-            ->get();
-
-        $unmappedHospitals = [];
-        $unmappedWards = [];
-        $unmappedBeds = [];
-        $unmappedDoctors = [];
-
-        foreach ($recentLogs as $log) {
-            $parsed = $log->parsed_data;
-            
-            // Check sending facility (hospital)
-            $facility = $parsed['msh']['sending_facility'] ?? null;
-            if ($facility && !in_array($facility, $existingHospitals) && !isset($unmappedHospitals[$facility])) {
-                $unmappedHospitals[$facility] = [
-                    'code' => $facility,
-                    'count' => 0,
-                    'last_seen' => $log->created_at,
-                ];
-            }
-            if ($facility && isset($unmappedHospitals[$facility])) {
-                $unmappedHospitals[$facility]['count']++;
-            }
-
-            // Check ward from PV1
-            $pv1 = $parsed['pv1'] ?? [];
-            $ward = $pv1['ward'] ?? null;
-            if ($ward && !in_array($ward, $existingWards) && !isset($unmappedWards[$ward])) {
-                $unmappedWards[$ward] = [
-                    'code' => $ward,
-                    'count' => 0,
-                    'last_seen' => $log->created_at,
-                ];
-            }
-            if ($ward && isset($unmappedWards[$ward])) {
-                $unmappedWards[$ward]['count']++;
-            }
-
-            // Check bed from PV1 (from location or bed_status)
-            $bed = $pv1['bed'] ?? null;
-            if ($bed && !in_array($bed, $existingBeds) && !isset($unmappedBeds[$bed])) {
-                $unmappedBeds[$bed] = [
-                    'code' => $bed,
-                    'count' => 0,
-                    'last_seen' => $log->created_at,
-                    'source' => 'pv1_bed',
-                ];
-            }
-            if ($bed && isset($unmappedBeds[$bed])) {
-                $unmappedBeds[$bed]['count']++;
-            }
-
-            // Also check bed_status field for bed codes
-            $bedStatus = $pv1['bed_status'] ?? null;
-            if ($bedStatus && preg_match('/\^*([A-Z0-9]+)$/i', $bedStatus, $matches)) {
-                $bedCode = $matches[1];
-                if (!in_array($bedCode, $existingBeds) && !isset($unmappedBeds[$bedCode])) {
-                    $unmappedBeds[$bedCode] = [
-                        'code' => $bedCode,
-                        'count' => 0,
-                        'last_seen' => $log->created_at,
-                        'source' => 'pv1_bed_status',
-                    ];
-                }
-                if (isset($unmappedBeds[$bedCode])) {
-                    $unmappedBeds[$bedCode]['count']++;
-                }
-            }
-
-            // Check doctors from PV1
-            $doctors = [
-                'attending' => $pv1['attending_doctor_id'] ?? null,
-                'referring' => $pv1['referring_doctor'] ?? null,
-                'consulting' => $pv1['consulting_doctor'] ?? null,
-                'admitting' => $pv1['admitting_doctor'] ?? null,
-            ];
-
-            foreach ($doctors as $type => $doctorCode) {
-                if ($doctorCode && !in_array($doctorCode, $existingDoctors)) {
-                    $key = $doctorCode . '_' . $type;
-                    if (!isset($unmappedDoctors[$key])) {
-                        $unmappedDoctors[$key] = [
-                            'code' => $doctorCode,
-                            'type' => $type,
-                            'count' => 0,
-                            'last_seen' => $log->created_at,
-                        ];
-                    }
-                    $unmappedDoctors[$key]['count']++;
-                }
-            }
-        }
-
-        return response()->json([
-            'success' => true,
-            'unmapped' => [
-                'hospitals' => array_values($unmappedHospitals),
-                'wards' => array_values($unmappedWards),
-                'beds' => array_values($unmappedBeds),
-                'doctors' => array_values($unmappedDoctors),
-            ],
-            'totals' => [
-                'hospitals' => count($unmappedHospitals),
-                'wards' => count($unmappedWards),
-                'beds' => count($unmappedBeds),
-                'doctors' => count($unmappedDoctors),
-            ],
         ]);
     }
 }

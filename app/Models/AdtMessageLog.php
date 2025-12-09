@@ -120,6 +120,7 @@ class AdtMessageLog extends Model
             'processed' => 'green',
             'failed' => 'red',
             'ignored' => 'gray',
+            'unmapped' => 'yellow',
             default => 'gray',
         };
     }

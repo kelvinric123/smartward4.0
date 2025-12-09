@@ -27,7 +27,7 @@ PORT = int(os.getenv('HL7_PORT', '3000'))
 BUFFER_SIZE = 65536
 
 # Laravel API Configuration
-LARAVEL_API_URL = os.getenv('LARAVEL_API_URL', 'http://localhost:80/api/adt/message')
+LARAVEL_API_URL = os.getenv('LARAVEL_API_URL', 'http://localhost:8000/api/adt/message')
 LARAVEL_API_KEY = os.getenv('LARAVEL_API_KEY', '')
 
 # ADT Event Types
@@ -785,6 +785,19 @@ class HL7Parser:
             if isinstance(zit, list) and zit and isinstance(zit[0], str):
                 custom['isolation_type'] = self._get_field(zit, 1)
                 custom['isolation_description'] = self._get_field(zit, 2)
+
+        # Parse RMI (Isolation Precautions) - e.g., RMI|0|||CI^Contact Isolation
+        rmi = segments.get('RMI', [])
+        if rmi:
+            # Handle single RMI segment
+            if isinstance(rmi, list) and rmi and isinstance(rmi[0], str):
+                isolation_field = self._get_field(rmi, 4)
+                if isolation_field:
+                    parts = isolation_field.split('^')
+                    code = parts[0] if parts else isolation_field
+                    desc = parts[1] if len(parts) > 1 else ''
+                    custom['isolation_type'] = code or custom.get('isolation_type', '')
+                    custom['isolation_description'] = desc or custom.get('isolation_description', '')
         
         # Parse ZFR (Fall Risk Flag)
         zfr = segments.get('ZFR', [])

@@ -123,12 +123,24 @@ class AdtApiController extends Controller
     ): array {
         $actions = [];
         
+        // Extract ward and bed codes from the ADT message for logging
+        $adtWardCode = $pv1['ward'] ?? null;
+        $adtBedCode = $pv1['bed'] ?? null;
+        $bedStatus = $pv1['bed_status'] ?? null;
+        
+        // Extract bed code from bed_status if bed is empty (e.g., "^^C706" -> "C706")
+        if (!$adtBedCode && $bedStatus) {
+            if (preg_match('/\^*([A-Za-z0-9]+)$/', $bedStatus, $matches)) {
+                $adtBedCode = $matches[1];
+            }
+        }
+        
         Log::info("ADT A01 Admit - Processing", [
             'mrn' => $pid['mrn'] ?? 'N/A',
             'name' => $pid['name'] ?? 'N/A',
-            'bed' => $pv1['bed'] ?? 'N/A',
-            'bed_status' => $pv1['bed_status'] ?? 'N/A',
-            'ward' => $pv1['ward'] ?? 'N/A',
+            'adt_ward_code' => $adtWardCode,
+            'adt_bed_code' => $adtBedCode,
+            'bed_status' => $bedStatus,
             'auto_admit' => $configuration?->auto_admit ?? 'no config',
         ]);
         
@@ -139,7 +151,11 @@ class AdtApiController extends Controller
             if ($configuration && !$configuration->auto_admit) {
                 $messageLog->update([
                     'status' => 'ignored',
-                    'action_taken' => ['reason' => 'Auto-admit disabled'],
+                    'action_taken' => [
+                        'reason' => 'Auto-admit disabled',
+                        'adt_ward_code' => $adtWardCode,
+                        'adt_bed_code' => $adtBedCode,
+                    ],
                 ]);
                 DB::commit();
                 Log::info("ADT A01 Admit - Ignored (auto-admit disabled)");
@@ -147,6 +163,61 @@ class AdtApiController extends Controller
                     'success' => true,
                     'message' => 'Message logged but auto-admit is disabled',
                     'actions' => ['logged'],
+                ];
+            }
+            
+            // Check if ward mapping exists
+            $wardMapped = false;
+            $bedMapped = false;
+            $mappedWard = null;
+            $mappedBed = null;
+            
+            if ($configuration && $adtWardCode) {
+                $mappedWard = $configuration->findWardByAdtCode($adtWardCode);
+                $wardMapped = $mappedWard !== null;
+            }
+            
+            if ($configuration && $adtBedCode) {
+                $mappedBed = $configuration->findBedByAdtCode($adtBedCode);
+                $bedMapped = $mappedBed !== null;
+            }
+            
+            // If ward or bed is not mapped, mark as unmapped and don't process
+            if (!$wardMapped || !$bedMapped) {
+                $unmappedDetails = [];
+                if (!$wardMapped && $adtWardCode) {
+                    $unmappedDetails[] = "Ward '{$adtWardCode}' not mapped";
+                }
+                if (!$bedMapped && $adtBedCode) {
+                    $unmappedDetails[] = "Bed '{$adtBedCode}' not mapped";
+                }
+                
+                $messageLog->update([
+                    'status' => 'unmapped',
+                    'error_message' => implode('; ', $unmappedDetails),
+                    'action_taken' => [
+                        'reason' => 'Ward or bed not mapped in system',
+                        'adt_ward_code' => $adtWardCode,
+                        'adt_bed_code' => $adtBedCode,
+                        'ward_mapped' => $wardMapped,
+                        'bed_mapped' => $bedMapped,
+                        'mapped_ward_name' => $mappedWard?->ward_name,
+                        'mapped_bed_number' => $mappedBed?->bed_number,
+                    ],
+                ]);
+                DB::commit();
+                
+                Log::warning("ADT A01 Admit - UNMAPPED", [
+                    'adt_ward_code' => $adtWardCode,
+                    'adt_bed_code' => $adtBedCode,
+                    'ward_mapped' => $wardMapped,
+                    'bed_mapped' => $bedMapped,
+                ]);
+                
+                return [
+                    'success' => false,
+                    'message' => 'Ward or bed not mapped: ' . implode('; ', $unmappedDetails),
+                    'actions' => ['unmapped'],
                 ];
             }
             
@@ -184,15 +255,18 @@ class AdtApiController extends Controller
             $patient->pending_discharge_at = null; // Clear any pending discharge flag
             $patient->discharged_at = null; // Clear discharged timestamp
             
-            // Find and assign bed
+            // Find and assign bed (we know it exists from the mapping check above)
             $bed = $this->findAndAssignBed($patient, $pv1, $configuration);
             if ($bed) {
                 $patient->ward_id = $bed->ward_id;
                 $patient->bed_number = $bed->bed_number;
+                $wardName = $bed->ward->ward_name ?? 'unknown';
                 $actions[] = 'bed_assigned';
+                $actions[] = "assigned_to_ward_{$wardName}";
+                $actions[] = "assigned_to_bed_{$bed->bed_number}";
                 Log::info("ADT A01 Admit - Bed assigned: {$bed->bed_number} (ID: {$bed->id})");
             } else {
-                Log::warning("ADT A01 Admit - No bed assigned");
+                Log::warning("ADT A01 Admit - No bed assigned despite mapping check");
             }
             
             // Find and assign consultant
@@ -213,10 +287,15 @@ class AdtApiController extends Controller
                 'bed_number' => $patient->bed_number,
             ]);
             
-            // Update message log
+            // Update message log with detailed information
             $messageLog->update([
                 'status' => 'processed',
-                'action_taken' => $actions,
+                'action_taken' => array_merge($actions, [
+                    'adt_ward_code' => $adtWardCode,
+                    'adt_bed_code' => $adtBedCode,
+                    'assigned_ward' => $bed?->ward?->ward_name,
+                    'assigned_bed' => $bed?->bed_number,
+                ]),
                 'patient_id_ref' => $patient->id,
                 'bed_id_ref' => $bed?->id,
             ]);
@@ -251,6 +330,10 @@ class AdtApiController extends Controller
             $messageLog->update([
                 'status' => 'failed',
                 'error_message' => $e->getMessage(),
+                'action_taken' => [
+                    'adt_ward_code' => $adtWardCode,
+                    'adt_bed_code' => $adtBedCode,
+                ],
             ]);
             
             throw $e;
@@ -284,54 +367,183 @@ class AdtApiController extends Controller
                 ];
             }
             
-            $mrn = $pid['mrn'] ?? null;
-            $patient = $mrn ? Patient::where('mrn', $mrn)->first() : null;
+            // Extract ward and bed codes from PV1-3
+            $adtWardCode = $pv1['ward'] ?? null;
+            $adtBedCode = $pv1['bed'] ?? null;
+            // Fallback: if bed code is missing, try to extract from bed_status (PV1-40) e.g. "^^B10" -> "B10"
+            if (!$adtBedCode && !empty($pv1['bed_status'])) {
+                if (preg_match('/\\^*([A-Za-z0-9]+)$/', $pv1['bed_status'], $matches)) {
+                    $adtBedCode = $matches[1];
+                }
+            }
             
-            if (!$patient) {
+            Log::info("ADT A02 Transfer - Checking destination mapping", [
+                'adt_ward_code' => $adtWardCode,
+                'adt_bed_code' => $adtBedCode,
+            ]);
+            
+            // Check if destination ward and bed are mapped
+            $wardMapped = false;
+            $bedMapped = false;
+            $mappedWard = null;
+            $mappedBed = null;
+            
+            if ($configuration && $adtWardCode) {
+                $mappedWard = $configuration->findWardByAdtCode($adtWardCode);
+                $wardMapped = $mappedWard !== null;
+            }
+            
+            if ($configuration && $adtBedCode) {
+                $mappedBed = $configuration->findBedByAdtCode($adtBedCode);
+                $bedMapped = $mappedBed !== null;
+            }
+            
+            // If destination ward or bed is not mapped, mark as unmapped
+            if (!$wardMapped || !$bedMapped) {
+                $unmappedDetails = [];
+                if (!$wardMapped && $adtWardCode) {
+                    $unmappedDetails[] = "Ward '{$adtWardCode}' not mapped";
+                }
+                if (!$bedMapped && $adtBedCode) {
+                    $unmappedDetails[] = "Bed '{$adtBedCode}' not mapped";
+                }
+                
                 $messageLog->update([
-                    'status' => 'failed',
-                    'error_message' => 'Patient not found for transfer',
+                    'status' => 'unmapped',
+                    'error_message' => implode('; ', $unmappedDetails),
+                    'action_taken' => [
+                        'reason' => 'Destination ward or bed not mapped in system',
+                        'adt_ward_code' => $adtWardCode,
+                        'adt_bed_code' => $adtBedCode,
+                        'ward_mapped' => $wardMapped,
+                        'bed_mapped' => $bedMapped,
+                        'mapped_ward_name' => $mappedWard?->ward_name,
+                        'mapped_bed_number' => $mappedBed?->bed_number,
+                    ],
+                    'unmapped_ward_code' => !$wardMapped ? $adtWardCode : null,
+                    'unmapped_bed_code' => !$bedMapped ? $adtBedCode : null,
                 ]);
                 DB::commit();
+                
+                Log::warning("ADT A02 Transfer - UNMAPPED DESTINATION", [
+                    'adt_ward_code' => $adtWardCode,
+                    'adt_bed_code' => $adtBedCode,
+                    'ward_mapped' => $wardMapped,
+                    'bed_mapped' => $bedMapped,
+                ]);
+                
                 return [
                     'success' => false,
-                    'message' => 'Patient not found',
-                    'actions' => [],
+                    'message' => 'Destination ward or bed not mapped: ' . implode('; ', $unmappedDetails),
+                    'actions' => ['unmapped'],
                 ];
             }
             
-            // Release old bed
+            $mrn = $pid['mrn'] ?? null;
+            if (!$mrn) {
+                throw new \Exception('MRN is required for transfer');
+            }
+            
+            $patient = Patient::where('mrn', $mrn)->first();
+            
+            // If patient doesn't exist (e.g., was in unmapped location), create them now
+            if (!$patient) {
+                Log::info("ADT A02 Transfer - Patient not found, creating new patient", ['mrn' => $mrn]);
+                $patient = new Patient();
+                $patient->mrn = $mrn;
+                $this->updatePatientFromPid($patient, $pid);
+                $patient->status = Patient::STATUS_ADMITTED;
+                $patient->admitted_at = now();
+                $actions[] = 'patient_created_on_transfer';
+            } else {
+                // Update existing patient info
+                $this->updatePatientFromPid($patient, $pid);
+                $actions[] = 'patient_updated';
+            }
+            
+            // Release old bed if patient has one
             $oldBed = Bed::where('patient_id', $patient->id)->first();
+            $oldBedNumber = $oldBed?->bed_number;
+            $oldWardName = $oldBed?->ward?->ward_name;
+            
             if ($oldBed) {
                 $oldBed->update([
                     'patient_id' => null,
                     'status' => 'available',
                 ]);
                 $actions[] = 'old_bed_released';
+                Log::info("ADT A02 Transfer - Released old bed: {$oldBedNumber}");
             }
             
             // Find and assign new bed
-            $newBed = $this->findAndAssignBed($patient, $pv1, $configuration);
+            [$newBed, $unmappedWardCode, $unmappedBedCode] = $this->findAndAssignBed($patient, $pv1, $configuration);
             if ($newBed) {
                 $patient->ward_id = $newBed->ward_id;
                 $patient->bed_number = $newBed->bed_number;
+                $patient->status = Patient::STATUS_ADMITTED;
+                $patient->is_active = true;
+                
                 $newBed->update([
                     'patient_id' => $patient->id,
                     'status' => 'occupied',
                 ]);
                 $actions[] = 'new_bed_assigned';
+                $actions[] = "transferred_to_ward_{$newBed->ward->ward_name}";
+                $actions[] = "transferred_to_bed_{$newBed->bed_number}";
+                Log::info("ADT A02 Transfer - Assigned new bed: {$newBed->bed_number} in {$newBed->ward->ward_name}");
+            } else {
+                // Fallback: if mapping exists, force-assign mapped bed even if filters failed
+                if ($mappedBed) {
+                    $patient->ward_id = $mappedBed->ward_id;
+                    $patient->bed_number = $mappedBed->bed_number;
+                    $patient->status = Patient::STATUS_ADMITTED;
+                    $patient->is_active = true;
+                    
+                    $mappedBed->update([
+                        'patient_id' => $patient->id,
+                        'status' => 'occupied',
+                    ]);
+                    
+                    $actions[] = 'new_bed_assigned_forced';
+                    $actions[] = "transferred_to_ward_{$mappedBed->ward->ward_name}";
+                    $actions[] = "transferred_to_bed_{$mappedBed->bed_number}";
+                    
+                    Log::warning("ADT A02 Transfer - Forced bed assignment via mapping", [
+                        'bed' => $mappedBed->bed_number,
+                        'ward' => $mappedBed->ward->ward_name ?? null,
+                    ]);
+                } else {
+                    Log::warning("ADT A02 Transfer - No bed found", [
+                        'unmapped_ward' => $unmappedWardCode,
+                        'unmapped_bed' => $unmappedBedCode,
+                    ]);
+                }
             }
             
             $patient->save();
             
             $messageLog->update([
                 'status' => 'processed',
-                'action_taken' => $actions,
+                'action_taken' => array_merge($actions, [
+                    'adt_ward_code' => $adtWardCode,
+                    'adt_bed_code' => $adtBedCode,
+                    'old_ward' => $oldWardName,
+                    'old_bed' => $oldBedNumber,
+                    'assigned_ward' => $newBed?->ward?->ward_name,
+                    'assigned_bed' => $newBed?->bed_number,
+                ]),
                 'patient_id_ref' => $patient->id,
                 'bed_id_ref' => $newBed?->id,
             ]);
             
             DB::commit();
+            
+            Log::info("ADT A02 Transfer - SUCCESS", [
+                'patient_id' => $patient->id,
+                'from' => "{$oldWardName}/{$oldBedNumber}",
+                'to' => "{$newBed?->ward?->ward_name}/{$newBed?->bed_number}",
+                'actions' => $actions,
+            ]);
             
             return [
                 'success' => true,
@@ -342,10 +554,16 @@ class AdtApiController extends Controller
             
         } catch (\Exception $e) {
             DB::rollBack();
+            
+            Log::error("ADT A02 Transfer - FAILED: " . $e->getMessage(), [
+                'trace' => $e->getTraceAsString(),
+            ]);
+            
             $messageLog->update([
                 'status' => 'failed',
                 'error_message' => $e->getMessage(),
             ]);
+            
             throw $e;
         }
     }
@@ -472,18 +690,28 @@ class AdtApiController extends Controller
             DB::beginTransaction();
             
             $mrn = $pid['mrn'] ?? null;
-            $patient = $mrn ? Patient::where('mrn', $mrn)->first() : null;
-            
-            if (!$patient) {
-                // Create new patient if not exists
-                $patient = new Patient();
-                $patient->mrn = $mrn;
-                $actions[] = 'patient_created';
-            } else {
-                $actions[] = 'patient_updated';
+            if (!$mrn) {
+                throw new \Exception('MRN is required for patient update');
             }
             
-            // Update patient information
+            $patient = Patient::where('mrn', $mrn)->first();
+            
+            if (!$patient) {
+                $messageLog->update([
+                    'status' => 'failed',
+                    'error_message' => 'Patient not found for update',
+                ]);
+                DB::commit();
+                return [
+                    'success' => false,
+                    'message' => 'Patient not found',
+                    'actions' => [],
+                ];
+            }
+            
+            $actions[] = 'patient_updated';
+            
+            // Update patient information (demographics/clinical/visit) but do NOT change admission/bed
             $this->updatePatientFromPid($patient, $pid);
             $this->updatePatientClinicalIndicators($patient, $allergies, $custom, $pv1);
             $this->updatePatientVisitInfo($patient, $pv1, $pv2);
@@ -944,7 +1172,6 @@ class AdtApiController extends Controller
                 'C' => 'contact',
                 'CI' => 'contact',
                 // Combined codes
-                'DAC' => 'droplet_airborne_contact',
                 'DC' => 'droplet_contact',
                 'AC' => 'airborne_contact',
                 // Full names
@@ -956,8 +1183,30 @@ class AdtApiController extends Controller
                 'AIRBORNE ISOLATION' => 'airborne',
             ];
             
-            $isolationType = strtoupper($custom['isolation_type']);
-            $patient->isolation_type = $isolationMap[$isolationType] ?? strtolower(str_replace(' ', '_', $custom['isolation_type']));
+            $rawIsolation = trim($custom['isolation_type']);
+            
+            // Handle caret-delimited values like "CI^Contact Isolation"
+            $parts = strpos($rawIsolation, '^') !== false ? explode('^', $rawIsolation, 2) : [$rawIsolation];
+            $codePart = trim($parts[0] ?? '');
+            $descPart = trim($parts[1] ?? '');
+            
+            // Try mapping using code, then description, then full raw value
+            $isolationTypeCandidates = array_filter([
+                strtoupper($codePart),
+                strtoupper($descPart),
+                strtoupper($rawIsolation),
+            ]);
+            
+            $mappedIsolation = null;
+            foreach ($isolationTypeCandidates as $candidate) {
+                if (isset($isolationMap[$candidate])) {
+                    $mappedIsolation = $isolationMap[$candidate];
+                    break;
+                }
+            }
+            
+            // Fallback to slugified raw value
+            $patient->isolation_type = $mappedIsolation ?? strtolower(str_replace([' ', '^'], ['_', '_'], $rawIsolation));
             
             Log::info("ADT - Isolation type set", [
                 'raw' => $custom['isolation_type'],
@@ -1059,9 +1308,9 @@ class AdtApiController extends Controller
     protected function findAndAssignBed(Patient $patient, array $pv1, ?AdtConfiguration $configuration): ?Bed
     {
         // Try to find bed from PV1-3 location or PV1-40 bed status
-        $bedCode = $pv1['bed'] ?? null;
-        $wardCode = $pv1['ward'] ?? null;
-        $bedStatus = $pv1['bed_status'] ?? null;
+        $bedCode = isset($pv1['bed']) ? strtoupper(trim($pv1['bed'])) : null;
+        $wardCode = isset($pv1['ward']) ? strtoupper(trim($pv1['ward'])) : null;
+        $bedStatus = isset($pv1['bed_status']) ? trim($pv1['bed_status']) : null;
         
         Log::info("ADT Bed Assignment - Looking for bed", [
             'bed_code' => $bedCode,
@@ -1072,7 +1321,7 @@ class AdtApiController extends Controller
         // Extract bed code from bed_status if bed is empty (e.g., "^^B2" -> "B2")
         if (!$bedCode && $bedStatus) {
             if (preg_match('/\^*([A-Za-z0-9]+)$/', $bedStatus, $matches)) {
-                $bedCode = $matches[1];
+                $bedCode = strtoupper($matches[1]);
                 Log::info("ADT Bed Assignment - Extracted bed code from bed_status: {$bedCode}");
             }
         }
@@ -1099,50 +1348,61 @@ class AdtApiController extends Controller
             }
         }
         
-        // Try fuzzy bed lookup (B2 matches B02, BED-2, etc.)
+        // Try fuzzy bed lookup for various formats
         if ($bedCode) {
-            // Extract numeric part
-            preg_match('/(\d+)/', $bedCode, $numMatches);
-            $bedNum = $numMatches[1] ?? null;
+            $possibleFormats = [$bedCode];
             
-            if ($bedNum) {
-                // Try various formats
-                $possibleFormats = [
-                    $bedCode,                    // B2
-                    'B' . str_pad($bedNum, 2, '0', STR_PAD_LEFT),  // B02
-                    'B' . $bedNum,               // B2
-                    'BED' . $bedNum,             // BED2
-                    'BED-' . $bedNum,            // BED-2
-                    'Bed ' . $bedNum,            // Bed 2
-                ];
+            // Check if bed code is in D6XX format (e.g., D610 -> bed 10 in ward D6)
+            if (preg_match('/^D6(\d{2})$/', $bedCode, $d6Matches)) {
+                // D6XX format - extract bed number
+                $bedNum = (int) $d6Matches[1];
+                $possibleFormats[] = 'D6' . str_pad($bedNum, 2, '0', STR_PAD_LEFT);  // D610
+                $possibleFormats[] = (string) $bedNum;  // 10
+            } 
+            // Legacy B-format (B2, B02, BED-2, etc.)
+            elseif (preg_match('/(\d+)/', $bedCode, $numMatches)) {
+                $bedNum = $numMatches[1];
+                // Try various B-format variations
+                $possibleFormats[] = 'B' . str_pad($bedNum, 2, '0', STR_PAD_LEFT);  // B02
+                $possibleFormats[] = 'B' . $bedNum;               // B2
+                $possibleFormats[] = 'BED' . $bedNum;             // BED2
+                $possibleFormats[] = 'BED-' . $bedNum;            // BED-2
+                $possibleFormats[] = 'Bed ' . $bedNum;            // Bed 2
+                // Also try D6XX format in case beds use that naming
+                $possibleFormats[] = 'D6' . str_pad($bedNum, 2, '0', STR_PAD_LEFT);  // D602
+            }
+            
+            $possibleFormats = array_unique($possibleFormats);
+            Log::info("ADT Bed Assignment - Trying fuzzy formats", ['formats' => $possibleFormats]);
+            
+            $bed = Bed::whereIn('bed_number', $possibleFormats)
+                ->where('status', 'available')
+                ->whereNull('patient_id')
+                ->where('is_active', true)
+                ->first();
                 
-                Log::info("ADT Bed Assignment - Trying fuzzy formats", ['formats' => $possibleFormats]);
+            if ($bed) {
+                Log::info("ADT Bed Assignment - Found by fuzzy match: {$bed->bed_number}");
+                return $bed;
+            }
+            
+            // Try LIKE match for partial matches
+            $bed = Bed::where(function($q) use ($bedCode) {
+                    // Try exact end match (e.g., %10 matches D610)
+                    if (preg_match('/(\d+)$/', $bedCode, $m)) {
+                        $numPart = $m[1];
+                        $q->where('bed_number', 'LIKE', "%{$numPart}")
+                          ->orWhere('bed_number', 'LIKE', "D6%{$numPart}");
+                    }
+                })
+                ->where('status', 'available')
+                ->whereNull('patient_id')
+                ->where('is_active', true)
+                ->first();
                 
-                $bed = Bed::whereIn('bed_number', $possibleFormats)
-                    ->where('status', 'available')
-                    ->whereNull('patient_id')
-                    ->where('is_active', true)
-                    ->first();
-                    
-                if ($bed) {
-                    Log::info("ADT Bed Assignment - Found by fuzzy match: {$bed->bed_number}");
-                    return $bed;
-                }
-                
-                // Try LIKE match
-                $bed = Bed::where(function($q) use ($bedNum) {
-                        $q->where('bed_number', 'LIKE', "%{$bedNum}")
-                          ->orWhere('bed_number', 'LIKE', "B%{$bedNum}%");
-                    })
-                    ->where('status', 'available')
-                    ->whereNull('patient_id')
-                    ->where('is_active', true)
-                    ->first();
-                    
-                if ($bed) {
-                    Log::info("ADT Bed Assignment - Found by LIKE match: {$bed->bed_number}");
-                    return $bed;
-                }
+            if ($bed) {
+                Log::info("ADT Bed Assignment - Found by LIKE match: {$bed->bed_number}");
+                return $bed;
             }
         }
         

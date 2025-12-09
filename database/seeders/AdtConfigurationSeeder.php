@@ -72,8 +72,10 @@ class AdtConfigurationSeeder extends Seeder
 
         $this->command->info("Created Hospital Mapping: PHKL -> {$hospital->name}");
 
-        // Ward Mapping - Map common ward codes to D6
-        $wardCodes = ['D6', '5A', 'ICU', 'W5', 'WARD5'];
+        // Ward Mapping - Map ward codes to Ward D6
+        // HIS sends ward code as 'WWD6' (format: WW + ward identifier)
+        // Also map alternative codes that might be used
+        $wardCodes = ['WWD6', 'D6', 'WD6', 'WARD-D6'];
         foreach ($wardCodes as $code) {
             AdtWardMapping::updateOrCreate(
                 [
@@ -91,42 +93,49 @@ class AdtConfigurationSeeder extends Seeder
         $this->command->info("Created Ward Mappings: " . implode(', ', $wardCodes) . " -> {$ward->ward_name}");
 
         // Bed Mappings - Map HIS bed codes to SmartWard beds
+        // HIS sends bed code as 'D6XX' where XX is bed number (01-22)
+        // Example: D601, D602, ..., D622
         $beds = Bed::where('ward_id', $ward->id)->where('is_active', true)->get();
         
+        $bedMappingsCreated = 0;
         foreach ($beds as $bed) {
-            // Map various formats: B01 -> B01, B1 -> B01, etc.
-            $bedNum = (int) filter_var($bed->bed_number, FILTER_SANITIZE_NUMBER_INT);
-            
-            // Create mapping for short format (B1, B2, etc.)
+            // The bed_number is already in D6XX format (D601, D602, etc.)
+            // Create direct mapping for the bed code
             AdtBedMapping::updateOrCreate(
                 [
                     'adt_configuration_id' => $configuration->id,
-                    'adt_bed_code' => 'B' . $bedNum,
+                    'adt_bed_code' => $bed->bed_number,
                 ],
                 [
-                    'adt_bed_name' => "Bed {$bedNum} (HIS)",
+                    'adt_bed_name' => "Bed {$bed->bed_number} (HIS)",
                     'bed_id' => $bed->id,
                     'is_active' => true,
                 ]
             );
-
-            // Also create mapping for long format (B01, B02, etc.)
-            if ($bedNum < 10) {
+            $bedMappingsCreated++;
+            
+            // Also extract the bed number for short format mapping
+            // D601 -> bed number 1, D610 -> bed number 10
+            if (preg_match('/D6(\d+)/', $bed->bed_number, $matches)) {
+                $bedNum = (int) $matches[1];
+                
+                // Create mapping for numeric-only format (1, 2, 10, etc.)
                 AdtBedMapping::updateOrCreate(
                     [
                         'adt_configuration_id' => $configuration->id,
-                        'adt_bed_code' => 'B0' . $bedNum,
+                        'adt_bed_code' => (string) $bedNum,
                     ],
                     [
-                        'adt_bed_name' => "Bed 0{$bedNum} (HIS)",
+                        'adt_bed_name' => "Bed {$bedNum} (HIS short)",
                         'bed_id' => $bed->id,
                         'is_active' => true,
                     ]
                 );
+                $bedMappingsCreated++;
             }
         }
 
-        $this->command->info("Created Bed Mappings for {$beds->count()} beds");
+        $this->command->info("Created Bed Mappings for {$beds->count()} beds ({$bedMappingsCreated} total mappings)");
 
         // Doctor Mappings - Map HIS doctor codes to SmartWard consultants
         $doctorCodes = [
@@ -179,8 +188,8 @@ class AdtConfigurationSeeder extends Seeder
         $this->command->newLine();
         $this->command->info('Mappings Created:');
         $this->command->info("  - 1 Hospital Mapping (PHKL)");
-        $this->command->info("  - " . count($wardCodes) . " Ward Mappings");
-        $this->command->info("  - " . ($beds->count() * 2) . " Bed Mappings (short + long format)");
+        $this->command->info("  - " . count($wardCodes) . " Ward Mappings (WWD6, D6, etc.)");
+        $this->command->info("  - {$bedMappingsCreated} Bed Mappings (D601-D622 format)");
         $this->command->info("  - " . count($doctorCodes) . " Doctor Mappings");
         $this->command->newLine();
         $this->command->info('You can now test with the sample HL7 message sender:');

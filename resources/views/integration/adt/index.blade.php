@@ -7,13 +7,22 @@
                 </h2>
                 <p class="text-sm text-gray-500 mt-1">Configure HL7 ADT message handling for patient Admit, Discharge, and Transfer</p>
             </div>
-            <button onclick="document.getElementById('adtInfoModal').classList.remove('hidden')" 
-                    class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                </svg>
-                How ADT Works
-            </button>
+            <div class="flex space-x-2">
+                <button onclick="openMappingIframe()" 
+                        class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-600 hover:to-blue-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6l4 2m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    Mappings
+                </button>
+                <button onclick="document.getElementById('adtInfoModal').classList.remove('hidden')" 
+                        class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    How ADT Works
+                </button>
+            </div>
         </div>
     </x-slot>
 
@@ -197,54 +206,67 @@
                 </div>
 
                 <!-- Statistics Cards -->
-                <div class="lg:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div class="bg-white/90 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-blue-100">
+                <div class="lg:col-span-2 grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div class="bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-lg border border-blue-100">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-sm font-medium text-gray-500">Total Messages</p>
-                                <p class="text-3xl font-bold text-gray-800">{{ number_format($stats['total_messages']) }}</p>
+                                <p class="text-xs font-medium text-gray-500">Total</p>
+                                <p class="text-2xl font-bold text-gray-800">{{ number_format($stats['total_messages']) }}</p>
                             </div>
-                            <div class="p-3 bg-blue-100 rounded-xl">
-                                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div class="p-2 bg-blue-100 rounded-xl">
+                                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                                 </svg>
                             </div>
                         </div>
                     </div>
-                    <div class="bg-white/90 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-green-100">
+                    <div class="bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-lg border border-green-100">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-sm font-medium text-gray-500">Processed</p>
-                                <p class="text-3xl font-bold text-green-600">{{ number_format($stats['processed']) }}</p>
+                                <p class="text-xs font-medium text-gray-500">Processed</p>
+                                <p class="text-2xl font-bold text-green-600">{{ number_format($stats['processed']) }}</p>
                             </div>
-                            <div class="p-3 bg-green-100 rounded-xl">
-                                <svg class="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div class="p-2 bg-green-100 rounded-xl">
+                                <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                                 </svg>
                             </div>
                         </div>
                     </div>
-                    <div class="bg-white/90 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-red-100">
+                    <div class="bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-lg border border-yellow-100">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-sm font-medium text-gray-500">Failed</p>
-                                <p class="text-3xl font-bold text-red-600">{{ number_format($stats['failed']) }}</p>
+                                <p class="text-xs font-medium text-gray-500">Unmapped</p>
+                                <p class="text-2xl font-bold text-yellow-600">{{ number_format($stats['unmapped']) }}</p>
                             </div>
-                            <div class="p-3 bg-red-100 rounded-xl">
-                                <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div class="p-2 bg-yellow-100 rounded-xl">
+                                <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-lg border border-red-100">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs font-medium text-gray-500">Failed</p>
+                                <p class="text-2xl font-bold text-red-600">{{ number_format($stats['failed']) }}</p>
+                            </div>
+                            <div class="p-2 bg-red-100 rounded-xl">
+                                <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                                 </svg>
                             </div>
                         </div>
                     </div>
-                    <div class="bg-white/90 backdrop-blur-sm p-6 rounded-2xl shadow-lg border border-purple-100">
+                    <div class="bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-lg border border-purple-100">
                         <div class="flex items-center justify-between">
                             <div>
-                                <p class="text-sm font-medium text-gray-500">Today</p>
-                                <p class="text-3xl font-bold text-purple-600">{{ number_format($stats['today']) }}</p>
+                                <p class="text-xs font-medium text-gray-500">Today</p>
+                                <p class="text-2xl font-bold text-purple-600">{{ number_format($stats['today']) }}</p>
                             </div>
-                            <div class="p-3 bg-purple-100 rounded-xl">
-                                <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div class="p-2 bg-purple-100 rounded-xl">
+                                <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                                 </svg>
                             </div>
@@ -320,118 +342,6 @@
                             </label>
                         </div>
                     </form>
-                </div>
-            </div>
-
-            <!-- Smart Mapping Suggestions -->
-            <div x-show="unmappedCodes && (unmappedCodes.beds?.length > 0 || unmappedCodes.doctors?.length > 0 || unmappedCodes.wards?.length > 0 || unmappedCodes.hospitals?.length > 0)" 
-                 class="bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-2xl shadow-lg overflow-hidden">
-                <div class="p-4 border-b border-amber-200 bg-gradient-to-r from-amber-100 to-yellow-100">
-                    <div class="flex justify-between items-center">
-                        <div class="flex items-center">
-                            <div class="p-2 bg-amber-500 rounded-lg mr-3">
-                                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-                                </svg>
-                            </div>
-                            <div>
-                                <h3 class="text-md font-bold text-amber-800">Smart Mapping Suggestions</h3>
-                                <p class="text-xs text-amber-600">Unmapped codes detected from ADT messages</p>
-                            </div>
-                        </div>
-                        <button @click="loadUnmappedCodes()" class="p-2 bg-amber-200 hover:bg-amber-300 text-amber-700 rounded-lg transition-colors">
-                            <svg class="w-5 h-5" :class="{ 'animate-spin': loadingUnmapped }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-                <div class="p-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <!-- Unmapped Beds -->
-                        <div x-show="unmappedCodes.beds?.length > 0">
-                            <h4 class="text-sm font-bold text-amber-800 mb-2 flex items-center">
-                                <span class="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                                Beds (<span x-text="unmappedCodes.beds?.length || 0"></span>)
-                            </h4>
-                            <div class="space-y-2 max-h-32 overflow-y-auto">
-                                <template x-for="bed in unmappedCodes.beds" :key="bed.code">
-                                    <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-amber-100">
-                                        <div>
-                                            <span class="font-mono text-sm font-bold text-gray-800" x-text="bed.code"></span>
-                                            <span class="text-xs text-gray-500 ml-1">(<span x-text="bed.count"></span>x)</span>
-                                        </div>
-                                        <button @click="quickMapBed(bed.code)" class="text-xs px-2 py-1 bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors">
-                                            Map
-                                        </button>
-                                    </div>
-                                </template>
-                            </div>
-                        </div>
-
-                        <!-- Unmapped Wards -->
-                        <div x-show="unmappedCodes.wards?.length > 0">
-                            <h4 class="text-sm font-bold text-amber-800 mb-2 flex items-center">
-                                <span class="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-                                Wards (<span x-text="unmappedCodes.wards?.length || 0"></span>)
-                            </h4>
-                            <div class="space-y-2 max-h-32 overflow-y-auto">
-                                <template x-for="ward in unmappedCodes.wards" :key="ward.code">
-                                    <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-amber-100">
-                                        <div>
-                                            <span class="font-mono text-sm font-bold text-gray-800" x-text="ward.code"></span>
-                                            <span class="text-xs text-gray-500 ml-1">(<span x-text="ward.count"></span>x)</span>
-                                        </div>
-                                        <button @click="quickMapWard(ward.code)" class="text-xs px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors">
-                                            Map
-                                        </button>
-                                    </div>
-                                </template>
-                            </div>
-                        </div>
-
-                        <!-- Unmapped Doctors -->
-                        <div x-show="unmappedCodes.doctors?.length > 0">
-                            <h4 class="text-sm font-bold text-amber-800 mb-2 flex items-center">
-                                <span class="w-2 h-2 bg-purple-500 rounded-full mr-2"></span>
-                                Doctors (<span x-text="unmappedCodes.doctors?.length || 0"></span>)
-                            </h4>
-                            <div class="space-y-2 max-h-32 overflow-y-auto">
-                                <template x-for="doctor in unmappedCodes.doctors" :key="doctor.code + '_' + doctor.type">
-                                    <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-amber-100">
-                                        <div>
-                                            <span class="font-mono text-sm font-bold text-gray-800" x-text="doctor.code"></span>
-                                            <span class="text-xs text-purple-600 ml-1" x-text="doctor.type"></span>
-                                        </div>
-                                        <button @click="quickMapDoctor(doctor.code, doctor.type)" class="text-xs px-2 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded transition-colors">
-                                            Map
-                                        </button>
-                                    </div>
-                                </template>
-                            </div>
-                        </div>
-
-                        <!-- Unmapped Hospitals -->
-                        <div x-show="unmappedCodes.hospitals?.length > 0">
-                            <h4 class="text-sm font-bold text-amber-800 mb-2 flex items-center">
-                                <span class="w-2 h-2 bg-orange-500 rounded-full mr-2"></span>
-                                Hospitals (<span x-text="unmappedCodes.hospitals?.length || 0"></span>)
-                            </h4>
-                            <div class="space-y-2 max-h-32 overflow-y-auto">
-                                <template x-for="hospital in unmappedCodes.hospitals" :key="hospital.code">
-                                    <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-amber-100">
-                                        <div>
-                                            <span class="font-mono text-sm font-bold text-gray-800" x-text="hospital.code"></span>
-                                            <span class="text-xs text-gray-500 ml-1">(<span x-text="hospital.count"></span>x)</span>
-                                        </div>
-                                        <button @click="quickMapHospital(hospital.code)" class="text-xs px-2 py-1 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded transition-colors">
-                                            Map
-                                        </button>
-                                    </div>
-                                </template>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -609,7 +519,7 @@
             <!-- Message Logs Section -->
             <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-gray-200">
                 <div class="p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-slate-50">
-                    <div class="flex justify-between items-center">
+                    <div class="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
                         <div class="flex items-center">
                             <div class="p-3 bg-gray-600 rounded-xl mr-4">
                                 <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -639,6 +549,62 @@
                             </form>
                         </div>
                     </div>
+                    
+                    <!-- Filters -->
+                    <form method="GET" action="{{ route('adt.index') }}" class="mt-4 flex flex-wrap gap-3 items-end">
+                        <div class="flex-1 min-w-[150px]">
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Status</label>
+                            <select name="status" class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500">
+                                <option value="">All Status</option>
+                                <option value="processed" {{ request('status') === 'processed' ? 'selected' : '' }}>Processed</option>
+                                <option value="unmapped" {{ request('status') === 'unmapped' ? 'selected' : '' }}>Unmapped</option>
+                                <option value="failed" {{ request('status') === 'failed' ? 'selected' : '' }}>Failed</option>
+                                <option value="received" {{ request('status') === 'received' ? 'selected' : '' }}>Received</option>
+                                <option value="ignored" {{ request('status') === 'ignored' ? 'selected' : '' }}>Ignored</option>
+                            </select>
+                        </div>
+                        <div class="flex-1 min-w-[120px]">
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Event Type</label>
+                            <select name="event_type" class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500">
+                                <option value="">All Events</option>
+                                <option value="A01" {{ request('event_type') === 'A01' ? 'selected' : '' }}>A01 - Admit</option>
+                                <option value="A02" {{ request('event_type') === 'A02' ? 'selected' : '' }}>A02 - Transfer</option>
+                                <option value="A03" {{ request('event_type') === 'A03' ? 'selected' : '' }}>A03 - Discharge</option>
+                                <option value="A08" {{ request('event_type') === 'A08' ? 'selected' : '' }}>A08 - Update</option>
+                            </select>
+                        </div>
+                        <div class="flex-1 min-w-[180px]">
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Search (MRN/Name)</label>
+                            <input type="text" name="search" value="{{ request('search') }}" placeholder="Search patient..." 
+                                   class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500">
+                        </div>
+                        <div class="flex-1 min-w-[140px]">
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Date From</label>
+                            <input type="date" name="date_from" value="{{ request('date_from') }}" 
+                                   class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500">
+                        </div>
+                        <div class="flex-1 min-w-[140px]">
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Date To</label>
+                            <input type="date" name="date_to" value="{{ request('date_to') }}" 
+                                   class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500">
+                        </div>
+                        <div class="flex gap-2">
+                            <button type="submit" class="inline-flex items-center px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white font-medium text-sm rounded-lg transition-colors">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
+                                </svg>
+                                Filter
+                            </button>
+                            @if(request()->hasAny(['status', 'event_type', 'search', 'date_from', 'date_to']))
+                                <a href="{{ route('adt.index') }}" class="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-sm rounded-lg transition-colors">
+                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                    </svg>
+                                    Clear
+                                </a>
+                            @endif
+                        </div>
+                    </form>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200">
@@ -647,9 +613,9 @@
                                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Time</th>
                                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Event</th>
                                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Patient</th>
-                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Location</th>
+                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Ward / Bed</th>
                                 <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Status</th>
-                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Actions</th>
+                                <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">View</th>
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-100">
@@ -673,17 +639,60 @@
                                         <div class="text-sm font-medium text-gray-800">{{ $log->patient_name ?: 'N/A' }}</div>
                                         <div class="text-xs text-gray-500">MRN: {{ $log->patient_mrn ?: $log->patient_id ?: 'N/A' }}</div>
                                     </td>
-                                    <td class="px-4 py-3 text-sm text-gray-600">
-                                        {{ $log->assigned_location ?: 'N/A' }}
+                                    <td class="px-4 py-3 text-sm">
+                                        @php
+                                            $actionData = $log->action_taken ?? [];
+                                            $adtWardCode = $actionData['adt_ward_code'] ?? null;
+                                            $adtBedCode = $actionData['adt_bed_code'] ?? null;
+                                            $assignedWard = $actionData['assigned_ward'] ?? null;
+                                            $assignedBed = $actionData['assigned_bed'] ?? null;
+                                        @endphp
+                                        @if($log->status === 'processed' && $assignedWard && $assignedBed)
+                                            <div class="text-green-700 font-medium">
+                                                {{ $assignedWard }} → {{ $assignedBed }}
+                                            </div>
+                                            <div class="text-xs text-gray-500">
+                                                From: {{ $adtWardCode ?? 'N/A' }} / {{ $adtBedCode ?? 'N/A' }}
+                                            </div>
+                                        @elseif($log->status === 'unmapped')
+                                            <div class="text-yellow-700 font-medium">
+                                                <span class="inline-flex items-center">
+                                                    <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                                    </svg>
+                                                    Not Mapped
+                                                </span>
+                                            </div>
+                                            <div class="text-xs text-yellow-600 font-mono">
+                                                Ward: {{ $adtWardCode ?? 'N/A' }} / Bed: {{ $adtBedCode ?? 'N/A' }}
+                                            </div>
+                                        @else
+                                            <div class="text-gray-600">{{ $log->assigned_location ?: 'N/A' }}</div>
+                                            @if($adtWardCode || $adtBedCode)
+                                                <div class="text-xs text-gray-500 font-mono">
+                                                    {{ $adtWardCode ?? '-' }} / {{ $adtBedCode ?? '-' }}
+                                                </div>
+                                            @endif
+                                        @endif
                                     </td>
                                     <td class="px-4 py-3">
                                         <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
                                             {{ $log->status === 'processed' ? 'bg-green-100 text-green-800' : '' }}
                                             {{ $log->status === 'received' ? 'bg-blue-100 text-blue-800' : '' }}
                                             {{ $log->status === 'failed' ? 'bg-red-100 text-red-800' : '' }}
-                                            {{ $log->status === 'ignored' ? 'bg-gray-100 text-gray-800' : '' }}">
+                                            {{ $log->status === 'ignored' ? 'bg-gray-100 text-gray-800' : '' }}
+                                            {{ $log->status === 'unmapped' ? 'bg-yellow-100 text-yellow-800' : '' }}">
                                             {{ ucfirst($log->status) }}
                                         </span>
+                                        @if($log->status === 'unmapped' && $log->error_message)
+                                            <div class="text-xs text-yellow-600 mt-1 max-w-xs truncate" title="{{ $log->error_message }}">
+                                                {{ Str::limit($log->error_message, 40) }}
+                                            </div>
+                                        @elseif($log->status === 'failed' && $log->error_message)
+                                            <div class="text-xs text-red-600 mt-1 max-w-xs truncate" title="{{ $log->error_message }}">
+                                                {{ Str::limit($log->error_message, 40) }}
+                                            </div>
+                                        @endif
                                     </td>
                                     <td class="px-4 py-3">
                                         <button @click="viewLogDetail({{ $log->id }})" class="text-teal-600 hover:text-teal-800">
@@ -714,7 +723,7 @@
         <!-- Hospital Mapping Modal -->
         <div x-show="showHospitalModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showHospitalModal = false; quickMapCode = '';"></div>
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showHospitalModal = false"></div>
                 <div class="relative bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
                     <h3 class="text-lg font-bold text-gray-800 mb-4">Add Hospital Mapping</h3>
                     <form action="{{ route('adt.hospital-mapping.store') }}" method="POST">
@@ -723,7 +732,6 @@
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">ADT Hospital Code *</label>
                                 <input type="text" name="adt_hospital_code" required placeholder="e.g., PHKL, HKL"
-                                       :value="quickMapCode"
                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 font-mono">
                                 <p class="text-xs text-gray-500 mt-1">The sending_facility code from HL7 messages (MSH-4)</p>
                             </div>
@@ -743,7 +751,7 @@
                             </div>
                         </div>
                         <div class="mt-6 flex justify-end space-x-3">
-                            <button type="button" @click="showHospitalModal = false; quickMapCode = '';" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg">Cancel</button>
+                            <button type="button" @click="showHospitalModal = false" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg">Cancel</button>
                             <button type="submit" class="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg">Add Mapping</button>
                         </div>
                     </form>
@@ -754,7 +762,7 @@
         <!-- Ward Mapping Modal -->
         <div x-show="showWardModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showWardModal = false; quickMapCode = '';"></div>
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showWardModal = false"></div>
                 <div class="relative bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
                     <h3 class="text-lg font-bold text-gray-800 mb-4">Add Ward Mapping</h3>
                     <form action="{{ route('adt.ward-mapping.store') }}" method="POST">
@@ -762,8 +770,7 @@
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">ADT Ward Code *</label>
-                                <input type="text" name="adt_ward_code" required placeholder="e.g., 5A, ICU1, W5"
-                                       :value="quickMapCode"
+                                <input type="text" name="adt_ward_code" required placeholder="e.g., WWD6, D6"
                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 font-mono">
                                 <p class="text-xs text-gray-500 mt-1">The ward/unit code from PV1-3 location field</p>
                             </div>
@@ -783,7 +790,7 @@
                             </div>
                         </div>
                         <div class="mt-6 flex justify-end space-x-3">
-                            <button type="button" @click="showWardModal = false; quickMapCode = '';" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg">Cancel</button>
+                            <button type="button" @click="showWardModal = false" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg">Cancel</button>
                             <button type="submit" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg">Add Mapping</button>
                         </div>
                     </form>
@@ -794,7 +801,7 @@
         <!-- Bed Mapping Modal -->
         <div x-show="showBedModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showBedModal = false; quickMapCode = '';"></div>
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showBedModal = false"></div>
                 <div class="relative bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
                     <h3 class="text-lg font-bold text-gray-800 mb-4">Add Bed Mapping</h3>
                     <form action="{{ route('adt.bed-mapping.store') }}" method="POST">
@@ -802,10 +809,9 @@
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">ADT Bed Code *</label>
-                                <input type="text" name="adt_bed_code" required placeholder="e.g., B2, B01, BED001"
-                                       :value="quickMapCode"
+                                <input type="text" name="adt_bed_code" required placeholder="e.g., D601, D610, D622"
                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 font-mono">
-                                <p class="text-xs text-gray-500 mt-1">The bed identifier from PV1-40 (e.g., ^^B2 → B2)</p>
+                                <p class="text-xs text-gray-500 mt-1">The bed code from HIS (e.g., D610 for bed 10 in ward D6)</p>
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">ADT Bed Name</label>
@@ -824,7 +830,7 @@
                             </div>
                         </div>
                         <div class="mt-6 flex justify-end space-x-3">
-                            <button type="button" @click="showBedModal = false; quickMapCode = '';" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg">Cancel</button>
+                            <button type="button" @click="showBedModal = false" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg">Cancel</button>
                             <button type="submit" class="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-medium rounded-lg">Add Mapping</button>
                         </div>
                     </form>
@@ -835,7 +841,7 @@
         <!-- Doctor Mapping Modal -->
         <div x-show="showDoctorModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto">
             <div class="flex items-center justify-center min-h-screen px-4">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showDoctorModal = false; quickMapCode = ''; quickMapType = '';"></div>
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showDoctorModal = false"></div>
                 <div class="relative bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
                     <h3 class="text-lg font-bold text-gray-800 mb-4">Add Doctor Mapping</h3>
                     <form action="{{ route('adt.doctor-mapping.store') }}" method="POST">
@@ -843,8 +849,7 @@
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">ADT Doctor Code *</label>
-                                <input type="text" name="adt_doctor_code" required placeholder="e.g., DOCTOR1, DR001"
-                                       :value="quickMapCode"
+                                <input type="text" name="adt_doctor_code" required placeholder="e.g., DKAMJIT, DR001"
                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 font-mono">
                                 <p class="text-xs text-gray-500 mt-1">The doctor code from PV1 (Attending/Referring/Consulting)</p>
                             </div>
@@ -855,10 +860,9 @@
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Doctor Type *</label>
-                                <select name="doctor_type" required class="w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
-                                        x-init="$watch('quickMapType', value => { if(value) $el.value = value; })">
+                                <select name="doctor_type" required class="w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500">
                                     @foreach($doctorTypes as $key => $label)
-                                        <option value="{{ $key }}" :selected="quickMapType === '{{ $key }}'">{{ $label }}</option>
+                                        <option value="{{ $key }}">{{ $label }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -873,7 +877,7 @@
                             </div>
                         </div>
                         <div class="mt-6 flex justify-end space-x-3">
-                            <button type="button" @click="showDoctorModal = false; quickMapCode = ''; quickMapType = '';" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg">Cancel</button>
+                            <button type="button" @click="showDoctorModal = false" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg">Cancel</button>
                             <button type="submit" class="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white font-medium rounded-lg">Add Mapping</button>
                         </div>
                     </form>
@@ -974,15 +978,6 @@
                 testing: false,
                 connectionStatus: null,
                 loadingLogs: false,
-                loadingUnmapped: false,
-                unmappedCodes: {
-                    beds: [],
-                    wards: [],
-                    doctors: [],
-                    hospitals: []
-                },
-                quickMapCode: '',
-                quickMapType: '',
                 toast: {
                     show: false,
                     success: true,
@@ -991,62 +986,6 @@
 
                 init() {
                     this.testConnection();
-                    this.loadUnmappedCodes();
-                },
-
-                async loadUnmappedCodes() {
-                    this.loadingUnmapped = true;
-                    try {
-                        const response = await fetch('{{ route('adt.unmapped-codes') }}');
-                        const data = await response.json();
-                        if (data.success) {
-                            this.unmappedCodes = data.unmapped;
-                        }
-                    } catch (error) {
-                        console.error('Failed to load unmapped codes:', error);
-                    } finally {
-                        this.loadingUnmapped = false;
-                    }
-                },
-
-                quickMapBed(code) {
-                    this.quickMapCode = code;
-                    this.showBedModal = true;
-                    // Pre-fill the bed code field
-                    this.$nextTick(() => {
-                        const input = document.querySelector('input[name="adt_bed_code"]');
-                        if (input) input.value = code;
-                    });
-                },
-
-                quickMapWard(code) {
-                    this.quickMapCode = code;
-                    this.showWardModal = true;
-                    this.$nextTick(() => {
-                        const input = document.querySelector('input[name="adt_ward_code"]');
-                        if (input) input.value = code;
-                    });
-                },
-
-                quickMapDoctor(code, type) {
-                    this.quickMapCode = code;
-                    this.quickMapType = type;
-                    this.showDoctorModal = true;
-                    this.$nextTick(() => {
-                        const codeInput = document.querySelector('input[name="adt_doctor_code"]');
-                        const typeSelect = document.querySelector('select[name="doctor_type"]');
-                        if (codeInput) codeInput.value = code;
-                        if (typeSelect) typeSelect.value = type;
-                    });
-                },
-
-                quickMapHospital(code) {
-                    this.quickMapCode = code;
-                    this.showHospitalModal = true;
-                    this.$nextTick(() => {
-                        const input = document.querySelector('input[name="adt_hospital_code"]');
-                        if (input) input.value = code;
-                    });
                 },
 
                 async testConnection() {
@@ -1090,8 +1029,45 @@
                 }
             };
         }
+
+        function openMappingIframe() {
+            const modal = document.getElementById('adtMappingsModal');
+            const iframe = document.getElementById('adtMappingsFrame');
+            if (modal && iframe) {
+                iframe.src = "{{ route('adt.mappings.frame') }}";
+                modal.classList.remove('hidden');
+            }
+        }
     </script>
 </x-app-layout>
+
+<!-- ADT Mappings Modal -->
+<div id="adtMappingsModal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" onclick="document.getElementById('adtMappingsModal').classList.add('hidden')"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl max-w-6xl w-full h-[85vh] overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-3 border-b">
+                <div class="flex items-center space-x-2">
+                    <div class="p-2 bg-indigo-500 rounded-lg text-white">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6l4 2m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-500">ADT</p>
+                        <p class="text-lg font-bold text-gray-800">Mappings</p>
+                    </div>
+                </div>
+                <button class="text-gray-500 hover:text-gray-700" onclick="document.getElementById('adtMappingsModal').classList.add('hidden')">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <iframe id="adtMappingsFrame" src="" class="w-full h-full border-0"></iframe>
+        </div>
+    </div>
+</div>
 
 
 

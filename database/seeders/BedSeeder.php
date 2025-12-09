@@ -22,20 +22,23 @@ class BedSeeder extends Seeder
             return;
         }
 
-        // Create 20 beds
-        for ($i = 1; $i <= 20; $i++) {
-            $bedNumber = 'B' . str_pad($i, 2, '0', STR_PAD_LEFT);
+        // Create 22 beds for Ward D6
+        // Bed code format: D6XX where XX is the bed number (01-22)
+        // Example: D601, D602, ... D622
+        for ($i = 1; $i <= 22; $i++) {
+            // Bed number format: D6 + 2-digit number (D601, D602, ..., D622)
+            $bedNumber = 'D6' . str_pad($i, 2, '0', STR_PAD_LEFT);
             
             Bed::create([
                 'ward_id' => $ward->id,
                 'bed_number' => $bedNumber,
-                'bed_id' => 'BED-' . $ward->ward_code . '-' . $bedNumber,
-                'bed_display_name' => 'Bed ' . $bedNumber,
+                'bed_id' => $bedNumber, // Using same format for bed_id
+                'bed_display_name' => 'Bed ' . $i,
                 'status' => 'available',
                 'is_active' => true,
             ]);
         }
 
-        $this->command->info('Successfully created 20 beds for ward: ' . $ward->ward_name);
+        $this->command->info('Successfully created 22 beds (D601-D622) for ward: ' . $ward->ward_name);
     }
 }

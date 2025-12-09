@@ -15,9 +15,12 @@
     <div class="p-4">
         <!-- Header with Filter -->
         <div class="mb-4 flex items-center justify-between">
-            <h2 class="text-xl font-bold text-gray-800">Admission Logs</h2>
-            <form method="GET" action="{{ route('ward.admission-logs') }}" class="flex items-center space-x-2">
-                <select name="ward_id" onchange="this.form.submit()" class="px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
+            <div>
+                <h2 class="text-xl font-bold text-gray-800">Admission Logs</h2>
+                <p class="text-sm text-gray-500">Bed status and admission activity</p>
+            </div>
+            <form method="GET" action="{{ route('ward.admission-logs') }}" class="flex flex-wrap items-center gap-2">
+                <select name="ward_id" class="px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
                     <option value="">All Wards</option>
                     @foreach($wards as $ward)
                         <option value="{{ $ward->id }}" {{ $wardId == $ward->id ? 'selected' : '' }}>
@@ -25,6 +28,29 @@
                         </option>
                     @endforeach
                 </select>
+
+                <select name="action" class="px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
+                    <option value="">All Actions</option>
+                    @foreach($actions as $actionOption)
+                        <option value="{{ $actionOption }}" {{ request('action') === $actionOption ? 'selected' : '' }}>
+                            {{ ucfirst(str_replace('_', ' ', $actionOption)) }}
+                        </option>
+                    @endforeach
+                </select>
+
+                <input type="text" name="bed_number" value="{{ request('bed_number') }}" placeholder="Bed #" class="px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm w-28">
+
+                <input type="text" name="search" value="{{ request('search') }}" placeholder="MRN / Patient" class="px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm w-40">
+
+                <input type="date" name="from_date" value="{{ request('from_date') }}" class="px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
+                <input type="date" name="to_date" value="{{ request('to_date') }}" class="px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm">
+
+                <button type="submit" class="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1">
+                    Filter
+                </button>
+                <a href="{{ route('ward.admission-logs') }}" class="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm border border-gray-300 hover:bg-gray-200">
+                    Reset
+                </a>
             </form>
         </div>
 
@@ -52,19 +78,21 @@
                                     {{ $log->created_at->format('Y-m-d H:i') }}
                                 </td>
                                 <td class="px-4 py-3 whitespace-nowrap">
-                                    @if($log->action === 'admit')
-                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                                            Admit
-                                        </span>
-                                    @elseif($log->action === 'prebook')
-                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                                            Prebook
-                                        </span>
-                                    @elseif($log->action === 'check-in')
-                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">
-                                            Check-in
-                                        </span>
-                                    @endif
+                                    @php
+                                        $actionStyles = [
+                                            'admit' => 'bg-green-100 text-green-800',
+                                            'prebook' => 'bg-blue-100 text-blue-800',
+                                            'check-in' => 'bg-purple-100 text-purple-800',
+                                            'transfer' => 'bg-amber-100 text-amber-800',
+                                            'discharge' => 'bg-gray-100 text-gray-800',
+                                            'pending_discharge' => 'bg-orange-100 text-orange-800',
+                                            'bed_release' => 'bg-slate-100 text-slate-800',
+                                        ];
+                                        $badgeClass = $actionStyles[$log->action] ?? 'bg-slate-100 text-slate-800';
+                                    @endphp
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full {{ $badgeClass }}">
+                                        {{ ucfirst(str_replace('_', ' ', $log->action)) }}
+                                    </span>
                                 </td>
                                 <td class="px-4 py-3 text-sm text-gray-900">
                                     <div class="font-medium">{{ $log->patient_name }}</div>
@@ -98,6 +126,9 @@
                                         @endif
                                         @if($log->booked_at)
                                             <div class="text-xs"><span class="font-medium">Booked:</span> {{ $log->booked_at instanceof \Carbon\Carbon ? $log->booked_at->format('Y-m-d H:i') : $log->booked_at }}</div>
+                                        @endif
+                                        @if($log->action === 'discharge')
+                                            <div class="text-xs text-gray-500">Bed released</div>
                                         @endif
                                     </div>
                                 </td>

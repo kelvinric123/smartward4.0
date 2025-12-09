@@ -151,12 +151,12 @@
         };
     @endphp
 
-    <div class="py-6 flex flex-col" x-data="{ 
+    <div class="py-6 flex flex-col min-h-0 overscroll-contain" x-data="{ 
         customFullscreen: localStorage.getItem('wardDashboardFullscreen') === 'true', 
         fullscreenGrid: '{{ $fullscreenGrid }}', 
         fullscreenTextClass: '{{ $fullscreenTextClass }}' 
     }" @toggle-custom-fullscreen.window="customFullscreen = $event.detail.enabled" :class="[customFullscreen ? fullscreenTextClass : '', customFullscreen ? 'h-[calc(100vh-80px)] overflow-hidden' : '']">
-        <div class="mx-auto px-[5%] flex-1 flex flex-col overflow-hidden w-full" :class="customFullscreen ? 'px-2' : ''">
+        <div class="mx-auto px-[5%] flex-1 flex flex-col overflow-hidden w-full min-h-0" :class="customFullscreen ? 'px-2' : ''">
             <!-- Tabs and Action Buttons -->
             <div class="flex-shrink-0 mb-4 flex items-center justify-between" :class="customFullscreen ? 'mb-2' : 'mb-6'">
                 <div class="flex items-center space-x-2">
@@ -204,8 +204,16 @@
             </div>
 
             <!-- Beds Grid - scrollable area -->
-            <div class="flex-1 overflow-y-auto pb-4" :class="customFullscreen ? 'pr-2' : ''">
-            <div class="grid gap-4" :class="customFullscreen ? fullscreenGrid : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'"
+            <div class="flex-1 overflow-y-auto pb-4 min-h-0 overscroll-contain" :class="customFullscreen ? 'pr-2' : ''">
+            <div class="grid gap-4" :class="customFullscreen ? fullscreenGrid : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'">
+                @php
+                    $bedStatusColors = [
+                        'available' => 'bg-green-100 text-green-800 border-green-200',
+                        'occupied' => 'bg-red-100 text-red-800 border-red-200',
+                        'reserved' => 'bg-yellow-100 text-yellow-800 border-yellow-200',
+                        'maintenance' => 'bg-gray-100 text-gray-800 border-gray-200',
+                    ];
+                @endphp
                 @if($selectedWard && count($beds) > 0)
                 @foreach($beds as $bed)
                     @if($bed['status'] === 'occupied' && !empty($bed['is_outside']))
@@ -220,12 +228,17 @@
                         >
                             <div class="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white flex items-center justify-between">
                                 <span class="font-bold bed-number cursor-pointer" onclick='highlightAndFilterBeds(@json([$bed["number"]]), "bed")'>{{ $bed['number'] }}</span>
-                                <span class="text-xs bg-white/30 px-2 py-1 rounded font-semibold flex items-center">
+                                <div class="flex items-center space-x-2">
+                                    <span class="px-2 py-0.5 text-[11px] font-semibold rounded-full border {{ $bedStatusColors[$bed['status']] ?? 'bg-gray-100 text-gray-800 border-gray-200' }}">
+                                        {{ ucfirst($bed['status']) }}
+                                    </span>
+                                    <span class="text-xs bg-white/30 px-2 py-1 rounded font-semibold flex items-center">
                                     <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
                                     </svg>
                                     OUTSIDE
-                                </span>
+                                    </span>
+                                </div>
                             </div>
                             <div class="p-3 space-y-2 flex-1">
                                 <!-- Location Badge -->
@@ -309,9 +322,14 @@
                                     </span>
                                     @endif
                                 </div>
-                                @if($isVisible('mrn'))
-                                <span class="text-sm">MRN: {{ $bed['mrn'] }}</span>
-                                @endif
+                                <div class="flex items-center space-x-2">
+                                    <span class="px-2 py-0.5 text-[11px] font-semibold rounded-full border {{ $bedStatusColors[$bed['status']] ?? 'bg-gray-100 text-gray-800 border-gray-200' }}">
+                                        {{ ucfirst($bed['status']) }}
+                                    </span>
+                                    @if($isVisible('mrn'))
+                                    <span class="text-sm">MRN: {{ $bed['mrn'] }}</span>
+                                    @endif
+                                </div>
                             </div>
                             <div class="p-3 space-y-2 flex-1">
                                 @if($isVisible('patient_name'))
@@ -575,7 +593,12 @@
                         <div class="bed-card bg-white rounded-lg shadow-md border-2 {{ $prebookBorderClass }} overflow-hidden transition-all duration-300 h-[280px] flex flex-col" data-section="{{ $bed['section'] ?? 1 }}">
                             <div class="px-4 py-2 {{ $prebookBgClass }} text-white flex items-center justify-between">
                                 <span class="font-bold bed-number cursor-pointer" onclick='highlightAndFilterBeds(@json([$bed["number"]]), "bed")'>{{ $bed['number'] }}</span>
-                                <span class="text-xs bg-white/30 px-2 py-1 rounded font-semibold">PREBOOKED</span>
+                                <div class="flex items-center space-x-2">
+                                    <span class="px-2 py-0.5 text-[11px] font-semibold rounded-full border {{ $bedStatusColors[$bed['status']] ?? 'bg-gray-100 text-gray-800 border-gray-200' }}">
+                                        {{ ucfirst($bed['status']) }}
+                                    </span>
+                                    <span class="text-xs bg-white/30 px-2 py-1 rounded font-semibold">PREBOOKED</span>
+                                </div>
                             </div>
                             <div class="p-3 space-y-2 flex-1">
                                 <div class="{{ $prebookInfoBg }} border rounded-lg p-3 mb-2">
@@ -642,7 +665,9 @@
                         <div class="bed-card bg-white rounded-lg shadow-md border-2 border-gray-300 overflow-hidden hover:border-green-400 transition-all duration-300 h-[280px] flex flex-col" data-section="{{ $bed['section'] ?? 1 }}">
                             <div class="px-4 py-2 bg-gray-500 text-white flex items-center justify-between">
                                 <span class="font-bold bed-number cursor-pointer" onclick='highlightAndFilterBeds(@json([$bed["number"]]), "bed")'>{{ $bed['number'] }}</span>
-                                <span class="text-xs">No Patient</span>
+                                <span class="px-2 py-0.5 text-[11px] font-semibold rounded-full border {{ $bedStatusColors[$bed['status']] ?? 'bg-gray-100 text-gray-800 border-gray-200' }}">
+                                    {{ ucfirst($bed['status']) }}
+                                </span>
                             </div>
                             <div class="p-3 flex-1 flex items-center justify-center">
                                 <div class="text-center">

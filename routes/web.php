@@ -130,7 +130,11 @@ Route::middleware('auth')->group(function () {
     Route::delete('/adt/bed-mapping/{bedMapping}', [AdtConfigurationController::class, 'destroyBedMapping'])->name('adt.bed-mapping.destroy');
     Route::post('/adt/doctor-mapping', [AdtConfigurationController::class, 'storeDoctorMapping'])->name('adt.doctor-mapping.store');
     Route::delete('/adt/doctor-mapping/{doctorMapping}', [AdtConfigurationController::class, 'destroyDoctorMapping'])->name('adt.doctor-mapping.destroy');
-    Route::get('/adt/unmapped-codes', [AdtConfigurationController::class, 'getUnmappedCodes'])->name('adt.unmapped-codes');
+    Route::post('/adt/diet-mapping', [AdtConfigurationController::class, 'storeDietMapping'])->name('adt.diet-mapping.store');
+    Route::delete('/adt/diet-mapping/{dietMapping}', [AdtConfigurationController::class, 'destroyDietMapping'])->name('adt.diet-mapping.destroy');
+    Route::post('/adt/isolation-mapping', [AdtConfigurationController::class, 'storeIsolationMapping'])->name('adt.isolation-mapping.store');
+    Route::delete('/adt/isolation-mapping/{isolationMapping}', [AdtConfigurationController::class, 'destroyIsolationMapping'])->name('adt.isolation-mapping.destroy');
+    Route::get('/adt/mappings-frame', [AdtConfigurationController::class, 'mappingsFrame'])->name('adt.mappings.frame');
 });
 
 // Public API Routes for Vital Sign Gateway (no CSRF, no auth)

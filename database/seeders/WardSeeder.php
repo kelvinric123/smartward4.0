@@ -30,11 +30,11 @@ class WardSeeder extends Seeder
         $wards = [
             [
                 'hospital_id' => $hospital->id,
-                'ward_code' => 'D6',
-                'ward_name' => 'PHKL D6',
-                'capacity' => 20,
+                'ward_code' => 'WWD6',
+                'ward_name' => 'Ward D6',
+                'capacity' => 22,
                 'specialties' => 'General Medicine, Surgery',
-                'description' => 'Main general ward for PHKL',
+                'description' => 'Ward D6 - Main general ward for PHKL',
                 'is_active' => true,
             ],
         ];
