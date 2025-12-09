@@ -252,11 +252,12 @@ class WardDashboardController extends Controller
             $patient = Patient::where('ward_id', $wardId)
                 ->where('bed_number', $bed->bed_number)
                 ->where('is_active', true)
-                ->whereIn('status', ['admitted', 'prebook'])
+                ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
                 ->first();
             
             if ($patient) {
                 // Update bed status based on patient status
+                // pending_discharge is still considered occupied
                 $bedStatus = $patient->status === 'prebook' ? 'reserved' : 'occupied';
                 $bed->update([
                     'status' => $bedStatus,
@@ -323,8 +324,11 @@ class WardDashboardController extends Controller
                 $days = $diff->days;
                 $hours = $diff->h;
                 
-                // Determine status
+                // Determine status - pending_discharge patients are still occupying bed
                 $status = $patient->status === 'prebook' ? 'reserved' : 'occupied';
+                
+                // Check if patient is pending discharge
+                $isPendingDischarge = $patient->status === 'pending_discharge' || $patient->pending_discharge_at !== null;
                 
                 // Get latest vital signs and calculate EWS
                 $latestVitals = VitalSign::where('patient_id', $patient->id)
@@ -336,6 +340,9 @@ class WardDashboardController extends Controller
                 $beds[] = [
                     'number' => $bedNumber,
                     'status' => $status,
+                    'patient_status' => $patient->status, // Raw patient status for display
+                    'is_pending_discharge' => $isPendingDischarge,
+                    'pending_discharge_at' => $patient->pending_discharge_at ? $patient->pending_discharge_at->format('Y-m-d H:i') : null,
                     'section' => $section,
                     'patient_id' => $patient->id,
                     'mrn' => $patient->mrn,
@@ -374,6 +381,9 @@ class WardDashboardController extends Controller
                 $beds[] = [
                     'number' => $bedNumber,
                     'status' => 'available',
+                    'patient_status' => null,
+                    'is_pending_discharge' => false,
+                    'pending_discharge_at' => null,
                     'section' => $section,
                     'patient_id' => null,
                     'mrn' => null,
@@ -424,7 +434,7 @@ class WardDashboardController extends Controller
             $existingPatient = Patient::where('ward_id', $request->ward_id)
                 ->where('bed_number', $request->bed_number)
                 ->where('is_active', true)
-                ->whereIn('status', ['admitted', 'prebook'])
+                ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
                 ->first();
                 
             if ($existingPatient) {
@@ -533,7 +543,7 @@ class WardDashboardController extends Controller
             $existingPatient = Patient::where('ward_id', $request->ward_id)
                 ->where('bed_number', $request->bed_number)
                 ->where('is_active', true)
-                ->whereIn('status', ['admitted', 'prebook'])
+                ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
                 ->first();
                 
             if ($existingPatient) {
@@ -756,7 +766,7 @@ class WardDashboardController extends Controller
         $search = trim((string) $request->input('search', ''));
 
         $query = Patient::where('is_active', true)
-            ->whereIn('status', ['admitted', 'prebook'])
+            ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
             ->with(['ward', 'consultant', 'nurse'])
             ->orderBy('name');
 
@@ -1250,7 +1260,7 @@ class WardDashboardController extends Controller
         $existingPatient = Patient::where('ward_id', $request->ward_id)
             ->where('bed_number', $request->bed_number)
             ->where('is_active', true)
-            ->whereIn('status', ['admitted', 'prebook'])
+            ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
             ->first();
 
         if ($existingPatient) {
@@ -1577,7 +1587,7 @@ class WardDashboardController extends Controller
         // Consider both currently admitted and prebooked patients in this ward
         $patients = Patient::where('ward_id', $wardId)
             ->where('is_active', true)
-            ->whereIn('status', ['admitted', 'prebook'])
+            ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
             ->with('consultant')
             ->get();
         
@@ -1679,7 +1689,7 @@ class WardDashboardController extends Controller
         // Include both admitted and prebooked patients that have a nurse assigned
         $patients = Patient::where('ward_id', $wardId)
             ->where('is_active', true)
-            ->whereIn('status', ['admitted', 'prebook'])
+            ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
             ->whereNotNull('nurse_id')
             ->with('nurse')
             ->get();
@@ -1719,7 +1729,7 @@ class WardDashboardController extends Controller
         // Include both admitted and prebooked patients that have an anaesthetist assigned
         $patients = Patient::where('ward_id', $wardId)
             ->where('is_active', true)
-            ->whereIn('status', ['admitted', 'prebook'])
+            ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
             ->whereNotNull('anaesthetist_id')
             ->with('anaesthetist')
             ->get();

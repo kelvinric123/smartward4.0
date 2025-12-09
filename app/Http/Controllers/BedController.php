@@ -31,7 +31,7 @@ class BedController extends Controller
             $patient = Patient::where('ward_id', $bed->ward_id)
                 ->where('bed_number', $bed->bed_number)
                 ->where('is_active', true)
-                ->whereIn('status', ['admitted', 'prebook'])
+                ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
                 ->first();
             
             if ($patient) {
