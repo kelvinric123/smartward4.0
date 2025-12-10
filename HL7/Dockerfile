@@ -35,7 +35,7 @@ RUN mkdir -p logs received_messages
 # Environment variables (can be overridden in docker-compose)
 ENV HL7_HOST=0.0.0.0
 ENV HL7_PORT=3000
-ENV LARAVEL_API_URL=http://smartward:80/api/adt/message
+ENV LARAVEL_API_URL=http://smartward:88/api/adt/message
 ENV LARAVEL_API_KEY=
 
 # Expose MLLP port
@@ -47,6 +47,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 
 # Run the listener
 CMD ["python", "adt_listener.py"]
+
 
 
 

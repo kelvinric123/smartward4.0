@@ -199,7 +199,7 @@ RUN bash -c '\
     mysql -u root -psmartward_secret --socket=/var/run/mysqld/mysqld.sock -e "SELECT 1" || { echo "Database connection failed!"; exit 1; }; \
     \
     echo "Running migrations and seeders (using socket connection)..."; \
-    php artisan migrate:fresh --seed --force; \
+    php artisan migrate --seed --force; \
     echo "Migrations and seeders completed successfully!"; \
     \
     echo "Stopping MariaDB..."; \
@@ -227,15 +227,15 @@ RUN composer update --no-dev --optimize-autoloader --no-interaction --prefer-dis
 RUN chown -R www:www /app \
     && chmod -R 755 /app/storage /app/bootstrap/cache
 
-# Allow binding to port 80
+# Allow binding to privileged ports (port 88)
 RUN setcap 'cap_net_bind_service=+ep' /usr/local/bin/php || true
 
 # Expose ports
-EXPOSE 80 3306 6379
+EXPOSE 88 3306 6379
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost/health || exit 1
+    CMD curl -f http://localhost:88/health || exit 1
 
 # Entry point
 ENTRYPOINT ["/entrypoint.sh"]

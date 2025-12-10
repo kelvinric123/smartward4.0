@@ -1,12 +1,26 @@
+@php
+    $openSection = null;
+
+    if (request()->routeIs('patients.*')) {
+        $openSection = 'patient';
+    } elseif (request()->routeIs('hospitals.*') || request()->routeIs('specialties.*') || request()->routeIs('consultants.*') || request()->routeIs('anaesthetists.*') || request()->routeIs('nurses.*')) {
+        $openSection = 'admin';
+    } elseif (request()->routeIs('wards.*') || request()->routeIs('beds.*')) {
+        $openSection = 'wardManagement';
+    } elseif (request()->routeIs('ward.schedule')) {
+        $openSection = 'schedule';
+    } elseif (request()->routeIs('vital-signs.*')) {
+        $openSection = 'vitalSign';
+    } elseif (request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*')) {
+        $openSection = 'integration';
+    }
+@endphp
+
 <nav x-data="{ 
-    sidebarOpen: true, 
-    patientOpen: {{ request()->routeIs('patients.*') ? 'true' : 'false' }},
-    adminOpen: {{ request()->routeIs('hospitals.*') || request()->routeIs('specialties.*') || request()->routeIs('consultants.*') || request()->routeIs('anaesthetists.*') || request()->routeIs('nurses.*') ? 'true' : 'false' }},
-    wardManagementOpen: {{ request()->routeIs('wards.*') || request()->routeIs('beds.*') ? 'true' : 'false' }},
-    scheduleOpen: {{ request()->routeIs('ward.schedule') ? 'true' : 'false' }},
-    vitalSignOpen: {{ request()->routeIs('vital-signs.*') ? 'true' : 'false' }},
-    wardDashboardOpen: {{ request()->routeIs('ward.dashboard') ? 'true' : 'false' }},
-    integrationOpen: {{ request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*') ? 'true' : 'false' }}
+    sidebarOpen: true,
+    openSection: @js($openSection),
+    isSectionOpen(section) { return this.openSection === section; },
+    toggleSection(section) { this.openSection = this.openSection === section ? null : section; }
 }" 
 @toggle-sidebar.window="sidebarOpen = $event.detail.open"
 class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 transition-all duration-300 min-h-screen flex flex-col flex-shrink-0 shadow-xl" :class="sidebarOpen ? 'w-64' : 'w-20'">
@@ -37,19 +51,19 @@ class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 tran
 
         <!-- Patient Section -->
         <div class="pt-2">
-            <button @click="patientOpen = !patientOpen" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10">
+            <button @click="toggleSection('patient')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10">
                 <div class="flex items-center">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
                     </svg>
                     <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Patient</span>
                 </div>
-                <svg x-show="sidebarOpen" :class="{'rotate-180': patientOpen}" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg x-show="sidebarOpen" :class="{'rotate-180': isSectionOpen('patient')}" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                 </svg>
             </button>
             
-            <div x-show="patientOpen && sidebarOpen" x-transition class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
+            <div x-show="isSectionOpen('patient') && sidebarOpen" x-transition class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
                 <a href="{{ route('patients.index') }}" class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('patients.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
                     <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
@@ -61,19 +75,19 @@ class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 tran
 
         <!-- Admin Management Section -->
         <div class="pt-2">
-            <button @click="adminOpen = !adminOpen" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10">
+            <button @click="toggleSection('admin')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10">
                 <div class="flex items-center">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
                     </svg>
                     <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Admin Management</span>
                 </div>
-                <svg x-show="sidebarOpen" :class="{'rotate-180': adminOpen}" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg x-show="sidebarOpen" :class="{'rotate-180': isSectionOpen('admin')}" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                 </svg>
             </button>
             
-            <div x-show="adminOpen && sidebarOpen" x-transition class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
+            <div x-show="isSectionOpen('admin') && sidebarOpen" x-transition class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
                 <a href="{{ route('hospitals.index') }}" class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('hospitals.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
                     <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
@@ -113,19 +127,19 @@ class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 tran
 
         <!-- Ward Management Section -->
         <div class="pt-2">
-            <button @click="wardManagementOpen = !wardManagementOpen" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10">
+            <button @click="toggleSection('wardManagement')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10">
                 <div class="flex items-center">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                     </svg>
                     <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Ward Management</span>
                 </div>
-                <svg x-show="sidebarOpen" :class="{'rotate-180': wardManagementOpen}" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg x-show="sidebarOpen" :class="{'rotate-180': isSectionOpen('wardManagement')}" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                 </svg>
             </button>
             
-            <div x-show="wardManagementOpen && sidebarOpen" x-transition class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
+            <div x-show="isSectionOpen('wardManagement') && sidebarOpen" x-transition class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
                 <a href="{{ route('wards.index') }}" class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('wards.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
                     <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
@@ -144,19 +158,19 @@ class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 tran
 
         <!-- Schedule Section -->
         <div class="pt-2">
-            <button @click="scheduleOpen = !scheduleOpen" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ward.schedule') ? 'bg-white/20' : '' }}">
+            <button @click="toggleSection('schedule')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ward.schedule') ? 'bg-white/20' : '' }}">
                 <div class="flex items-center">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V5a3 3 0 013-3h2a3 3 0 013 3v2m4 0H4a2 2 0 00-2 2v9a3 3 0 003 3h14a3 3 0 003-3v-9a2 2 0 00-2-2z"/>
                     </svg>
                     <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Schedule</span>
                 </div>
-                <svg x-show="sidebarOpen" :class="{'rotate-180': scheduleOpen}" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg x-show="sidebarOpen" :class="{'rotate-180': isSectionOpen('schedule')}" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                 </svg>
             </button>
             
-            <div x-show="scheduleOpen && sidebarOpen" x-transition class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
+            <div x-show="isSectionOpen('schedule') && sidebarOpen" x-transition class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
                 <a href="{{ route('ward.schedule') }}" class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ward.schedule') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
                     <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M3 12h18M3 17h18"/>
@@ -168,19 +182,19 @@ class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 tran
 
         <!-- Vital Sign Section -->
         <div class="pt-2">
-            <button @click="vitalSignOpen = !vitalSignOpen" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('vital-signs.*') ? 'bg-white/20' : '' }}">
+            <button @click="toggleSection('vitalSign')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('vital-signs.*') ? 'bg-white/20' : '' }}">
                 <div class="flex items-center">
                     <svg class="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                         <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
                     </svg>
                     <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Vital Sign</span>
                 </div>
-                <svg x-show="sidebarOpen" :class="{'rotate-180': vitalSignOpen}" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg x-show="sidebarOpen" :class="{'rotate-180': isSectionOpen('vitalSign')}" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                 </svg>
             </button>
             
-            <div x-show="vitalSignOpen && sidebarOpen" x-transition class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
+            <div x-show="isSectionOpen('vitalSign') && sidebarOpen" x-transition class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
                 <a href="{{ route('vital-signs.index') }}" class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('vital-signs.index') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
                     <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
@@ -202,19 +216,19 @@ class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 tran
 
         <!-- Integration Section -->
         <div class="pt-2">
-            <button @click="integrationOpen = !integrationOpen" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*') ? 'bg-white/20' : '' }}">
+            <button @click="toggleSection('integration')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*') ? 'bg-white/20' : '' }}">
                 <div class="flex items-center">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/>
                     </svg>
                     <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Integration</span>
                 </div>
-                <svg x-show="sidebarOpen" :class="{'rotate-180': integrationOpen}" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg x-show="sidebarOpen" :class="{'rotate-180': isSectionOpen('integration')}" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                 </svg>
             </button>
             
-            <div x-show="integrationOpen && sidebarOpen" x-transition class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
+            <div x-show="isSectionOpen('integration') && sidebarOpen" x-transition class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
                 <a href="{{ route('ldap.index') }}" class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ldap.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
                     <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>

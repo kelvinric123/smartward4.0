@@ -1,6 +1,6 @@
 # =============================================================================
 # Docker Compose - Laravel Swoole Production
-# Single container with PHP-Swoole, MySQL, Redis + ADT Listener
+# Single container with PHP-Swoole, MySQL, Redis + ADT Listener + ECG Server
 # =============================================================================
 
 services:
@@ -18,7 +18,7 @@ services:
     env_file:
       - docker.env
     ports:
-      - "${APP_PORT:-80}:80"
+      - "${APP_PORT:-88}:88"
       - "${DB_PORT:-3307}:3306"
       - "${REDIS_PORT:-6380}:6379"
     environment:
@@ -62,6 +62,7 @@ services:
       ADT_PORT: "3000"
     depends_on:
       - adt
+      - ecg
     volumes:
       # Persistent data
       - smartward_mysql:/var/lib/mysql
@@ -70,7 +71,7 @@ services:
       # Optional: mount logs for debugging
       - smartward_logs:/var/log
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:88/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -102,7 +103,7 @@ services:
       HL7_HOST: "0.0.0.0"
       HL7_PORT: "3000"
       # Connect to smartward container via internal network
-      LARAVEL_API_URL: "http://smartward:80/api/adt/message"
+      LARAVEL_API_URL: "http://smartward:88/api/adt/message"
       LARAVEL_API_KEY: "${LARAVEL_API_KEY:-}"
     volumes:
       # Persist logs and received messages
@@ -110,6 +111,44 @@ services:
       - adt_messages:/app/HL7/received_messages
     healthcheck:
       test: ["CMD", "nc", "-z", "localhost", "3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: "256M"
+        reservations:
+          cpus: "0.25"
+          memory: "64M"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ECG HTTP Upload Server Container
+  ecg:
+    build:
+      context: ..
+      dockerfile: ecg/Dockerfile
+    container_name: smartward4-ecg
+    restart: unless-stopped
+    ports:
+      - "${ECG_PORT:-8080}:8080"
+    environment:
+      ECG_HOST: "0.0.0.0"
+      ECG_PORT: "8080"
+      ECG_USERNAME: "${ECG_USERNAME:-admin}"
+      ECG_PASSWORD: "${ECG_PASSWORD:-admin123}"
+    volumes:
+      # Persist uploaded ECG files
+      - ecg_data:/app/ecg/ftp_data
+      - ecg_store:/app/ecg/store
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -140,6 +179,10 @@ volumes:
   adt_logs:
     driver: local
   adt_messages:
+    driver: local
+  ecg_data:
+    driver: local
+  ecg_store:
     driver: local
 
 networks:

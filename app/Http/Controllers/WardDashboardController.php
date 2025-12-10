@@ -14,6 +14,8 @@ use App\Models\PatientMovement;
 use App\Models\PatientReferral;
 use App\Models\WardDashboardSetting;
 use App\Models\VitalSign;
+use App\Models\ShiftSetting;
+use App\Models\WardScheduleAssignment;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
@@ -301,6 +303,29 @@ class WardDashboardController extends Controller
                 $bedPatientMap[$patient->bed_number] = $patient;
             }
         }
+
+        // Get current shift and nurse assignments for today
+        $currentShift = ShiftSetting::getCurrentShift($ward->id);
+        $currentShiftCode = $currentShift ? $currentShift->shift_code : null;
+        $today = now()->toDateString();
+
+        // Get all nurse assignments for this ward, today, and current shift
+        $nurseAssignments = [];
+        if ($currentShiftCode) {
+            $assignments = WardScheduleAssignment::where('ward_id', $ward->id)
+                ->where('scheduled_date', $today)
+                ->where('shift', $currentShiftCode)
+                ->with('nurse')
+                ->get();
+            
+            foreach ($assignments as $assignment) {
+                $nurseAssignments[$assignment->bed_id] = [
+                    'nurse_id' => $assignment->nurse_id,
+                    'nurse_name' => $assignment->nurse ? $assignment->nurse->name : null,
+                    'shift' => $assignment->shift,
+                ];
+            }
+        }
         
         // Each "section" groups 9 beds together (Section 1 = beds 1-9, Section 2 = 10-18, etc.)
         foreach ($wardBeds as $index => $wardBed) {
@@ -346,8 +371,12 @@ class WardDashboardController extends Controller
                 
                 $ewsData = $this->calculateEWS($latestVitals);
                 
+                // Get nurse on duty from schedule assignment
+                $nurseOnDuty = $nurseAssignments[$wardBed->id] ?? null;
+
                 $beds[] = [
                     'number' => $bedNumber,
+                    'bed_id' => $wardBed->id,
                     'status' => $status,
                     'patient_status' => $patient->status, // Raw patient status for display
                     'is_pending_discharge' => $isPendingDischarge,
@@ -358,6 +387,8 @@ class WardDashboardController extends Controller
                     'patient_name' => $patient->name,
                     'consultant' => $patient->consultant ? $patient->consultant->name : 'Not Assigned',
                     'nurse' => $patient->nurse ? $patient->nurse->name : 'Not Assigned',
+                    'nurse_on_duty' => $nurseOnDuty ? $nurseOnDuty['nurse_name'] : null,
+                    'current_shift' => $currentShiftCode,
                     'gender' => $patient->gender,
                     'age' => $patient->age,
                     'days' => $days,
@@ -387,8 +418,12 @@ class WardDashboardController extends Controller
                     'allergies' => $patient->allergies ?? [],
                 ];
             } else {
+                // Get nurse on duty from schedule assignment for empty beds too
+                $nurseOnDuty = $nurseAssignments[$wardBed->id] ?? null;
+
                 $beds[] = [
                     'number' => $bedNumber,
+                    'bed_id' => $wardBed->id,
                     'status' => $wardBed->status ?? 'available',
                     'patient_status' => null,
                     'is_pending_discharge' => false,
@@ -399,6 +434,8 @@ class WardDashboardController extends Controller
                     'patient_name' => null,
                     'consultant' => null,
                     'nurse' => null,
+                    'nurse_on_duty' => $nurseOnDuty ? $nurseOnDuty['nurse_name'] : null,
+                    'current_shift' => $currentShiftCode,
                     'gender' => null,
                     'age' => null,
                     'days' => null,

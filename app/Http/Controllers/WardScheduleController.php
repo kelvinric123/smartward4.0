@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Bed;
 use App\Models\Ward;
+use App\Models\Nurse;
 use App\Models\Patient;
+use App\Models\WardScheduleAssignment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Carbon;
@@ -41,6 +43,31 @@ class WardScheduleController extends Controller
                 ->get()
             : collect();
 
+        $nurses = Nurse::where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $assignments = collect();
+
+        if ($selectedWardId) {
+            $assignments = WardScheduleAssignment::with('nurse')
+                ->where('ward_id', $selectedWardId)
+                ->whereBetween('scheduled_date', [
+                    $dateRange->first()->toDateString(),
+                    $dateRange->last()->toDateString(),
+                ])
+                ->get()
+                ->keyBy(fn ($assignment) => $assignment->bed_id . '|' . $assignment->scheduled_date->toDateString() . '|' . $assignment->shift)
+                ->map(fn ($assignment) => [
+                    'id' => $assignment->id,
+                    'bed_id' => $assignment->bed_id,
+                    'shift' => $assignment->shift,
+                    'date' => $assignment->scheduled_date->toDateString(),
+                    'nurse_id' => $assignment->nurse_id,
+                    'nurse_name' => $assignment->nurse->name ?? null,
+                ]);
+        }
+
         return view('wards.schedule', [
             'wards' => $wards,
             'selectedWard' => $selectedWard,
@@ -49,7 +76,67 @@ class WardScheduleController extends Controller
             'beds' => $beds,
             'shifts' => ['AM', 'PM', 'ON'],
             'dateRange' => $dateRange,
+            'nurses' => $nurses,
+            'assignments' => $assignments->toArray(),
         ]);
+    }
+
+    public function assignNurses(Request $request)
+    {
+        $rawAssignments = json_decode($request->input('assignments', '[]'), true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return back()->with('error', 'Unable to read selected shifts. Please try again.');
+        }
+
+        $request->merge([
+            'assignments' => $rawAssignments,
+        ]);
+
+        $validated = $request->validate([
+            'ward_id' => 'required|exists:wards,id',
+            'date' => 'required|date',
+            'nurse_id' => 'required|exists:nurses,id',
+            'assignments' => 'required|array|min:1',
+            'assignments.*.bed_id' => 'required|exists:beds,id',
+            'assignments.*.date' => 'required|date',
+            'assignments.*.shift' => 'required|in:AM,PM,ON',
+        ]);
+
+        $wardId = $validated['ward_id'];
+        $nurseId = $validated['nurse_id'];
+        $assignments = $validated['assignments'];
+
+        foreach ($assignments as $assignment) {
+            $bedBelongsToWard = Bed::where('ward_id', $wardId)
+                ->where('id', $assignment['bed_id'])
+                ->exists();
+
+            if (!$bedBelongsToWard) {
+                return back()->with('error', 'One or more selected beds do not belong to this ward.');
+            }
+        }
+
+        foreach ($assignments as $assignment) {
+            $scheduledDate = Carbon::parse($assignment['date'])->toDateString();
+
+            WardScheduleAssignment::updateOrCreate(
+                [
+                    'bed_id' => $assignment['bed_id'],
+                    'scheduled_date' => $scheduledDate,
+                    'shift' => $assignment['shift'],
+                ],
+                [
+                    'ward_id' => $wardId,
+                    'nurse_id' => $nurseId,
+                ]
+            );
+        }
+
+        return redirect()->route('ward.schedule', [
+            'ward_id' => $wardId,
+            'date' => $validated['date'],
+        ])->with('success', 'Nurse assigned to ' . count($assignments) . ' shift(s).');
     }
 
     /**

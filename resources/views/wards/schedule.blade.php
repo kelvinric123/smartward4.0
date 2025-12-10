@@ -7,24 +7,41 @@
                 </h2>
                 <p class="text-sm text-gray-500 mt-1">Visualise beds by shift for the selected ward</p>
             </div>
-                <div class="flex items-center space-x-2">
+                <div class="flex items-center space-x-3">
                     <span class="px-3 py-1 rounded-full text-sm font-semibold bg-blue-100 text-blue-800">
                         Columns: Dates (base {{ \Carbon\Carbon::parse($selectedDate)->format('d M Y') }})
                     </span>
                     <span class="px-3 py-1 rounded-full text-sm font-semibold bg-cyan-100 text-cyan-800">
                         Rows: Bed → Shift (AM / PM / ON)
                     </span>
+                    <button type="button" 
+                            onclick="openShiftSettings()" 
+                            class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-xl font-semibold shadow-sm transition-all text-sm">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Shift Setting
+                    </button>
                 </div>
         </div>
     </x-slot>
 
     <div class="py-8">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-            <div class="bg-white/90 backdrop-blur-sm shadow-lg rounded-2xl border border-blue-100" 
+            <div class="bg-white shadow-lg rounded-2xl border border-blue-100" 
                  x-data="{
                     selected: [],
                     assignModal: false,
+                    selectedNurse: '{{ $nurses->first()->id ?? '' }}',
+                    assignError: '',
+                    assignLoading: false,
+                    hasNurses: {{ $nurses->count() ? 'true' : 'false' }},
                     patientModal: { open: false, patientId: null },
+                    submitFilters() {
+                        if (this.$refs.filterForm) {
+                            this.$refs.filterForm.submit();
+                        }
+                    },
                     toggle(cell) {
                         const idx = this.selected.findIndex(c => c.key === cell.key);
                         if (idx === -1) {
@@ -46,13 +63,68 @@
                     closePatientDetails() {
                         this.patientModal.open = false;
                         this.patientModal.patientId = null;
+                    },
+                    assignNurses() {
+                        this.assignError = '';
+
+                        if (!this.selected.length) {
+                            this.assignError = 'Select at least one shift.';
+                            return;
+                        }
+
+                        if (!this.selectedNurse) {
+                            this.assignError = 'Choose a nurse to assign.';
+                            return;
+                        }
+
+                        const assignments = this.selected.map(cell => ({
+                            bed_id: cell.bed_id,
+                            date: cell.date,
+                            shift: cell.shift,
+                        }));
+
+                        this.$refs.assignmentsField.value = JSON.stringify(assignments);
+                        this.$refs.nurseField.value = this.selectedNurse;
+                        this.assignLoading = true;
+                        this.$refs.assignForm.submit();
                     }
-                 }">
+                 }"
+                 x-effect="document.body.style.overflow = assignModal ? 'hidden' : ''">
                 <div class="p-6 space-y-6">
-                    <form method="GET" action="{{ route('ward.schedule') }}" class="grid gap-4 md:gap-6 md:grid-cols-3 items-end">
+                    @if (session('success'))
+                        <div class="flex items-start gap-3 p-4 rounded-xl bg-green-50 border border-green-200 text-green-800">
+                            <svg class="w-5 h-5 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                            </svg>
+                            <div>
+                                <p class="font-semibold">{{ session('success') }}</p>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if (session('error'))
+                        <div class="flex items-start gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-800">
+                            <svg class="w-5 h-5 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                            <div>
+                                <p class="font-semibold">{{ session('error') }}</p>
+                            </div>
+                        </div>
+                    @endif
+
+                    <form x-ref="assignForm" method="POST" action="{{ route('ward.schedule.assign') }}" class="hidden">
+                        @csrf
+                        <input type="hidden" name="ward_id" value="{{ $selectedWardId }}">
+                        <input type="hidden" name="date" value="{{ $selectedDate }}">
+                        <input type="hidden" name="nurse_id" x-ref="nurseField">
+                        <input type="hidden" name="assignments" x-ref="assignmentsField">
+                    </form>
+                    <form x-ref="filterForm" method="GET" action="{{ route('ward.schedule') }}" class="grid gap-4 md:gap-6 md:grid-cols-3 items-end">
                         <div>
                             <label for="ward_id" class="block text-sm font-semibold text-gray-700 mb-2">Ward</label>
-                            <select id="ward_id" name="ward_id" class="w-full rounded-xl border-gray-200 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                            <select id="ward_id" name="ward_id" class="w-full rounded-xl border-gray-200 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                    @change="submitFilters()">
                                 @forelse($wards as $ward)
                                     <option value="{{ $ward->id }}" {{ $selectedWardId == $ward->id ? 'selected' : '' }}>
                                         {{ $ward->ward_name }} ({{ $ward->ward_code }})
@@ -64,19 +136,13 @@
                         </div>
                         <div>
                             <label for="date" class="block text-sm font-semibold text-gray-700 mb-2">Base date</label>
-                            <input type="date" id="date" name="date" value="{{ $selectedDate }}" class="w-full rounded-xl border-gray-200 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                            <input type="date" id="date" name="date" value="{{ $selectedDate }}" class="w-full rounded-xl border-gray-200 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                   @change="submitFilters()">
                         </div>
-                        <div class="flex md:justify-end">
-                            <button type="submit" class="inline-flex items-center px-5 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-semibold rounded-xl shadow-md hover:shadow-lg transition-all duration-200">
-                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V5a3 3 0 013-3h2a3 3 0 013 3v2m4 0H4a2 2 0 00-2 2v9a3 3 0 003 3h14a3 3 0 003-3v-9a2 2 0 00-2-2z"/>
-                                </svg>
-                                Apply
-                            </button>
-                        </div>
+                        <div></div>
                     </form>
 
-                    <div class="flex items-center justify-between gap-3">
+                    <div class="flex items-center justify-between gap-3 sticky top-0 z-30 bg-white/95 backdrop-blur px-4 py-3 -mx-4 border border-blue-100 rounded-xl">
                         <div class="flex items-center gap-2">
                             <span class="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-100">
                                 Selected shifts: <span x-text="selected.length"></span>
@@ -187,7 +253,7 @@
                                                         @endphp
                                                         <td class="px-6 py-4">
                                                             <button type="button"
-                                                                @click="toggle({ key: '{{ $cellKey }}', bed: @js($bed->bed_display_name ?? 'Bed '.$bed->bed_number), shift: '{{ $shift }}', date: '{{ $date->toDateString() }}' })"
+                                                                @click="toggle({ key: '{{ $cellKey }}', bed_id: {{ $bed->id }}, bed: @js($bed->bed_display_name ?? 'Bed '.$bed->bed_number), shift: '{{ $shift }}', date: '{{ $date->toDateString() }}' })"
                                                                 :class="isSelected('{{ $cellKey }}') ? 'ring-2 ring-offset-2 ring-green-400' : ''"
                                                                 class="w-full text-left">
                                                                 <div class="rounded-lg border {{ $isSelectedDate ? 'border-green-200 bg-green-50' : 'border-gray-100 bg-white' }} p-3 hover:border-blue-200 hover:bg-blue-50 transition-colors">
@@ -197,6 +263,12 @@
                                                                     </div>
                                                                     <p class="text-sm font-semibold text-gray-800 mt-1">{{ ucfirst($bed->status) }}</p>
                                                                     <p class="text-xs text-gray-400">Shift {{ $shift }}</p>
+                                                                    @php $assignment = $assignments[$cellKey] ?? null; @endphp
+                                                                    @if($assignment)
+                                                                        <p class="text-xs text-green-700 font-semibold mt-2">
+                                                                            Nurse: {{ $assignment['nurse_name'] ?? 'Unassigned' }}
+                                                                        </p>
+                                                                    @endif
                                                                 </div>
                                                             </button>
                                                         </td>
@@ -223,9 +295,11 @@
                     </div>
 
                     <!-- Assign Nurses Modal -->
-                    <div x-show="assignModal" style="display: none;" class="fixed inset-0 z-50 flex items-center justify-center">
-                        <div class="absolute inset-0 bg-black/40" @click="assignModal = false"></div>
-                        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 space-y-4">
+                    <div x-show="assignModal" style="display: none;" class="fixed inset-0 z-50 overflow-y-auto">
+                        <div class="fixed inset-0 bg-black/40" @click="assignModal = false"></div>
+                        <div class="flex min-h-full items-center justify-center p-4">
+                            <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+                                 @click.stop>
                             <div class="flex items-center justify-between">
                                 <h3 class="text-lg font-semibold text-gray-800">Assign Nurses</h3>
                                 <button type="button" class="text-gray-400 hover:text-gray-600" @click="assignModal = false">&times;</button>
@@ -245,22 +319,42 @@
                                     </div>
                                 </template>
                             </div>
+                            <div class="space-y-2">
+                                <label class="block text-sm font-semibold text-gray-700">Select nurse</label>
+                                <select x-model="selectedNurse" class="w-full rounded-lg border-gray-200 shadow-sm focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500" :disabled="!hasNurses">
+                                    <option value="">Choose a nurse...</option>
+                                    @forelse($nurses as $nurse)
+                                        <option value="{{ $nurse->id }}">{{ $nurse->name }}{{ $nurse->registration_number ? ' · '.$nurse->registration_number : '' }}</option>
+                                    @empty
+                                        <option disabled>No active nurses available</option>
+                                    @endforelse
+                                </select>
+                                @if(!$nurses->count())
+                                    <p class="text-sm text-amber-600">Add active nurses first before assigning.</p>
+                                @else
+                                    <p class="text-xs text-gray-500">The selected nurse will be applied to all chosen shifts.</p>
+                                @endif
+                                <p x-show="assignError" class="text-sm text-red-600" x-text="assignError"></p>
+                            </div>
                             <div class="flex items-center justify-end gap-3">
                                 <button type="button" class="px-4 py-2 rounded-lg text-gray-600 hover:text-gray-800 hover:bg-gray-100" @click="assignModal = false">Cancel</button>
                                 <button type="button" class="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-                                        :disabled="!selected.length"
-                                        @click="alert('Hook up nurse assignment action here with ' + selected.length + ' shift(s).')">
-                                    Confirm Assign
+                                        :disabled="!selected.length || !hasNurses || assignLoading"
+                                        @click="assignNurses()">
+                                    <span x-show="assignLoading">Assigning...</span>
+                                    <span x-show="!assignLoading">Confirm Assign</span>
                                 </button>
                             </div>
+                        </div>
                         </div>
                     </div>
 
                     <!-- Patient Details Modal -->
-                    <div x-show="patientModal.open" style="display:none;" class="fixed inset-0 z-50 flex items-center justify-center">
-                        <div class="absolute inset-0 bg-black/40" @click="closePatientDetails()"></div>
-                        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-5xl p-4"
-                             @click.stop>
+                    <div x-show="patientModal.open" style="display:none;" class="fixed inset-0 z-50 overflow-y-auto">
+                        <div class="fixed inset-0 bg-black/40" @click="closePatientDetails()"></div>
+                        <div class="flex min-h-full items-center justify-center p-4">
+                            <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-5xl p-4"
+                                 @click.stop>
                             <div class="flex items-center justify-between mb-3">
                                 <h3 class="text-lg font-semibold text-gray-800">Patient Details</h3>
                                 <button type="button" class="text-gray-400 hover:text-gray-600" @click="closePatientDetails()">&times;</button>
@@ -275,10 +369,64 @@
                                 <p class="text-sm text-gray-500">No patient selected.</p>
                             </template>
                         </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Shift Settings Modal -->
+    <div id="shiftSettingsModal" style="display: none;" class="fixed inset-0 z-50 overflow-y-auto">
+        <div class="fixed inset-0 bg-black/40" onclick="closeShiftSettings()"></div>
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
+                <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-indigo-50">
+                    <h3 class="text-lg font-semibold text-gray-800 flex items-center">
+                        <svg class="w-5 h-5 mr-2 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        Shift Settings
+                    </h3>
+                    <button type="button" class="text-gray-400 hover:text-gray-600 transition-colors" onclick="closeShiftSettings()">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <iframe id="shiftSettingsIframe"
+                        src=""
+                        class="w-full h-[600px] border-0"
+                        title="Shift Settings">
+                </iframe>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openShiftSettings() {
+            const modal = document.getElementById('shiftSettingsModal');
+            const iframe = document.getElementById('shiftSettingsIframe');
+            const wardId = document.getElementById('ward_id')?.value || '{{ $selectedWardId }}';
+            iframe.src = '{{ route("ward.shift-settings") }}?ward_id=' + wardId;
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeShiftSettings() {
+            const modal = document.getElementById('shiftSettingsModal');
+            const iframe = document.getElementById('shiftSettingsIframe');
+            modal.style.display = 'none';
+            iframe.src = '';
+            document.body.style.overflow = '';
+        }
+
+        // Close modal on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeShiftSettings();
+            }
+        });
+    </script>
 </x-app-layout>
 

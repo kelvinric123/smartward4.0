@@ -16,6 +16,8 @@ use App\Http\Controllers\LdapConfigurationController;
 use App\Http\Controllers\VitalSignIntegrationController;
 use App\Http\Controllers\InfusionIntegrationController;
 use App\Http\Controllers\AdtConfigurationController;
+use App\Http\Controllers\EcgController;
+use App\Http\Controllers\ShiftSettingController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -61,7 +63,13 @@ Route::middleware('auth')->group(function () {
 
     // Ward Schedule Routes
     Route::get('/ward-schedule', [WardScheduleController::class, 'index'])->name('ward.schedule');
+    Route::post('/ward-schedule/assign', [WardScheduleController::class, 'assignNurses'])->name('ward.schedule.assign');
     Route::get('/ward-schedule/patient-details', [WardScheduleController::class, 'patientDetailsIframe'])->name('ward.schedule.patient-details');
+
+    // Shift Settings Routes
+    Route::get('/ward-schedule/shift-settings', [ShiftSettingController::class, 'index'])->name('ward.shift-settings');
+    Route::post('/ward-schedule/shift-settings', [ShiftSettingController::class, 'update'])->name('ward.shift-settings.update');
+    Route::post('/ward-schedule/shift-settings/reset', [ShiftSettingController::class, 'reset'])->name('ward.shift-settings.reset');
 
     // Ward Dashboard Routes
     Route::get('/ward-dashboard', [WardDashboardController::class, 'index'])->name('ward.dashboard');
@@ -118,6 +126,11 @@ Route::middleware('auth')->group(function () {
     // Ward Infusion Overview (iframe)
     Route::get('/ward-dashboard/infusion-overview', [InfusionIntegrationController::class, 'wardOverview'])->name('ward.infusion-overview');
     Route::get('/ward-dashboard/patient-infusions', [InfusionIntegrationController::class, 'patientInfusions'])->name('ward.patient-infusions');
+
+    // ECG Routes
+    Route::get('/ecg/patient', [EcgController::class, 'patientEcg'])->name('ecg.patient');
+    Route::get('/ecg/pdf', [EcgController::class, 'servePdf'])->name('ecg.pdf');
+    Route::get('/ecg/list', [EcgController::class, 'listFiles'])->name('ecg.list');
 
     // ADT Integration Routes
     Route::get('/adt', [AdtConfigurationController::class, 'index'])->name('adt.index');
