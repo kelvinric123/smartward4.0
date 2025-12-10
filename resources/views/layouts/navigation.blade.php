@@ -3,6 +3,7 @@
     patientOpen: {{ request()->routeIs('patients.*') ? 'true' : 'false' }},
     adminOpen: {{ request()->routeIs('hospitals.*') || request()->routeIs('specialties.*') || request()->routeIs('consultants.*') || request()->routeIs('anaesthetists.*') || request()->routeIs('nurses.*') ? 'true' : 'false' }},
     wardManagementOpen: {{ request()->routeIs('wards.*') || request()->routeIs('beds.*') ? 'true' : 'false' }},
+    scheduleOpen: {{ request()->routeIs('ward.schedule') ? 'true' : 'false' }},
     vitalSignOpen: {{ request()->routeIs('vital-signs.*') ? 'true' : 'false' }},
     wardDashboardOpen: {{ request()->routeIs('ward.dashboard') ? 'true' : 'false' }},
     integrationOpen: {{ request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*') ? 'true' : 'false' }}
@@ -137,6 +138,30 @@ class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 tran
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
                     </svg>
                     <span class="ml-2">Beds</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Schedule Section -->
+        <div class="pt-2">
+            <button @click="scheduleOpen = !scheduleOpen" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ward.schedule') ? 'bg-white/20' : '' }}">
+                <div class="flex items-center">
+                    <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V5a3 3 0 013-3h2a3 3 0 013 3v2m4 0H4a2 2 0 00-2 2v9a3 3 0 003 3h14a3 3 0 003-3v-9a2 2 0 00-2-2z"/>
+                    </svg>
+                    <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Schedule</span>
+                </div>
+                <svg x-show="sidebarOpen" :class="{'rotate-180': scheduleOpen}" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </button>
+            
+            <div x-show="scheduleOpen && sidebarOpen" x-transition class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
+                <a href="{{ route('ward.schedule') }}" class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ward.schedule') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M3 12h18M3 17h18"/>
+                    </svg>
+                    <span class="ml-2">Ward Schedule</span>
                 </a>
             </div>
         </div>

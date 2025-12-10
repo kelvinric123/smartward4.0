@@ -10,6 +10,7 @@ use App\Http\Controllers\PatientController;
 use App\Http\Controllers\WardController;
 use App\Http\Controllers\BedController;
 use App\Http\Controllers\WardDashboardController;
+use App\Http\Controllers\WardScheduleController;
 use App\Http\Controllers\VitalSignController;
 use App\Http\Controllers\LdapConfigurationController;
 use App\Http\Controllers\VitalSignIntegrationController;
@@ -57,6 +58,10 @@ Route::middleware('auth')->group(function () {
     // Bed Management Routes
     Route::resource('beds', BedController::class)->except(['show']);
     Route::post('beds/{bed}/deactivate', [BedController::class, 'deactivate'])->name('beds.deactivate');
+
+    // Ward Schedule Routes
+    Route::get('/ward-schedule', [WardScheduleController::class, 'index'])->name('ward.schedule');
+    Route::get('/ward-schedule/patient-details', [WardScheduleController::class, 'patientDetailsIframe'])->name('ward.schedule.patient-details');
 
     // Ward Dashboard Routes
     Route::get('/ward-dashboard', [WardDashboardController::class, 'index'])->name('ward.dashboard');

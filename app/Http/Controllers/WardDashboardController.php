@@ -881,11 +881,40 @@ class WardDashboardController extends Controller
         $patientDetailsTabs = $defaultTabs;
         $clinicalIndicatorOptions = $this->getDefaultClinicalIndicatorOptions();
         
+        // Allow iframe callers to explicitly restrict tabs via ?tabs=info,additional
+        if ($request->filled('tabs')) {
+            $requested = collect(explode(',', $request->input('tabs')))
+                ->map(fn($tab) => trim($tab))
+                ->filter()
+                ->unique()
+                ->values();
+
+            // start with all tabs false, then enable allowed requested keys that exist in defaults
+            $patientDetailsTabs = collect($defaultTabs)
+                ->map(fn() => false)
+                ->toArray();
+
+            foreach ($requested as $tab) {
+                if (array_key_exists($tab, $defaultTabs)) {
+                    $patientDetailsTabs[$tab] = true;
+                }
+            }
+
+            // ensure active tab falls back to the first available tab
+            if (!$patientDetailsTabs[$activeTab] ?? false) {
+                $firstEnabled = collect($patientDetailsTabs)
+                    ->filter()
+                    ->keys()
+                    ->first();
+                $activeTab = $firstEnabled ?? $activeTab;
+            }
+        }
+
         if (Auth::check()) {
             $settings = WardDashboardSetting::where('user_id', Auth::id())->first();
             if ($settings) {
                 if (is_array($settings->patient_details_tabs)) {
-                    $patientDetailsTabs = array_merge($defaultTabs, $settings->patient_details_tabs);
+                    $patientDetailsTabs = array_merge($patientDetailsTabs, $settings->patient_details_tabs);
                 }
                 if (is_array($settings->clinical_indicator_options)) {
                     $clinicalIndicatorOptions = array_merge($clinicalIndicatorOptions, $settings->clinical_indicator_options);
