@@ -15,7 +15,6 @@ WORKDIR /app/HL7
 RUN apk add --no-cache \
     bash \
     curl \
-    netcat-openbsd \
     && rm -rf /var/cache/apk/*
 
 # Copy requirements first for better caching
@@ -43,7 +42,7 @@ EXPOSE 3000
 
 # Health check - verify the listener is running and accepting connections
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD nc -z localhost 3000 || exit 1
+    CMD python -c "import socket; s=socket.socket(); s.connect(('localhost',3000)); s.close()" || exit 1
 
 # Run the listener
 CMD ["python", "adt_listener.py"]

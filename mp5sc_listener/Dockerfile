@@ -15,7 +15,7 @@ WORKDIR /app/mp5sc_listener
 RUN apk add --no-cache \
     bash \
     curl \
-    netcat-openbsd \
+    procps \
     && rm -rf /var/cache/apk/*
 
 # Copy requirements first for better caching

@@ -15,7 +15,6 @@ WORKDIR /app/ecg
 RUN apk add --no-cache \
     bash \
     curl \
-    netcat-openbsd \
     && rm -rf /var/cache/apk/*
 
 # Copy ECG server files
