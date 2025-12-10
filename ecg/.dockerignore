@@ -1,0 +1,41 @@
+# =============================================================================
+# Docker Ignore File for ECG Service
+# =============================================================================
+
+# Version Control
+.git
+.gitignore
+.gitattributes
+
+# IDE & Editors
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Python virtual environment
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Existing data files (volumes will be mounted)
+store/
+ftp_data/
+
+# Documentation
+*.md
+!README.md
+
+# Logs
+*.log
+
+# Test files
+test_*.py
+*_test.py
+
+# Batch files (Windows only)
+*.bat
+
