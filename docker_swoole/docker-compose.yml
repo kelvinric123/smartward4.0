@@ -22,11 +22,15 @@ services:
       - "${DB_PORT:-3307}:3306"
       - "${REDIS_PORT:-6380}:6379"
     environment:
+      # Timezone (default: Asia/Kuala_Lumpur - GMT+8)
+      TZ: "${TZ:-Asia/Kuala_Lumpur}"
+      
       # Application (APP_KEY comes from env_file)
       APP_NAME: "${APP_NAME:-SmartWard}"
       APP_ENV: "${APP_ENV:-production}"
       APP_DEBUG: "${APP_DEBUG:-false}"
       APP_URL: "${APP_URL:-http://localhost}"
+      APP_TIMEZONE: "${APP_TIMEZONE:-Asia/Kuala_Lumpur}"
       
       # Octane/Swoole (Aggressive settings)
       OCTANE_SERVER: "swoole"
@@ -167,6 +171,51 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # MP5sc Vital Sign Monitor Listener Container
+  mp5sc:
+    build:
+      context: ..
+      dockerfile: mp5sc_listener/Dockerfile
+    container_name: smartward4-mp5sc
+    restart: unless-stopped
+    # No ports exposed - this is an outbound UDP client
+    network_mode: "host"  # Required for UDP communication with medical devices on local network
+    environment:
+      # API Server Configuration (connects to smartward container)
+      API_BASE_URL: "${MP5SC_API_BASE_URL:-http://127.0.0.1:88/api/v1}"
+      API_PASSPHRASE: "${MP5SC_API_PASSPHRASE:-qmedno1}"
+      API_USERNAME: "${MP5SC_API_USERNAME:-api@qmed.asia}"
+      API_PASSWORD: "${MP5SC_API_PASSWORD:-88888888}"
+      # Monitor Device Configuration
+      MONITOR_IP: "${MP5SC_MONITOR_IP:-192.168.0.5}"
+      # Polling Configuration
+      POLL_INTERVAL: "${MP5SC_POLL_INTERVAL:-2}"
+      REFRESH_INTERVAL: "${MP5SC_REFRESH_INTERVAL:-10}"
+      # Debug Mode
+      DEBUG_MODE: "${MP5SC_DEBUG_MODE:-false}"
+    volumes:
+      # Persist logs
+      - mp5sc_logs:/app/mp5sc_listener/logs
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "python.*vital_sign_listener"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "128M"
+        reservations:
+          cpus: "0.1"
+          memory: "32M"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   smartward_mysql:
     driver: local
@@ -183,6 +232,8 @@ volumes:
   ecg_data:
     driver: local
   ecg_store:
+    driver: local
+  mp5sc_logs:
     driver: local
 
 networks:

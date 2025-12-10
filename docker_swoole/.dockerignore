@@ -78,3 +78,21 @@ phpunit.xml
 phpstan.neon
 psalm.xml
 
+# =============================================================================
+# MP5sc Listener - Keep these files (NOT ignored)
+# =============================================================================
+!mp5sc_listener/
+!mp5sc_listener/Dockerfile
+!mp5sc_listener/listener/
+!mp5sc_listener/listener/requirements.txt
+!mp5sc_listener/listener/vital_sign_listener.py
+!mp5sc_listener/listener/src/
+
+# Ignore MP5sc development/test files
+mp5sc_listener/listener/plotting_example/
+mp5sc_listener/listener/*.png
+mp5sc_listener/listener/LICENSE
+mp5sc_listener/listener/README.md
+mp5sc_listener/listener/env.example
+mp5sc_listener/.git/
+
