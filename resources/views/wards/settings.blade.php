@@ -899,7 +899,7 @@
             const defaultBedBoxItems = [
                 { key: 'patient_name', label: 'Patient Name', description: 'Full name of the patient', visible: true, order: 0 },
                 { key: 'consultant', label: 'Consultant Name', description: 'Attending consultant doctor', visible: true, order: 1 },
-                { key: 'nurse', label: 'Nurses in Charge', description: 'Assigned nursing staff', visible: true, order: 2 },
+                { key: 'nurse', label: 'Nurse on Duty', description: 'Nurse assigned from ward schedule', visible: true, order: 2 },
                 { key: 'admitted_duration', label: 'Admitted Duration', description: 'Days and hours since admission', visible: true, order: 3 },
                 { key: 'ews', label: 'EWS', description: 'Early Warning Score indicator', visible: true, order: 4 },
                 { key: 'mrn', label: 'MRN', description: 'Medical Record Number in header', visible: true, order: 5 },
@@ -1205,7 +1205,7 @@
                     this.bedBoxItems = [
                         { key: 'patient_name', label: 'Patient Name', description: 'Full name of the patient', visible: true, order: 0 },
                         { key: 'consultant', label: 'Consultant Name', description: 'Attending consultant doctor', visible: true, order: 1 },
-                        { key: 'nurse', label: 'Nurses in Charge', description: 'Assigned nursing staff', visible: true, order: 2 },
+                        { key: 'nurse', label: 'Nurse on Duty', description: 'Nurse assigned from ward schedule', visible: true, order: 2 },
                         { key: 'admitted_duration', label: 'Admitted Duration', description: 'Days and hours since admission', visible: true, order: 3 },
                         { key: 'ews', label: 'EWS', description: 'Early Warning Score indicator', visible: true, order: 4 },
                         { key: 'mrn', label: 'MRN', description: 'Medical Record Number in header', visible: true, order: 5 },
@@ -1320,7 +1320,7 @@
                     const values = {
                         patient_name: 'John Smith',
                         consultant: 'Dr. Sarah Johnson',
-                        nurse: 'Nurse Mary Wong',
+                        nurse: 'AM: Nurse Mary Wong',
                         admitted_duration: '3 days, 5 hours',
                     };
                     return values[key] || '';

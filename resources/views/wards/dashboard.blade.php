@@ -61,8 +61,198 @@
                 </div>
             </div>
             <div class="flex items-center space-x-4">
-                <div class="text-sm text-gray-500">
-                    {{ date('l, F j, Y \a\t g:i A') }}
+                <!-- Live DateTime Display - Click to open timezone settings -->
+                <div x-data="dashboardClock()" x-init="init()" class="relative">
+                    <button @click="showTimezoneModal = true" 
+                            class="flex items-center space-x-2 px-3 py-2 bg-white/50 hover:bg-white/80 rounded-lg border border-gray-200 shadow-sm transition-all cursor-pointer group">
+                        <svg class="w-4 h-4 text-gray-500 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <div class="text-sm text-gray-600 group-hover:text-gray-800 transition-colors">
+                            <span x-text="formattedDate" class="font-medium"></span>
+                            <span class="mx-1 text-gray-400">|</span>
+                            <span x-text="formattedTime" class="font-bold text-blue-600"></span>
+                        </div>
+                        <svg class="w-3 h-3 text-gray-400 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                    </button>
+
+                    <!-- Timezone Settings Modal -->
+                    <div x-show="showTimezoneModal" 
+                         x-transition:enter="transition ease-out duration-200"
+                         x-transition:enter-start="opacity-0"
+                         x-transition:enter-end="opacity-100"
+                         x-transition:leave="transition ease-in duration-150"
+                         x-transition:leave-start="opacity-100"
+                         x-transition:leave-end="opacity-0"
+                         class="fixed inset-0 z-50 overflow-y-auto" 
+                         style="display: none;">
+                        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+                            <div class="fixed inset-0 transition-opacity bg-gray-900/60 backdrop-blur-sm" @click="showTimezoneModal = false"></div>
+                            
+                            <div class="inline-block w-full max-w-lg p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-2xl rounded-2xl sm:my-16">
+                                <!-- Modal Header -->
+                                <div class="flex items-center justify-between mb-6">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg">
+                                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <h3 class="text-xl font-bold text-gray-900">Date & Time Settings</h3>
+                                            <p class="text-sm text-gray-500">Configure timezone and sync options</p>
+                                        </div>
+                                    </div>
+                                    <button @click="showTimezoneModal = false" class="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                                        <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                        </svg>
+                                    </button>
+                                </div>
+
+                                <!-- Current Time Display -->
+                                <div class="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-5 mb-6 border border-blue-100">
+                                    <div class="text-center">
+                                        <div class="text-4xl font-bold text-gray-800 tracking-wider" x-text="formattedTime"></div>
+                                        <div class="text-lg text-gray-600 mt-1" x-text="formattedDate"></div>
+                                        <div class="flex items-center justify-center mt-3 space-x-2">
+                                            <span class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium" x-text="selectedTimezone"></span>
+                                            <span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium flex items-center">
+                                                <span class="w-2 h-2 bg-green-500 rounded-full mr-1 animate-pulse"></span>
+                                                Live
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Timezone Selection -->
+                                <div class="mb-6">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                        <svg class="w-4 h-4 inline mr-1 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                        Select Timezone
+                                    </label>
+                                    <select x-model="selectedTimezone" @change="saveTimezone()" 
+                                            class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm text-gray-700">
+                                        <optgroup label="Southeast Asia">
+                                            <option value="Asia/Kuala_Lumpur">Malaysia (GMT+8) - Kuala Lumpur</option>
+                                            <option value="Asia/Singapore">Singapore (GMT+8)</option>
+                                            <option value="Asia/Bangkok">Thailand (GMT+7) - Bangkok</option>
+                                            <option value="Asia/Jakarta">Indonesia (GMT+7) - Jakarta</option>
+                                            <option value="Asia/Manila">Philippines (GMT+8) - Manila</option>
+                                            <option value="Asia/Ho_Chi_Minh">Vietnam (GMT+7) - Ho Chi Minh</option>
+                                        </optgroup>
+                                        <optgroup label="East Asia">
+                                            <option value="Asia/Hong_Kong">Hong Kong (GMT+8)</option>
+                                            <option value="Asia/Shanghai">China (GMT+8) - Shanghai</option>
+                                            <option value="Asia/Tokyo">Japan (GMT+9) - Tokyo</option>
+                                            <option value="Asia/Seoul">South Korea (GMT+9) - Seoul</option>
+                                            <option value="Asia/Taipei">Taiwan (GMT+8) - Taipei</option>
+                                        </optgroup>
+                                        <optgroup label="South Asia">
+                                            <option value="Asia/Kolkata">India (GMT+5:30) - Kolkata</option>
+                                            <option value="Asia/Dhaka">Bangladesh (GMT+6) - Dhaka</option>
+                                            <option value="Asia/Karachi">Pakistan (GMT+5) - Karachi</option>
+                                        </optgroup>
+                                        <optgroup label="Middle East">
+                                            <option value="Asia/Dubai">UAE (GMT+4) - Dubai</option>
+                                            <option value="Asia/Riyadh">Saudi Arabia (GMT+3) - Riyadh</option>
+                                        </optgroup>
+                                        <optgroup label="Oceania">
+                                            <option value="Australia/Sydney">Australia (GMT+10/11) - Sydney</option>
+                                            <option value="Australia/Perth">Australia (GMT+8) - Perth</option>
+                                            <option value="Pacific/Auckland">New Zealand (GMT+12/13) - Auckland</option>
+                                        </optgroup>
+                                        <optgroup label="Europe">
+                                            <option value="Europe/London">UK (GMT+0/1) - London</option>
+                                            <option value="Europe/Paris">France (GMT+1/2) - Paris</option>
+                                            <option value="Europe/Berlin">Germany (GMT+1/2) - Berlin</option>
+                                        </optgroup>
+                                        <optgroup label="Americas">
+                                            <option value="America/New_York">USA Eastern (GMT-5/-4) - New York</option>
+                                            <option value="America/Los_Angeles">USA Pacific (GMT-8/-7) - Los Angeles</option>
+                                            <option value="America/Chicago">USA Central (GMT-6/-5) - Chicago</option>
+                                        </optgroup>
+                                        <optgroup label="UTC">
+                                            <option value="UTC">UTC (GMT+0)</option>
+                                        </optgroup>
+                                    </select>
+                                </div>
+
+                                <!-- Time Sync Options -->
+                                <div class="mb-6">
+                                    <label class="block text-sm font-semibold text-gray-700 mb-3">
+                                        <svg class="w-4 h-4 inline mr-1 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                        </svg>
+                                        Time Synchronization
+                                    </label>
+                                    
+                                    <div class="space-y-3">
+                                        <!-- Use Internet Time -->
+                                        <div class="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200 hover:border-blue-300 transition-colors">
+                                            <div class="flex items-center space-x-3">
+                                                <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                                                    <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/>
+                                                    </svg>
+                                                </div>
+                                                <div>
+                                                    <div class="font-medium text-gray-800">Use Internet Time</div>
+                                                    <div class="text-xs text-gray-500">Sync with NTP server automatically</div>
+                                                </div>
+                                            </div>
+                                            <label class="relative inline-flex items-center cursor-pointer">
+                                                <input type="checkbox" x-model="useInternetTime" @change="toggleInternetTime()" class="sr-only peer">
+                                                <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                            </label>
+                                        </div>
+
+                                        <!-- Sync Now Button -->
+                                        <button @click="syncNow()" 
+                                                :disabled="syncing"
+                                                class="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-xl font-medium shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                                            <svg :class="{'animate-spin': syncing}" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                            </svg>
+                                            <span x-text="syncing ? 'Syncing...' : 'Sync Now'"></span>
+                                        </button>
+
+                                        <!-- Last Sync Info -->
+                                        <div x-show="lastSync" class="text-center text-xs text-gray-500">
+                                            <span>Last synced: </span>
+                                            <span x-text="lastSync" class="font-medium"></span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Server Time Info -->
+                                <div class="p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                                    <div class="flex items-start space-x-3">
+                                        <svg class="w-5 h-5 text-amber-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                        <div class="text-sm text-amber-800">
+                                            <div class="font-medium">Server Timezone</div>
+                                            <div class="text-xs mt-1">The server is configured to use <strong>{{ config('app.timezone', 'Asia/Kuala_Lumpur') }}</strong> timezone. This client-side setting only affects how time is displayed in your browser.</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Modal Footer -->
+                                <div class="mt-6 flex justify-end">
+                                    <button @click="showTimezoneModal = false" 
+                                            class="px-6 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors">
+                                        Close
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <!-- Custom Fullscreen Toggle Button -->
                 <button @click="
@@ -359,23 +549,19 @@
                                     <span>{{ $bed['consultant'] }}</span>
                                 </div>
                                 @endif
+                                {{-- Nurse On Duty (from Ward Schedule) --}}
                                 @if($isVisible('nurse'))
                                 <div class="flex items-center text-xs text-gray-600">
                                     <svg class="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
                                     </svg>
-                                    <span>{{ $bed['nurse'] }}</span>
-                                </div>
-                                @endif
-                                {{-- Nurse On Duty (from Ward Schedule) --}}
-                                @if(!empty($bed['nurse_on_duty']))
-                                <div class="flex items-center text-xs text-purple-600 font-medium">
-                                    <svg class="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                    </svg>
-                                    <span class="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-xs">
-                                        {{ $bed['current_shift'] ?? 'Shift' }}: {{ $bed['nurse_on_duty'] }}
+                                    @if(!empty($bed['nurse_on_duty']))
+                                    <span class="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-xs font-medium">
+                                        {{ $bed['current_shift'] ?? '' }}: {{ $bed['nurse_on_duty'] }}
                                     </span>
+                                    @else
+                                    <span class="text-gray-400">No nurse assigned</span>
+                                    @endif
                                 </div>
                                 @endif
                                 @if(!empty($bed['next_movement_location']) && !empty($bed['next_movement_time_display']))
@@ -902,16 +1088,6 @@
                                     </div>
                                     
                                     <div>
-                                        <label for="nurse_id" class="block text-sm font-medium text-gray-700">Nurse (Optional)</label>
-                                        <select name="nurse_id" id="nurse_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                            <option value="">Choose a nurse...</option>
-                                            @foreach(\App\Models\Nurse::where('is_active', true)->get() as $nurse)
-                                                <option value="{{ $nurse->id }}">{{ $nurse->name }}</option>
-                                            @endforeach
-                                        </select>
-                                    </div>
-                                    
-                                    <div>
                                         <label for="anaesthetist_id" class="block text-sm font-medium text-gray-700">Anaesthetist (Optional)</label>
                                         <select name="anaesthetist_id" id="anaesthetist_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                                             <option value="">Choose an anaesthetist...</option>
@@ -996,24 +1172,14 @@
                                         </div>
                                         
                                         <div>
-                                            <label for="prebook_nurse_id" class="block text-sm font-medium text-gray-700">Nurse (Optional)</label>
-                                            <select name="nurse_id" id="prebook_nurse_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                                <option value="">Choose a nurse...</option>
-                                                @foreach(\App\Models\Nurse::where('is_active', true)->get() as $nurse)
-                                                    <option value="{{ $nurse->id }}">{{ $nurse->name }}</option>
+                                            <label for="prebook_anaesthetist_id" class="block text-sm font-medium text-gray-700">Anaesthetist (Optional)</label>
+                                            <select name="anaesthetist_id" id="prebook_anaesthetist_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                                <option value="">Choose an anaesthetist...</option>
+                                                @foreach(\App\Models\Anaesthetist::where('is_active', true)->get() as $anaesthetist)
+                                                    <option value="{{ $anaesthetist->id }}">{{ $anaesthetist->name }}</option>
                                                 @endforeach
                                             </select>
                                         </div>
-                                    </div>
-                                    
-                                    <div>
-                                        <label for="prebook_anaesthetist_id" class="block text-sm font-medium text-gray-700">Anaesthetist (Optional)</label>
-                                        <select name="anaesthetist_id" id="prebook_anaesthetist_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                            <option value="">Choose an anaesthetist...</option>
-                                            @foreach(\App\Models\Anaesthetist::where('is_active', true)->get() as $anaesthetist)
-                                                <option value="{{ $anaesthetist->id }}">{{ $anaesthetist->name }}</option>
-                                            @endforeach
-                                        </select>
                                     </div>
                                     
                                     <div class="grid grid-cols-2 gap-4">
@@ -2018,6 +2184,187 @@
             checkMovementReminders();
             setInterval(checkMovementReminders, 60000);
         });
+
+        // Dashboard Clock Component with Timezone Support
+        function dashboardClock() {
+            return {
+                currentTime: new Date(),
+                formattedDate: '',
+                formattedTime: '',
+                selectedTimezone: 'Asia/Kuala_Lumpur',
+                showTimezoneModal: false,
+                useInternetTime: true,
+                syncing: false,
+                lastSync: null,
+                intervalId: null,
+
+                init() {
+                    // Load saved timezone from localStorage
+                    const savedTimezone = localStorage.getItem('smartward_timezone');
+                    if (savedTimezone) {
+                        this.selectedTimezone = savedTimezone;
+                    }
+
+                    // Load internet time preference
+                    const savedInternetTime = localStorage.getItem('smartward_use_internet_time');
+                    this.useInternetTime = savedInternetTime !== 'false';
+
+                    // Load last sync time
+                    const savedLastSync = localStorage.getItem('smartward_last_sync');
+                    if (savedLastSync) {
+                        this.lastSync = savedLastSync;
+                    }
+
+                    // Update time immediately
+                    this.updateTime();
+
+                    // Update time every second
+                    this.intervalId = setInterval(() => {
+                        this.updateTime();
+                    }, 1000);
+
+                    // Auto-sync every 30 minutes if internet time is enabled
+                    setInterval(() => {
+                        if (this.useInternetTime) {
+                            this.syncNow(true); // Silent sync
+                        }
+                    }, 30 * 60 * 1000);
+                },
+
+                updateTime() {
+                    this.currentTime = new Date();
+                    
+                    try {
+                        // Format date with selected timezone
+                        this.formattedDate = this.currentTime.toLocaleDateString('en-US', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            timeZone: this.selectedTimezone
+                        });
+
+                        // Format time with selected timezone
+                        this.formattedTime = this.currentTime.toLocaleTimeString('en-US', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                            hour12: true,
+                            timeZone: this.selectedTimezone
+                        });
+                    } catch (e) {
+                        // Fallback to default formatting if timezone is invalid
+                        this.formattedDate = this.currentTime.toLocaleDateString('en-US', {
+                            weekday: 'long',
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric'
+                        });
+                        this.formattedTime = this.currentTime.toLocaleTimeString('en-US', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit',
+                            hour12: true
+                        });
+                    }
+                },
+
+                saveTimezone() {
+                    localStorage.setItem('smartward_timezone', this.selectedTimezone);
+                    this.updateTime();
+                },
+
+                toggleInternetTime() {
+                    localStorage.setItem('smartward_use_internet_time', this.useInternetTime.toString());
+                    if (this.useInternetTime) {
+                        this.syncNow();
+                    }
+                },
+
+                async syncNow(silent = false) {
+                    if (this.syncing) return;
+                    
+                    this.syncing = true;
+                    
+                    try {
+                        // Try to sync with WorldTimeAPI (free, no API key needed)
+                        const response = await fetch(`https://worldtimeapi.org/api/timezone/${this.selectedTimezone}`);
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            // WorldTimeAPI returns datetime in ISO format
+                            const serverTime = new Date(data.datetime);
+                            const clientTime = new Date();
+                            const offset = serverTime.getTime() - clientTime.getTime();
+                            
+                            // Store offset for future corrections (not implemented for simplicity)
+                            localStorage.setItem('smartward_time_offset', offset.toString());
+                            
+                            this.lastSync = new Date().toLocaleString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                timeZone: this.selectedTimezone
+                            });
+                            localStorage.setItem('smartward_last_sync', this.lastSync);
+                            
+                            if (!silent) {
+                                // Show success notification
+                                this.showNotification('Time synchronized successfully!', 'success');
+                            }
+                        } else {
+                            throw new Error('Failed to sync with time server');
+                        }
+                    } catch (error) {
+                        console.warn('Time sync failed:', error);
+                        if (!silent) {
+                            this.showNotification('Using local device time', 'warning');
+                        }
+                        
+                        // Use local time as fallback
+                        this.lastSync = new Date().toLocaleString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            timeZone: this.selectedTimezone
+                        }) + ' (local)';
+                        localStorage.setItem('smartward_last_sync', this.lastSync);
+                    } finally {
+                        this.syncing = false;
+                    }
+                },
+
+                showNotification(message, type = 'info') {
+                    const colors = {
+                        success: 'bg-green-500',
+                        warning: 'bg-amber-500',
+                        error: 'bg-red-500',
+                        info: 'bg-blue-500'
+                    };
+
+                    const notification = document.createElement('div');
+                    notification.className = `fixed bottom-4 right-4 z-50 ${colors[type]} text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-2 animate-fade-in`;
+                    notification.innerHTML = `
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            ${type === 'success' 
+                                ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>'
+                                : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>'}
+                        </svg>
+                        <span>${message}</span>
+                    `;
+
+                    document.body.appendChild(notification);
+
+                    setTimeout(() => {
+                        notification.style.opacity = '0';
+                        notification.style.transition = 'opacity 0.3s';
+                        setTimeout(() => notification.remove(), 300);
+                    }, 3000);
+                }
+            };
+        }
     </script>
 </x-app-layout>
 

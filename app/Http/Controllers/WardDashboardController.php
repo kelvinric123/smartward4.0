@@ -471,7 +471,6 @@ class WardDashboardController extends Controller
             'ward_id' => 'required|exists:wards,id',
             'bed_number' => 'required|string',
             'consultant_id' => 'nullable|exists:consultants,id',
-            'nurse_id' => 'nullable|exists:nurses,id',
             'anaesthetist_id' => 'nullable|exists:anaesthetists,id',
         ]);
         
@@ -496,18 +495,16 @@ class WardDashboardController extends Controller
             
             $patient = Patient::findOrFail($request->patient_id);
             $consultant = $request->consultant_id ? Consultant::find($request->consultant_id) : null;
-            $nurse = $request->nurse_id ? Nurse::find($request->nurse_id) : null;
             $anaesthetist = $request->anaesthetist_id ? Anaesthetist::find($request->anaesthetist_id) : null;
             $ward = Ward::findOrFail($request->ward_id);
             
             $admittedAt = now();
             
-            // Update patient record
+            // Update patient record (nurse is assigned via ward schedule, not during admission)
             $patient->update([
                 'ward_id' => $request->ward_id,
                 'bed_number' => $request->bed_number,
                 'consultant_id' => $request->consultant_id,
-                'nurse_id' => $request->nurse_id,
                 'anaesthetist_id' => $request->anaesthetist_id,
                 'admitted_at' => $admittedAt,
                 'status' => 'admitted',
@@ -521,7 +518,6 @@ class WardDashboardController extends Controller
                 $bedRecord->update([
                     'status' => 'occupied',
                     'patient_id' => $patient->id,
-                    'nurse_id' => $request->nurse_id,
                     'anaesthetist_id' => $request->anaesthetist_id,
                 ]);
             }
@@ -536,7 +532,7 @@ class WardDashboardController extends Controller
                 'patient_name' => $patient->name,
                 'mrn' => $patient->mrn,
                 'consultant_name' => $consultant ? $consultant->name : null,
-                'nurse_name' => $nurse ? $nurse->name : null,
+                'nurse_name' => null, // Nurse is now assigned via ward schedule
                 'gender' => $patient->gender,
                 'age' => $patient->age,
                 'admitted_at' => $admittedAt,
@@ -550,7 +546,6 @@ class WardDashboardController extends Controller
                 'ward_name' => $ward->ward_name,
                 'bed_number' => $request->bed_number,
                 'consultant' => $consultant ? $consultant->name : 'None',
-                'nurse' => $nurse ? $nurse->name : 'None',
                 'admitted_at' => $admittedAt,
                 'user_id' => Auth::id(),
             ]);
@@ -576,7 +571,6 @@ class WardDashboardController extends Controller
             'ward_id' => 'required|exists:wards,id',
             'bed_number' => 'required|string',
             'consultant_id' => 'nullable|exists:consultants,id',
-            'nurse_id' => 'nullable|exists:nurses,id',
             'anaesthetist_id' => 'nullable|exists:anaesthetists,id',
             'gender' => 'nullable|in:Male,Female',
             'age' => 'nullable|integer|min:0|max:150',
@@ -605,7 +599,6 @@ class WardDashboardController extends Controller
             
             $ward = Ward::findOrFail($request->ward_id);
             $consultant = $request->consultant_id ? Consultant::find($request->consultant_id) : null;
-            $nurse = $request->nurse_id ? Nurse::find($request->nurse_id) : null;
             $anaesthetist = $request->anaesthetist_id ? Anaesthetist::find($request->anaesthetist_id) : null;
             $bookedAt = $request->booked_at ? $request->booked_at : now();
             
@@ -613,12 +606,11 @@ class WardDashboardController extends Controller
             if ($request->filled('patient_id')) {
                 $patient = Patient::findOrFail($request->patient_id);
                 
-                // Update patient with optional fields
+                // Update patient with optional fields (nurse is assigned via ward schedule)
                 $updateData = [
                     'ward_id' => $request->ward_id,
                     'bed_number' => $request->bed_number,
                     'consultant_id' => $request->consultant_id,
-                    'nurse_id' => $request->nurse_id,
                     'anaesthetist_id' => $request->anaesthetist_id,
                     'booked_at' => $bookedAt,
                     'status' => 'prebook',
@@ -643,7 +635,6 @@ class WardDashboardController extends Controller
                     'ward_id' => $request->ward_id,
                     'bed_number' => $request->bed_number,
                     'consultant_id' => $request->consultant_id,
-                    'nurse_id' => $request->nurse_id,
                     'anaesthetist_id' => $request->anaesthetist_id,
                     'gender' => $request->gender ?? 'Male',
                     'age' => $request->age ?? 0,
@@ -662,7 +653,6 @@ class WardDashboardController extends Controller
                 $bedRecord->update([
                     'status' => 'reserved',
                     'patient_id' => $patient->id,
-                    'nurse_id' => $request->nurse_id,
                     'anaesthetist_id' => $request->anaesthetist_id,
                 ]);
             }
@@ -677,7 +667,7 @@ class WardDashboardController extends Controller
                 'patient_name' => $patient->name,
                 'mrn' => $patient->mrn,
                 'consultant_name' => $consultant ? $consultant->name : null,
-                'nurse_name' => $nurse ? $nurse->name : null,
+                'nurse_name' => null, // Nurse is now assigned via ward schedule
                 'gender' => $request->gender ?? $patient->gender,
                 'age' => $request->age ?? $patient->age,
                 'notes' => $request->notes,
@@ -692,7 +682,6 @@ class WardDashboardController extends Controller
                 'ward_name' => $ward->ward_name,
                 'bed_number' => $request->bed_number,
                 'consultant' => $consultant ? $consultant->name : 'None',
-                'nurse' => $nurse ? $nurse->name : 'None',
                 'booked_at' => $bookedAt,
                 'notes' => $request->notes ?? 'None',
                 'user_id' => Auth::id(),

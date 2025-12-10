@@ -27,6 +27,14 @@ log_error() {
 # =============================================================================
 # Environment Defaults (Aggressive settings for high-performance servers)
 # =============================================================================
+# Timezone configuration (default: Asia/Kuala_Lumpur - GMT+8)
+export TZ=${TZ:-Asia/Kuala_Lumpur}
+if [ -f "/usr/share/zoneinfo/${TZ}" ]; then
+    cp /usr/share/zoneinfo/${TZ} /etc/localtime 2>/dev/null || true
+    echo "${TZ}" > /etc/timezone 2>/dev/null || true
+    log_info "Timezone set to: ${TZ}"
+fi
+
 # Auto-detect CPU cores for worker count
 CPU_CORES=$(nproc 2>/dev/null || echo 4)
 # Use 2x CPU cores for workers (aggressive)
@@ -39,6 +47,7 @@ export OCTANE_MAX_REQUESTS=${OCTANE_MAX_REQUESTS:-500}
 export DB_DATABASE=${DB_DATABASE:-smartward}
 export DB_USERNAME=${DB_USERNAME:-root}
 export DB_PASSWORD=${DB_PASSWORD:-smartward_secret}
+export APP_TIMEZONE=${APP_TIMEZONE:-Asia/Kuala_Lumpur}
 
 # =============================================================================
 # Initialize MySQL (MariaDB on Alpine)

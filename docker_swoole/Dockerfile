@@ -12,6 +12,7 @@ LABEL description="Production Laravel Octane with Swoole, MySQL, Redis in single
 ENV OCTANE_SERVER=swoole
 ENV APP_ENV=production
 ENV APP_DEBUG=false
+ENV TZ=Asia/Kuala_Lumpur
 
 # Build arguments
 ARG SWOOLE_VERSION=5.1.1
@@ -20,6 +21,8 @@ ARG REDIS_MAXMEMORY=256mb
 
 # Install system dependencies
 RUN apk add --no-cache \
+    # Timezone data
+    tzdata \
     # MySQL
     mariadb \
     mariadb-client \
@@ -56,6 +59,10 @@ RUN apk add --no-cache \
     # Python with pip for HL7 ADT listener
     python3 \
     py3-pip
+
+# Configure timezone (default: Asia/Kuala_Lumpur - GMT+8)
+RUN cp /usr/share/zoneinfo/${TZ} /etc/localtime \
+    && echo "${TZ}" > /etc/timezone
 
 # Install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
