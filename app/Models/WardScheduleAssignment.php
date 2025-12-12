@@ -37,3 +37,4 @@ class WardScheduleAssignment extends Model
     }
 }
 
+

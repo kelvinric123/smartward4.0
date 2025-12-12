@@ -103,3 +103,4 @@ class ShiftSetting extends Model
     }
 }
 
+
