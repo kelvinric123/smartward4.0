@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class Anaesthetist extends Model
 {
     protected $fillable = [
+        'personnel_code',
         'name',
         'registration_number',
         'phone',
@@ -20,4 +21,14 @@ class Anaesthetist extends Model
         'is_active' => 'boolean',
         'years_of_experience' => 'integer',
     ];
+
+    /**
+     * Find anaesthetist by personnel code (ADT code)
+     */
+    public static function findByPersonnelCode(string $code): ?self
+    {
+        return static::where('personnel_code', $code)
+            ->where('is_active', true)
+            ->first();
+    }
 }

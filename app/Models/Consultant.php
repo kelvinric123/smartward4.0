@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Consultant extends Model
 {
     protected $fillable = [
+        'personnel_code',
         'name',
         'specialty_id',
         'registration_number',
@@ -26,5 +27,37 @@ class Consultant extends Model
     public function specialty(): BelongsTo
     {
         return $this->belongsTo(Specialty::class);
+    }
+
+    /**
+     * Find consultant by personnel code (ADT code)
+     */
+    public static function findByPersonnelCode(string $code): ?self
+    {
+        return static::where('personnel_code', $code)
+            ->where('is_active', true)
+            ->first();
+    }
+
+    /**
+     * Check if consultant is an anaesthetist based on specialty
+     */
+    public function isAnaesthetist(): bool
+    {
+        if (!$this->specialty) {
+            return false;
+        }
+        
+        $anaesthetistKeywords = ['anaesth', 'anesth', 'anesthesi'];
+        $specialtyName = strtolower($this->specialty->name ?? '');
+        $specialtyCode = strtolower($this->specialty->code ?? '');
+        
+        foreach ($anaesthetistKeywords as $keyword) {
+            if (str_contains($specialtyName, $keyword) || str_contains($specialtyCode, $keyword)) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 }

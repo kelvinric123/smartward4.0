@@ -17,6 +17,8 @@ class WardDashboardSetting extends Model
         'clinical_indicator_options',
         'dashboard_display',
         'clinical_settings',
+        'patient_vitals_mode',
+        'bed_box_vitals_mode',
     ];
 
     protected $casts = [

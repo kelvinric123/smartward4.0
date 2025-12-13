@@ -16,6 +16,7 @@ use App\Models\WardDashboardSetting;
 use App\Models\VitalSign;
 use App\Models\ShiftSetting;
 use App\Models\WardScheduleAssignment;
+use App\Models\DietType;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
@@ -217,6 +218,9 @@ class WardDashboardController extends Controller
             ? array_merge($defaultDashboardDisplay, $userSettings->dashboard_display)
             : $defaultDashboardDisplay;
         
+        // Bed box vitals mode (demo/real/off)
+        $bedBoxVitalsMode = $userSettings ? ($userSettings->bed_box_vitals_mode ?? 'demo') : 'demo';
+        
         // Convert to keyed array for easy access in blade
         $bedBoxConfig = collect($bedBoxDisplay)->keyBy('key')->toArray();
         $patientInfoConfig = collect($patientInfoDisplay)->keyBy('key')->toArray();
@@ -240,7 +244,8 @@ class WardDashboardController extends Controller
             'anaesthetistPatients',
             'bedBoxConfig',
             'patientInfoConfig',
-            'dashboardDisplay'
+            'dashboardDisplay',
+            'bedBoxVitalsMode'
         ));
     }
     
@@ -412,7 +417,8 @@ class WardDashboardController extends Controller
                         : null,
                     // Clinical indicators
                     'nursing_level' => $patient->nursing_level ?? 'none',
-                    'diet_type' => $patient->diet_type ?? 'regular',
+                    'diet_type' => $patient->diet_type ?? 'RD',
+                    'diet_type_name' => $patient->diet_type ? DietType::getDisplayName($patient->diet_type) : 'Regular diet',
                     'fall_risk' => $patient->fall_risk ?? 'none',
                     'isolation_type' => $patient->isolation_type ?? 'none',
                     'allergies' => $patient->allergies ?? [],
@@ -454,6 +460,7 @@ class WardDashboardController extends Controller
                     // Clinical indicators (null for available beds)
                     'nursing_level' => null,
                     'diet_type' => null,
+                    'diet_type_name' => null,
                     'fall_risk' => null,
                     'isolation_type' => null,
                     'allergies' => null,
@@ -936,6 +943,8 @@ class WardDashboardController extends Controller
             }
         }
 
+        $patientVitalsMode = 'demo'; // default
+
         if (Auth::check()) {
             $settings = WardDashboardSetting::where('user_id', Auth::id())->first();
             if ($settings) {
@@ -945,6 +954,8 @@ class WardDashboardController extends Controller
                 if (is_array($settings->clinical_indicator_options)) {
                     $clinicalIndicatorOptions = array_merge($clinicalIndicatorOptions, $settings->clinical_indicator_options);
                 }
+                // Get patient vitals mode
+                $patientVitalsMode = $settings->patient_vitals_mode ?? 'demo';
             }
         }
 
@@ -956,6 +967,7 @@ class WardDashboardController extends Controller
             'activeTab' => $activeTab,
             'patientDetailsTabs' => $patientDetailsTabs,
             'clinicalIndicatorOptions' => $clinicalIndicatorOptions,
+            'patientVitalsMode' => $patientVitalsMode,
         ]);
     }
 
@@ -1034,6 +1046,10 @@ class WardDashboardController extends Controller
         // Merge with defaults to ensure all keys exist
         $clinicalIndicatorOptions = array_merge($defaultClinicalOptions, $clinicalIndicatorOptions);
 
+        // Vitals data mode settings (demo/real/off)
+        $patientVitalsMode = $settings->patient_vitals_mode ?? 'demo';
+        $bedBoxVitalsMode = $settings->bed_box_vitals_mode ?? 'demo';
+
         return view('wards.settings', [
             'tabs' => $tabs,
             'bedBoxDisplay' => $bedBoxDisplay,
@@ -1041,6 +1057,8 @@ class WardDashboardController extends Controller
             'clinicalIndicatorOptions' => $clinicalIndicatorOptions,
             'dashboardDisplay' => $dashboardDisplay,
             'clinicalSettings' => $clinicalSettings,
+            'patientVitalsMode' => $patientVitalsMode,
+            'bedBoxVitalsMode' => $bedBoxVitalsMode,
         ]);
     }
 
@@ -1105,6 +1123,28 @@ class WardDashboardController extends Controller
             }
 
             return back()->with('success', 'Clinical settings updated successfully.');
+        }
+
+        if ($settingType === 'patient_vitals_mode') {
+            // Handle patient vitals mode (demo/real/off)
+            $mode = $request->input('patient_vitals_mode', 'demo');
+            if (in_array($mode, ['demo', 'real', 'off'])) {
+                $settings->patient_vitals_mode = $mode;
+                $settings->save();
+            }
+
+            return back()->with('success', 'Patient vitals mode updated successfully.');
+        }
+
+        if ($settingType === 'bed_box_vitals_mode') {
+            // Handle bed box vitals mode (demo/real/off)
+            $mode = $request->input('bed_box_vitals_mode', 'demo');
+            if (in_array($mode, ['demo', 'real', 'off'])) {
+                $settings->bed_box_vitals_mode = $mode;
+                $settings->save();
+            }
+
+            return back()->with('success', 'Bed box vitals mode updated successfully.');
         }
 
         // Handle patient details tabs settings (default)

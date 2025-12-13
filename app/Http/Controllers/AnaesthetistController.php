@@ -21,6 +21,7 @@ class AnaesthetistController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
+            'personnel_code' => 'nullable|string|max:50|unique:anaesthetists,personnel_code',
             'name' => 'required|string|max:255',
             'registration_number' => 'required|string|unique:anaesthetists,registration_number',
             'phone' => 'nullable|string|max:20',
@@ -35,6 +36,11 @@ class AnaesthetistController extends Controller
         return redirect()->route('anaesthetists.index')->with('success', 'Anaesthetist created successfully.');
     }
 
+    public function show(Anaesthetist $anaesthetist)
+    {
+        return view('admin.anaesthetists.show', compact('anaesthetist'));
+    }
+
     public function edit(Anaesthetist $anaesthetist)
     {
         return view('admin.anaesthetists.edit', compact('anaesthetist'));
@@ -43,6 +49,7 @@ class AnaesthetistController extends Controller
     public function update(Request $request, Anaesthetist $anaesthetist)
     {
         $validated = $request->validate([
+            'personnel_code' => 'nullable|string|max:50|unique:anaesthetists,personnel_code,' . $anaesthetist->id,
             'name' => 'required|string|max:255',
             'registration_number' => 'required|string|unique:anaesthetists,registration_number,' . $anaesthetist->id,
             'phone' => 'nullable|string|max:20',

@@ -14,6 +14,10 @@ use App\Models\Hospital;
 use App\Models\Ward;
 use App\Models\Bed;
 use App\Models\Consultant;
+use App\Models\Nurse;
+use App\Models\Anaesthetist;
+use App\Models\DietType;
+use App\Models\IsolationType;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -615,6 +619,206 @@ class AdtConfigurationController extends Controller
             'success' => true,
             'logs' => $logs,
         ]);
+    }
+
+    /**
+     * Display the ADT Test page.
+     */
+    public function testPage()
+    {
+        $configuration = AdtConfiguration::first();
+        
+        // Determine the default host for the test form
+        // In Docker, use ADT_HOST env var (service name 'adt')
+        // Otherwise, use the configuration or fall back to localhost
+        $adtHost = config('services.adt.host');
+        if ($adtHost) {
+            $defaultHost = $adtHost;
+        } elseif ($configuration && $configuration->listener_host && $configuration->listener_host !== '0.0.0.0') {
+            $defaultHost = $configuration->listener_host;
+        } else {
+            $defaultHost = 'localhost';
+        }
+        
+        $defaultPort = config('services.adt.port') ?: ($configuration->listener_port ?? 3000);
+        
+        // Sample ADT messages based on adt_sample_sender.py
+        $sampleMessages = [
+            'A01' => [
+                'name' => 'ADT^A01 - Admit/Register Patient',
+                'description' => 'Creates a new patient visit and assigns the patient to the designated location/ward.',
+                'message' => "MSH|^~\\&|CEREBRALPLUS|PHKL|IWARD|IWARD|20251117080000||ADT^A01^ADT_A01|50690.0|T|2.4\r\nEVN|A01|20251117080000||||\r\nPID|1||3300746940^^^^MR|PP^N7356938|TEST SST PATIENT||19920409|M||00|Test^^Ayer Hitam^Johor^N/A^MYS|MYS|0^06128764|||0|99||||||||||||IND|\r\nPV1|1|I|WWC7^C706^C706|||WWC7^WARD C7 (EXECUTIVE WARD)|DALEXLHR^ALEX LEOW HWONG RUEY|||||||||||||PHKL25IP11000009|15^4^1^C000020027~15^1^99^||||||||||||||||||||||||||||20251117080000|\r\nNK1|1||||||||||||||||||||||||||||||||||||||",
+            ],
+            'A02' => [
+                'name' => 'ADT^A02 - Transfer Patient',
+                'description' => 'Transfers a patient to another ward, room, or bed.',
+                'message' => "MSH|^~\\&|CEREBRALPLUS|PHKL|IWARD|IWARD|20251117100000||ADT^A02^ADT_A02|50691.0|T|2.4\r\nEVN|A02|20251117100000|||||\r\nPID|1||3300746940^^^^MR|PP^N7356938|TEST SST PATIENT||19920409|M||00|Test^^Ayer Hitam^Johor^N/A^MYS|MYS|0^06128764|||0|99||||||||||||IND|\r\nPV1|1|I|WWD6^D610^D610|||WWD6^WARD D6 (MEDICAL \\& SURGICAL)|DKAMJIT^KAMALJIT KAUR D/O HARBAN SINGH|||||||||||||PHKL25IP11000009|15^4^1^C000020027~15^1^99^||||||||||||||||||||||||||||20251117080000|||||||",
+            ],
+            'A03' => [
+                'name' => 'ADT^A03 - Discharge/End Visit',
+                'description' => 'Indicates the patient has been discharged and the visit is considered closed.',
+                'message' => "MSH|^~\\&|CEREBRALPLUS|PHKL|IWARD|IWARD|20251117160000||ADT^A03^ADT_A03|50695.0|T|2.4\r\nEVN|A03|20251117160000|||||\r\nPID|1||3300746940^^^^MR|PP^N7356938|TEST SST PATIENT||19920409|M||00|Test^^Ayer Hitam^Johor^N/A^MYS|MYS|0^06128764|||0|99||||||||||||IND|\r\nPV1|1|I|WWD6^D610^D610|||WWD6^WARD D6 (MEDICAL \\& SURGICAL)|DKAMJIT^KAMALJIT KAUR D/O HARBAN SINGH|||||||||||||PHKL25IP11000009|15^4^1^C000020027~15^1^99^|||||||||||||||||||||||||||20251117080000|20251117160000||||||||",
+            ],
+            'A08' => [
+                'name' => 'ADT^A08 - Update Patient Details',
+                'description' => 'Updates patient demographics, contact details, diet, or isolation status.',
+                'message' => "MSH|^~\\&|CEREBRALPLUS|PHKL|IWARD|IWARD|20251117120000||ADT^A08^ADT_A08|50692.0|T|2.4\r\nEVN|A08|20251117120000|||||\r\nPID|1||3300746940^^^^MR|PP^N7356938|TEST SST PATIENT||19920409|M||00|Test^^Ayer Hitam^Johor^N/A^MYS|MYS|0^06128764|||0|99||||||||||||IND|\r\nPV1|1|I|WWD6^D610^D610|||WWD6^WARD D6 (MEDICAL \\& SURGICAL)|DKAMJIT^KAMALJIT KAUR D/O HARBAN SINGH|||||||||||||PHKL25IP11000009|15^4^1^C000020027~15^1^99^||||||||||||||||||||DMD, REGD^DIABETIC DIET, REGULAR DIET|||||||||\r\nNK1|1|^AHMAD|40^Son|Test^^Ayer Hitam^Johor^N/A^MYS|60123456789||||||||||||||||||||||||||||||||||||111103149999\r\nRMI|0|||CI^Contact Isolation||||||||||||||||||||||||||||||||||",
+            ],
+            'A11' => [
+                'name' => 'ADT^A11 - Cancel Admit/Cancel Visit',
+                'description' => 'Reverses a previously sent A01 message.',
+                'message' => "MSH|^~\\&|CEREBRALPLUS|PHKL|IWARD|IWARD|20251117180000||ADT^A11^ADT_A11|50697.0|T|2.4\r\nEVN|A11|20251117180000||||\r\nPID|1||3300746940^^^^MR|PP^N7356938|TEST SST PATIENT||19920409|M||00|Test^^Ayer Hitam^Johor^N/A^MYS|MYS|0^06128764|||0|99||||||||||||IND|\r\nPV1|1|I|WWC7^C706^C706|||WWC7^WARD C7 (EXECUTIVE WARD)|DALEXLHR^ALEX LEOW HWONG RUEY|||||||||||||PHKL25IP11000009|15^4^1^C000020027~15^1^99^||||||||||||||||||||||||||||||||||||",
+            ],
+            'A13' => [
+                'name' => 'ADT^A13 - Cancel Discharge',
+                'description' => 'Reopens a visit by cancelling a prior discharge event.',
+                'message' => "MSH|^~\\&|CEREBRALPLUS|PHKL|IWARD|IWARD|20251117170000||ADT^A13^ADT_A13|50696.0|T|2.4\r\nEVN|A13|20251117170000|||||\r\nPID|1||3300746940^^^^MR|PP^N7356938|TEST SST PATIENT||19920409|M||00|Test^^Ayer Hitam^Johor^N/A^MYS|MYS|0^06128764|||0|99||||||||||||IND|\r\nPV1|1|I|WWD6^D610^D610|||WWD6^WARD D6 (MEDICAL \\& SURGICAL)|DKAMJIT^KAMALJIT KAUR D/O HARBAN SINGH|||||||||||||PHKL25IP11000009|15^4^1^C000020027~15^1^99^||||||||||||||||||||||||||20251117080000||||||||",
+            ],
+            'A16' => [
+                'name' => 'ADT^A16 - Pending Discharge',
+                'description' => 'Indicates the patient is awaiting discharge.',
+                'message' => "MSH|^~\\&|CEREBRALPLUS|PHKL|IWARD|IWARD|20251117140000||ADT^A16^ADT_A16|50693.0|T|2.4\r\nEVN|A16|20251117140000|||||\r\nPID|1||3300746940^^^^MR|PP^N7356938|TEST SST PATIENT||19920409|M||00|Test^^Ayer Hitam^Johor^N/A^MYS|MYS|0^06128764|||0|99||||||||||||IND|\r\nPV1|1|I|WWD6^D610^D610|||WWD6^WARD D6 (MEDICAL \\& SURGICAL)|DKAMJIT^KAMALJIT KAUR D/O HARBAN SINGH|||||||||||||PHKL25IP11000009|15^4^1^C000020027~15^1^99^||||||||||||||||||||||||||20251117080000||||||||",
+            ],
+            'A25' => [
+                'name' => 'ADT^A25 - Cancel Pending Discharge',
+                'description' => 'Reverses a pending discharge previously flagged by an A16.',
+                'message' => "MSH|^~\\&|CEREBRALPLUS|PHKL|IWARD|IWARD|20251117143000||ADT^A25^ADT_A25|50694.0|T|2.4\r\nEVN|A25|20251117143000||||\r\nPID|1||3300746940^^^^MR|PP^N7356938|TEST SST PATIENT||19920409|M||00|Test^^Ayer Hitam^Johor^N/A^MYS|MYS|0^06128764|||0|99||||||||||||IND|\r\nPV1|1|I|WWD6^D610^D610|||WWD6^WARD D6 (MEDICAL \\& SURGICAL)|DKAMJIT^KAMALJIT KAUR D/O HARBAN SINGH|||||||||||||PHKL25IP11000009|15^4^1^C000020027~15^1^99^||||||||||||||||||||||||||20251117080000|||||||||",
+            ],
+        ];
+
+        // Get diet types and isolation types for A08 dropdowns
+        $dietTypes = DietType::where('is_active', true)->orderBy('name')->get();
+        $isolationTypes = IsolationType::where('is_active', true)->orderBy('name')->get();
+
+        // Get wards with their beds for location dropdowns
+        $wards = Ward::where('is_active', true)
+            ->orderBy('ward_name')
+            ->get();
+        
+        // Get beds with ward information for cascading dropdown
+        $beds = Bed::with('ward')
+            ->where('is_active', true)
+            ->orderBy('bed_number')
+            ->get()
+            ->map(function ($bed) {
+                return [
+                    'id' => $bed->id,
+                    'ward_id' => $bed->ward_id,
+                    'bed_number' => $bed->bed_number,
+                    'bed_id' => $bed->bed_id ?? $bed->bed_number,
+                    'bed_display_name' => $bed->bed_display_name ?? $bed->bed_number,
+                    'ward_code' => $bed->ward->ward_code ?? '',
+                ];
+            });
+
+        // Get consultants (doctors) for attending physician dropdown
+        $consultants = Consultant::where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        // Get nurses for nurse dropdown
+        $nurses = Nurse::where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        // Get anaesthetists for anaesthetist dropdown
+        $anaesthetists = Anaesthetist::where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        return view('integration.adt.test', compact(
+            'configuration', 
+            'sampleMessages', 
+            'defaultHost', 
+            'defaultPort', 
+            'dietTypes', 
+            'isolationTypes',
+            'wards',
+            'beds',
+            'consultants',
+            'nurses',
+            'anaesthetists'
+        ));
+    }
+
+    /**
+     * Send a test ADT message to the HL7 listener.
+     * Fire and forget - don't wait for ACK response.
+     * Check ADT Config logs for results.
+     */
+    public function sendTestMessage(Request $request)
+    {
+        $validated = $request->validate([
+            'host' => 'required|string',
+            'port' => 'required|integer|min:1|max:65535',
+            'message' => 'required|string',
+        ]);
+
+        $host = $validated['host'];
+        $port = $validated['port'];
+        $message = $validated['message'];
+
+        // MLLP framing constants
+        $MLLP_START_BLOCK = chr(0x0B); // VT (Vertical Tab)
+        $MLLP_END_BLOCK = chr(0x1C);   // FS (File Separator)
+        $MLLP_CARRIAGE_RETURN = chr(0x0D); // CR
+
+        // Normalize line endings to \r (carriage return) as per HL7 standard
+        $message = str_replace(["\r\n", "\n"], "\r", $message);
+
+        // Create MLLP wrapped message
+        $mllpMessage = $MLLP_START_BLOCK . $message . $MLLP_END_BLOCK . $MLLP_CARRIAGE_RETURN;
+
+        try {
+            // Create socket connection
+            $socket = @fsockopen($host, $port, $errno, $errstr, 10);
+
+            if (!$socket) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Connection failed: {$errstr} (Error {$errno}). Host: {$host}:{$port}",
+                    'error' => $errstr,
+                ], 400);
+            }
+
+            // Set blocking mode for reliable transmission
+            stream_set_blocking($socket, true);
+
+            // Send the MLLP message
+            $bytesSent = fwrite($socket, $mllpMessage);
+            
+            if ($bytesSent === false) {
+                fclose($socket);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to send message to listener',
+                    'error' => 'Write failed',
+                ], 500);
+            }
+
+            // Flush the output buffer to ensure data is sent
+            fflush($socket);
+
+            // Wait a moment for the data to be transmitted and processed
+            // This prevents the connection from being closed before the receiver processes the data
+            usleep(100000); // 100ms delay
+
+            // Close the connection
+            fclose($socket);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Message sent to listener. Check ADT Config logs for processing result.',
+                'bytes_sent' => $bytesSent,
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error sending message: ' . $e->getMessage(),
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 }
 

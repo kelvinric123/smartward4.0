@@ -13,6 +13,15 @@
                         @csrf
 
                         <div class="mb-4">
+                            <label for="personnel_code" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Personnel Code (ADT)</label>
+                            <input type="text" name="personnel_code" id="personnel_code" value="{{ old('personnel_code') }}" placeholder="e.g., NURS001" class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Code used for ADT/HL7 integration matching</p>
+                            @error('personnel_code')
+                                <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <div class="mb-4">
                             <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Name <span class="text-red-500">*</span></label>
                             <input type="text" name="name" id="name" value="{{ old('name') }}" required class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                             @error('name')

@@ -106,7 +106,12 @@
                         x-show="patientTabs.vitals"
                         :class="activeTab === 'vitals' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
                         class="whitespace-nowrap py-2 px-3 border-b-2 font-medium">
-                        Vital Signs (Demo)
+                        Vital Signs
+                        @if(($patientVitalsMode ?? 'demo') === 'demo')
+                            <span class="text-xs text-blue-500">(Demo)</span>
+                        @elseif(($patientVitalsMode ?? 'demo') === 'off')
+                            <span class="text-xs text-gray-400">(Off)</span>
+                        @endif
                     </button>
                     <button type="button"
                         @click="activeTab = 'movement'"
@@ -447,14 +452,18 @@
                     </form>
                 </div>
 
-                <!-- Vital Signs Demo + Graph -->
+                <!-- Vital Signs -->
+                @php
+                    $vitalsMode = $patientVitalsMode ?? 'demo';
+                @endphp
                 <div x-show="activeTab === 'vitals'" x-cloak
                      x-data="{
                         view: 'table',
                         chartInstance: null,
+                        vitalsMode: '{{ $vitalsMode }}',
                         init() {
                             this.$watch('view', (val) => {
-                                if (val === 'graph') {
+                                if (val === 'graph' && this.vitalsMode !== 'off') {
                                     this.renderChart();
                                 }
                             });
@@ -464,12 +473,36 @@
                                 return;
                             }
                             const ctx = this.$refs.vitalsChart.getContext('2d');
+                            @if($vitalsMode === 'real')
+                            // Real data - fetch from patient's vital signs
+                            @php
+                                $realVitals = \App\Models\VitalSign::where('patient_id', $patient->id ?? 0)
+                                    ->orderBy('recorded_at', 'desc')
+                                    ->limit(10)
+                                    ->get()
+                                    ->reverse();
+                                $labels = $realVitals->map(fn($v) => $v->recorded_at->format('M d H:i'))->values()->toArray();
+                                $heartRates = $realVitals->pluck('pulse_rate')->toArray();
+                                $spo2Values = $realVitals->pluck('spo2')->toArray();
+                                $systolicValues = $realVitals->pluck('systolic_bp')->toArray();
+                                $diastolicValues = $realVitals->pluck('diastolic_bp')->toArray();
+                                $tempValues = $realVitals->map(fn($v) => (float)$v->temperature)->toArray();
+                            @endphp
+                            const labels = @json($labels);
+                            const heartRate = @json($heartRates);
+                            const spo2 = @json($spo2Values);
+                            const systolic = @json($systolicValues);
+                            const diastolic = @json($diastolicValues);
+                            const temperature = @json($tempValues);
+                            @else
+                            // Demo data
                             const labels = ['Yesterday 20:00', 'Today 04:00', 'Today 08:00'];
                             const heartRate = [78, 84, 80];
                             const spo2 = [98, 97, 98];
                             const systolic = [116, 124, 118];
                             const diastolic = [74, 80, 76];
                             const temperature = [36.9, 37.2, 37.0];
+                            @endif
 
                             this.chartInstance = new Chart(ctx, {
                                 type: 'line',
@@ -550,105 +583,205 @@
                             });
                         }
                      }">
-                    <div class="flex items-center justify-between mb-3">
-                        <div>
-                            <h3 class="text-lg font-semibold text-gray-800">Vital Signs (Demo)</h3>
-                            <p class="text-sm text-gray-600">
-                                Demo data only. Replace with live vitals integration later.
+                    @if($vitalsMode === 'off')
+                        <!-- Vitals Disabled -->
+                        <div class="flex flex-col items-center justify-center py-12 text-center">
+                            <div class="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                                <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
+                                </svg>
+                            </div>
+                            <h3 class="text-lg font-semibold text-gray-700 mb-2">Vital Signs Disabled</h3>
+                            <p class="text-sm text-gray-500 max-w-sm">
+                                Vital signs display has been turned off in settings. Contact your administrator or enable it in Settings → Patient Details Tab.
                             </p>
                         </div>
-                        <div class="inline-flex rounded-md shadow-sm border border-gray-200 bg-white overflow-hidden text-xs">
-                            <button type="button"
-                                    @click="view = 'table'"
-                                    :class="view === 'table' ? 'bg-gray-100 text-gray-900' : 'bg-white text-gray-600 hover:bg-gray-50'"
-                                    class="px-3 py-1 font-semibold border-r border-gray-200">
-                                Table
-                            </button>
-                            <button type="button"
-                                    @click="view = 'graph'"
-                                    :class="view === 'graph' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
-                                    class="px-3 py-1 font-semibold flex items-center space-x-1">
-                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                          d="M4 19h16M5 16l4-6 4 4 6-10"/>
-                                </svg>
-                                <span>Graph</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <template x-if="view === 'table'">
-                        <div>
-                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                                <div class="bg-blue-50 border border-blue-100 rounded-lg p-3">
-                                    <div class="text-xs text-blue-600 font-semibold mb-1">Heart Rate</div>
-                                    <div class="text-2xl font-bold text-gray-900">82</div>
-                                    <div class="text-xs text-gray-500 mt-1">bpm</div>
-                                </div>
-                                <div class="bg-green-50 border border-green-100 rounded-lg p-3">
-                                    <div class="text-xs text-green-600 font-semibold mb-1">SpO₂</div>
-                                    <div class="text-2xl font-bold text-gray-900">97%</div>
-                                    <div class="text-xs text-gray-500 mt-1">room air</div>
-                                </div>
-                                <div class="bg-red-50 border border-red-100 rounded-lg p-3">
-                                    <div class="text-xs text-red-600 font-semibold mb-1">Blood Pressure</div>
-                                    <div class="text-2xl font-bold text-gray-900">122/78</div>
-                                    <div class="text-xs text-gray-500 mt-1">mmHg</div>
-                                </div>
-                                <div class="bg-yellow-50 border border-yellow-100 rounded-lg p-3">
-                                    <div class="text-xs text-yellow-600 font-semibold mb-1">Temperature</div>
-                                    <div class="text-2xl font-bold text-gray-900">37.1°C</div>
-                                    <div class="text-xs text-gray-500 mt-1">oral</div>
-                                </div>
+                    @else
+                        <div class="flex items-center justify-between mb-3">
+                            <div>
+                                <h3 class="text-lg font-semibold text-gray-800">
+                                    Vital Signs
+                                    @if($vitalsMode === 'demo')
+                                        <span class="text-xs font-normal text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full ml-2">Demo</span>
+                                    @else
+                                        <span class="text-xs font-normal text-green-600 bg-green-100 px-2 py-0.5 rounded-full ml-2">Real Data</span>
+                                    @endif
+                                </h3>
+                                <p class="text-sm text-gray-600">
+                                    @if($vitalsMode === 'demo')
+                                        Demo data only. Configure real data in Settings → Patient Details Tab.
+                                    @else
+                                        Displaying real vital signs from the database.
+                                    @endif
+                                </p>
                             </div>
-
-                            <div class="mt-4">
-                                <h4 class="text-sm font-semibold text-gray-800 mb-2">Recent Vitals (Demo)</h4>
-                                <div class="overflow-x-auto">
-                                    <table class="min-w-full text-xs border border-gray-200 rounded-lg overflow-hidden">
-                                        <thead class="bg-gray-50">
-                                            <tr>
-                                                <th class="px-2 py-2 text-left font-medium text-gray-600 border-b">Time</th>
-                                                <th class="px-2 py-2 text-left font-medium text-gray-600 border-b">HR</th>
-                                                <th class="px-2 py-2 text-left font-medium text-gray-600 border-b">BP</th>
-                                                <th class="px-2 py-2 text-left font-medium text-gray-600 border-b">SpO₂</th>
-                                                <th class="px-2 py-2 text-left font-medium text-gray-600 border-b">Temp</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr class="hover:bg-gray-50">
-                                                <td class="px-2 py-2 border-b">Today 08:00</td>
-                                                <td class="px-2 py-2 border-b">80 bpm</td>
-                                                <td class="px-2 py-2 border-b">118/76</td>
-                                                <td class="px-2 py-2 border-b">98%</td>
-                                                <td class="px-2 py-2 border-b">37.0°C</td>
-                                            </tr>
-                                            <tr class="hover:bg-gray-50">
-                                                <td class="px-2 py-2 border-b">Today 04:00</td>
-                                                <td class="px-2 py-2 border-b">84 bpm</td>
-                                                <td class="px-2 py-2 border-b">124/80</td>
-                                                <td class="px-2 py-2 border-b">97%</td>
-                                                <td class="px-2 py-2 border-b">37.2°C</td>
-                                            </tr>
-                                            <tr class="hover:bg-gray-50">
-                                                <td class="px-2 py-2 border-b">Yesterday 20:00</td>
-                                                <td class="px-2 py-2 border-b">78 bpm</td>
-                                                <td class="px-2 py-2 border-b">116/74</td>
-                                                <td class="px-2 py-2 border-b">98%</td>
-                                                <td class="px-2 py-2 border-b">36.9°C</td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
+                            <div class="inline-flex rounded-md shadow-sm border border-gray-200 bg-white overflow-hidden text-xs">
+                                <button type="button"
+                                        @click="view = 'table'"
+                                        :class="view === 'table' ? 'bg-gray-100 text-gray-900' : 'bg-white text-gray-600 hover:bg-gray-50'"
+                                        class="px-3 py-1 font-semibold border-r border-gray-200">
+                                    Table
+                                </button>
+                                <button type="button"
+                                        @click="view = 'graph'"
+                                        :class="view === 'graph' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
+                                        class="px-3 py-1 font-semibold flex items-center space-x-1">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                              d="M4 19h16M5 16l4-6 4 4 6-10"/>
+                                    </svg>
+                                    <span>Graph</span>
+                                </button>
                             </div>
                         </div>
-                    </template>
 
-                    <template x-if="view === 'graph'">
-                        <div class="mt-2 h-72 md:h-80">
-                            <canvas x-ref="vitalsChart"></canvas>
-                        </div>
-                    </template>
+                        <template x-if="view === 'table'">
+                            <div>
+                                @if($vitalsMode === 'real')
+                                    @php
+                                        $latestVital = \App\Models\VitalSign::where('patient_id', $patient->id ?? 0)
+                                            ->orderBy('recorded_at', 'desc')
+                                            ->first();
+                                        $recentVitals = \App\Models\VitalSign::where('patient_id', $patient->id ?? 0)
+                                            ->orderBy('recorded_at', 'desc')
+                                            ->limit(5)
+                                            ->get();
+                                    @endphp
+                                    @if($latestVital)
+                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                            <div class="bg-blue-50 border border-blue-100 rounded-lg p-3">
+                                                <div class="text-xs text-blue-600 font-semibold mb-1">Heart Rate</div>
+                                                <div class="text-2xl font-bold text-gray-900">{{ $latestVital->pulse_rate ?? '-' }}</div>
+                                                <div class="text-xs text-gray-500 mt-1">bpm</div>
+                                            </div>
+                                            <div class="bg-green-50 border border-green-100 rounded-lg p-3">
+                                                <div class="text-xs text-green-600 font-semibold mb-1">SpO₂</div>
+                                                <div class="text-2xl font-bold text-gray-900">{{ $latestVital->spo2 ? $latestVital->spo2 . '%' : '-' }}</div>
+                                                <div class="text-xs text-gray-500 mt-1">{{ $latestVital->oxygen_therapy ?? 'room air' }}</div>
+                                            </div>
+                                            <div class="bg-red-50 border border-red-100 rounded-lg p-3">
+                                                <div class="text-xs text-red-600 font-semibold mb-1">Blood Pressure</div>
+                                                <div class="text-2xl font-bold text-gray-900">{{ ($latestVital->systolic_bp && $latestVital->diastolic_bp) ? $latestVital->systolic_bp . '/' . $latestVital->diastolic_bp : '-' }}</div>
+                                                <div class="text-xs text-gray-500 mt-1">mmHg</div>
+                                            </div>
+                                            <div class="bg-yellow-50 border border-yellow-100 rounded-lg p-3">
+                                                <div class="text-xs text-yellow-600 font-semibold mb-1">Temperature</div>
+                                                <div class="text-2xl font-bold text-gray-900">{{ $latestVital->temperature ? $latestVital->temperature . '°C' : '-' }}</div>
+                                                <div class="text-xs text-gray-500 mt-1">{{ $latestVital->temperature_site ?? '' }}</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-4">
+                                            <h4 class="text-sm font-semibold text-gray-800 mb-2">Recent Vitals</h4>
+                                            <div class="overflow-x-auto">
+                                                <table class="min-w-full text-xs border border-gray-200 rounded-lg overflow-hidden">
+                                                    <thead class="bg-gray-50">
+                                                        <tr>
+                                                            <th class="px-2 py-2 text-left font-medium text-gray-600 border-b">Time</th>
+                                                            <th class="px-2 py-2 text-left font-medium text-gray-600 border-b">HR</th>
+                                                            <th class="px-2 py-2 text-left font-medium text-gray-600 border-b">BP</th>
+                                                            <th class="px-2 py-2 text-left font-medium text-gray-600 border-b">SpO₂</th>
+                                                            <th class="px-2 py-2 text-left font-medium text-gray-600 border-b">Temp</th>
+                                                            <th class="px-2 py-2 text-left font-medium text-gray-600 border-b">RR</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        @foreach($recentVitals as $vital)
+                                                            <tr class="hover:bg-gray-50">
+                                                                <td class="px-2 py-2 border-b">{{ $vital->recorded_at->format('M d H:i') }}</td>
+                                                                <td class="px-2 py-2 border-b">{{ $vital->pulse_rate ? $vital->pulse_rate . ' bpm' : '-' }}</td>
+                                                                <td class="px-2 py-2 border-b">{{ ($vital->systolic_bp && $vital->diastolic_bp) ? $vital->systolic_bp . '/' . $vital->diastolic_bp : '-' }}</td>
+                                                                <td class="px-2 py-2 border-b">{{ $vital->spo2 ? $vital->spo2 . '%' : '-' }}</td>
+                                                                <td class="px-2 py-2 border-b">{{ $vital->temperature ? $vital->temperature . '°C' : '-' }}</td>
+                                                                <td class="px-2 py-2 border-b">{{ $vital->respiratory_rate ?? '-' }}</td>
+                                                            </tr>
+                                                        @endforeach
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    @else
+                                        <div class="text-center py-8 text-gray-500">
+                                            <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                                            </svg>
+                                            <p class="text-sm">No vital signs recorded for this patient yet.</p>
+                                        </div>
+                                    @endif
+                                @else
+                                    <!-- Demo Data -->
+                                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                        <div class="bg-blue-50 border border-blue-100 rounded-lg p-3">
+                                            <div class="text-xs text-blue-600 font-semibold mb-1">Heart Rate</div>
+                                            <div class="text-2xl font-bold text-gray-900">82</div>
+                                            <div class="text-xs text-gray-500 mt-1">bpm</div>
+                                        </div>
+                                        <div class="bg-green-50 border border-green-100 rounded-lg p-3">
+                                            <div class="text-xs text-green-600 font-semibold mb-1">SpO₂</div>
+                                            <div class="text-2xl font-bold text-gray-900">97%</div>
+                                            <div class="text-xs text-gray-500 mt-1">room air</div>
+                                        </div>
+                                        <div class="bg-red-50 border border-red-100 rounded-lg p-3">
+                                            <div class="text-xs text-red-600 font-semibold mb-1">Blood Pressure</div>
+                                            <div class="text-2xl font-bold text-gray-900">122/78</div>
+                                            <div class="text-xs text-gray-500 mt-1">mmHg</div>
+                                        </div>
+                                        <div class="bg-yellow-50 border border-yellow-100 rounded-lg p-3">
+                                            <div class="text-xs text-yellow-600 font-semibold mb-1">Temperature</div>
+                                            <div class="text-2xl font-bold text-gray-900">37.1°C</div>
+                                            <div class="text-xs text-gray-500 mt-1">oral</div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-4">
+                                        <h4 class="text-sm font-semibold text-gray-800 mb-2">Recent Vitals (Demo)</h4>
+                                        <div class="overflow-x-auto">
+                                            <table class="min-w-full text-xs border border-gray-200 rounded-lg overflow-hidden">
+                                                <thead class="bg-gray-50">
+                                                    <tr>
+                                                        <th class="px-2 py-2 text-left font-medium text-gray-600 border-b">Time</th>
+                                                        <th class="px-2 py-2 text-left font-medium text-gray-600 border-b">HR</th>
+                                                        <th class="px-2 py-2 text-left font-medium text-gray-600 border-b">BP</th>
+                                                        <th class="px-2 py-2 text-left font-medium text-gray-600 border-b">SpO₂</th>
+                                                        <th class="px-2 py-2 text-left font-medium text-gray-600 border-b">Temp</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <tr class="hover:bg-gray-50">
+                                                        <td class="px-2 py-2 border-b">Today 08:00</td>
+                                                        <td class="px-2 py-2 border-b">80 bpm</td>
+                                                        <td class="px-2 py-2 border-b">118/76</td>
+                                                        <td class="px-2 py-2 border-b">98%</td>
+                                                        <td class="px-2 py-2 border-b">37.0°C</td>
+                                                    </tr>
+                                                    <tr class="hover:bg-gray-50">
+                                                        <td class="px-2 py-2 border-b">Today 04:00</td>
+                                                        <td class="px-2 py-2 border-b">84 bpm</td>
+                                                        <td class="px-2 py-2 border-b">124/80</td>
+                                                        <td class="px-2 py-2 border-b">97%</td>
+                                                        <td class="px-2 py-2 border-b">37.2°C</td>
+                                                    </tr>
+                                                    <tr class="hover:bg-gray-50">
+                                                        <td class="px-2 py-2 border-b">Yesterday 20:00</td>
+                                                        <td class="px-2 py-2 border-b">78 bpm</td>
+                                                        <td class="px-2 py-2 border-b">116/74</td>
+                                                        <td class="px-2 py-2 border-b">98%</td>
+                                                        <td class="px-2 py-2 border-b">36.9°C</td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                @endif
+                            </div>
+                        </template>
+
+                        <template x-if="view === 'graph'">
+                            <div class="mt-2 h-72 md:h-80">
+                                <canvas x-ref="vitalsChart"></canvas>
+                            </div>
+                        </template>
+                    @endif
                 </div>
 
                 <!-- Patient Movement -->

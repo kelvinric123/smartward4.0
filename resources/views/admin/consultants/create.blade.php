@@ -13,6 +13,15 @@
                         @csrf
 
                         <div class="mb-4">
+                            <label for="personnel_code" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Personnel Code (ADT)</label>
+                            <input type="text" name="personnel_code" id="personnel_code" value="{{ old('personnel_code') }}" class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g., 00017">
+                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Used for ADT/HL7 integration to identify the consultant</p>
+                            @error('personnel_code')
+                                <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <div class="mb-4">
                             <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Name <span class="text-red-500">*</span></label>
                             <input type="text" name="name" id="name" value="{{ old('name') }}" required class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                             @error('name')
@@ -21,9 +30,9 @@
                         </div>
 
                         <div class="mb-4">
-                            <label for="specialty_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Specialty <span class="text-red-500">*</span></label>
-                            <select name="specialty_id" id="specialty_id" required class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                                <option value="">Select Specialty</option>
+                            <label for="specialty_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Specialty</label>
+                            <select name="specialty_id" id="specialty_id" class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">No Specialty</option>
                                 @foreach($specialties as $specialty)
                                     <option value="{{ $specialty->id }}" {{ old('specialty_id') == $specialty->id ? 'selected' : '' }}>{{ $specialty->name }}</option>
                                 @endforeach
@@ -67,7 +76,7 @@
 
                         <div class="mb-4">
                             <label for="years_of_experience" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Years of Experience</label>
-                            <input type="number" name="years_of_experience" id="years_of_experience" value="{{ old('years_of_experience', 0) }}" min="0" class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                            <input type="number" name="years_of_experience" id="years_of_experience" value="{{ old('years_of_experience') }}" min="0" class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Optional">
                             @error('years_of_experience')
                                 <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
                             @enderror

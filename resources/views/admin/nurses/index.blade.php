@@ -7,12 +7,20 @@
                 </h2>
                 <p class="text-sm text-gray-500 mt-1">Manage nursing staff and their qualifications</p>
             </div>
-            <a href="{{ route('nurses.create') }}" class="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 border border-transparent rounded-lg font-semibold text-sm text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                </svg>
-                {{ __('Add Nurse') }}
-            </a>
+            <div class="flex items-center gap-3">
+                <a href="{{ route('nurses.bulk-upload') }}" class="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 border border-transparent rounded-lg font-semibold text-sm text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                    </svg>
+                    {{ __('Bulk Upload') }}
+                </a>
+                <a href="{{ route('nurses.create') }}" class="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 border border-transparent rounded-lg font-semibold text-sm text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    {{ __('Add Nurse') }}
+                </a>
+            </div>
         </div>
     </x-slot>
 
@@ -35,11 +43,11 @@
                         <table class="min-w-full divide-y divide-blue-100">
                             <thead>
                                 <tr class="bg-gradient-to-r from-blue-50 to-cyan-50">
+                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Personnel Code</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Name</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Registration No.</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Phone</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Qualification</th>
-                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Experience</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
                                     <th class="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
                                 </tr>
@@ -47,6 +55,13 @@
                             <tbody class="bg-white divide-y divide-blue-50">
                                 @forelse ($nurses as $nurse)
                                     <tr class="hover:bg-blue-50 transition-colors">
+                                        <td class="px-6 py-4 text-gray-600 text-sm">
+                                            @if($nurse->personnel_code)
+                                                <span class="font-mono text-xs bg-gray-100 px-2 py-1 rounded">{{ $nurse->personnel_code }}</span>
+                                            @else
+                                                <span class="text-gray-400">-</span>
+                                            @endif
+                                        </td>
                                         <td class="px-6 py-4">
                                             <div class="flex items-center">
                                                 <div class="p-2 bg-purple-100 rounded-lg mr-3">
@@ -64,7 +79,6 @@
                                                 {{ $nurse->qualification }}
                                             </span>
                                         </td>
-                                        <td class="px-6 py-4 text-gray-600 text-sm">{{ $nurse->years_of_experience }} years</td>
                                         <td class="px-6 py-4 whitespace-nowrap">
                                             <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full {{ $nurse->is_active ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border border-green-200' : 'bg-gradient-to-r from-red-100 to-pink-100 text-red-800 border border-red-200' }}">
                                                 {{ $nurse->is_active ? 'Active' : 'Inactive' }}

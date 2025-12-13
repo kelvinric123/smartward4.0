@@ -18,6 +18,8 @@ use App\Http\Controllers\InfusionIntegrationController;
 use App\Http\Controllers\AdtConfigurationController;
 use App\Http\Controllers\EcgController;
 use App\Http\Controllers\ShiftSettingController;
+use App\Http\Controllers\DietTypeController;
+use App\Http\Controllers\IsolationTypeController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -40,7 +42,7 @@ Route::middleware('auth')->group(function () {
     Route::resource('specialties', SpecialtyController::class)->except(['show']);
     Route::post('specialties/{specialty}/deactivate', [SpecialtyController::class, 'deactivate'])->name('specialties.deactivate');
 
-    Route::resource('consultants', ConsultantController::class)->except(['show']);
+    Route::resource('consultants', ConsultantController::class);
     Route::post('consultants/{consultant}/deactivate', [ConsultantController::class, 'deactivate'])->name('consultants.deactivate');
 
     Route::resource('anaesthetists', AnaesthetistController::class)->except(['show']);
@@ -48,6 +50,16 @@ Route::middleware('auth')->group(function () {
 
     Route::resource('nurses', NurseController::class)->except(['show']);
     Route::post('nurses/{nurse}/deactivate', [NurseController::class, 'deactivate'])->name('nurses.deactivate');
+    Route::get('nurses-bulk-upload', [NurseController::class, 'bulkUploadForm'])->name('nurses.bulk-upload');
+    Route::post('nurses-bulk-upload/preview', [NurseController::class, 'bulkUploadPreview'])->name('nurses.bulk-upload.preview');
+    Route::post('nurses-bulk-upload/confirm', [NurseController::class, 'bulkUploadConfirm'])->name('nurses.bulk-upload.confirm');
+
+    // Patient Additional Field Routes (inside Admin Management)
+    Route::resource('diet-types', DietTypeController::class)->except(['show']);
+    Route::post('diet-types/{diet_type}/toggle-active', [DietTypeController::class, 'toggleActive'])->name('diet-types.toggle-active');
+    
+    Route::resource('isolation-types', IsolationTypeController::class)->except(['show', 'index']);
+    Route::post('isolation-types/{isolation_type}/toggle-active', [IsolationTypeController::class, 'toggleActive'])->name('isolation-types.toggle-active');
 
     // Patient Routes
     Route::resource('patients', PatientController::class)->except(['show']);
@@ -153,6 +165,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/adt/isolation-mapping', [AdtConfigurationController::class, 'storeIsolationMapping'])->name('adt.isolation-mapping.store');
     Route::delete('/adt/isolation-mapping/{isolationMapping}', [AdtConfigurationController::class, 'destroyIsolationMapping'])->name('adt.isolation-mapping.destroy');
     Route::get('/adt/mappings-frame', [AdtConfigurationController::class, 'mappingsFrame'])->name('adt.mappings.frame');
+    Route::get('/adt-test', [AdtConfigurationController::class, 'testPage'])->name('adt.test');
+    Route::post('/adt-test/send', [AdtConfigurationController::class, 'sendTestMessage'])->name('adt.test.send');
 });
 
 // Public API Routes for Vital Sign Gateway (no CSRF, no auth)

@@ -23,8 +23,9 @@ class ConsultantController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
+            'personnel_code' => 'nullable|string|max:50|unique:consultants,personnel_code',
             'name' => 'required|string|max:255',
-            'specialty_id' => 'required|exists:specialties,id',
+            'specialty_id' => 'nullable|exists:specialties,id',
             'registration_number' => 'required|string|unique:consultants,registration_number',
             'phone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
@@ -38,6 +39,12 @@ class ConsultantController extends Controller
         return redirect()->route('consultants.index')->with('success', 'Consultant created successfully.');
     }
 
+    public function show(Consultant $consultant)
+    {
+        $consultant->load('specialty');
+        return view('admin.consultants.show', compact('consultant'));
+    }
+
     public function edit(Consultant $consultant)
     {
         $specialties = Specialty::where('is_active', true)->get();
@@ -47,8 +54,9 @@ class ConsultantController extends Controller
     public function update(Request $request, Consultant $consultant)
     {
         $validated = $request->validate([
+            'personnel_code' => 'nullable|string|max:50|unique:consultants,personnel_code,' . $consultant->id,
             'name' => 'required|string|max:255',
-            'specialty_id' => 'required|exists:specialties,id',
+            'specialty_id' => 'nullable|exists:specialties,id',
             'registration_number' => 'required|string|unique:consultants,registration_number,' . $consultant->id,
             'phone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',

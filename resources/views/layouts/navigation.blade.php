@@ -3,7 +3,7 @@
 
     if (request()->routeIs('patients.*')) {
         $openSection = 'patient';
-    } elseif (request()->routeIs('hospitals.*') || request()->routeIs('specialties.*') || request()->routeIs('consultants.*') || request()->routeIs('anaesthetists.*') || request()->routeIs('nurses.*')) {
+    } else    if (request()->routeIs('hospitals.*') || request()->routeIs('specialties.*') || request()->routeIs('consultants.*') || request()->routeIs('anaesthetists.*') || request()->routeIs('nurses.*') || request()->routeIs('diet-types.*') || request()->routeIs('isolation-types.*')) {
         $openSection = 'admin';
     } elseif (request()->routeIs('wards.*') || request()->routeIs('beds.*')) {
         $openSection = 'wardManagement';
@@ -121,6 +121,16 @@ class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 tran
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
                     </svg>
                     <span class="ml-2">Nurses</span>
+                </a>
+                
+                <div class="border-t border-white/20 my-2 mx-2"></div>
+                <p class="px-3 py-1 text-xs text-white/60 font-medium uppercase tracking-wider">Patient Additional Field</p>
+                
+                <a href="{{ route('diet-types.index') }}" class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('diet-types.*') || request()->routeIs('isolation-types.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                    </svg>
+                    <span class="ml-2">Diet Types & Isolation</span>
                 </a>
             </div>
         </div>
@@ -250,11 +260,18 @@ class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 tran
                     <span class="ml-2">Infusion Integration</span>
                 </a>
                 
-                <a href="{{ route('adt.index') }}" class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('adt.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                <a href="{{ route('adt.index') }}" class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('adt.index') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
                     <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
                     </svg>
                     <span class="ml-2">ADT Config</span>
+                </a>
+                
+                <a href="{{ route('adt.test') }}" class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('adt.test') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                    <span class="ml-2">ADT Test</span>
                 </a>
             </div>
         </div>
