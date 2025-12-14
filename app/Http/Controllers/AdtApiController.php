@@ -1257,56 +1257,55 @@ class AdtApiController extends Controller
             }
         }
         
-        // Diet Type from PV1-38 (diet_type field)
+        // Diet Types from PV1-38 (diet_type field) - now supports multiple diets
         // Example from document: DMD, REGD^DIABETIC DIET, BF (Breastfeeding)
         if (!empty($pv1['diet_type'])) {
-            // Parse diet type - may contain multiple diets separated by comma
             $dietRaw = $pv1['diet_type'];
+            $dietCodes = [];
             
-            // If it contains ^, take the code part (before ^)
-            if (strpos($dietRaw, '^') !== false) {
-                $parts = explode('^', $dietRaw);
-                $dietRaw = trim($parts[0]);
-            }
+            // Split by comma if multiple diets
+            $dietParts = strpos($dietRaw, ',') !== false ? explode(',', $dietRaw) : [$dietRaw];
             
-            // Take the first diet if multiple
-            if (strpos($dietRaw, ',') !== false) {
-                $dietRaw = trim(explode(',', $dietRaw)[0]);
-            }
-            
-            // First, try to look up in DietType table (primary source)
-            $dietCode = strtoupper(trim($dietRaw));
-            $dietType = DietType::findByCode($dietCode);
-            
-            if ($dietType) {
-                // Store the diet code directly - it's a valid code in our system
-                $patient->diet_type = $dietType->code;
-                Log::info("ADT - Diet type set from DietType table", [
-                    'raw' => $pv1['diet_type'],
-                    'code' => $dietType->code,
-                    'name' => $dietType->name,
-                ]);
-            } else {
-                // Fallback to hardcoded map for backwards compatibility
-                $dietMap = [
-                    'NPO' => 'NPO',
-                    'NBM' => 'NBM',
-                    'DMD' => 'DMD',
-                    'REGD' => 'RD',
-                    'RD' => 'RD',
-                    'BF' => 'BF',
-                    'VEG' => 'VEGD',
-                    'SD' => 'SD',
-                ];
+            foreach ($dietParts as $dietPart) {
+                $dietPart = trim($dietPart);
                 
-                $patient->diet_type = $dietMap[$dietCode] ?? $dietCode;
+                // If it contains ^, take the code part (before ^)
+                if (strpos($dietPart, '^') !== false) {
+                    $parts = explode('^', $dietPart);
+                    $dietPart = trim($parts[0]);
+                }
                 
-                Log::info("ADT - Diet type set (fallback)", [
-                    'raw' => $pv1['diet_type'],
-                    'parsed' => $dietRaw,
-                    'mapped' => $patient->diet_type,
-                ]);
+                // First, try to look up in DietType table (primary source)
+                $dietCode = strtoupper(trim($dietPart));
+                $dietType = DietType::findByCode($dietCode);
+                
+                if ($dietType) {
+                    $dietCodes[] = $dietType->code;
+                } else {
+                    // Fallback to hardcoded map for backwards compatibility
+                    $dietMap = [
+                        'NPO' => 'NPO',
+                        'NBM' => 'NBM',
+                        'DMD' => 'DMD',
+                        'REGD' => 'RD',
+                        'RD' => 'RD',
+                        'BF' => 'BF',
+                        'VEG' => 'VEGD',
+                        'SD' => 'SD',
+                    ];
+                    
+                    $dietCodes[] = $dietMap[$dietCode] ?? $dietCode;
+                }
             }
+            
+            // Remove duplicates and store as array
+            $dietCodes = array_unique($dietCodes);
+            $patient->diet_types = !empty($dietCodes) ? array_values($dietCodes) : null;
+            
+            Log::info("ADT - Diet types set", [
+                'raw' => $pv1['diet_type'],
+                'mapped' => $patient->diet_types,
+            ]);
         }
     }
     

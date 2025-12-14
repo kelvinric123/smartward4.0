@@ -24,8 +24,9 @@
     })->values()->toArray();
     
     // Get display names from database tables
-    $dietTypeDisplay = $patient && $patient->diet_type 
-        ? DietType::getDisplayName($patient->diet_type) 
+    $dietTypesArray = $patient && $patient->diet_types ? $patient->diet_types : [];
+    $dietTypeDisplay = count($dietTypesArray) > 0 
+        ? collect($dietTypesArray)->map(fn($dt) => DietType::getDisplayName($dt))->implode(', ')
         : 'Regular diet';
     $isolationTypeDisplay = $patient && $patient->isolation_type && $patient->isolation_type !== 'none'
         ? IsolationType::getDisplayName($patient->isolation_type) 

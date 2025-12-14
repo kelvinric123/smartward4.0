@@ -398,86 +398,6 @@
                 </div>
             </form>
 
-            <!-- Vital Signs Data Mode Section -->
-            <div class="border-t border-gray-200 mt-6 pt-6">
-                <h4 class="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-                    <svg class="w-4 h-4 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
-                    </svg>
-                    Vital Signs Data Mode
-                </h4>
-                <p class="text-xs text-gray-500 mb-4">
-                    Configure the data source for vital signs in the Patient Details modal.
-                </p>
-
-                <form method="POST" action="{{ route('ward.settings.update') }}">
-                    @csrf
-                    <input type="hidden" name="setting_type" value="patient_vitals_mode">
-
-                    <div class="grid grid-cols-3 gap-3">
-                        <label class="flex flex-col items-center p-4 bg-gray-50 hover:bg-gray-100 rounded-lg border-2 cursor-pointer transition-all"
-                               :class="patientVitalsMode === 'demo' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'"
-                               x-data=""
-                               @click="patientVitalsMode = 'demo'">
-                            <input type="radio" 
-                                   name="patient_vitals_mode"
-                                   value="demo"
-                                   x-model="patientVitalsMode"
-                                   class="sr-only">
-                            <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mb-2">
-                                <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-                                </svg>
-                            </div>
-                            <span class="text-sm font-semibold text-gray-700">Demo</span>
-                            <span class="text-xs text-gray-500 text-center mt-1">Show demo/sample vital signs data</span>
-                        </label>
-
-                        <label class="flex flex-col items-center p-4 bg-gray-50 hover:bg-gray-100 rounded-lg border-2 cursor-pointer transition-all"
-                               :class="patientVitalsMode === 'real' ? 'border-green-500 bg-green-50' : 'border-gray-200'"
-                               x-data=""
-                               @click="patientVitalsMode = 'real'">
-                            <input type="radio" 
-                                   name="patient_vitals_mode"
-                                   value="real"
-                                   x-model="patientVitalsMode"
-                                   class="sr-only">
-                            <div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mb-2">
-                                <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                </svg>
-                            </div>
-                            <span class="text-sm font-semibold text-gray-700">Real</span>
-                            <span class="text-xs text-gray-500 text-center mt-1">Show real vital signs from database</span>
-                        </label>
-
-                        <label class="flex flex-col items-center p-4 bg-gray-50 hover:bg-gray-100 rounded-lg border-2 cursor-pointer transition-all"
-                               :class="patientVitalsMode === 'off' ? 'border-gray-500 bg-gray-100' : 'border-gray-200'"
-                               x-data=""
-                               @click="patientVitalsMode = 'off'">
-                            <input type="radio" 
-                                   name="patient_vitals_mode"
-                                   value="off"
-                                   x-model="patientVitalsMode"
-                                   class="sr-only">
-                            <div class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center mb-2">
-                                <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
-                                </svg>
-                            </div>
-                            <span class="text-sm font-semibold text-gray-700">Off</span>
-                            <span class="text-xs text-gray-500 text-center mt-1">Hide vital signs completely</span>
-                        </label>
-                    </div>
-
-                    <div class="pt-4 flex justify-end">
-                        <button type="submit"
-                                class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                            Save Vitals Mode
-                        </button>
-                    </div>
-                </form>
-            </div>
         </div>
 
         <!-- Bed Box Config Tab Panel -->
@@ -526,8 +446,9 @@
                                     </div>
                                 </div>
 
-                                <!-- Footer Buttons -->
+                                <!-- Footer Buttons: 1-Patient Details, 2-Vital Signs, 3-ECG, 4-Clinical -->
                                 <div class="flex items-center space-x-1 border-t px-3 py-2">
+                                    {{-- Button 1: Patient Details --}}
                                     <template x-if="bedBoxItems.find(i => i.key === 'admit_button')?.visible">
                                         <button type="button" class="flex-1 p-2 text-gray-600 hover:bg-gray-100 rounded transition-colors" title="Patient Details">
                                             <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -535,23 +456,25 @@
                                             </svg>
                                         </button>
                                     </template>
-                                    <button type="button" class="flex-1 p-2 text-red-600 hover:bg-red-50 rounded transition-colors" title="Favorite">
+                                    {{-- Button 2: Vital Signs --}}
+                                    <button type="button" class="flex-1 p-2 text-red-600 hover:bg-red-50 rounded transition-colors" title="Vital Signs">
+                                        <svg class="w-4 h-4 mx-auto" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
+                                        </svg>
+                                    </button>
+                                    {{-- Button 3: ECG --}}
+                                    <button type="button" class="flex-1 p-2 text-emerald-600 hover:bg-emerald-50 rounded transition-colors" title="ECG">
                                         <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12h4l3-9 4 18 3-9h4"/>
                                         </svg>
                                     </button>
-                                    <button type="button" class="flex-1 p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Assign">
+                                    {{-- Button 4: Clinical --}}
+                                    <button type="button" class="flex-1 p-2 text-cyan-600 hover:bg-cyan-50 rounded transition-colors" title="Clinical">
                                         <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
                                         </svg>
                                     </button>
-                                    <template x-if="bedBoxItems.find(i => i.key === 'prebook_button')?.visible">
-                                        <button type="button" class="flex-1 p-2 text-purple-600 hover:bg-purple-50 rounded transition-colors" title="Prebook">
-                                            <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                                            </svg>
-                                        </button>
-                                    </template>
                                 </div>
                             </div>
                         </div>
@@ -622,16 +545,16 @@
                 </div>
             </form>
 
-            <!-- Bed Box Vital Signs Data Mode Section -->
+            <!-- Vital Signs Data Mode Section -->
             <div class="border-t border-gray-200 mt-6 pt-6">
                 <h4 class="text-sm font-semibold text-gray-700 mb-3 flex items-center">
                     <svg class="w-4 h-4 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
                     </svg>
-                    Bed Box Vital Signs Data Mode
+                    Vital Signs Data Mode
                 </h4>
                 <p class="text-xs text-gray-500 mb-4">
-                    Configure the data source for vital signs displayed on bed cards in the dashboard.
+                    Configure the data source for vital signs displayed on bed cards and in patient details.
                 </p>
 
                 <form method="POST" action="{{ route('ward.settings.update') }}">
@@ -654,7 +577,7 @@
                                 </svg>
                             </div>
                             <span class="text-sm font-semibold text-gray-700">Demo</span>
-                            <span class="text-xs text-gray-500 text-center mt-1">Show demo EWS on bed cards</span>
+                            <span class="text-xs text-gray-500 text-center mt-1">Show demo/sample vital signs data</span>
                         </label>
 
                         <label class="flex flex-col items-center p-4 bg-gray-50 hover:bg-gray-100 rounded-lg border-2 cursor-pointer transition-all"
@@ -672,7 +595,7 @@
                                 </svg>
                             </div>
                             <span class="text-sm font-semibold text-gray-700">Real</span>
-                            <span class="text-xs text-gray-500 text-center mt-1">Show real EWS from database</span>
+                            <span class="text-xs text-gray-500 text-center mt-1">Show real vital signs from database</span>
                         </label>
 
                         <label class="flex flex-col items-center p-4 bg-gray-50 hover:bg-gray-100 rounded-lg border-2 cursor-pointer transition-all"
@@ -690,14 +613,14 @@
                                 </svg>
                             </div>
                             <span class="text-sm font-semibold text-gray-700">Off</span>
-                            <span class="text-xs text-gray-500 text-center mt-1">Hide EWS on bed cards</span>
+                            <span class="text-xs text-gray-500 text-center mt-1">Hide vital signs completely</span>
                         </label>
                     </div>
 
                     <div class="pt-4 flex justify-end">
                         <button type="submit"
                                 class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                            Save Bed Box Vitals Mode
+                            Save Vitals Mode
                         </button>
                     </div>
                 </form>
@@ -1071,8 +994,7 @@
                 { key: 'admitted_duration', label: 'Admitted Duration', description: 'Days and hours since admission', visible: true, order: 3 },
                 { key: 'ews', label: 'EWS', description: 'Early Warning Score indicator', visible: true, order: 4 },
                 { key: 'mrn', label: 'MRN', description: 'Medical Record Number in header', visible: true, order: 5 },
-                { key: 'admit_button', label: 'Admit Patient Button', description: 'Quick action button for patient details', visible: true, order: 6 },
-                { key: 'prebook_button', label: 'Prebook Button', description: 'Quick action button for prebooking', visible: true, order: 7 },
+                { key: 'admit_button', label: 'Patient Details Button', description: 'Show/hide Patient Details button on bed box', visible: true, order: 6 },
             ];
 
             const defaultPatientInfoItems = [

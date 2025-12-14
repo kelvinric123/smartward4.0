@@ -353,7 +353,11 @@
                                     <svg class="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
                                     </svg>
-                                    <span>{{ $bed['nurse'] }}</span>
+                                    @if(!empty($bed['nurse_on_duty']))
+                                        <span class="text-pink-600 font-medium" title="Nurse on duty ({{ $bed['current_shift'] ?? '' }} shift)">{{ $bed['nurse_on_duty'] }}</span>
+                                    @else
+                                        <span class="text-gray-400">No nurse assigned</span>
+                                    @endif
                                 </div>
                                 @endif
                                 @if(!empty($bed['next_movement_location']) && !empty($bed['next_movement_time_display']))
@@ -435,28 +439,13 @@
                                     </span>
                                     @endif
 
-                                    {{-- Diet Type --}}
-                                    @if($showPatientInfo('diet_type') && !empty($bed['diet_type']) && !in_array(strtoupper($bed['diet_type']), ['RD', 'REGULAR']))
-                                    @php
-                                        // Critical diets that need red highlighting
-                                        $criticalDiets = ['NPO', 'NBM', 'NPD'];
-                                        $dietCode = strtoupper($bed['diet_type']);
-                                        $isCriticalDiet = in_array($dietCode, $criticalDiets);
-                                        $dietColors = $isCriticalDiet ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700';
-                                        // Use diet_type_name from controller if available, fallback to code
-                                        $dietDisplayName = $bed['diet_type_name'] ?? ucfirst(str_replace('_', ' ', $bed['diet_type']));
-                                    @endphp
-                                    <span class="px-1 py-0.5 {{ $dietColors }} text-xs rounded font-medium flex items-center" title="Diet: {{ $dietDisplayName }}">
-                                        @if($isCriticalDiet)
+                                    {{-- Diet Type - Only show NBM (Nil by mouth) --}}
+                                    @if($showPatientInfo('diet_type') && ($bed['has_nbm'] ?? false))
+                                    <span class="px-1 py-0.5 bg-red-100 text-red-700 text-xs rounded font-medium flex items-center" title="Nil by Mouth">
                                         <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
                                         </svg>
-                                        @else
-                                        <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
-                                        </svg>
-                                        @endif
-                                        {{ strtoupper(substr($bed['diet_type'], 0, 4)) }}
+                                        NBM
                                     </span>
                                     @endif
 
@@ -515,6 +504,7 @@
                             </div>
 
                             <div class="flex items-center space-x-1 border-t px-3 py-2">
+                                {{-- Button 1: Patient Details --}}
                                 @if($isVisible('admit_button'))
                                 <button
                                     class="flex-1 p-2 text-gray-600 hover:bg-gray-100 rounded transition-colors"
@@ -526,6 +516,7 @@
                                     </svg>
                                 </button>
                                 @endif
+                                {{-- Button 2: Vital Signs --}}
                                 <button 
                                     class="flex-1 p-2 text-red-600 hover:bg-red-50 rounded transition-colors" 
                                     title="Vital Signs"
@@ -535,23 +526,27 @@
                                         <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
                                     </svg>
                                 </button>
-                                <button class="flex-1 p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors" title="Assign">
+                                {{-- Button 3: ECG --}}
+                                <button 
+                                    class="flex-1 p-2 text-emerald-600 hover:bg-emerald-50 rounded transition-colors" 
+                                    title="ECG"
+                                    onclick="window.dispatchEvent(new CustomEvent('open-ecg-modal', { detail: { patientId: {{ $bed['patient_id'] }} } }))"
+                                >
                                     <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12h4l3-9 4 18 3-9h4"/>
                                     </svg>
                                 </button>
-                                <button class="flex-1 p-2 text-cyan-600 hover:bg-cyan-50 rounded transition-colors" title="Clinical">
+                                {{-- Button 4: Clinical --}}
+                                <button 
+                                    class="flex-1 p-2 text-cyan-600 hover:bg-cyan-50 rounded transition-colors" 
+                                    title="Clinical"
+                                    onclick="window.dispatchEvent(new CustomEvent('open-clinical-modal', { detail: { patientId: {{ $bed['patient_id'] }} } }))"
+                                >
                                     <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
                                     </svg>
                                 </button>
-                                @if($isVisible('prebook_button'))
-                                <button class="flex-1 p-2 text-purple-600 hover:bg-purple-50 rounded transition-colors" title="Prebook">
-                                    <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                                    </svg>
-                                </button>
-                                @endif
                             </div>
                         </div>
                     @elseif($bed['status'] === 'reserved')
@@ -1310,6 +1305,157 @@
                     <button @click="open = false"
                             type="button"
                             class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:w-auto sm:text-sm">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ECG Modal -->
+    <div x-data="{ 
+            open: false, 
+            patientId: null
+         }"
+         @open-ecg-modal.window="open = true; patientId = $event.detail.patientId"
+         x-show="open"
+         class="fixed inset-0 z-50 overflow-y-auto"
+         style="display: none;">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="open"
+                 @click="open = false"
+                 x-transition:enter="ease-out duration-300"
+                 x-transition:enter-start="opacity-0"
+                 x-transition:enter-end="opacity-100"
+                 x-transition:leave="ease-in duration-200"
+                 x-transition:leave-start="opacity-100"
+                 x-transition:leave-end="opacity-0"
+                 class="fixed inset-0 transition-opacity"
+                 aria-hidden="true">
+                <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <div x-show="open"
+                 @click.stop
+                 x-transition:enter="ease-out duration-300"
+                 x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave="ease-in duration-200"
+                 x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-5xl sm:w-full">
+
+                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <div class="sm:flex sm:items-start">
+                        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-emerald-100 sm:mx-0 sm:h-10 sm:w-10">
+                            <svg class="h-6 w-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12h4l3-9 4 18 3-9h4"/>
+                            </svg>
+                        </div>
+                        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
+                            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+                                Patient ECG
+                            </h3>
+
+                            <div class="mt-2">
+                                <template x-if="patientId">
+                                    <iframe
+                                        :src="'{{ route('ecg.patient') }}?patient_id=' + patientId"
+                                        class="w-full h-[550px] border-0 rounded-lg"
+                                        title="Patient ECG">
+                                    </iframe>
+                                </template>
+                                <template x-if="!patientId">
+                                    <div class="text-sm text-red-500">
+                                        No patient selected.
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                    <button @click="open = false"
+                            type="button"
+                            class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 sm:w-auto sm:text-sm">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clinical Modal -->
+    <div x-data="{ 
+            open: false, 
+            patientId: null
+         }"
+         @open-clinical-modal.window="open = true; patientId = $event.detail.patientId"
+         x-show="open"
+         class="fixed inset-0 z-50 overflow-y-auto"
+         style="display: none;">
+        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div x-show="open"
+                 @click="open = false"
+                 x-transition:enter="ease-out duration-300"
+                 x-transition:enter-start="opacity-0"
+                 x-transition:enter-end="opacity-100"
+                 x-transition:leave="ease-in duration-200"
+                 x-transition:leave-start="opacity-100"
+                 x-transition:leave-end="opacity-0"
+                 class="fixed inset-0 transition-opacity"
+                 aria-hidden="true">
+                <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
+            </div>
+
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <div x-show="open"
+                 @click.stop
+                 x-transition:enter="ease-out duration-300"
+                 x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave="ease-in duration-200"
+                 x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                 x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                 class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+
+                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                    <div class="sm:flex sm:items-start">
+                        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-cyan-100 sm:mx-0 sm:h-10 sm:w-10">
+                            <svg class="h-6 w-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                            </svg>
+                        </div>
+                        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
+                            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+                                Clinical Information
+                            </h3>
+
+                            <div class="mt-2">
+                                <template x-if="patientId">
+                                    <iframe
+                                        :src="'{{ route('ward.patient-details') }}?patient_id=' + patientId + '&tabs=additional'"
+                                        class="w-full h-[550px] border-0 rounded-lg"
+                                        title="Clinical Information">
+                                    </iframe>
+                                </template>
+                                <template x-if="!patientId">
+                                    <div class="text-sm text-red-500">
+                                        No patient selected.
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                    <button @click="open = false"
+                            type="button"
+                            class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 sm:w-auto sm:text-sm">
                         Close
                     </button>
                 </div>

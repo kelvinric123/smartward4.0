@@ -29,8 +29,9 @@
         ];
         
         // Get display names from database tables for clinical status summary
-        $dietTypeDisplay = $patient && $patient->diet_type 
-            ? DietType::getDisplayName($patient->diet_type) 
+        $dietTypesArray = $patient && $patient->diet_types ? $patient->diet_types : [];
+        $dietTypeDisplay = count($dietTypesArray) > 0 
+            ? collect($dietTypesArray)->map(fn($dt) => DietType::getDisplayName($dt))->implode(', ')
             : 'Regular diet';
         $isolationTypeDisplay = $patient && $patient->isolation_type && $patient->isolation_type !== 'none'
             ? IsolationType::getDisplayName($patient->isolation_type) 
@@ -118,11 +119,6 @@
                         :class="activeTab === 'vitals' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
                         class="whitespace-nowrap py-2 px-3 border-b-2 font-medium">
                         Vital Signs
-                        @if(($patientVitalsMode ?? 'demo') === 'demo')
-                            <span class="text-xs text-blue-500">(Demo)</span>
-                        @elseif(($patientVitalsMode ?? 'demo') === 'off')
-                            <span class="text-xs text-gray-400">(Off)</span>
-                        @endif
                     </button>
                     <button type="button"
                         @click="activeTab = 'movement'"
@@ -283,24 +279,32 @@
                                 <p class="mt-1 text-xs text-gray-500">Patient care level classification</p>
                             </div>
 
-                            <!-- Diet Type -->
-                            <div>
-                                <label for="diet_type" class="block text-sm font-semibold text-gray-700 mb-2">
+                            <!-- Diet Types (Multiple Selection) -->
+                            <div class="md:col-span-2">
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">
                                     <div class="flex items-center">
                                         <svg class="w-4 h-4 mr-2 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
                                         </svg>
-                                        Diet Type
+                                        Diet Types
                                     </div>
                                 </label>
-                                <select id="diet_type" name="diet_type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                                <p class="text-xs text-gray-500 mb-2">Select one or more dietary requirements for the patient</p>
+                                <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                    @php
+                                        $currentDietTypes = $patient->diet_types ?? [];
+                                    @endphp
                                     @foreach($clinicalIndicatorOptions['diet_type'] ?? [] as $option)
-                                        <option value="{{ $option['value'] }}" {{ ($patient->diet_type ?? 'regular') === $option['value'] ? 'selected' : '' }}>
-                                            {{ $option['label'] }}
-                                        </option>
+                                        <label class="inline-flex items-center space-x-2 p-2 rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors {{ in_array($option['value'], $currentDietTypes) ? 'border-blue-500 bg-blue-50' : 'border-gray-200' }}">
+                                            <input type="checkbox" 
+                                                   name="diet_types[]" 
+                                                   value="{{ $option['value'] }}"
+                                                   {{ in_array($option['value'], $currentDietTypes) ? 'checked' : '' }}
+                                                   class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                            <span class="text-sm text-gray-700">{{ $option['label'] }}</span>
+                                        </label>
                                     @endforeach
-                                </select>
-                                <p class="mt-1 text-xs text-gray-500">Patient dietary requirements</p>
+                                </div>
                             </div>
 
                             <!-- Fall Risk Alert -->
@@ -434,7 +438,7 @@
                                 </div>
                                 <div class="bg-red-50 rounded-lg p-3 text-center">
                                     <div class="text-red-600 font-semibold">Diet</div>
-                                    <div class="text-gray-800 mt-1 capitalize">{{ $dietTypeDisplay }}</div>
+                                    <div class="text-gray-800 mt-1 capitalize text-xs">{{ $dietTypeDisplay }}</div>
                                 </div>
                                 <div class="bg-orange-50 rounded-lg p-3 text-center">
                                     <div class="text-orange-600 font-semibold">Fall Risk</div>
@@ -604,7 +608,7 @@
                             </div>
                             <h3 class="text-lg font-semibold text-gray-700 mb-2">Vital Signs Disabled</h3>
                             <p class="text-sm text-gray-500 max-w-sm">
-                                Vital signs display has been turned off in settings. Contact your administrator or enable it in Settings → Patient Details Tab.
+                                Vital signs display has been turned off in settings. Contact your administrator or enable it in Settings → Bed Box Config.
                             </p>
                         </div>
                     @else
@@ -620,7 +624,7 @@
                                 </h3>
                                 <p class="text-sm text-gray-600">
                                     @if($vitalsMode === 'demo')
-                                        Demo data only. Configure real data in Settings → Patient Details Tab.
+                                        Demo data only. Configure real data in Settings → Bed Box Config.
                                     @else
                                         Displaying real vital signs from the database.
                                     @endif

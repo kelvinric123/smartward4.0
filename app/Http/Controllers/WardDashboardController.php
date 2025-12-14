@@ -48,7 +48,6 @@ class WardDashboardController extends Controller
                 'ews' => ['key' => 'ews', 'visible' => true, 'order' => 4],
                 'mrn' => ['key' => 'mrn', 'visible' => true, 'order' => 5],
                 'admit_button' => ['key' => 'admit_button', 'visible' => true, 'order' => 6],
-                'prebook_button' => ['key' => 'prebook_button', 'visible' => true, 'order' => 7],
             ];
             $defaultPatientInfoConfig = [
                 'nursing_level' => ['key' => 'nursing_level', 'visible' => true],
@@ -190,7 +189,6 @@ class WardDashboardController extends Controller
             ['key' => 'ews', 'visible' => true, 'order' => 4],
             ['key' => 'mrn', 'visible' => true, 'order' => 5],
             ['key' => 'admit_button', 'visible' => true, 'order' => 6],
-            ['key' => 'prebook_button', 'visible' => true, 'order' => 7],
         ];
 
         $defaultPatientInfoDisplay = [
@@ -310,6 +308,18 @@ class WardDashboardController extends Controller
             }
         }
 
+        // Ensure shift settings exist for this ward (create defaults if missing)
+        $existingShifts = ShiftSetting::where('ward_id', $ward->id)->count();
+        if ($existingShifts === 0) {
+            $defaults = ShiftSetting::getDefaults();
+            foreach ($defaults as $default) {
+                ShiftSetting::create(array_merge($default, [
+                    'ward_id' => $ward->id,
+                    'is_active' => true,
+                ]));
+            }
+        }
+
         // Get current shift and nurse assignments for today
         $currentShift = ShiftSetting::getCurrentShift($ward->id);
         $currentShiftCode = $currentShift ? $currentShift->shift_code : null;
@@ -418,8 +428,11 @@ class WardDashboardController extends Controller
                         : null,
                     // Clinical indicators
                     'nursing_level' => $patient->nursing_level ?? 'none',
-                    'diet_type' => $patient->diet_type ?? 'RD',
-                    'diet_type_name' => $patient->diet_type ? DietType::getDisplayName($patient->diet_type) : 'Regular diet',
+                    'diet_types' => $patient->diet_types ?? [],
+                    'diet_types_display' => $patient->diet_types 
+                        ? collect($patient->diet_types)->map(fn($dt) => DietType::getDisplayName($dt))->implode(', ')
+                        : 'Regular diet',
+                    'has_nbm' => $patient->diet_types && collect($patient->diet_types)->map(fn($dt) => strtoupper($dt))->intersect(['NPO', 'NBM', 'NPD'])->isNotEmpty(),
                     'fall_risk' => $patient->fall_risk ?? 'none',
                     'isolation_type' => $patient->isolation_type ?? 'none',
                     'isolation_type_name' => $patient->isolation_type && $patient->isolation_type !== 'none' ? IsolationType::getDisplayName($patient->isolation_type) : 'None',
@@ -461,8 +474,9 @@ class WardDashboardController extends Controller
                     'next_movement_time_iso' => null,
                     // Clinical indicators (null for available beds)
                     'nursing_level' => null,
-                    'diet_type' => null,
-                    'diet_type_name' => null,
+                    'diet_types' => null,
+                    'diet_types_display' => null,
+                    'has_nbm' => false,
                     'fall_risk' => null,
                     'isolation_type' => null,
                     'isolation_type_name' => null,
@@ -946,7 +960,7 @@ class WardDashboardController extends Controller
             }
         }
 
-        $patientVitalsMode = 'demo'; // default
+        $patientVitalsMode = 'demo'; // default - follows bed box vitals mode
 
         if (Auth::check()) {
             $settings = WardDashboardSetting::where('user_id', Auth::id())->first();
@@ -957,8 +971,8 @@ class WardDashboardController extends Controller
                 if (is_array($settings->clinical_indicator_options)) {
                     $clinicalIndicatorOptions = array_merge($clinicalIndicatorOptions, $settings->clinical_indicator_options);
                 }
-                // Get patient vitals mode
-                $patientVitalsMode = $settings->patient_vitals_mode ?? 'demo';
+                // Get patient vitals mode from bed box vitals mode setting
+                $patientVitalsMode = $settings->bed_box_vitals_mode ?? 'demo';
             }
         }
         
@@ -1026,7 +1040,6 @@ class WardDashboardController extends Controller
             ['key' => 'ews', 'visible' => true, 'order' => 4],
             ['key' => 'mrn', 'visible' => true, 'order' => 5],
             ['key' => 'admit_button', 'visible' => true, 'order' => 6],
-            ['key' => 'prebook_button', 'visible' => true, 'order' => 7],
         ];
 
         $defaultPatientInfoDisplay = [
@@ -1698,7 +1711,8 @@ class WardDashboardController extends Controller
         $request->validate([
             'patient_id' => 'required|exists:patients,id',
             'nursing_level' => 'nullable|string',
-            'diet_type' => 'nullable|string',
+            'diet_types' => 'nullable|array',
+            'diet_types.*' => 'nullable|string',
             'fall_risk' => 'nullable|string',
             'isolation_type' => 'nullable|string',
             'allergies' => 'nullable|array',
@@ -1716,9 +1730,12 @@ class WardDashboardController extends Controller
             }
         }
 
+        // Handle diet_types array
+        $dietTypes = $request->input('diet_types', []);
+
         $patient->update([
             'nursing_level' => $request->nursing_level,
-            'diet_type' => $request->diet_type,
+            'diet_types' => !empty($dietTypes) ? $dietTypes : null,
             'fall_risk' => $request->fall_risk,
             'isolation_type' => $request->isolation_type,
             'allergies' => !empty($allergies) ? $allergies : null,
@@ -1727,7 +1744,7 @@ class WardDashboardController extends Controller
         Log::info('Patient clinical indicators updated', [
             'patient_id' => $patient->id,
             'nursing_level' => $patient->nursing_level,
-            'diet_type' => $patient->diet_type,
+            'diet_types' => $patient->diet_types,
             'fall_risk' => $patient->fall_risk,
             'isolation_type' => $patient->isolation_type,
             'allergies' => $patient->allergies,

@@ -38,7 +38,7 @@ class Patient extends Model
         'visit_number',
         'patient_class',
         'nursing_level',
-        'diet_type',
+        'diet_types',
         'fall_risk',
         'isolation_type',
         'allergies',
@@ -63,6 +63,7 @@ class Patient extends Model
         'date_of_birth' => 'date',
         'allergies' => 'array',
         'address' => 'array',
+        'diet_types' => 'array',
     ];
 
     /**

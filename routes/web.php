@@ -45,7 +45,7 @@ Route::middleware('auth')->group(function () {
     Route::resource('consultants', ConsultantController::class);
     Route::post('consultants/{consultant}/deactivate', [ConsultantController::class, 'deactivate'])->name('consultants.deactivate');
 
-    Route::resource('anaesthetists', AnaesthetistController::class)->except(['show']);
+    Route::resource('anaesthetists', AnaesthetistController::class);
     Route::post('anaesthetists/{anaesthetist}/deactivate', [AnaesthetistController::class, 'deactivate'])->name('anaesthetists.deactivate');
 
     Route::resource('nurses', NurseController::class)->except(['show']);
