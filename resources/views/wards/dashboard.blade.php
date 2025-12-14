@@ -481,24 +481,19 @@
                                     {{-- Isolation Type --}}
                                     @if($showPatientInfo('isolation_type') && !empty($bed['isolation_type']) && $bed['isolation_type'] !== 'none')
                                     @php
-                                        $isoLabels = [
-                                            'contact' => 'CON',
-                                            'droplet' => 'DRP',
-                                            'airborne' => 'AIR',
-                                            'protective' => 'PRO',
-                                            'mrsa' => 'MRSA',
-                                            'vre' => 'VRE',
-                                            'cdiff' => 'CD',
-                                            'covid' => 'COV',
-                                            'tb' => 'TB',
-                                        ];
-                                        $isoColors = in_array($bed['isolation_type'], ['covid', 'tb', 'airborne']) ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700';
+                                        // Critical isolation types that need red highlighting
+                                        $criticalIsolations = ['covid', 'tb', 'airborne', 'COVID', 'TB', 'AIR'];
+                                        $isoCode = strtoupper($bed['isolation_type']);
+                                        $isCriticalIso = in_array($bed['isolation_type'], $criticalIsolations) || in_array($isoCode, $criticalIsolations);
+                                        $isoColors = $isCriticalIso ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700';
+                                        // Use isolation_type_name from controller if available, fallback to code
+                                        $isoDisplayName = $bed['isolation_type_name'] ?? ucfirst(str_replace('_', ' ', $bed['isolation_type']));
                                     @endphp
-                                    <span class="px-1 py-0.5 {{ $isoColors }} text-xs rounded font-medium flex items-center" title="Isolation: {{ ucfirst(str_replace('_', ' ', $bed['isolation_type'])) }}">
+                                    <span class="px-1 py-0.5 {{ $isoColors }} text-xs rounded font-medium flex items-center" title="Isolation: {{ $isoDisplayName }}">
                                         <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
                                         </svg>
-                                        {{ $isoLabels[$bed['isolation_type']] ?? 'ISO' }}
+                                        {{ strtoupper(substr($bed['isolation_type'], 0, 4)) }}
                                     </span>
                                     @endif
 

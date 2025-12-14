@@ -127,6 +127,11 @@ Route::middleware('auth')->group(function () {
     Route::post('/vital-sign-integration/api-user/{apiUser}/regenerate-token', [VitalSignIntegrationController::class, 'regenerateToken'])->name('vital-sign-integration.api-user.regenerate-token');
     Route::get('/vital-sign-integration/logs', [VitalSignIntegrationController::class, 'getLogs'])->name('vital-sign-integration.logs');
     Route::post('/vital-sign-integration/logs/clear', [VitalSignIntegrationController::class, 'clearLogs'])->name('vital-sign-integration.logs.clear');
+    
+    // Monitor Device Routes (for mp5sc listener)
+    Route::post('/vital-sign-integration/device', [VitalSignIntegrationController::class, 'storeDevice'])->name('vital-sign-integration.device.store');
+    Route::put('/vital-sign-integration/device/{device}', [VitalSignIntegrationController::class, 'updateDevice'])->name('vital-sign-integration.device.update');
+    Route::delete('/vital-sign-integration/device/{device}', [VitalSignIntegrationController::class, 'destroyDevice'])->name('vital-sign-integration.device.destroy');
 
     // Infusion Integration Routes
     Route::get('/infusion-integration', [InfusionIntegrationController::class, 'index'])->name('infusion-integration.index');
@@ -140,6 +145,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/ward-dashboard/patient-infusions', [InfusionIntegrationController::class, 'patientInfusions'])->name('ward.patient-infusions');
 
     // ECG Routes
+    Route::get('/ecg', [EcgController::class, 'index'])->name('ecg.index');
     Route::get('/ecg/patient', [EcgController::class, 'patientEcg'])->name('ecg.patient');
     Route::get('/ecg/pdf', [EcgController::class, 'servePdf'])->name('ecg.pdf');
     Route::get('/ecg/list', [EcgController::class, 'listFiles'])->name('ecg.list');
@@ -197,6 +203,9 @@ Route::prefix('api/v1')->group(function () {
     Route::post('/vital-signs', [\App\Http\Controllers\VitalSignApiV1Controller::class, 'receiveVitalSigns']);
     Route::get('/patients/{patientCode}', [\App\Http\Controllers\VitalSignApiV1Controller::class, 'searchPatient']);
     Route::post('/device/login', [\App\Http\Controllers\VitalSignApiV1Controller::class, 'deviceLogin']);
+    // Monitor devices list for mp5sc listener
+    Route::get('/monitor-devices', [VitalSignIntegrationController::class, 'apiGetDevices']);
+    Route::post('/monitor-devices/{device}/status', [VitalSignIntegrationController::class, 'apiUpdateDeviceStatus']);
 });
 
 require __DIR__.'/auth.php';

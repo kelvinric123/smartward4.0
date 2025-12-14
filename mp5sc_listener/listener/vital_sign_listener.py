@@ -3,13 +3,16 @@
 
 """
 Vital Sign Listener
-Listens to vital signs from medical monitor device and sends to API server.
+Listens to vital signs from medical monitor device(s) and sends to API server.
+Supports both single device mode (via MONITOR_IP env var) and multi-device mode 
+(fetching devices from API).
 No graphical plotting - headless operation for server/background use.
 """
 
 import os
 import sys
 import time
+import threading
 import requests
 from datetime import datetime
 from dotenv import load_dotenv
@@ -23,18 +26,31 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
 
 class VitalSignListener:
-    """Listens to vital signs and sends them to API server"""
+    """Listens to vital signs from a single monitor and sends them to API server"""
     
-    def __init__(self):
-        # Load configuration from environment variables
-        self.api_base_url = os.getenv('API_BASE_URL', 'http://localhost:8000').rstrip('/')
-        self.api_passphrase = os.getenv('API_PASSPHRASE', '')
-        self.api_username = os.getenv('API_USERNAME', '')
-        self.api_password = os.getenv('API_PASSWORD', '')
-        self.monitor_ip = os.getenv('MONITOR_IP', '192.168.0.5')
-        self.poll_interval = int(os.getenv('POLL_INTERVAL', '2'))
-        self.refresh_interval = int(os.getenv('REFRESH_INTERVAL', '10'))
-        self.debug_mode = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
+    def __init__(self, monitor_ip, device_name="Monitor", api_config=None):
+        # API configuration (shared)
+        if api_config:
+            self.api_base_url = api_config['api_base_url']
+            self.api_passphrase = api_config['api_passphrase']
+            self.api_username = api_config['api_username']
+            self.api_password = api_config['api_password']
+            self.poll_interval = api_config['poll_interval']
+            self.refresh_interval = api_config['refresh_interval']
+            self.debug_mode = api_config['debug_mode']
+        else:
+            self.api_base_url = os.getenv('API_BASE_URL', 'http://localhost:8000').rstrip('/')
+            self.api_passphrase = os.getenv('API_PASSPHRASE', '')
+            self.api_username = os.getenv('API_USERNAME', '')
+            self.api_password = os.getenv('API_PASSWORD', '')
+            self.poll_interval = int(os.getenv('POLL_INTERVAL', '2'))
+            self.refresh_interval = int(os.getenv('REFRESH_INTERVAL', '10'))
+            self.debug_mode = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
+        
+        # Device-specific configuration
+        self.monitor_ip = monitor_ip
+        self.device_name = device_name
+        self.device_id = None  # Set if fetched from API
         
         # Track patient info
         self.last_patient_name = ""
@@ -46,10 +62,13 @@ class VitalSignListener:
         self.last_valid_temp = 0
         self.last_valid_resp_rate = 0
         
+        # Running state
+        self.running = False
+        
     def log(self, message, level="INFO"):
-        """Print log message with timestamp"""
+        """Print log message with timestamp and device name"""
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        print(f"[{timestamp}] [{level}] {message}")
+        print(f"[{timestamp}] [{level}] [{self.device_name}] {message}")
     
     def send_vital_signs(self, patient_name="", patient_id="", heart_rate=0, oxygen=0, 
                          bp_sys=0, bp_dias=0, temperature=0, resp_rate=0, timestamp=None):
@@ -128,16 +147,36 @@ class VitalSignListener:
             self.log(f"✗ Error sending vital signs: {e}", "ERROR")
             return False
     
+    def update_device_status(self, status, connected=False):
+        """Update device status in the API (if device_id is known)"""
+        if not self.device_id:
+            return
+        
+        try:
+            api_url = f"{self.api_base_url}/monitor-devices/{self.device_id}/status"
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "X-Passphrase": self.api_passphrase
+            }
+            payload = {
+                "status": status,
+                "connected": connected
+            }
+            requests.post(api_url, json=payload, headers=headers, timeout=5)
+        except Exception as e:
+            if self.debug_mode:
+                self.log(f"Failed to update device status: {e}", "DEBUG")
+    
     def run(self):
         """Main loop to listen for vital signs and send to API"""
-        self.log("=" * 60)
-        self.log("Vital Sign Listener Starting...")
-        self.log(f"Monitor IP: {self.monitor_ip}")
+        self.running = True
+        self.log("=" * 50)
+        self.log(f"Starting listener for {self.monitor_ip}")
         self.log(f"API Server: {self.api_base_url}")
-        self.log(f"API Endpoint: {self.api_base_url}/vital-signs")
         if self.debug_mode:
             self.log("Debug mode: ENABLED")
-        self.log("=" * 60)
+        self.log("=" * 50)
         
         # Check configuration
         if not self.api_username or not self.api_password:
@@ -147,16 +186,25 @@ class VitalSignListener:
         
         # Initialize device connection
         self.log(f"Connecting to monitor at {self.monitor_ip}...")
-        dev = device(self.monitor_ip)
+        self.update_device_status("Connecting...", False)
         
-        # Enable device debug mode if debug is enabled
-        if self.debug_mode:
-            dev.debug_info = True
-        
-        dev.start_client()
-        dev.start_watchdog()
-        
-        self.log("✓ Device connection started")
+        try:
+            dev = device(self.monitor_ip)
+            
+            # Enable device debug mode if debug is enabled
+            if self.debug_mode:
+                dev.debug_info = True
+            
+            dev.start_client()
+            dev.start_watchdog()
+            
+            self.log("✓ Device connection started")
+            self.update_device_status("Connected", True)
+            
+        except Exception as e:
+            self.log(f"✗ Failed to connect to device: {e}", "ERROR")
+            self.update_device_status(f"Connection failed: {e}", False)
+            return
         
         # Initialize tracking variables
         last_vital_time = 0
@@ -164,7 +212,7 @@ class VitalSignListener:
         refresh_counter = 0
         
         try:
-            while True:
+            while self.running:
                 # Get vital signs from device
                 temp_l = dev.get_vital_signs()
                 
@@ -277,18 +325,211 @@ class VitalSignListener:
             self.log("Shutdown requested by user...")
         except Exception as e:
             self.log(f"Error in main loop: {e}", "ERROR")
+            self.update_device_status(f"Error: {e}", False)
         finally:
+            self.running = False
             dev.halt_client()
             self.log("Client halted")
+            self.update_device_status("Disconnected", False)
             self.log("Exit...[OK]")
+
+    def stop(self):
+        """Stop the listener"""
+        self.running = False
+
+
+class MultiDeviceManager:
+    """Manages multiple VitalSignListener instances for multiple devices"""
+    
+    def __init__(self):
+        self.api_base_url = os.getenv('API_BASE_URL', 'http://localhost:8000').rstrip('/')
+        self.api_passphrase = os.getenv('API_PASSPHRASE', '')
+        self.api_username = os.getenv('API_USERNAME', '')
+        self.api_password = os.getenv('API_PASSWORD', '')
+        self.poll_interval = int(os.getenv('POLL_INTERVAL', '2'))
+        self.refresh_interval = int(os.getenv('REFRESH_INTERVAL', '10'))
+        self.debug_mode = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
+        self.device_fetch_interval = int(os.getenv('DEVICE_FETCH_INTERVAL', '60'))  # seconds
+        
+        # Legacy single device support
+        self.legacy_monitor_ip = os.getenv('MONITOR_IP', '')
+        
+        # Multi-device support
+        self.use_api_devices = os.getenv('USE_API_DEVICES', 'true').lower() == 'true'
+        
+        self.listeners = {}  # {ip: (thread, listener)}
+        self.running = False
+        
+    def log(self, message, level="INFO"):
+        """Print log message with timestamp"""
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print(f"[{timestamp}] [{level}] [Manager] {message}")
+    
+    def get_api_config(self):
+        """Get shared API configuration"""
+        return {
+            'api_base_url': self.api_base_url,
+            'api_passphrase': self.api_passphrase,
+            'api_username': self.api_username,
+            'api_password': self.api_password,
+            'poll_interval': self.poll_interval,
+            'refresh_interval': self.refresh_interval,
+            'debug_mode': self.debug_mode
+        }
+    
+    def fetch_devices_from_api(self):
+        """Fetch active monitor devices from the API"""
+        try:
+            api_url = f"{self.api_base_url}/monitor-devices"
+            headers = {
+                "Accept": "application/json",
+                "X-Passphrase": self.api_passphrase
+            }
+            
+            response = requests.get(api_url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('success') and data.get('data', {}).get('devices'):
+                    devices = data['data']['devices']
+                    self.log(f"Fetched {len(devices)} device(s) from API")
+                    return devices
+                else:
+                    self.log("No devices found in API response")
+                    return []
+            else:
+                self.log(f"Failed to fetch devices: HTTP {response.status_code}", "WARNING")
+                return []
+                
+        except requests.exceptions.ConnectionError:
+            self.log(f"Cannot connect to API at {self.api_base_url}", "WARNING")
+            return []
+        except Exception as e:
+            self.log(f"Error fetching devices: {e}", "ERROR")
+            return []
+    
+    def start_listener(self, ip, name="Monitor", device_id=None):
+        """Start a listener for a specific device"""
+        if ip in self.listeners:
+            self.log(f"Listener for {ip} already running")
+            return
+        
+        listener = VitalSignListener(ip, name, self.get_api_config())
+        listener.device_id = device_id
+        
+        thread = threading.Thread(target=listener.run, daemon=True)
+        thread.start()
+        
+        self.listeners[ip] = (thread, listener)
+        self.log(f"Started listener for {name} ({ip})")
+    
+    def stop_listener(self, ip):
+        """Stop a specific listener"""
+        if ip in self.listeners:
+            thread, listener = self.listeners[ip]
+            listener.stop()
+            thread.join(timeout=5)
+            del self.listeners[ip]
+            self.log(f"Stopped listener for {ip}")
+    
+    def sync_devices(self, devices):
+        """Sync running listeners with device list from API"""
+        current_ips = set(self.listeners.keys())
+        api_ips = {d['ip_address'] for d in devices}
+        
+        # Stop listeners for removed devices
+        for ip in current_ips - api_ips:
+            self.log(f"Device {ip} removed from API, stopping listener")
+            self.stop_listener(ip)
+        
+        # Start listeners for new devices
+        for device in devices:
+            ip = device['ip_address']
+            if ip not in current_ips:
+                self.log(f"New device {device['name']} ({ip}) found, starting listener")
+                self.start_listener(ip, device.get('name', 'Monitor'), device.get('id'))
+    
+    def run(self):
+        """Main loop to manage device listeners"""
+        self.running = True
+        self.log("=" * 60)
+        self.log("Multi-Device Vital Sign Listener Manager Starting...")
+        self.log(f"API Server: {self.api_base_url}")
+        self.log(f"Use API Devices: {self.use_api_devices}")
+        if self.legacy_monitor_ip and not self.use_api_devices:
+            self.log(f"Legacy Monitor IP: {self.legacy_monitor_ip}")
+        self.log("=" * 60)
+        
+        # Check configuration
+        if not self.api_username or not self.api_password:
+            self.log("WARNING: No API credentials configured", "WARNING")
+        if not self.api_passphrase:
+            self.log("WARNING: No API passphrase configured", "WARNING")
+        
+        try:
+            if self.use_api_devices:
+                # Multi-device mode: fetch from API
+                self.log("Running in multi-device mode (API)")
+                
+                # Initial device fetch
+                devices = self.fetch_devices_from_api()
+                if devices:
+                    self.sync_devices(devices)
+                elif self.legacy_monitor_ip:
+                    # Fallback to legacy IP if no API devices
+                    self.log(f"No API devices found, using legacy MONITOR_IP: {self.legacy_monitor_ip}")
+                    self.start_listener(self.legacy_monitor_ip, "Legacy Monitor")
+                
+                # Periodic device sync
+                last_fetch = time.time()
+                while self.running:
+                    time.sleep(1)
+                    
+                    # Check if it's time to refresh device list
+                    if time.time() - last_fetch >= self.device_fetch_interval:
+                        devices = self.fetch_devices_from_api()
+                        if devices:
+                            self.sync_devices(devices)
+                        last_fetch = time.time()
+                    
+                    # Check if any threads have died and restart them
+                    for ip, (thread, listener) in list(self.listeners.items()):
+                        if not thread.is_alive():
+                            self.log(f"Listener for {ip} died, restarting...", "WARNING")
+                            del self.listeners[ip]
+                            self.start_listener(ip, listener.device_name, listener.device_id)
+            else:
+                # Legacy single-device mode
+                if self.legacy_monitor_ip:
+                    self.log(f"Running in single-device mode with IP: {self.legacy_monitor_ip}")
+                    listener = VitalSignListener(self.legacy_monitor_ip, "Monitor", self.get_api_config())
+                    listener.run()
+                else:
+                    self.log("ERROR: No MONITOR_IP configured and USE_API_DEVICES is false", "ERROR")
+                    return
+                    
+        except KeyboardInterrupt:
+            self.log("Shutdown requested by user...")
+        except Exception as e:
+            self.log(f"Error in manager loop: {e}", "ERROR")
+        finally:
+            self.running = False
+            # Stop all listeners
+            for ip in list(self.listeners.keys()):
+                self.stop_listener(ip)
+            self.log("All listeners stopped")
+            self.log("Manager exit...[OK]")
+    
+    def stop(self):
+        """Stop the manager and all listeners"""
+        self.running = False
 
 
 def main():
     """Entry point"""
-    listener = VitalSignListener()
-    listener.run()
+    manager = MultiDeviceManager()
+    manager.run()
 
 
 if __name__ == "__main__":
     main()
-

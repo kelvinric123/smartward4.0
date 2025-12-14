@@ -10,6 +10,139 @@ use Illuminate\View\View;
 class EcgController extends Controller
 {
     /**
+     * Display ECG Admin page with all ECG files
+     */
+    public function index(): View
+    {
+        $ecgFiles = $this->getAllEcgFilesWithPatients();
+        
+        // Calculate stats
+        $ecgXmlFiles = array_filter($ecgFiles, fn($f) => ($f['type'] ?? '') === 'ecg_xml');
+        $standalonePdfs = array_filter($ecgFiles, fn($f) => ($f['type'] ?? '') === 'standalone_pdf');
+        
+        $stats = [
+            'total_files' => count($ecgFiles),
+            'ecg_xml_files' => count($ecgXmlFiles),
+            'standalone_pdfs' => count($standalonePdfs),
+            'matched_patients' => count(array_filter($ecgFiles, fn($f) => $f['patient'] !== null)),
+            'unmatched_patients' => count(array_filter($ecgXmlFiles, fn($f) => $f['patient'] === null)),
+            'with_pdf' => count(array_filter($ecgFiles, fn($f) => $f['has_pdf'])),
+        ];
+        
+        return view('integration.ecg.index', [
+            'ecgFiles' => $ecgFiles,
+            'stats' => $stats,
+        ]);
+    }
+    
+    /**
+     * Get all ECG files with patient matching information
+     */
+    private function getAllEcgFilesWithPatients(): array
+    {
+        $ecgStorePath = base_path('ecg/store');
+        $allFiles = [];
+        $processedPdfs = []; // Track PDFs that are linked to XML files
+        
+        if (!is_dir($ecgStorePath)) {
+            return [];
+        }
+        
+        $files = scandir($ecgStorePath);
+        
+        // Get all patients for MRN matching
+        $patients = Patient::where('is_active', true)
+            ->whereNotNull('mrn')
+            ->get()
+            ->keyBy(function($patient) {
+                return trim($patient->mrn);
+            });
+        
+        // First pass: Process XML files (ECG data with patient info)
+        foreach ($files as $file) {
+            if ($file === '.' || $file === '..') {
+                continue;
+            }
+            
+            if (!preg_match('/\.xml$/i', $file)) {
+                continue;
+            }
+            
+            $xmlPath = $ecgStorePath . '/' . $file;
+            $ecgPatientId = $this->getEcgPatientId($xmlPath);
+            
+            if ($ecgPatientId !== null) {
+                $baseName = pathinfo($file, PATHINFO_FILENAME);
+                $pdfFile = $baseName . '_extracted.pdf';
+                $pdfPath = $ecgStorePath . '/' . $pdfFile;
+                
+                // Track this extracted PDF
+                if (file_exists($pdfPath)) {
+                    $processedPdfs[$pdfFile] = true;
+                }
+                
+                // Try to find matching patient
+                $patient = null;
+                $trimmedMrn = trim($ecgPatientId);
+                if (isset($patients[$trimmedMrn])) {
+                    $p = $patients[$trimmedMrn];
+                    $patient = [
+                        'id' => $p->id,
+                        'name' => $p->patient_name,
+                        'mrn' => $p->mrn,
+                    ];
+                }
+                
+                $allFiles[] = [
+                    'xml_file' => $file,
+                    'pdf_file' => file_exists($pdfPath) ? $pdfFile : null,
+                    'has_pdf' => file_exists($pdfPath),
+                    'mrn' => $ecgPatientId,
+                    'timestamp' => $this->getTimestampFromFilename($file, $xmlPath),
+                    'patient' => $patient,
+                    'type' => 'ecg_xml',
+                ];
+            }
+        }
+        
+        // Second pass: Process standalone PDF files (not extracted from XML)
+        foreach ($files as $file) {
+            if ($file === '.' || $file === '..') {
+                continue;
+            }
+            
+            // Only process PDF files
+            if (!preg_match('/\.pdf$/i', $file)) {
+                continue;
+            }
+            
+            // Skip PDFs that are already linked to XML files
+            if (isset($processedPdfs[$file])) {
+                continue;
+            }
+            
+            $pdfPath = $ecgStorePath . '/' . $file;
+            
+            $allFiles[] = [
+                'xml_file' => null,
+                'pdf_file' => $file,
+                'has_pdf' => true,
+                'mrn' => null,
+                'timestamp' => date('Y-m-d H:i:s', filemtime($pdfPath)),
+                'patient' => null,
+                'type' => 'standalone_pdf',
+            ];
+        }
+        
+        // Sort by timestamp descending (newest first)
+        usort($allFiles, function($a, $b) {
+            return strtotime($b['timestamp'] ?? '1970-01-01') - strtotime($a['timestamp'] ?? '1970-01-01');
+        });
+        
+        return $allFiles;
+    }
+
+    /**
      * Display ECG viewer for a patient
      */
     public function patientEcg(Request $request): View

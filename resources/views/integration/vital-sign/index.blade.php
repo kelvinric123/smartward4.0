@@ -707,6 +707,125 @@ Content-Type: application/json</pre>
                 </div>
             </div>
 
+            <!-- Monitor Devices Section (for MP5SC Listener) -->
+            <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-cyan-100">
+                <div class="p-6 border-b border-cyan-100 bg-gradient-to-r from-cyan-50 to-sky-50">
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center">
+                            <div class="p-3 bg-cyan-600 rounded-xl mr-4">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-800">Monitor Devices</h3>
+                                <p class="text-sm text-gray-500">Philips IntelliVue MP5SC monitors for vital sign collection</p>
+                            </div>
+                        </div>
+                        <button @click="showAddDeviceModal = true" class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-cyan-600 to-sky-600 hover:from-cyan-700 hover:to-sky-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                            </svg>
+                            Add Device
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-6">
+                    @if($monitorDevices->count() > 0)
+                        <div class="grid gap-4">
+                            @foreach($monitorDevices as $device)
+                                <div class="border border-gray-200 rounded-xl p-5 hover:border-cyan-300 hover:shadow-md transition-all bg-white">
+                                    <div class="flex justify-between items-start">
+                                        <div class="flex-1">
+                                            <div class="flex items-center mb-2">
+                                                <h4 class="text-lg font-bold text-gray-800">{{ $device->name }}</h4>
+                                                <span class="ml-2 px-2 py-0.5 text-xs font-medium {{ $device->is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }} rounded-full">
+                                                    {{ $device->is_active ? 'Active' : 'Inactive' }}
+                                                </span>
+                                                @if($device->last_status)
+                                                    <span class="ml-2 px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-full">
+                                                        {{ $device->last_status }}
+                                                    </span>
+                                                @endif
+                                            </div>
+                                            <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-gray-600">
+                                                <div>
+                                                    <span class="font-medium">IP Address:</span> 
+                                                    <code class="bg-gray-100 px-2 py-0.5 rounded">{{ $device->ip_address }}</code>
+                                                </div>
+                                                <div>
+                                                    <span class="font-medium">Port:</span> {{ $device->port }}
+                                                </div>
+                                                <div>
+                                                    <span class="font-medium">Last Connected:</span> {{ $device->last_connected_at ? $device->last_connected_at->diffForHumans() : 'Never' }}
+                                                </div>
+                                            </div>
+                                            @if($device->location)
+                                                <p class="text-sm text-gray-500 mt-2"><span class="font-medium">Location:</span> {{ $device->location }}</p>
+                                            @endif
+                                            @if($device->description)
+                                                <p class="text-sm text-gray-400 mt-1">{{ $device->description }}</p>
+                                            @endif
+                                        </div>
+                                        <div class="flex items-center space-x-2 ml-4">
+                                            <button @click="editDevice({{ json_encode($device) }})" class="inline-flex items-center px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors text-sm font-medium">
+                                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                                </svg>
+                                                Edit
+                                            </button>
+                                            <form action="{{ route('vital-sign-integration.device.destroy', $device) }}" method="POST" class="inline" onsubmit="return confirm('Are you sure you want to delete this device?');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="inline-flex items-center px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors text-sm font-medium">
+                                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                                    </svg>
+                                                    Delete
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        <!-- Docker Configuration Help -->
+                        <div class="mt-6 bg-slate-900 rounded-xl p-5">
+                            <div class="flex justify-between items-center mb-3">
+                                <h4 class="font-bold text-white flex items-center">
+                                    <svg class="w-5 h-5 mr-2 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                                    </svg>
+                                    MP5SC Listener Configuration
+                                </h4>
+                            </div>
+                            <p class="text-sm text-gray-400 mb-3">The mp5sc_listener container will automatically fetch active devices from the API. Make sure the following environment variables are set:</p>
+                            <pre class="text-sm text-gray-300 font-mono overflow-x-auto"><span class="text-cyan-400">API_BASE_URL</span>=<span class="text-green-400">"http://{{ $gatewayConfig['server_ip'] }}:{{ $gatewayConfig['server_port'] }}/api/v1"</span>
+<span class="text-cyan-400">API_PASSPHRASE</span>=<span class="text-green-400">"{{ $gatewayConfig['passphrase'] }}"</span>
+<span class="text-cyan-400">API_USERNAME</span>=<span class="text-green-400">"your_api_user"</span>
+<span class="text-cyan-400">API_PASSWORD</span>=<span class="text-green-400">"your_password"</span></pre>
+                            <p class="text-xs text-gray-500 mt-3">Devices configured here will be fetched via <code class="text-cyan-300">GET /api/v1/monitor-devices</code></p>
+                        </div>
+                    @else
+                        <div class="text-center py-12">
+                            <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/>
+                            </svg>
+                            <h4 class="text-lg font-medium text-gray-600 mb-2">No Monitor Devices</h4>
+                            <p class="text-gray-500 mb-4">Add Philips IntelliVue MP5SC monitors to collect vital signs automatically.</p>
+                            <button @click="showAddDeviceModal = true" class="inline-flex items-center px-4 py-2 bg-cyan-600 text-white font-medium rounded-lg hover:bg-cyan-700 transition-colors">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                                Add Monitor Device
+                            </button>
+                        </div>
+                    @endif
+                </div>
+            </div>
+
             <!-- API Testing Section -->
             <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-purple-100">
                 <div class="p-6 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-indigo-50">
@@ -990,6 +1109,95 @@ Content-Type: application/json</pre>
             </div>
         </div>
 
+        <!-- Add/Edit Device Modal -->
+        <div x-show="showAddDeviceModal || showEditDeviceModal" 
+             x-cloak
+             class="fixed inset-0 z-50 overflow-y-auto"
+             x-transition:enter="ease-out duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeDeviceModals()"></div>
+
+                <div class="relative inline-block w-full max-w-lg p-6 my-8 text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-gray-800" x-text="showEditDeviceModal ? 'Edit Monitor Device' : 'Add Monitor Device'"></h3>
+                        <button @click="closeDeviceModals()" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <form :action="showEditDeviceModal ? '{{ url('vital-sign-integration/device') }}/' + editingDevice.id : '{{ route('vital-sign-integration.device.store') }}'" method="POST">
+                        @csrf
+                        <template x-if="showEditDeviceModal">
+                            <input type="hidden" name="_method" value="PUT">
+                        </template>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Device Name *</label>
+                                <input type="text" name="name" x-model="deviceFormData.name" required
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+                                       placeholder="e.g., MP5SC Ward A">
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-4">
+                                <div class="col-span-2">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">IP Address *</label>
+                                    <input type="text" name="ip_address" x-model="deviceFormData.ip_address" required
+                                           pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$"
+                                           class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+                                           placeholder="192.168.0.5">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Port</label>
+                                    <input type="number" name="port" x-model="deviceFormData.port"
+                                           class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+                                           placeholder="24105">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                                <input type="text" name="location" x-model="deviceFormData.location"
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+                                       placeholder="e.g., Ward A - Bed 1">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                <textarea name="description" x-model="deviceFormData.description" rows="2"
+                                          class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+                                          placeholder="Optional description for this device"></textarea>
+                            </div>
+
+                            <div x-show="showEditDeviceModal">
+                                <label class="flex items-center">
+                                    <input type="checkbox" name="is_active" x-model="deviceFormData.is_active"
+                                           class="rounded border-gray-300 text-cyan-600 shadow-sm focus:ring-cyan-500">
+                                    <span class="ml-2 text-sm text-gray-700">Active</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 flex justify-end space-x-3">
+                            <button type="button" @click="closeDeviceModals()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">
+                                Cancel
+                            </button>
+                            <button type="submit" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-medium rounded-lg transition-colors">
+                                <span x-text="showEditDeviceModal ? 'Update Device' : 'Add Device'"></span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
         <!-- Toast Notification -->
         <div x-show="toast.show" 
              x-cloak
@@ -1042,6 +1250,7 @@ DEVICE_PASSWORD = "your_password"`;
 
         function vitalSignIntegration() {
             return {
+                // User modal state
                 showAddUserModal: false,
                 showEditUserModal: false,
                 showPassphrase: false,
@@ -1053,6 +1262,19 @@ DEVICE_PASSWORD = "your_password"`;
                     description: '',
                     is_active: true
                 },
+                // Device modal state
+                showAddDeviceModal: false,
+                showEditDeviceModal: false,
+                editingDevice: {},
+                deviceFormData: {
+                    name: '',
+                    ip_address: '',
+                    port: '24105',
+                    location: '',
+                    description: '',
+                    is_active: true
+                },
+                // Testing state
                 testLogin: {
                     username: '',
                     password: ''
@@ -1076,6 +1298,7 @@ DEVICE_PASSWORD = "your_password"`;
                     message: ''
                 },
 
+                // User modal methods
                 closeModals() {
                     this.showAddUserModal = false;
                     this.showEditUserModal = false;
@@ -1103,6 +1326,38 @@ DEVICE_PASSWORD = "your_password"`;
                         is_active: user.is_active
                     };
                     this.showEditUserModal = true;
+                },
+
+                // Device modal methods
+                closeDeviceModals() {
+                    this.showAddDeviceModal = false;
+                    this.showEditDeviceModal = false;
+                    this.resetDeviceForm();
+                },
+
+                resetDeviceForm() {
+                    this.deviceFormData = {
+                        name: '',
+                        ip_address: '',
+                        port: '24105',
+                        location: '',
+                        description: '',
+                        is_active: true
+                    };
+                    this.editingDevice = {};
+                },
+
+                editDevice(device) {
+                    this.editingDevice = device;
+                    this.deviceFormData = {
+                        name: device.name,
+                        ip_address: device.ip_address,
+                        port: device.port || '24105',
+                        location: device.location || '',
+                        description: device.description || '',
+                        is_active: device.is_active
+                    };
+                    this.showEditDeviceModal = true;
                 },
 
                 async performLogin() {

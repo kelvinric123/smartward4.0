@@ -690,41 +690,61 @@ class AdtConfigurationController extends Controller
         $dietTypes = DietType::where('is_active', true)->orderBy('name')->get();
         $isolationTypes = IsolationType::where('is_active', true)->orderBy('name')->get();
 
-        // Get wards with their beds for location dropdowns
-        $wards = Ward::where('is_active', true)
-            ->orderBy('ward_name')
-            ->get();
+        // Get wards with their beds for location dropdowns (with error handling)
+        try {
+            $wards = Ward::where('is_active', true)
+                ->orderBy('ward_name')
+                ->get();
+        } catch (\Exception $e) {
+            $wards = collect();
+        }
         
         // Get beds with ward information for cascading dropdown
-        $beds = Bed::with('ward')
-            ->where('is_active', true)
-            ->orderBy('bed_number')
-            ->get()
-            ->map(function ($bed) {
-                return [
-                    'id' => $bed->id,
-                    'ward_id' => $bed->ward_id,
-                    'bed_number' => $bed->bed_number,
-                    'bed_id' => $bed->bed_id ?? $bed->bed_number,
-                    'bed_display_name' => $bed->bed_display_name ?? $bed->bed_number,
-                    'ward_code' => $bed->ward->ward_code ?? '',
-                ];
-            });
+        try {
+            $beds = Bed::with('ward')
+                ->where('is_active', true)
+                ->orderBy('bed_number')
+                ->get()
+                ->map(function ($bed) {
+                    return [
+                        'id' => $bed->id,
+                        'ward_id' => $bed->ward_id,
+                        'bed_number' => $bed->bed_number,
+                        'bed_id' => $bed->bed_id ?? $bed->bed_number,
+                        'bed_display_name' => $bed->bed_display_name ?? $bed->bed_number,
+                        'ward_code' => $bed->ward->ward_code ?? '',
+                    ];
+                });
+        } catch (\Exception $e) {
+            $beds = collect();
+        }
 
         // Get consultants (doctors) for attending physician dropdown
-        $consultants = Consultant::where('is_active', true)
-            ->orderBy('name')
-            ->get();
+        try {
+            $consultants = Consultant::where('is_active', true)
+                ->orderBy('name')
+                ->get();
+        } catch (\Exception $e) {
+            $consultants = collect();
+        }
 
         // Get nurses for nurse dropdown
-        $nurses = Nurse::where('is_active', true)
-            ->orderBy('name')
-            ->get();
+        try {
+            $nurses = Nurse::where('is_active', true)
+                ->orderBy('name')
+                ->get();
+        } catch (\Exception $e) {
+            $nurses = collect();
+        }
 
         // Get anaesthetists for anaesthetist dropdown
-        $anaesthetists = Anaesthetist::where('is_active', true)
-            ->orderBy('name')
-            ->get();
+        try {
+            $anaesthetists = Anaesthetist::where('is_active', true)
+                ->orderBy('name')
+                ->get();
+        } catch (\Exception $e) {
+            $anaesthetists = collect();
+        }
 
         return view('integration.adt.test', compact(
             'configuration', 

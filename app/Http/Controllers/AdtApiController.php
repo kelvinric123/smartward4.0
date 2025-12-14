@@ -11,6 +11,7 @@ use App\Models\Ward;
 use App\Models\Consultant;
 use App\Models\Anaesthetist;
 use App\Models\DietType;
+use App\Models\IsolationType;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -1189,59 +1190,71 @@ class AdtApiController extends Controller
         
         // Isolation Type from RMI segment or custom
         if (!empty($custom['isolation_type'])) {
-            // Map isolation codes to SmartWard values
-            // Based on HL7 ADT Integration Document - RMI segment contains isolation info
-            // Example: CI^Contact Isolation, DI^Droplet Isolation
-            $isolationMap = [
-                // Standard codes
-                'DAC' => 'droplet_airborne_contact',
-                'D' => 'droplet',
-                'DI' => 'droplet',
-                'A' => 'airborne',
-                'AI' => 'airborne',
-                'C' => 'contact',
-                'CI' => 'contact',
-                // Combined codes
-                'DC' => 'droplet_contact',
-                'AC' => 'airborne_contact',
-                // Full names
-                'CONTACT' => 'contact',
-                'DROPLET' => 'droplet',
-                'AIRBORNE' => 'airborne',
-                'CONTACT ISOLATION' => 'contact',
-                'DROPLET ISOLATION' => 'droplet',
-                'AIRBORNE ISOLATION' => 'airborne',
-            ];
-            
             $rawIsolation = trim($custom['isolation_type']);
             
             // Handle caret-delimited values like "CI^Contact Isolation"
             $parts = strpos($rawIsolation, '^') !== false ? explode('^', $rawIsolation, 2) : [$rawIsolation];
-            $codePart = trim($parts[0] ?? '');
+            $codePart = strtoupper(trim($parts[0] ?? ''));
             $descPart = trim($parts[1] ?? '');
             
-            // Try mapping using code, then description, then full raw value
-            $isolationTypeCandidates = array_filter([
-                strtoupper($codePart),
-                strtoupper($descPart),
-                strtoupper($rawIsolation),
-            ]);
+            // First, try to look up in IsolationType table (primary source)
+            $isolationType = IsolationType::findByCode($codePart);
             
-            $mappedIsolation = null;
-            foreach ($isolationTypeCandidates as $candidate) {
-                if (isset($isolationMap[$candidate])) {
-                    $mappedIsolation = $isolationMap[$candidate];
-                    break;
+            if ($isolationType) {
+                // Store the isolation code directly - it's a valid code in our system
+                $patient->isolation_type = $isolationType->code;
+                Log::info("ADT - Isolation type set from IsolationType table", [
+                    'raw' => $custom['isolation_type'],
+                    'code' => $isolationType->code,
+                    'name' => $isolationType->name,
+                ]);
+            } else {
+                // Fallback to hardcoded map for backwards compatibility
+                $isolationMap = [
+                    // Standard codes
+                    'DAC' => 'droplet_airborne_contact',
+                    'D' => 'droplet',
+                    'DI' => 'droplet',
+                    'A' => 'airborne',
+                    'AI' => 'airborne',
+                    'C' => 'contact',
+                    'CI' => 'contact',
+                    // Combined codes
+                    'DC' => 'droplet_contact',
+                    'AC' => 'airborne_contact',
+                    // Full names
+                    'CONTACT' => 'contact',
+                    'DROPLET' => 'droplet',
+                    'AIRBORNE' => 'airborne',
+                    'CONTACT ISOLATION' => 'contact',
+                    'DROPLET ISOLATION' => 'droplet',
+                    'AIRBORNE ISOLATION' => 'airborne',
+                ];
+                
+                // Try mapping using code, then description, then full raw value
+                $isolationTypeCandidates = array_filter([
+                    $codePart,
+                    strtoupper($descPart),
+                    strtoupper($rawIsolation),
+                ]);
+                
+                $mappedIsolation = null;
+                foreach ($isolationTypeCandidates as $candidate) {
+                    if (isset($isolationMap[$candidate])) {
+                        $mappedIsolation = $isolationMap[$candidate];
+                        break;
+                    }
                 }
+                
+                // Fallback to slugified raw value
+                $patient->isolation_type = $mappedIsolation ?? strtolower(str_replace([' ', '^'], ['_', '_'], $rawIsolation));
+                
+                Log::info("ADT - Isolation type set (fallback)", [
+                    'raw' => $custom['isolation_type'],
+                    'parsed' => $codePart,
+                    'mapped' => $patient->isolation_type,
+                ]);
             }
-            
-            // Fallback to slugified raw value
-            $patient->isolation_type = $mappedIsolation ?? strtolower(str_replace([' ', '^'], ['_', '_'], $rawIsolation));
-            
-            Log::info("ADT - Isolation type set", [
-                'raw' => $custom['isolation_type'],
-                'mapped' => $patient->isolation_type,
-            ]);
         }
         
         // Diet Type from PV1-38 (diet_type field)

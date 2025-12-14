@@ -67,3 +67,6 @@ class IsolationTypeController extends Controller
         return redirect()->route('diet-types.index', ['tab' => 'isolation'])->with('success', 'Isolation type deleted successfully.');
     }
 }
+
+
+

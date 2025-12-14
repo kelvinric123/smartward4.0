@@ -76,3 +76,6 @@ class DietTypeSeeder extends Seeder
         $this->command->info('- ' . count($dietTypes) . ' diet types created/updated');
     }
 }
+
+
+

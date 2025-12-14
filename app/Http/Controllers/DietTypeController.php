@@ -67,3 +67,6 @@ class DietTypeController extends Controller
         return redirect()->route('diet-types.index')->with('success', 'Diet type deleted successfully.');
     }
 }
+
+
+

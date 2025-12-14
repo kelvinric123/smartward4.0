@@ -63,3 +63,6 @@ class AnaesthetistSeeder extends Seeder
         $this->command->info("Anaesthetists seeded: {$count} anaesthetists created/updated.");
     }
 }
+
+
+

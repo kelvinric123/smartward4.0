@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ApiUser;
 use App\Models\VitalSign;
 use App\Models\VitalSignApiLog;
+use App\Models\VitalSignMonitorDevice;
 use App\Models\Patient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -26,30 +27,73 @@ class VitalSignIntegrationController extends Controller
             ->limit(20)
             ->get();
 
+        // Get monitor devices
+        $monitorDevices = VitalSignMonitorDevice::latest()->get();
+
         // Get gateway configuration for display
+        $serverInfo = $this->getServerInfo();
         $gatewayConfig = [
             'passphrase' => config('services.vital_sign_api.passphrase', 'qmedno1'),
             'api_base_url' => url('/api/v1'),
             'server_url' => url('/'),
-            'server_ip' => request()->server('SERVER_ADDR') ?: $this->getServerIp(),
-            'server_port' => request()->server('SERVER_PORT') ?: '80',
+            'server_ip' => $serverInfo['ip'],
+            'server_port' => $serverInfo['port'],
         ];
 
-        return view('integration.vital-sign.index', compact('apiUsers', 'recentLogs', 'gatewayConfig'));
+        return view('integration.vital-sign.index', compact('apiUsers', 'recentLogs', 'gatewayConfig', 'monitorDevices'));
     }
 
     /**
-     * Get server IP address for gateway configuration.
+     * Get server IP and port from APP_URL or request.
      */
-    private function getServerIp(): string
+    private function getServerInfo(): array
     {
-        // Try to get the local IP address
+        // First try to parse from APP_URL (most reliable)
+        $appUrl = config('app.url', '');
+        if ($appUrl) {
+            $parsed = parse_url($appUrl);
+            $ip = $parsed['host'] ?? '127.0.0.1';
+            $port = $parsed['port'] ?? ($parsed['scheme'] === 'https' ? '443' : '80');
+            
+            // If host is localhost, try to get actual IP
+            if ($ip === 'localhost') {
+                $ip = $this->getLocalIp();
+            }
+            
+            return ['ip' => $ip, 'port' => (string) $port];
+        }
+        
+        // Fallback to request info
+        $ip = request()->server('SERVER_ADDR') ?: $this->getLocalIp();
+        $port = request()->server('SERVER_PORT') ?: '80';
+        
+        return ['ip' => $ip, 'port' => (string) $port];
+    }
+
+    /**
+     * Get local IP address.
+     */
+    private function getLocalIp(): string
+    {
+        // Try to get from hostname
         $hostname = gethostname();
         $ip = gethostbyname($hostname);
         
-        // If we got a valid IP (not the hostname back), return it
         if ($ip !== $hostname && filter_var($ip, FILTER_VALIDATE_IP)) {
             return $ip;
+        }
+        
+        // Try socket connection method (works better on some systems)
+        if (function_exists('socket_create')) {
+            $sock = @socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
+            if ($sock) {
+                @socket_connect($sock, "8.8.8.8", 53);
+                @socket_getsockname($sock, $localIp);
+                @socket_close($sock);
+                if ($localIp && filter_var($localIp, FILTER_VALIDATE_IP)) {
+                    return $localIp;
+                }
+            }
         }
         
         return '127.0.0.1';
@@ -530,6 +574,131 @@ class VitalSignIntegrationController extends Controller
 
         return redirect()->route('vital-sign-integration.index')
             ->with('success', 'API logs cleared successfully.');
+    }
+
+    // ============================================
+    // Monitor Device Management
+    // ============================================
+
+    /**
+     * Store a new monitor device.
+     */
+    public function storeDevice(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'ip_address' => 'required|ip|unique:vital_sign_monitor_devices,ip_address',
+            'port' => 'nullable|integer|min:1|max:65535',
+            'location' => 'nullable|string|max:255',
+            'description' => 'nullable|string|max:1000',
+        ]);
+
+        $validated['port'] = $validated['port'] ?? 24105;
+
+        VitalSignMonitorDevice::create($validated);
+
+        return redirect()->route('vital-sign-integration.index')
+            ->with('success', 'Monitor device added successfully.');
+    }
+
+    /**
+     * Update an existing monitor device.
+     */
+    public function updateDevice(Request $request, VitalSignMonitorDevice $device)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'ip_address' => 'required|ip|unique:vital_sign_monitor_devices,ip_address,' . $device->id,
+            'port' => 'nullable|integer|min:1|max:65535',
+            'location' => 'nullable|string|max:255',
+            'description' => 'nullable|string|max:1000',
+            'is_active' => 'boolean',
+        ]);
+
+        $validated['is_active'] = $request->has('is_active');
+        $validated['port'] = $validated['port'] ?? 24105;
+
+        $device->update($validated);
+
+        return redirect()->route('vital-sign-integration.index')
+            ->with('success', 'Monitor device updated successfully.');
+    }
+
+    /**
+     * Delete a monitor device.
+     */
+    public function destroyDevice(VitalSignMonitorDevice $device)
+    {
+        $device->delete();
+
+        return redirect()->route('vital-sign-integration.index')
+            ->with('success', 'Monitor device deleted successfully.');
+    }
+
+    // ============================================
+    // API Endpoints for MP5SC Listener
+    // ============================================
+
+    /**
+     * API: Get list of active monitor devices for the listener.
+     * Used by the mp5sc_listener container to know which devices to connect to.
+     */
+    public function apiGetDevices(Request $request)
+    {
+        // Validate passphrase
+        $passphrase = $request->header('X-Passphrase');
+        $expectedPassphrase = config('services.vital_sign_api.passphrase', 'qmedno1');
+        
+        if ($passphrase !== $expectedPassphrase) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid passphrase',
+            ], 401);
+        }
+
+        $devices = VitalSignMonitorDevice::active()
+            ->select(['id', 'name', 'ip_address', 'port', 'location'])
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'devices' => $devices,
+                'count' => $devices->count(),
+            ],
+        ]);
+    }
+
+    /**
+     * API: Update device connection status from listener.
+     */
+    public function apiUpdateDeviceStatus(Request $request, VitalSignMonitorDevice $device)
+    {
+        // Validate passphrase
+        $passphrase = $request->header('X-Passphrase');
+        $expectedPassphrase = config('services.vital_sign_api.passphrase', 'qmedno1');
+        
+        if ($passphrase !== $expectedPassphrase) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid passphrase',
+            ], 401);
+        }
+
+        $validated = $request->validate([
+            'status' => 'required|string|max:255',
+            'connected' => 'boolean',
+        ]);
+
+        $device->updateConnectionStatus(
+            $validated['status'],
+            $validated['connected'] ?? false
+        );
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Device status updated',
+        ]);
     }
 }
 

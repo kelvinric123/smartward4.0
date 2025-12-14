@@ -17,6 +17,7 @@ use App\Models\VitalSign;
 use App\Models\ShiftSetting;
 use App\Models\WardScheduleAssignment;
 use App\Models\DietType;
+use App\Models\IsolationType;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
@@ -421,6 +422,7 @@ class WardDashboardController extends Controller
                     'diet_type_name' => $patient->diet_type ? DietType::getDisplayName($patient->diet_type) : 'Regular diet',
                     'fall_risk' => $patient->fall_risk ?? 'none',
                     'isolation_type' => $patient->isolation_type ?? 'none',
+                    'isolation_type_name' => $patient->isolation_type && $patient->isolation_type !== 'none' ? IsolationType::getDisplayName($patient->isolation_type) : 'None',
                     'allergies' => $patient->allergies ?? [],
                 ];
             } else {
@@ -463,6 +465,7 @@ class WardDashboardController extends Controller
                     'diet_type_name' => null,
                     'fall_risk' => null,
                     'isolation_type' => null,
+                    'isolation_type_name' => null,
                     'allergies' => null,
                 ];
             }
@@ -958,6 +961,34 @@ class WardDashboardController extends Controller
                 $patientVitalsMode = $settings->patient_vitals_mode ?? 'demo';
             }
         }
+        
+        // Load diet types and isolation types from database and merge into options
+        $dbDietTypes = DietType::where('is_active', true)->orderBy('name')->get();
+        $dbIsolationTypes = IsolationType::where('is_active', true)->orderBy('name')->get();
+        
+        if ($dbDietTypes->isNotEmpty()) {
+            $clinicalIndicatorOptions['diet_type'] = $dbDietTypes->map(function($dt) {
+                return [
+                    'value' => $dt->code,
+                    'label' => $dt->name,
+                    'color' => in_array(strtoupper($dt->code), ['NPO', 'NBM', 'NPD']) 
+                        ? 'bg-red-100 text-red-700' 
+                        : 'bg-orange-100 text-orange-700',
+                ];
+            })->toArray();
+        }
+        
+        if ($dbIsolationTypes->isNotEmpty()) {
+            $clinicalIndicatorOptions['isolation_type'] = $dbIsolationTypes->map(function($it) {
+                return [
+                    'value' => $it->code,
+                    'label' => $it->name,
+                    'color' => in_array(strtoupper($it->code), ['COVID', 'TB', 'AIR', 'AIRBORNE']) 
+                        ? 'bg-red-100 text-red-700' 
+                        : 'bg-yellow-100 text-yellow-700',
+                ];
+            })->toArray();
+        }
 
         return view('wards.patient-details', [
             'patient' => $patient,
@@ -1045,6 +1076,34 @@ class WardDashboardController extends Controller
         
         // Merge with defaults to ensure all keys exist
         $clinicalIndicatorOptions = array_merge($defaultClinicalOptions, $clinicalIndicatorOptions);
+        
+        // Load diet types and isolation types from database and merge into options
+        $dbDietTypes = DietType::where('is_active', true)->orderBy('name')->get();
+        $dbIsolationTypes = IsolationType::where('is_active', true)->orderBy('name')->get();
+        
+        if ($dbDietTypes->isNotEmpty()) {
+            $clinicalIndicatorOptions['diet_type'] = $dbDietTypes->map(function($dt) {
+                return [
+                    'value' => $dt->code,
+                    'label' => $dt->name,
+                    'color' => in_array(strtoupper($dt->code), ['NPO', 'NBM', 'NPD']) 
+                        ? 'bg-red-100 text-red-700' 
+                        : 'bg-orange-100 text-orange-700',
+                ];
+            })->toArray();
+        }
+        
+        if ($dbIsolationTypes->isNotEmpty()) {
+            $clinicalIndicatorOptions['isolation_type'] = $dbIsolationTypes->map(function($it) {
+                return [
+                    'value' => $it->code,
+                    'label' => $it->name,
+                    'color' => in_array(strtoupper($it->code), ['COVID', 'TB', 'AIR', 'AIRBORNE']) 
+                        ? 'bg-red-100 text-red-700' 
+                        : 'bg-yellow-100 text-yellow-700',
+                ];
+            })->toArray();
+        }
 
         // Vitals data mode settings (demo/real/off)
         $patientVitalsMode = $settings->patient_vitals_mode ?? 'demo';

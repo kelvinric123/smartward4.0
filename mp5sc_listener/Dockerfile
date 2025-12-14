@@ -39,14 +39,22 @@ ENV API_USERNAME=api@qmed.asia
 ENV API_PASSWORD=88888888
 
 # Monitor Device Configuration
+# Legacy single device mode (used when USE_API_DEVICES=false)
 ENV MONITOR_IP=192.168.0.5
+
+# Multi-device mode (fetch devices from API)
+ENV USE_API_DEVICES=true
+ENV DEVICE_FETCH_INTERVAL=60
 
 # Polling Configuration
 ENV POLL_INTERVAL=2
 ENV REFRESH_INTERVAL=10
 
-# Debug Mode
-ENV DEBUG_MODE=false
+# Debug Mode - enable for detailed logging
+ENV DEBUG_MODE=true
+
+# Python unbuffered for real-time logs in Docker
+ENV PYTHONUNBUFFERED=1
 
 # No port to expose - this is an outbound UDP client connecting to monitor
 

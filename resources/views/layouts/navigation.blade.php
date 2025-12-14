@@ -11,7 +11,7 @@
         $openSection = 'schedule';
     } elseif (request()->routeIs('vital-signs.*')) {
         $openSection = 'vitalSign';
-    } elseif (request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*')) {
+    } elseif (request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*') || request()->routeIs('ecg.index')) {
         $openSection = 'integration';
     }
 @endphp
@@ -226,7 +226,7 @@ class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 tran
 
         <!-- Integration Section -->
         <div class="pt-2">
-            <button @click="toggleSection('integration')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*') ? 'bg-white/20' : '' }}">
+            <button @click="toggleSection('integration')" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*') || request()->routeIs('ecg.index') ? 'bg-white/20' : '' }}">
                 <div class="flex items-center">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/>
@@ -272,6 +272,13 @@ class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 tran
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
                     </svg>
                     <span class="ml-2">ADT Test</span>
+                </a>
+                
+                <a href="{{ route('ecg.index') }}" class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ecg.index') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                    </svg>
+                    <span class="ml-2">ECG Admin</span>
                 </a>
             </div>
         </div>

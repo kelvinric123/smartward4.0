@@ -14,6 +14,9 @@
 </head>
 <body class="bg-gray-50">
     @php
+        use App\Models\DietType;
+        use App\Models\IsolationType;
+        
         $patientTabs = $patientDetailsTabs ?? [
             'info' => true,
             'additional' => true,
@@ -24,6 +27,14 @@
             'transfer' => true,
             'discharge' => true,
         ];
+        
+        // Get display names from database tables for clinical status summary
+        $dietTypeDisplay = $patient && $patient->diet_type 
+            ? DietType::getDisplayName($patient->diet_type) 
+            : 'Regular diet';
+        $isolationTypeDisplay = $patient && $patient->isolation_type && $patient->isolation_type !== 'none'
+            ? IsolationType::getDisplayName($patient->isolation_type) 
+            : 'None';
     @endphp
     <div class="p-4" x-data='@json([
         "activeTab" => $activeTab ?? "info",
@@ -423,7 +434,7 @@
                                 </div>
                                 <div class="bg-red-50 rounded-lg p-3 text-center">
                                     <div class="text-red-600 font-semibold">Diet</div>
-                                    <div class="text-gray-800 mt-1 capitalize">{{ str_replace('_', ' ', $patient->diet_type ?? 'Regular') }}</div>
+                                    <div class="text-gray-800 mt-1 capitalize">{{ $dietTypeDisplay }}</div>
                                 </div>
                                 <div class="bg-orange-50 rounded-lg p-3 text-center">
                                     <div class="text-orange-600 font-semibold">Fall Risk</div>
@@ -431,7 +442,7 @@
                                 </div>
                                 <div class="bg-yellow-50 rounded-lg p-3 text-center">
                                     <div class="text-yellow-700 font-semibold">Isolation</div>
-                                    <div class="text-gray-800 mt-1 capitalize">{{ str_replace('_', ' ', $patient->isolation_type ?? 'None') }}</div>
+                                    <div class="text-gray-800 mt-1 capitalize">{{ $isolationTypeDisplay }}</div>
                                 </div>
                                 <div class="bg-pink-50 rounded-lg p-3 text-center">
                                     <div class="text-pink-600 font-semibold">Allergies</div>

@@ -35,3 +35,6 @@ class IsolationTypeSeeder extends Seeder
         $this->command->info('- ' . count($isolationTypes) . ' isolation types created/updated');
     }
 }
+
+
+

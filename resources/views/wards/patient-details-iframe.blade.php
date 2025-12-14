@@ -8,6 +8,9 @@
 </head>
 <body class="bg-gradient-to-br from-blue-50 via-white to-cyan-50 min-h-screen">
 @php
+    use App\Models\DietType;
+    use App\Models\IsolationType;
+    
     $patientTabs = [
         'info' => true,
         'additional' => true,
@@ -19,6 +22,14 @@
         }
         return $a;
     })->values()->toArray();
+    
+    // Get display names from database tables
+    $dietTypeDisplay = $patient && $patient->diet_type 
+        ? DietType::getDisplayName($patient->diet_type) 
+        : 'Regular diet';
+    $isolationTypeDisplay = $patient && $patient->isolation_type && $patient->isolation_type !== 'none'
+        ? IsolationType::getDisplayName($patient->isolation_type) 
+        : 'None';
 @endphp
 
 <div class="p-6 max-w-6xl mx-auto"
@@ -125,7 +136,7 @@
                     <div class="text-xs uppercase text-gray-500">Diet Type</div>
                     <div class="mt-2">
                         <span class="inline-flex px-3 py-1 rounded-full text-sm font-semibold bg-cyan-100 text-cyan-800">
-                            {{ str_replace('_', ' ', ucfirst($patient->diet_type ?? 'regular')) }}
+                            {{ $dietTypeDisplay }}
                         </span>
                     </div>
                 </div>
@@ -141,7 +152,7 @@
                     <div class="text-xs uppercase text-gray-500">Isolation Precautions</div>
                     <div class="mt-2">
                         <span class="inline-flex px-3 py-1 rounded-full text-sm font-semibold bg-purple-100 text-purple-800">
-                            {{ str_replace('_', ' ', ucfirst($patient->isolation_type ?? 'none')) }}
+                            {{ $isolationTypeDisplay }}
                         </span>
                     </div>
                 </div>

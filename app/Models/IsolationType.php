@@ -47,3 +47,6 @@ class IsolationType extends Model
         return strtoupper(substr($this->code, 0, 4));
     }
 }
+
+
+

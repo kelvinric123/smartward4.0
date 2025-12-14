@@ -81,3 +81,6 @@ class SpecialtySeeder extends Seeder
         $this->command->info('Specialties seeded: ' . count($specialties) . ' specialties created/updated.');
     }
 }
+
+
+

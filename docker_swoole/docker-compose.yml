@@ -74,6 +74,8 @@ services:
       - smartward_storage:/app/storage
       # Optional: mount logs for debugging
       - smartward_logs:/var/log
+      # ECG files - shared with ECG container (Laravel reads from ecg/store)
+      - ecg_data:/app/ecg/store:ro
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:88/health"]
       interval: 30s
@@ -143,14 +145,20 @@ services:
     ports:
       - "${ECG_PORT:-8080}:8080"
     environment:
+      # Server Configuration
       ECG_HOST: "0.0.0.0"
       ECG_PORT: "8080"
       ECG_USERNAME: "${ECG_USERNAME:-admin}"
       ECG_PASSWORD: "${ECG_PASSWORD:-admin123}"
+      # Timezone
+      TZ: "${TZ:-Asia/Kuala_Lumpur}"
+      # Python unbuffered for real-time logs
+      PYTHONUNBUFFERED: "1"
     volumes:
       # Persist uploaded ECG files
       - ecg_data:/app/ecg/ftp_data
       - ecg_store:/app/ecg/store
+      - ecg_logs:/app/ecg/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/"]
       interval: 30s
@@ -168,8 +176,9 @@ services:
     logging:
       driver: "json-file"
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "5"
+        tag: "smartward4-ecg"
 
   # MP5sc Vital Sign Monitor Listener Container
   mp5sc:
@@ -187,12 +196,18 @@ services:
       API_USERNAME: "${MP5SC_API_USERNAME:-api@qmed.asia}"
       API_PASSWORD: "${MP5SC_API_PASSWORD:-88888888}"
       # Monitor Device Configuration
+      # Legacy single device mode (used when USE_API_DEVICES=false)
       MONITOR_IP: "${MP5SC_MONITOR_IP:-192.168.0.5}"
+      # Multi-device mode (fetch devices from API)
+      USE_API_DEVICES: "${MP5SC_USE_API_DEVICES:-true}"
+      DEVICE_FETCH_INTERVAL: "${MP5SC_DEVICE_FETCH_INTERVAL:-60}"
       # Polling Configuration
       POLL_INTERVAL: "${MP5SC_POLL_INTERVAL:-2}"
       REFRESH_INTERVAL: "${MP5SC_REFRESH_INTERVAL:-10}"
-      # Debug Mode
-      DEBUG_MODE: "${MP5SC_DEBUG_MODE:-false}"
+      # Debug Mode - enabled by default for detailed logging
+      DEBUG_MODE: "${MP5SC_DEBUG_MODE:-true}"
+      # Python unbuffered for real-time logs
+      PYTHONUNBUFFERED: "1"
     volumes:
       # Persist logs
       - mp5sc_logs:/app/mp5sc_listener/logs
@@ -213,8 +228,9 @@ services:
     logging:
       driver: "json-file"
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "5"
+        tag: "smartward4-mp5sc"
 
 volumes:
   smartward_mysql:
@@ -232,6 +248,8 @@ volumes:
   ecg_data:
     driver: local
   ecg_store:
+    driver: local
+  ecg_logs:
     driver: local
   mp5sc_logs:
     driver: local
