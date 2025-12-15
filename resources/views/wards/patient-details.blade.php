@@ -231,32 +231,17 @@
                 @endphp
                 <div x-show="activeTab === 'additional'" x-cloak
                      x-data="{
-                        allergies: @json($allergyStrings),
-                        newAllergy: '',
-                        addAllergy() {
-                            if (this.newAllergy.trim() && !this.allergies.includes(this.newAllergy.trim())) {
-                                this.allergies.push(this.newAllergy.trim());
-                                this.newAllergy = '';
-                            }
-                        },
-                        removeAllergy(index) {
-                            this.allergies.splice(index, 1);
-                        }
+                        allergies: @json($allergyStrings)
                      }">
                     <h3 class="text-lg font-semibold text-gray-800 mb-3">Patient Additional Info</h3>
                     <p class="text-sm text-gray-600 mb-4">
-                        Manage clinical indicators and patient care information.
+                        View clinical indicators and patient care information. Diet types and allergies are managed by the ADT system.
                     </p>
 
                     <form method="POST" action="{{ route('ward.update-patient-clinical') }}" class="space-y-6">
                         @csrf
                         <input type="hidden" name="patient_id" value="{{ $patient->id }}">
                         <input type="hidden" name="active_tab" value="additional">
-                        
-                        <!-- Hidden field to store allergies array -->
-                        <template x-for="(allergy, index) in allergies" :key="index">
-                            <input type="hidden" name="allergies[]" :value="allergy">
-                        </template>
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <!-- Nursing Level of Care -->
@@ -279,7 +264,7 @@
                                 <p class="mt-1 text-xs text-gray-500">Patient care level classification</p>
                             </div>
 
-                            <!-- Diet Types (Multiple Selection) -->
+                            <!-- Diet Types (Read-only from ADT) -->
                             <div class="md:col-span-2">
                                 <label class="block text-sm font-semibold text-gray-700 mb-2">
                                     <div class="flex items-center">
@@ -287,23 +272,26 @@
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
                                         </svg>
                                         Diet Types
+                                        <span class="ml-2 text-xs font-normal text-gray-400">(from ADT)</span>
                                     </div>
                                 </label>
-                                <p class="text-xs text-gray-500 mb-2">Select one or more dietary requirements for the patient</p>
-                                <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                                <p class="text-xs text-gray-500 mb-2">Diet types are managed by ADT system</p>
+                                <div class="flex flex-wrap gap-2">
                                     @php
                                         $currentDietTypes = $patient->diet_types ?? [];
                                     @endphp
-                                    @foreach($clinicalIndicatorOptions['diet_type'] ?? [] as $option)
-                                        <label class="inline-flex items-center space-x-2 p-2 rounded-lg border cursor-pointer hover:bg-gray-50 transition-colors {{ in_array($option['value'], $currentDietTypes) ? 'border-blue-500 bg-blue-50' : 'border-gray-200' }}">
-                                            <input type="checkbox" 
-                                                   name="diet_types[]" 
-                                                   value="{{ $option['value'] }}"
-                                                   {{ in_array($option['value'], $currentDietTypes) ? 'checked' : '' }}
-                                                   class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                                            <span class="text-sm text-gray-700">{{ $option['label'] }}</span>
-                                        </label>
-                                    @endforeach
+                                    @if(count($currentDietTypes) > 0)
+                                        @foreach($currentDietTypes as $dietCode)
+                                            <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-cyan-100 text-cyan-800 border border-cyan-200">
+                                                <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                                </svg>
+                                                {{ \App\Models\DietType::getDisplayName($dietCode) }}
+                                            </span>
+                                        @endforeach
+                                    @else
+                                        <span class="text-sm text-gray-400 italic">No diet types specified (Regular diet)</span>
+                                    @endif
                                 </div>
                             </div>
 
@@ -348,7 +336,7 @@
                             </div>
                         </div>
 
-                        <!-- Medical Allergies -->
+                        <!-- Medical Allergies (Read-only from ADT) -->
                         <div class="border-t pt-6">
                             <label class="block text-sm font-semibold text-gray-700 mb-2">
                                 <div class="flex items-center">
@@ -356,44 +344,23 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                                     </svg>
                                     Medical Allergies
+                                    <span class="ml-2 text-xs font-normal text-gray-400">(from ADT)</span>
                                 </div>
                             </label>
-                            <p class="text-xs text-gray-500 mb-3">Add known allergies for this patient</p>
+                            <p class="text-xs text-gray-500 mb-3">Allergies are managed by ADT system</p>
                             
-                            <!-- Add New Allergy -->
-                            <div class="flex items-center space-x-2 mb-3">
-                                <input type="text"
-                                       x-model="newAllergy"
-                                       @keydown.enter.prevent="addAllergy()"
-                                       placeholder="Enter allergy (e.g., Penicillin, Latex)"
-                                       class="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
-                                <button type="button"
-                                        @click="addAllergy()"
-                                        class="inline-flex items-center px-3 py-2 bg-pink-600 text-white text-sm font-semibold rounded-md shadow-sm hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pink-500">
-                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                                    </svg>
-                                    Add
-                                </button>
-                            </div>
-                            
-                            <!-- Current Allergies List -->
+                            <!-- Allergies List (Read-only) -->
                             <div class="flex flex-wrap gap-2" x-show="allergies.length > 0">
                                 <template x-for="(allergy, index) in allergies" :key="index">
-                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-pink-100 text-pink-800">
-                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-pink-100 text-pink-800 border border-pink-200">
+                                        <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                                         </svg>
                                         <span x-text="allergy"></span>
-                                        <button type="button" @click="removeAllergy(index)" class="ml-2 text-pink-600 hover:text-pink-800">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                                            </svg>
-                                        </button>
                                     </span>
                                 </template>
                             </div>
-                            <p x-show="allergies.length === 0" class="text-xs text-gray-400 italic">No allergies recorded</p>
+                            <p x-show="allergies.length === 0" class="text-sm text-gray-400 italic">No allergies recorded</p>
                         </div>
 
                         <!-- Patient Status -->
@@ -421,10 +388,33 @@
                         <!-- Current Clinical Status Summary -->
                         <div class="border-t pt-6">
                             <h4 class="text-sm font-semibold text-gray-700 mb-3">Current Clinical Status</h4>
+                            @php
+                                $nursingLevelNum = ['level_1' => '1', 'level_2' => '2', 'level_3' => '3', 'level_4' => '4'];
+                                $nursingLevelColors = [
+                                    'level_1' => 'bg-green-100 border-green-300 text-green-700',
+                                    'level_2' => 'bg-blue-100 border-blue-300 text-blue-700',
+                                    'level_3' => 'bg-yellow-100 border-yellow-300 text-yellow-700',
+                                    'level_4' => 'bg-red-100 border-red-300 text-red-700',
+                                ];
+                                $fallRiskNum = ['low' => '1', 'moderate' => '2', 'high' => '3', 'alert_active' => '4'];
+                                $fallRiskColors = [
+                                    'low' => 'bg-green-100 border-green-300 text-green-700',
+                                    'moderate' => 'bg-yellow-100 border-yellow-300 text-yellow-700',
+                                    'high' => 'bg-orange-100 border-orange-300 text-orange-700',
+                                    'alert_active' => 'bg-red-100 border-red-300 text-red-700',
+                                ];
+                                $hasNbm = $patient->diet_types && collect($patient->diet_types)->map(fn($dt) => strtoupper($dt))->intersect(['NPO', 'NBM', 'NPD'])->isNotEmpty();
+                            @endphp
                             <div class="grid grid-cols-2 md:grid-cols-6 gap-3 text-xs">
-                                <div class="rounded-lg p-3 text-center {{ ($patient->status === 'pending_discharge' || $patient->pending_discharge_at) ? 'bg-green-100 border-2 border-green-300' : 'bg-gray-50' }}">
-                                    <div class="{{ ($patient->status === 'pending_discharge' || $patient->pending_discharge_at) ? 'text-green-700' : 'text-gray-600' }} font-semibold">Status</div>
-                                    <div class="text-gray-800 mt-1 capitalize font-medium">
+                                {{-- Status --}}
+                                <div class="rounded-lg p-3 text-center border-2 {{ ($patient->status === 'pending_discharge' || $patient->pending_discharge_at) ? 'bg-green-100 border-green-300' : 'bg-gray-50 border-gray-200' }}">
+                                    <div class="flex justify-center mb-1">
+                                        <svg class="w-5 h-5 {{ ($patient->status === 'pending_discharge' || $patient->pending_discharge_at) ? 'text-green-600' : 'text-gray-500' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                                        </svg>
+                                    </div>
+                                    <div class="{{ ($patient->status === 'pending_discharge' || $patient->pending_discharge_at) ? 'text-green-700' : 'text-gray-600' }} font-semibold text-[10px]">Status</div>
+                                    <div class="text-gray-800 mt-0.5 capitalize font-bold">
                                         @if($patient->status === 'pending_discharge' || $patient->pending_discharge_at)
                                             Pending DC
                                         @else
@@ -432,25 +422,92 @@
                                         @endif
                                     </div>
                                 </div>
-                                <div class="bg-purple-50 rounded-lg p-3 text-center">
-                                    <div class="text-purple-600 font-semibold">Nursing Level</div>
-                                    <div class="text-gray-800 mt-1 capitalize">{{ str_replace('_', ' ', $patient->nursing_level ?? 'None') }}</div>
+
+                                {{-- Nursing Level with icon and number --}}
+                                @php $nl = $patient->nursing_level ?? 'none'; @endphp
+                                <div class="rounded-lg p-3 text-center border-2 {{ $nursingLevelColors[$nl] ?? 'bg-gray-50 border-gray-200' }}">
+                                    <div class="flex justify-center mb-1">
+                                        <svg class="w-5 h-5 {{ isset($nursingLevelColors[$nl]) ? 'text-current' : 'text-gray-500' }}" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                        </svg>
+                                    </div>
+                                    <div class="font-semibold text-[10px]">Nursing Level</div>
+                                    <div class="text-gray-800 mt-0.5 font-bold text-lg">{{ $nursingLevelNum[$nl] ?? '-' }}</div>
                                 </div>
-                                <div class="bg-red-50 rounded-lg p-3 text-center">
-                                    <div class="text-red-600 font-semibold">Diet</div>
-                                    <div class="text-gray-800 mt-1 capitalize text-xs">{{ $dietTypeDisplay }}</div>
+
+                                {{-- Diet - NBM indicator --}}
+                                <div class="rounded-lg p-3 text-center border-2 {{ $hasNbm ? 'bg-red-100 border-red-300' : 'bg-cyan-50 border-cyan-200' }}">
+                                    <div class="flex justify-center mb-1">
+                                        @if($hasNbm)
+                                        <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                            <path d="M3 3v6c0 1 1 2 2 2h3c1 0 2-1 2-2V3M6 3v18"/>
+                                            <line x1="2" y1="2" x2="22" y2="22" stroke-width="3"/>
+                                            <path d="M15 3h4v6a3 3 0 01-3 3h-1M17 12v9"/>
+                                        </svg>
+                                        @else
+                                        <svg class="w-5 h-5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                            <path d="M3 3v6c0 1 1 2 2 2h3c1 0 2-1 2-2V3M6 3v18M15 3h4v6a3 3 0 01-3 3h-1M17 12v9"/>
+                                        </svg>
+                                        @endif
+                                    </div>
+                                    <div class="{{ $hasNbm ? 'text-red-700' : 'text-cyan-700' }} font-semibold text-[10px]">Diet</div>
+                                    <div class="text-gray-800 mt-0.5 capitalize text-[11px] font-medium">
+                                        @if($hasNbm)
+                                            <span class="text-red-700 font-bold">NBM</span>
+                                        @else
+                                            {{ \Illuminate\Support\Str::limit($dietTypeDisplay, 15) }}
+                                        @endif
+                                    </div>
                                 </div>
-                                <div class="bg-orange-50 rounded-lg p-3 text-center">
-                                    <div class="text-orange-600 font-semibold">Fall Risk</div>
-                                    <div class="text-gray-800 mt-1 capitalize">{{ str_replace('_', ' ', $patient->fall_risk ?? 'None') }}</div>
+
+                                {{-- Fall Risk with icon and number --}}
+                                @php $fr = $patient->fall_risk ?? 'none'; @endphp
+                                <div class="rounded-lg p-3 text-center border-2 {{ $fallRiskColors[$fr] ?? 'bg-gray-50 border-gray-200' }}">
+                                    <div class="flex justify-center mb-1">
+                                        <svg class="w-5 h-5 {{ isset($fallRiskColors[$fr]) ? 'text-current' : 'text-gray-500' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                            <circle cx="17" cy="4" r="2"/>
+                                            <path d="M15 8l-3 4 4 2.5M12 12l-3.5-1.5M17 14.5l1.5 4.5M14 14.5l-2 5.5"/>
+                                            <path d="M3 20h18" stroke-width="1.5"/>
+                                        </svg>
+                                    </div>
+                                    <div class="font-semibold text-[10px]">Fall Risk</div>
+                                    <div class="text-gray-800 mt-0.5 font-bold text-lg">{{ $fallRiskNum[$fr] ?? '-' }}</div>
                                 </div>
-                                <div class="bg-yellow-50 rounded-lg p-3 text-center">
-                                    <div class="text-yellow-700 font-semibold">Isolation</div>
-                                    <div class="text-gray-800 mt-1 capitalize">{{ $isolationTypeDisplay }}</div>
+
+                                {{-- Isolation with virus icon --}}
+                                @php 
+                                    $hasIsolation = $patient->isolation_type && $patient->isolation_type !== 'none';
+                                    $criticalIsolations = ['covid', 'tb', 'airborne', 'COVID', 'TB', 'AIR'];
+                                    $isCritical = $hasIsolation && (in_array($patient->isolation_type, $criticalIsolations) || in_array(strtoupper($patient->isolation_type), $criticalIsolations));
+                                @endphp
+                                <div class="rounded-lg p-3 text-center border-2 {{ $hasIsolation ? ($isCritical ? 'bg-red-100 border-red-300' : 'bg-yellow-100 border-yellow-300') : 'bg-gray-50 border-gray-200' }}">
+                                    <div class="flex justify-center mb-1">
+                                        <svg class="w-5 h-5 {{ $hasIsolation ? ($isCritical ? 'text-red-600' : 'text-yellow-600') : 'text-gray-400' }}" fill="currentColor" viewBox="0 0 24 24">
+                                            <circle cx="12" cy="12" r="4"/>
+                                            <circle cx="12" cy="3" r="1.5"/>
+                                            <circle cx="12" cy="21" r="1.5"/>
+                                            <circle cx="3" cy="12" r="1.5"/>
+                                            <circle cx="21" cy="12" r="1.5"/>
+                                            <circle cx="5.6" cy="5.6" r="1"/>
+                                            <circle cx="18.4" cy="18.4" r="1"/>
+                                            <circle cx="5.6" cy="18.4" r="1"/>
+                                            <circle cx="18.4" cy="5.6" r="1"/>
+                                        </svg>
+                                    </div>
+                                    <div class="{{ $hasIsolation ? ($isCritical ? 'text-red-700' : 'text-yellow-700') : 'text-gray-600' }} font-semibold text-[10px]">Isolation</div>
+                                    <div class="text-gray-800 mt-0.5 capitalize text-[11px] font-medium">{{ $hasIsolation ? $isolationTypeDisplay : 'None' }}</div>
                                 </div>
-                                <div class="bg-pink-50 rounded-lg p-3 text-center">
-                                    <div class="text-pink-600 font-semibold">Allergies</div>
-                                    <div class="text-gray-800 mt-1">{{ count($patient->allergies ?? []) }} recorded</div>
+
+                                {{-- Allergies with warning icon --}}
+                                @php $allergyCount = count($patient->allergies ?? []); @endphp
+                                <div class="rounded-lg p-3 text-center border-2 {{ $allergyCount > 0 ? 'bg-pink-100 border-pink-300' : 'bg-gray-50 border-gray-200' }}">
+                                    <div class="flex justify-center mb-1">
+                                        <svg class="w-5 h-5 {{ $allergyCount > 0 ? 'text-pink-600' : 'text-gray-400' }}" fill="currentColor" viewBox="0 0 24 24">
+                                            <path d="M12 2L1 21h22L12 2zm0 3.5L19.5 19h-15L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/>
+                                        </svg>
+                                    </div>
+                                    <div class="{{ $allergyCount > 0 ? 'text-pink-700' : 'text-gray-600' }} font-semibold text-[10px]">Allergies</div>
+                                    <div class="text-gray-800 mt-0.5 font-bold">{{ $allergyCount > 0 ? $allergyCount : '-' }}</div>
                                 </div>
                             </div>
                         </div>

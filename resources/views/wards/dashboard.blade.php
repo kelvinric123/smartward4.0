@@ -38,10 +38,18 @@
         }">
             <div class="flex items-center space-x-4">
                 <div>
-                    <h2 class="font-bold text-2xl text-gray-800 leading-tight">
-                        Ward Dashboard
-                    </h2>
-                    <p class="text-sm text-gray-500 mt-1">Real-time bed and patient management</p>
+                    <a href="{{ route('ward.dashboard', request()->query()) }}" 
+                       onclick="window.location.reload(); return false;"
+                       title="Click to refresh"
+                       class="inline-flex items-center group">
+                        <h2 class="font-bold text-2xl text-gray-800 leading-tight group-hover:text-blue-600 transition-colors cursor-pointer">
+                            Ward Dashboard
+                        </h2>
+                        <svg class="w-4 h-4 ml-2 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Refresh">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
+                    </a>
+                    <p class="text-sm text-gray-500 mt-1">Real-time bed and patient management <span class="text-xs text-gray-400">(click title to refresh)</span></p>
                 </div>
                 <!-- Ward Selector -->
                 <div class="relative">
@@ -383,15 +391,15 @@
                                     };
                                 @endphp
 
-                                <!-- Clinical Indicators Row -->
-                                <div class="flex items-center flex-wrap gap-1 pt-2">
+                                <!-- Clinical Indicators Row - Touch Screen Friendly -->
+                                <div class="flex items-center flex-wrap gap-1 pt-2" x-data="{ openPopover: null }">
                                     {{-- Pending Discharge Status Badge --}}
                                     @if($bed['is_pending_discharge'] ?? false)
-                                    <span class="px-1.5 py-0.5 bg-green-500 text-white text-xs rounded font-bold flex items-center" title="Pending Discharge since {{ $bed['pending_discharge_at'] ?? 'N/A' }}">
+                                    <span class="px-1.5 py-0.5 bg-green-500 text-white text-xs rounded font-bold flex items-center">
                                         <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
                                         </svg>
-                                        PENDING DC
+                                        DC
                                     </span>
                                     @endif
                                     
@@ -416,89 +424,174 @@
                                                 </svg>
                                             @endif
                                         @else
-                                            <span class="px-1.5 py-0.5 bg-gray-400 text-white text-xs rounded font-medium" title="No vital signs recorded">No vitals</span>
+                                            <span class="px-1.5 py-0.5 bg-gray-400 text-white text-xs rounded font-medium">No vitals</span>
                                         @endif
                                     @endif
 
-                                    {{-- Nursing Level --}}
+                                    {{-- Nursing Level - Click to show details --}}
                                     @if($showPatientInfo('nursing_level') && !empty($bed['nursing_level']) && $bed['nursing_level'] !== 'none')
                                     @php
                                         $levelColors = [
-                                            'level_1' => 'bg-green-100 text-green-700',
-                                            'level_2' => 'bg-blue-100 text-blue-700',
-                                            'level_3' => 'bg-yellow-100 text-yellow-700',
-                                            'level_4' => 'bg-red-100 text-red-700',
+                                            'level_1' => ['bg' => 'bg-green-500', 'text' => 'text-white', 'border' => 'border-green-600'],
+                                            'level_2' => ['bg' => 'bg-blue-500', 'text' => 'text-white', 'border' => 'border-blue-600'],
+                                            'level_3' => ['bg' => 'bg-yellow-500', 'text' => 'text-white', 'border' => 'border-yellow-600'],
+                                            'level_4' => ['bg' => 'bg-red-500', 'text' => 'text-white', 'border' => 'border-red-600'],
                                         ];
-                                        $levelLabels = ['level_1' => 'L1', 'level_2' => 'L2', 'level_3' => 'L3', 'level_4' => 'L4'];
+                                        $levelNum = ['level_1' => '1', 'level_2' => '2', 'level_3' => '3', 'level_4' => '4'];
+                                        $levelDesc = ['level_1' => 'Minimal Care', 'level_2' => 'Moderate Care', 'level_3' => 'Maximum Care', 'level_4' => 'Intensive Care'];
+                                        $currentLevel = $levelColors[$bed['nursing_level']] ?? ['bg' => 'bg-purple-500', 'text' => 'text-white', 'border' => 'border-purple-600'];
                                     @endphp
-                                    <span class="px-1 py-0.5 {{ $levelColors[$bed['nursing_level']] ?? 'bg-purple-100 text-purple-700' }} text-xs rounded font-medium flex items-center" title="Nursing Level: {{ ucfirst(str_replace('_', ' ', $bed['nursing_level'])) }}">
-                                        <svg class="w-3 h-3 mr-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                            <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
-                                        </svg>
-                                        {{ $levelLabels[$bed['nursing_level']] ?? 'L?' }}
-                                    </span>
+                                    <div class="relative">
+                                        <button type="button" @click="openPopover = openPopover === 'nursing_{{ $bed['patient_id'] }}' ? null : 'nursing_{{ $bed['patient_id'] }}'" 
+                                                class="px-1.5 py-0.5 {{ $currentLevel['bg'] }} {{ $currentLevel['text'] }} text-xs rounded font-bold flex items-center cursor-pointer border {{ $currentLevel['border'] }}">
+                                            <!-- Nursing Care Icon -->
+                                            <svg class="w-3.5 h-3.5 mr-0.5" fill="currentColor" viewBox="0 0 24 24">
+                                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                            </svg>
+                                            {{ $levelNum[$bed['nursing_level']] ?? '?' }}
+                                        </button>
+                                        <div x-show="openPopover === 'nursing_{{ $bed['patient_id'] }}'" 
+                                             @click.away="openPopover = null"
+                                             x-transition
+                                             class="absolute z-50 bottom-full left-0 mb-1 w-40 bg-white rounded-lg shadow-xl border border-gray-200 p-2">
+                                            <div class="text-xs font-bold text-gray-800 mb-1">Nursing Level {{ $levelNum[$bed['nursing_level']] ?? '?' }}</div>
+                                            <div class="text-xs text-gray-600">{{ $levelDesc[$bed['nursing_level']] ?? 'Unknown Level' }}</div>
+                                        </div>
+                                    </div>
                                     @endif
 
-                                    {{-- Diet Type - Only show NBM (Nil by mouth) --}}
+                                    {{-- Diet Type - NBM (Nil by mouth) with click details --}}
                                     @if($showPatientInfo('diet_type') && ($bed['has_nbm'] ?? false))
-                                    <span class="px-1 py-0.5 bg-red-100 text-red-700 text-xs rounded font-medium flex items-center" title="Nil by Mouth">
-                                        <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/>
-                                        </svg>
-                                        NBM
-                                    </span>
+                                    <div class="relative">
+                                        <button type="button" @click="openPopover = openPopover === 'nbm_{{ $bed['patient_id'] }}' ? null : 'nbm_{{ $bed['patient_id'] }}'"
+                                                class="px-1.5 py-0.5 bg-red-600 text-white text-xs rounded font-bold flex items-center cursor-pointer border border-red-700">
+                                            <!-- NBM Icon - Crossed utensils -->
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                                <path d="M3 3v6c0 1 1 2 2 2h3c1 0 2-1 2-2V3M6 3v18"/>
+                                                <line x1="2" y1="2" x2="22" y2="22" stroke-width="3"/>
+                                                <path d="M15 3h4v6a3 3 0 01-3 3h-1M17 12v9"/>
+                                            </svg>
+                                        </button>
+                                        <div x-show="openPopover === 'nbm_{{ $bed['patient_id'] }}'" 
+                                             @click.away="openPopover = null"
+                                             x-transition
+                                             class="absolute z-50 bottom-full left-0 mb-1 w-36 bg-white rounded-lg shadow-xl border border-gray-200 p-2">
+                                            <div class="text-xs font-bold text-red-700 mb-1">⚠️ NBM</div>
+                                            <div class="text-xs text-gray-600">Nil By Mouth</div>
+                                            <div class="text-xs text-gray-500 mt-1">No food or drink</div>
+                                        </div>
+                                    </div>
                                     @endif
 
-                                    {{-- Fall Risk --}}
+                                    {{-- Fall Risk - Click to show level --}}
                                     @if($showPatientInfo('fall_risk') && !empty($bed['fall_risk']) && $bed['fall_risk'] !== 'none')
                                     @php
                                         $fallColors = [
-                                            'low' => 'bg-green-100 text-green-700',
-                                            'moderate' => 'bg-yellow-100 text-yellow-700',
-                                            'high' => 'bg-orange-100 text-orange-700',
-                                            'alert_active' => 'bg-red-100 text-red-700',
+                                            'low' => ['bg' => 'bg-green-500', 'text' => 'text-white', 'border' => 'border-green-600', 'level' => '1'],
+                                            'moderate' => ['bg' => 'bg-yellow-500', 'text' => 'text-white', 'border' => 'border-yellow-600', 'level' => '2'],
+                                            'high' => ['bg' => 'bg-orange-500', 'text' => 'text-white', 'border' => 'border-orange-600', 'level' => '3'],
+                                            'alert_active' => ['bg' => 'bg-red-500', 'text' => 'text-white', 'border' => 'border-red-600', 'level' => '4'],
                                         ];
+                                        $fallDesc = [
+                                            'low' => 'Low Risk - Standard precautions',
+                                            'moderate' => 'Moderate Risk - Enhanced monitoring',
+                                            'high' => 'High Risk - Close supervision',
+                                            'alert_active' => 'Alert Active - Constant observation',
+                                        ];
+                                        $currentFall = $fallColors[$bed['fall_risk']] ?? ['bg' => 'bg-orange-500', 'text' => 'text-white', 'border' => 'border-orange-600', 'level' => '?'];
                                     @endphp
-                                    <span class="px-1 py-0.5 {{ $fallColors[$bed['fall_risk']] ?? 'bg-orange-100 text-orange-700' }} text-xs rounded font-medium flex items-center" title="Fall Risk: {{ ucfirst(str_replace('_', ' ', $bed['fall_risk'])) }}">
-                                        <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                                        </svg>
-                                        FR
-                                    </span>
+                                    <div class="relative">
+                                        <button type="button" @click="openPopover = openPopover === 'fall_{{ $bed['patient_id'] }}' ? null : 'fall_{{ $bed['patient_id'] }}'"
+                                                class="px-1.5 py-0.5 {{ $currentFall['bg'] }} {{ $currentFall['text'] }} text-xs rounded font-bold flex items-center cursor-pointer border {{ $currentFall['border'] }}">
+                                            <!-- Fall Risk Icon - Person falling -->
+                                            <svg class="w-3.5 h-3.5 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                                <circle cx="17" cy="4" r="2"/>
+                                                <path d="M15 8l-3 4 4 2.5M12 12l-3.5-1.5M17 14.5l1.5 4.5M14 14.5l-2 5.5"/>
+                                                <path d="M3 20h18" stroke-width="1.5"/>
+                                            </svg>
+                                            {{ $currentFall['level'] }}
+                                        </button>
+                                        <div x-show="openPopover === 'fall_{{ $bed['patient_id'] }}'" 
+                                             @click.away="openPopover = null"
+                                             x-transition
+                                             class="absolute z-50 bottom-full left-0 mb-1 w-48 bg-white rounded-lg shadow-xl border border-gray-200 p-2">
+                                            <div class="text-xs font-bold text-gray-800 mb-1">⚠️ Fall Risk Level {{ $currentFall['level'] }}</div>
+                                            <div class="text-xs text-gray-600">{{ $fallDesc[$bed['fall_risk']] ?? 'Unknown Risk' }}</div>
+                                        </div>
+                                    </div>
                                     @endif
 
-                                    {{-- Isolation Type --}}
+                                    {{-- Isolation Type - Click to show category --}}
                                     @if($showPatientInfo('isolation_type') && !empty($bed['isolation_type']) && $bed['isolation_type'] !== 'none')
                                     @php
-                                        // Critical isolation types that need red highlighting
                                         $criticalIsolations = ['covid', 'tb', 'airborne', 'COVID', 'TB', 'AIR'];
                                         $isoCode = strtoupper($bed['isolation_type']);
                                         $isCriticalIso = in_array($bed['isolation_type'], $criticalIsolations) || in_array($isoCode, $criticalIsolations);
-                                        $isoColors = $isCriticalIso ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700';
-                                        // Use isolation_type_name from controller if available, fallback to code
+                                        $isoColors = $isCriticalIso 
+                                            ? ['bg' => 'bg-red-600', 'text' => 'text-white', 'border' => 'border-red-700'] 
+                                            : ['bg' => 'bg-yellow-500', 'text' => 'text-white', 'border' => 'border-yellow-600'];
                                         $isoDisplayName = $bed['isolation_type_name'] ?? ucfirst(str_replace('_', ' ', $bed['isolation_type']));
                                     @endphp
-                                    <span class="px-1 py-0.5 {{ $isoColors }} text-xs rounded font-medium flex items-center" title="Isolation: {{ $isoDisplayName }}">
-                                        <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                                        </svg>
-                                        {{ strtoupper(substr($bed['isolation_type'], 0, 4)) }}
-                                    </span>
+                                    <div class="relative">
+                                        <button type="button" @click="openPopover = openPopover === 'iso_{{ $bed['patient_id'] }}' ? null : 'iso_{{ $bed['patient_id'] }}'"
+                                                class="px-1.5 py-0.5 {{ $isoColors['bg'] }} {{ $isoColors['text'] }} text-xs rounded font-bold flex items-center cursor-pointer border {{ $isoColors['border'] }}">
+                                            <!-- Virus Icon -->
+                                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                                <circle cx="12" cy="12" r="4"/>
+                                                <circle cx="12" cy="3" r="1.5"/>
+                                                <circle cx="12" cy="21" r="1.5"/>
+                                                <circle cx="3" cy="12" r="1.5"/>
+                                                <circle cx="21" cy="12" r="1.5"/>
+                                                <circle cx="5.6" cy="5.6" r="1.2"/>
+                                                <circle cx="18.4" cy="18.4" r="1.2"/>
+                                                <circle cx="5.6" cy="18.4" r="1.2"/>
+                                                <circle cx="18.4" cy="5.6" r="1.2"/>
+                                            </svg>
+                                        </button>
+                                        <div x-show="openPopover === 'iso_{{ $bed['patient_id'] }}'" 
+                                             @click.away="openPopover = null"
+                                             x-transition
+                                             class="absolute z-50 bottom-full left-0 mb-1 w-48 bg-white rounded-lg shadow-xl border border-gray-200 p-2">
+                                            <div class="text-xs font-bold {{ $isCriticalIso ? 'text-red-700' : 'text-yellow-700' }} mb-1">🦠 Isolation Required</div>
+                                            <div class="text-xs text-gray-800 font-semibold">{{ $isoDisplayName }}</div>
+                                            @if($isCriticalIso)
+                                            <div class="text-xs text-red-600 mt-1">⚠️ Critical - Full PPE required</div>
+                                            @endif
+                                        </div>
+                                    </div>
                                     @endif
 
-                                    {{-- Allergies --}}
+                                    {{-- Allergies - Click to show list --}}
                                     @if($showPatientInfo('allergies') && !empty($bed['allergies']) && is_array($bed['allergies']) && count($bed['allergies']) > 0)
                                     @php
-                                        $allergyNames = collect($bed['allergies'])->map(function($a) {
+                                        $allergyList = collect($bed['allergies'])->map(function($a) {
                                             return is_array($a) ? ($a['allergen'] ?? $a['allergen_code'] ?? 'Unknown') : $a;
-                                        })->implode(', ');
+                                        })->toArray();
+                                        $allergyCount = count($allergyList);
                                     @endphp
-                                    <span class="px-1 py-0.5 bg-pink-100 text-pink-700 text-xs rounded font-medium flex items-center" title="Allergies: {{ $allergyNames }}">
-                                        <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                                        </svg>
-                                        ALG
-                                    </span>
+                                    <div class="relative">
+                                        <button type="button" @click="openPopover = openPopover === 'allergy_{{ $bed['patient_id'] }}' ? null : 'allergy_{{ $bed['patient_id'] }}'"
+                                                class="px-1.5 py-0.5 bg-pink-600 text-white text-xs rounded font-bold flex items-center cursor-pointer border border-pink-700">
+                                            <!-- Allergy Warning Icon -->
+                                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                                <path d="M12 2L1 21h22L12 2zm0 3.5L19.5 19h-15L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/>
+                                            </svg>
+                                        </button>
+                                        <div x-show="openPopover === 'allergy_{{ $bed['patient_id'] }}'" 
+                                             @click.away="openPopover = null"
+                                             x-transition
+                                             class="absolute z-50 bottom-full right-0 mb-1 w-52 bg-white rounded-lg shadow-xl border border-gray-200 p-2">
+                                            <div class="text-xs font-bold text-pink-700 mb-2">⚠️ Allergies ({{ $allergyCount }})</div>
+                                            <ul class="space-y-1">
+                                                @foreach($allergyList as $allergy)
+                                                <li class="text-xs text-gray-700 flex items-center">
+                                                    <span class="w-1.5 h-1.5 bg-pink-500 rounded-full mr-2"></span>
+                                                    {{ $allergy }}
+                                                </li>
+                                                @endforeach
+                                            </ul>
+                                        </div>
+                                    </div>
                                     @endif
                                 </div>
                             </div>

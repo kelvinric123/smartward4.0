@@ -113,14 +113,11 @@
 
         <div x-show="activeTab === 'additional'" x-cloak
              x-data="{
-                allergies: @json($allergyStrings),
-                newAllergy: '',
-                addAllergy() {},
-                removeAllergy() {}
+                allergies: @json($allergyStrings)
              }">
             <h3 class="text-lg font-semibold text-gray-800 mb-3">Patient Additional Info</h3>
             <p class="text-sm text-gray-600 mb-4">
-                View clinical indicators and patient care information.
+                View clinical indicators and patient care information. Diet types and allergies are managed by the ADT system.
             </p>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -134,11 +131,19 @@
                     </div>
                 </div>
                 <div class="rounded-lg border border-gray-100 bg-gray-50 p-4">
-                    <div class="text-xs uppercase text-gray-500">Diet Type</div>
-                    <div class="mt-2">
-                        <span class="inline-flex px-3 py-1 rounded-full text-sm font-semibold bg-cyan-100 text-cyan-800">
-                            {{ $dietTypeDisplay }}
-                        </span>
+                    <div class="text-xs uppercase text-gray-500">Diet Type <span class="normal-case text-gray-400">(from ADT)</span></div>
+                    <div class="mt-2 flex flex-wrap gap-1">
+                        @if(count($dietTypesArray) > 0)
+                            @foreach($dietTypesArray as $dietCode)
+                                <span class="inline-flex px-3 py-1 rounded-full text-sm font-semibold bg-cyan-100 text-cyan-800">
+                                    {{ \App\Models\DietType::getDisplayName($dietCode) }}
+                                </span>
+                            @endforeach
+                        @else
+                            <span class="inline-flex px-3 py-1 rounded-full text-sm font-semibold bg-gray-100 text-gray-600">
+                                Regular diet
+                            </span>
+                        @endif
                     </div>
                 </div>
                 <div class="rounded-lg border border-gray-100 bg-gray-50 p-4">
@@ -162,17 +167,20 @@
             <div class="border-t pt-6 mt-6">
                 <div class="flex items-center justify-between mb-3">
                     <div>
-                        <div class="text-sm font-semibold text-gray-700">Medical Allergies</div>
-                        <p class="text-xs text-gray-500">Recorded allergies for this patient</p>
+                        <div class="text-sm font-semibold text-gray-700">Medical Allergies <span class="font-normal text-gray-400 text-xs">(from ADT)</span></div>
+                        <p class="text-xs text-gray-500">Allergies are managed by ADT system</p>
                     </div>
                 </div>
                 <div class="flex flex-wrap gap-2">
                     <template x-for="(allergy, index) in allergies" :key="index">
-                        <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-pink-100 text-pink-800">
+                        <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-pink-100 text-pink-800 border border-pink-200">
+                            <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                            </svg>
                             <span x-text="allergy"></span>
                         </span>
                     </template>
-                    <p x-show="allergies.length === 0" class="text-xs text-gray-400 italic">No allergies recorded</p>
+                    <p x-show="allergies.length === 0" class="text-sm text-gray-400 italic">No allergies recorded</p>
                 </div>
             </div>
         </div>
