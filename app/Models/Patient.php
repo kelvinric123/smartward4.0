@@ -134,6 +134,52 @@ class Patient extends Model
         return $this->hasMany(PatientReferral::class);
     }
 
+    /**
+     * Get all care providers from ADT (attending, referring, consulting doctors)
+     */
+    public function careProviders(): HasMany
+    {
+        return $this->hasMany(PatientCareProvider::class);
+    }
+
+    /**
+     * Get active care providers
+     */
+    public function activeCareProviders(): HasMany
+    {
+        return $this->hasMany(PatientCareProvider::class)->where('is_active', true);
+    }
+
+    /**
+     * Get attending doctors (PV1-7)
+     */
+    public function attendingDoctors(): HasMany
+    {
+        return $this->hasMany(PatientCareProvider::class)
+            ->where('role', PatientCareProvider::ROLE_ATTENDING)
+            ->where('is_active', true);
+    }
+
+    /**
+     * Get referring doctors (PV1-8)
+     */
+    public function referringDoctors(): HasMany
+    {
+        return $this->hasMany(PatientCareProvider::class)
+            ->where('role', PatientCareProvider::ROLE_REFERRING)
+            ->where('is_active', true);
+    }
+
+    /**
+     * Get consulting doctors (PV1-9)
+     */
+    public function consultingDoctors(): HasMany
+    {
+        return $this->hasMany(PatientCareProvider::class)
+            ->where('role', PatientCareProvider::ROLE_CONSULTING)
+            ->where('is_active', true);
+    }
+
     public function vitalSigns(): HasMany
     {
         return $this->hasMany(VitalSign::class);

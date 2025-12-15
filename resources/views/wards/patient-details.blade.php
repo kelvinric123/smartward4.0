@@ -16,17 +16,24 @@
     @php
         use App\Models\DietType;
         use App\Models\IsolationType;
+        use App\Models\PatientCareProvider;
         
         $patientTabs = $patientDetailsTabs ?? [
             'info' => true,
             'additional' => true,
             'vitals' => true,
             'movement' => true,
-            'referral' => true,
+            'careprovider' => true,
             'infusion' => true,
             'transfer' => true,
             'discharge' => true,
         ];
+        
+        // Map old 'referral' key to 'careprovider' for backwards compatibility
+        if (isset($patientTabs['referral'])) {
+            $patientTabs['careprovider'] = $patientTabs['referral'];
+            unset($patientTabs['referral']);
+        }
         
         // Get display names from database tables for clinical status summary
         $dietTypesArray = $patient && $patient->diet_types ? $patient->diet_types : [];
@@ -36,6 +43,11 @@
         $isolationTypeDisplay = $patient && $patient->isolation_type && $patient->isolation_type !== 'none'
             ? IsolationType::getDisplayName($patient->isolation_type) 
             : 'None';
+        
+        // Get care providers from ADT (grouped by role)
+        $attendingDoctors = $patient ? $patient->activeCareProviders()->where('role', PatientCareProvider::ROLE_ATTENDING)->get() : collect();
+        $referringDoctors = $patient ? $patient->activeCareProviders()->where('role', PatientCareProvider::ROLE_REFERRING)->get() : collect();
+        $consultingDoctors = $patient ? $patient->activeCareProviders()->where('role', PatientCareProvider::ROLE_CONSULTING)->get() : collect();
     @endphp
     <div class="p-4" x-data='@json([
         "activeTab" => $activeTab ?? "info",
@@ -128,11 +140,11 @@
                         Patient Movement
                     </button>
                     <button type="button"
-                        @click="activeTab = 'referral'"
-                        x-show="patientTabs.referral"
-                        :class="activeTab === 'referral' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                        @click="activeTab = 'careprovider'"
+                        x-show="patientTabs.careprovider"
+                        :class="activeTab === 'careprovider' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
                         class="whitespace-nowrap py-2 px-3 border-b-2 font-medium">
-                        Referral
+                        Care Provider
                     </button>
                     <button type="button"
                         @click="activeTab = 'infusion'"
@@ -1072,197 +1084,154 @@
                     </div>
                 </div>
 
-                <!-- Referral -->
-                <div x-show="activeTab === 'referral'" x-cloak x-data="{ referralType: 'consultant' }">
-                    <h3 class="text-lg font-semibold text-gray-800 mb-3">Referral</h3>
+                <!-- Care Provider Tab -->
+                <div x-show="activeTab === 'careprovider'" x-cloak>
+                    <h3 class="text-lg font-semibold text-gray-800 mb-3">Care Provider</h3>
                     <p class="text-sm text-gray-600 mb-4">
-                        Use this tab to refer the patient to additional consultants or anaesthetists.
-                        A patient can have more than one consultant or anaesthetist.
+                        Doctors assigned to this patient from ADT PV1 segment. This includes attending, referring, and consulting doctors.
                     </p>
 
-                    <!-- New Referral Form -->
-                    <form method="POST" action="{{ route('ward.patient-referrals.store') }}" class="mb-6 space-y-4">
-                        @csrf
-                        <input type="hidden" name="patient_id" value="{{ $patient->id }}">
-                        <input type="hidden" name="active_tab" value="referral">
-
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-                            <div>
-                                <label class="block text-xs font-semibold text-gray-700 mb-1">
-                                    Referral Type
-                                </label>
-                                <div class="flex items-center space-x-4 text-xs">
-                                    <label class="inline-flex items-center space-x-1 cursor-pointer">
-                                        <input type="radio"
-                                               class="text-blue-600 border-gray-300 focus:ring-blue-500"
-                                               name="referral_type"
-                                               value="consultant"
-                                               x-model="referralType">
-                                        <span>Consultant</span>
-                                    </label>
-                                    <label class="inline-flex items-center space-x-1 cursor-pointer">
-                                        <input type="radio"
-                                               class="text-blue-600 border-gray-300 focus:ring-blue-500"
-                                               name="referral_type"
-                                               value="anaesthetist"
-                                               x-model="referralType">
-                                        <span>Anaesthetist</span>
-                                    </label>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label class="block text-xs font-semibold text-gray-700 mb-1">
-                                    Target Consultant / Anaesthetist
-                                </label>
-                                <div x-show="referralType === 'consultant'" x-cloak>
-                                    <select name="consultant_id"
-                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
-                                        <option value="">Select consultant...</option>
-                                        @foreach($consultants as $consultant)
-                                            <option value="{{ $consultant->id }}">
-                                                {{ $consultant->name }} ({{ $consultant->specialty->name ?? 'No Specialty' }})
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                                <div x-show="referralType === 'anaesthetist'" x-cloak>
-                                    <select name="anaesthetist_id"
-                                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
-                                        <option value="">Select anaesthetist...</option>
-                                        @foreach($anaesthetists as $anaesthetist)
-                                            <option value="{{ $anaesthetist->id }}">
-                                                {{ $anaesthetist->name }}
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label for="referral_reason" class="block text-xs font-semibold text-gray-700 mb-1">
-                                    Reason (optional)
-                                </label>
-                                <input type="text"
-                                       id="referral_reason"
-                                       name="reason"
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
-                                       placeholder="e.g. Second opinion, pre-op assessment">
-                            </div>
-                        </div>
-
-                        <div>
-                            <label for="referral_notes" class="block text-xs font-semibold text-gray-700 mb-1">
-                                Notes (optional)
-                            </label>
-                            <textarea id="referral_notes"
-                                      name="notes"
-                                      rows="2"
-                                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
-                                      placeholder="Add any specific questions or instructions for the referred clinician"></textarea>
-                        </div>
-
-                        <div class="flex justify-end">
-                            <button type="submit"
-                                    class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                          d="M12 4v16m8-8H4"/>
+                    <div class="space-y-6">
+                        <!-- Attending Doctors (PV1-7) -->
+                        <div class="rounded-lg border border-blue-100 bg-blue-50/50 p-4">
+                            <div class="flex items-center mb-3">
+                                <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                                 </svg>
-                                Add Referral
-                            </button>
-                        </div>
-                    </form>
-
-                    <!-- Existing Referrals -->
-                    <div class="space-y-3 text-sm">
-                        <h4 class="font-semibold text-gray-800 flex items-center">
-                            <svg class="w-4 h-4 mr-1 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                      d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                            </svg>
-                            Existing Referrals
-                        </h4>
-
-                        @php
-                            $referrals = $patient->referrals ?? collect();
-                        @endphp
-
-                        @if($referrals->count() === 0)
-                            <div class="border border-dashed border-gray-300 rounded-lg p-4 text-xs text-gray-500">
-                                No referrals recorded yet for this patient.
+                                <h4 class="text-sm font-semibold text-blue-800">Attending Doctor <span class="font-normal text-blue-600">(PV1-7)</span></h4>
                             </div>
-                        @else
-                            <div class="overflow-x-auto border border-gray-200 rounded-lg">
-                                <table class="min-w-full text-xs">
-                                    <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="px-3 py-2 text-left font-medium text-gray-600 border-b">Type</th>
-                                        <th class="px-3 py-2 text-left font-medium text-gray-600 border-b">Referred To</th>
-                                        <th class="px-3 py-2 text-left font-medium text-gray-600 border-b">Reason</th>
-                                        <th class="px-3 py-2 text-left font-medium text-gray-600 border-b">Notes</th>
-                                        <th class="px-3 py-2 text-left font-medium text-gray-600 border-b">Status</th>
-                                        <th class="px-3 py-2 text-left font-medium text-gray-600 border-b">Created At</th>
-                                    </tr>
-                                    </thead>
-                                    <tbody>
-                                    @foreach($referrals as $referral)
-                                        <tr class="hover:bg-gray-50">
-                                            <td class="px-3 py-2 border-b align-top capitalize">
-                                                {{ $referral->referral_type }}
-                                            </td>
-                                            <td class="px-3 py-2 border-b align-top">
-                                                @if($referral->referral_type === 'consultant' && $referral->consultant)
-                                                    <div class="font-semibold text-gray-900">
-                                                        {{ $referral->consultant->name }}
-                                                    </div>
-                                                    <div class="text-[11px] text-gray-500">
-                                                        {{ $referral->consultant->specialty->name ?? 'No Specialty' }}
-                                                    </div>
-                                                @elseif($referral->referral_type === 'anaesthetist' && $referral->anaesthetist)
-                                                    <div class="font-semibold text-gray-900">
-                                                        {{ $referral->anaesthetist->name }}
-                                                    </div>
-                                                    <div class="text-[11px] text-gray-500">
-                                                        Anaesthetist
-                                                    </div>
-                                                @else
-                                                    <span class="text-gray-400">—</span>
-                                                @endif
-                                            </td>
-                                            <td class="px-3 py-2 border-b align-top max-w-xs">
-                                                <div class="text-xs text-gray-800 whitespace-pre-line">
-                                                    {{ $referral->reason ?? '-' }}
+                            @if($attendingDoctors->count() > 0)
+                                <div class="space-y-2">
+                                    @foreach($attendingDoctors as $provider)
+                                        <div class="flex items-center justify-between bg-white rounded-lg p-3 border border-blue-100">
+                                            <div>
+                                                <div class="font-medium text-gray-900">{{ $provider->display_name }}</div>
+                                                <div class="text-xs text-gray-500">
+                                                    Code: {{ $provider->doctor_code }}
+                                                    @if($provider->specialty)
+                                                        • {{ $provider->specialty }}
+                                                    @endif
                                                 </div>
-                                            </td>
-                                            <td class="px-3 py-2 border-b align-top max-w-xs">
-                                                <div class="text-xs text-gray-700 whitespace-pre-line">
-                                                    {{ $referral->notes ?? '-' }}
-                                                </div>
-                                            </td>
-                                            <td class="px-3 py-2 border-b align-top">
-                                                @php
-                                                    $statusClasses = [
-                                                        'active' => 'bg-green-100 text-green-800',
-                                                        'completed' => 'bg-blue-100 text-blue-800',
-                                                        'cancelled' => 'bg-gray-100 text-gray-800',
-                                                    ];
-                                                @endphp
-                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold {{ $statusClasses[$referral->status] ?? 'bg-gray-100 text-gray-800' }}">
-                                                    {{ ucfirst($referral->status) }}
+                                            </div>
+                                            @if($provider->isLinked())
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                    <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                                    </svg>
+                                                    Linked
                                                 </span>
-                                            </td>
-                                            <td class="px-3 py-2 border-b align-top">
-                                                <div class="text-xs text-gray-700">
-                                                    {{ $referral->created_at ? $referral->created_at->format('Y-m-d H:i') : '-' }}
-                                                </div>
-                                            </td>
-                                        </tr>
+                                            @else
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                                    ADT Only
+                                                </span>
+                                            @endif
+                                        </div>
                                     @endforeach
-                                    </tbody>
-                                </table>
+                                </div>
+                            @else
+                                <p class="text-sm text-blue-600 italic">No attending doctor assigned from ADT</p>
+                            @endif
+                        </div>
+
+                        <!-- Referring Doctors (PV1-8) -->
+                        <div class="rounded-lg border border-purple-100 bg-purple-50/50 p-4">
+                            <div class="flex items-center mb-3">
+                                <svg class="w-5 h-5 text-purple-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                                </svg>
+                                <h4 class="text-sm font-semibold text-purple-800">Referring Doctor <span class="font-normal text-purple-600">(PV1-8)</span></h4>
                             </div>
-                        @endif
+                            @if($referringDoctors->count() > 0)
+                                <div class="space-y-2">
+                                    @foreach($referringDoctors as $provider)
+                                        <div class="flex items-center justify-between bg-white rounded-lg p-3 border border-purple-100">
+                                            <div>
+                                                <div class="font-medium text-gray-900">{{ $provider->display_name }}</div>
+                                                <div class="text-xs text-gray-500">
+                                                    Code: {{ $provider->doctor_code }}
+                                                    @if($provider->specialty)
+                                                        • {{ $provider->specialty }}
+                                                    @endif
+                                                </div>
+                                            </div>
+                                            @if($provider->isLinked())
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                    <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                                    </svg>
+                                                    Linked
+                                                </span>
+                                            @else
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                                    ADT Only
+                                                </span>
+                                            @endif
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @else
+                                <p class="text-sm text-purple-600 italic">No referring doctor assigned from ADT</p>
+                            @endif
+                        </div>
+
+                        <!-- Consulting Doctors (PV1-9) -->
+                        <div class="rounded-lg border border-green-100 bg-green-50/50 p-4">
+                            <div class="flex items-center mb-3">
+                                <svg class="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                                </svg>
+                                <h4 class="text-sm font-semibold text-green-800">Consulting Doctor <span class="font-normal text-green-600">(PV1-9)</span></h4>
+                            </div>
+                            @if($consultingDoctors->count() > 0)
+                                <div class="space-y-2">
+                                    @foreach($consultingDoctors as $provider)
+                                        <div class="flex items-center justify-between bg-white rounded-lg p-3 border border-green-100">
+                                            <div>
+                                                <div class="font-medium text-gray-900">{{ $provider->display_name }}</div>
+                                                <div class="text-xs text-gray-500">
+                                                    Code: {{ $provider->doctor_code }}
+                                                    @if($provider->specialty)
+                                                        • {{ $provider->specialty }}
+                                                    @endif
+                                                </div>
+                                            </div>
+                                            @if($provider->isLinked())
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                    <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                                    </svg>
+                                                    Linked
+                                                </span>
+                                            @else
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                                    ADT Only
+                                                </span>
+                                            @endif
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @else
+                                <p class="text-sm text-green-600 italic">No consulting doctor assigned from ADT</p>
+                            @endif
+                        </div>
+                    </div>
+
+                    <!-- Info note about ADT -->
+                    <div class="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                        <div class="flex items-start">
+                            <svg class="w-5 h-5 text-gray-400 mr-2 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <div class="text-sm text-gray-600">
+                                <p class="font-medium text-gray-700">About Care Providers from ADT</p>
+                                <p class="mt-1">Care providers are automatically assigned from HL7 ADT messages. Each doctor type corresponds to specific PV1 fields:</p>
+                                <ul class="mt-2 list-disc list-inside text-xs space-y-1">
+                                    <li><strong>Attending Doctor (PV1-7):</strong> The primary physician responsible for the patient's care</li>
+                                    <li><strong>Referring Doctor (PV1-8):</strong> The physician who referred the patient</li>
+                                    <li><strong>Consulting Doctor (PV1-9):</strong> Additional specialists consulted for the patient's care</li>
+                                </ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

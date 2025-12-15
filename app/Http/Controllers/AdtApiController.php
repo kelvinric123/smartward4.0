@@ -6,6 +6,7 @@ use App\Models\AdtConfiguration;
 use App\Models\AdtMessageLog;
 use App\Models\AdtDoctorMapping;
 use App\Models\Patient;
+use App\Models\PatientCareProvider;
 use App\Models\Bed;
 use App\Models\Ward;
 use App\Models\Consultant;
@@ -315,6 +316,12 @@ class AdtApiController extends Controller
                 'bed_number' => $patient->bed_number,
             ]);
             
+            // Save care providers from PV1 (attending, referring, consulting doctors)
+            $careProviders = $this->saveCareProviders($patient, $pv1, $configuration);
+            if (!empty($careProviders)) {
+                $actions[] = 'care_providers_saved';
+            }
+            
             // Update message log with detailed information
             $messageLog->update([
                 'status' => 'processed',
@@ -323,6 +330,7 @@ class AdtApiController extends Controller
                     'adt_bed_code' => $adtBedCode,
                     'assigned_ward' => $bed?->ward?->ward_name,
                     'assigned_bed' => $bed?->bed_number,
+                    'care_providers' => $careProviders,
                 ]),
                 'patient_id_ref' => $patient->id,
                 'bed_id_ref' => $bed?->id,
@@ -553,6 +561,12 @@ class AdtApiController extends Controller
             
             $patient->save();
             
+            // Save care providers from PV1 (attending, referring, consulting doctors)
+            $careProviders = $this->saveCareProviders($patient, $pv1, $configuration);
+            if (!empty($careProviders)) {
+                $actions[] = 'care_providers_updated';
+            }
+            
             $messageLog->update([
                 'status' => 'processed',
                 'action_taken' => array_merge($actions, [
@@ -562,6 +576,7 @@ class AdtApiController extends Controller
                     'old_bed' => $oldBedNumber,
                     'assigned_ward' => $newBed?->ward?->ward_name,
                     'assigned_bed' => $newBed?->bed_number,
+                    'care_providers' => $careProviders,
                 ]),
                 'patient_id_ref' => $patient->id,
                 'bed_id_ref' => $newBed?->id,
@@ -749,9 +764,17 @@ class AdtApiController extends Controller
             
             $patient->save();
             
+            // Save care providers from PV1 (attending, referring, consulting doctors)
+            $careProviders = $this->saveCareProviders($patient, $pv1, $configuration);
+            if (!empty($careProviders)) {
+                $actions[] = 'care_providers_updated';
+            }
+            
             $messageLog->update([
                 'status' => 'processed',
-                'action_taken' => $actions,
+                'action_taken' => array_merge($actions, [
+                    'care_providers' => $careProviders,
+                ]),
                 'patient_id_ref' => $patient->id,
             ]);
             
@@ -1480,6 +1503,194 @@ class AdtApiController extends Controller
         Log::warning("ADT Consultant Assignment - Doctor not found", ['code' => $doctorCode]);
         
         return null;
+    }
+    
+    /**
+     * Save care providers from PV1 segment
+     * PV1-7: Attending Doctor
+     * PV1-8: Referring Doctor (can have multiple, separated by ~)
+     * PV1-9: Consulting Doctor (can have multiple, separated by ~)
+     */
+    protected function saveCareProviders(Patient $patient, array $pv1, ?AdtConfiguration $configuration): array
+    {
+        $careProvidersAdded = [];
+        $visitNumber = $pv1['visit_number'] ?? null;
+        
+        // Deactivate old care providers for this patient (new ADT message replaces old assignments)
+        PatientCareProvider::where('patient_id', $patient->id)
+            ->where('source', PatientCareProvider::SOURCE_ADT)
+            ->update(['is_active' => false]);
+        
+        // PV1-7: Attending Doctor
+        $attendingRaw = $pv1['attending_doctor_raw'] ?? null;
+        if ($attendingRaw) {
+            $doctors = $this->parseMultipleDoctors($attendingRaw);
+            foreach ($doctors as $doctor) {
+                $careProvider = $this->createCareProvider(
+                    $patient,
+                    PatientCareProvider::ROLE_ATTENDING,
+                    $doctor['code'],
+                    $doctor['name'],
+                    $visitNumber,
+                    $configuration
+                );
+                if ($careProvider) {
+                    $careProvidersAdded[] = "attending:{$doctor['code']}";
+                }
+            }
+        }
+        
+        // PV1-8: Referring Doctor
+        $referringRaw = $pv1['referring_doctor'] ?? null;
+        if ($referringRaw) {
+            $doctors = $this->parseMultipleDoctors($referringRaw);
+            foreach ($doctors as $doctor) {
+                $careProvider = $this->createCareProvider(
+                    $patient,
+                    PatientCareProvider::ROLE_REFERRING,
+                    $doctor['code'],
+                    $doctor['name'],
+                    $visitNumber,
+                    $configuration
+                );
+                if ($careProvider) {
+                    $careProvidersAdded[] = "referring:{$doctor['code']}";
+                }
+            }
+        }
+        
+        // PV1-9: Consulting Doctor
+        $consultingRaw = $pv1['consulting_doctor'] ?? null;
+        if ($consultingRaw) {
+            $doctors = $this->parseMultipleDoctors($consultingRaw);
+            foreach ($doctors as $doctor) {
+                $careProvider = $this->createCareProvider(
+                    $patient,
+                    PatientCareProvider::ROLE_CONSULTING,
+                    $doctor['code'],
+                    $doctor['name'],
+                    $visitNumber,
+                    $configuration
+                );
+                if ($careProvider) {
+                    $careProvidersAdded[] = "consulting:{$doctor['code']}";
+                }
+            }
+        }
+        
+        if (!empty($careProvidersAdded)) {
+            Log::info("ADT Care Providers - Saved", [
+                'patient_id' => $patient->id,
+                'providers' => $careProvidersAdded,
+            ]);
+        }
+        
+        return $careProvidersAdded;
+    }
+    
+    /**
+     * Parse multiple doctors from ADT field (can be separated by ~ for repeating)
+     * Format: CODE^LASTNAME^FIRSTNAME or just CODE
+     */
+    protected function parseMultipleDoctors(string $raw): array
+    {
+        $doctors = [];
+        
+        // Split by ~ for multiple doctors (HL7 repetition separator)
+        $doctorParts = strpos($raw, '~') !== false ? explode('~', $raw) : [$raw];
+        
+        foreach ($doctorParts as $doctorRaw) {
+            $doctorRaw = trim($doctorRaw);
+            if (empty($doctorRaw)) {
+                continue;
+            }
+            
+            // Parse CODE^LASTNAME^FIRSTNAME format
+            $parts = explode('^', $doctorRaw);
+            $code = $parts[0] ?? '';
+            $name = '';
+            
+            if (count($parts) > 2) {
+                // Has name parts: CODE^LASTNAME^FIRSTNAME
+                $name = trim(($parts[1] ?? '') . ' ' . ($parts[2] ?? ''));
+            } elseif (count($parts) > 1) {
+                // CODE^NAME format
+                $name = $parts[1] ?? '';
+            }
+            
+            if (!empty($code)) {
+                $doctors[] = [
+                    'code' => $code,
+                    'name' => $name,
+                ];
+            }
+        }
+        
+        return $doctors;
+    }
+    
+    /**
+     * Create a care provider record
+     */
+    protected function createCareProvider(
+        Patient $patient,
+        string $role,
+        string $doctorCode,
+        ?string $doctorName,
+        ?string $visitNumber,
+        ?AdtConfiguration $configuration
+    ): ?PatientCareProvider {
+        // Try to find linked consultant
+        $consultantId = null;
+        $anaesthetistId = null;
+        
+        // 1) Direct lookup by personnel_code
+        $consultant = Consultant::findByPersonnelCode($doctorCode);
+        if ($consultant) {
+            $consultantId = $consultant->id;
+            if ($consultant->isAnaesthetist()) {
+                $anaesthetistId = $consultant->id;
+                $consultantId = null; // Store in anaesthetist instead
+            }
+        }
+        
+        // 2) Try Anaesthetist table
+        if (!$consultantId && !$anaesthetistId) {
+            $anaesthetist = Anaesthetist::findByPersonnelCode($doctorCode);
+            if ($anaesthetist) {
+                $anaesthetistId = $anaesthetist->id;
+            }
+        }
+        
+        // 3) Try mapping table
+        if (!$consultantId && !$anaesthetistId && $configuration) {
+            $consultant = $configuration->findConsultantByAdtCode($doctorCode, $role);
+            if ($consultant) {
+                $consultantId = $consultant->id;
+                if ($consultant->isAnaesthetist()) {
+                    $anaesthetistId = $consultant->id;
+                    $consultantId = null;
+                }
+            }
+        }
+        
+        // Create or update care provider record
+        return PatientCareProvider::updateOrCreate(
+            [
+                'patient_id' => $patient->id,
+                'role' => $role,
+                'doctor_code' => $doctorCode,
+                'source' => PatientCareProvider::SOURCE_ADT,
+            ],
+            [
+                'doctor_name' => $doctorName,
+                'consultant_id' => $consultantId,
+                'anaesthetist_id' => $anaesthetistId,
+                'visit_number' => $visitNumber,
+                'assigned_at' => now(),
+                'is_active' => true,
+            ]
+        );
     }
     
     /**
