@@ -946,6 +946,33 @@
 
                     <!-- EWS Options -->
                     <div class="space-y-2">
+                        <!-- EWS IHH Option (Default) -->
+                        <label class="flex items-start p-3 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 cursor-pointer transition-colors"
+                               :class="clinicalSettings.ews_system === 'ews_ihh' ? 'ring-2 ring-blue-500 border-blue-500' : ''">
+                            <input type="radio" 
+                                   name="ews_system_radio"
+                                   value="ews_ihh"
+                                   x-model="clinicalSettings.ews_system"
+                                   class="h-4 w-4 mt-0.5 text-blue-600 focus:ring-blue-500 border-gray-300">
+                            <div class="ml-3 flex-1">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm font-medium text-gray-700">EWS IHH (IJN Hospital Hijau)</span>
+                                    <button type="button"
+                                            @click.prevent="showEwsIhhModal = true"
+                                            class="ml-2 p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded-full transition-colors"
+                                            title="View EWS IHH Scoring Table">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                                <p class="text-xs text-gray-500 mt-1">IHH standard. Uses: Pulse, RR, Systolic BP, SpO2, Temperature. Yellow Zone (Score 1) and Pink Zone (Score 2) triggers.</p>
+                                <span class="inline-flex items-center mt-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    Recommended
+                                </span>
+                            </div>
+                        </label>
+
                         <label class="flex items-start p-3 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 cursor-pointer transition-colors"
                                :class="clinicalSettings.ews_system === 'news2' ? 'ring-2 ring-blue-500 border-blue-500' : ''">
                             <input type="radio" 
@@ -1033,6 +1060,174 @@
                     </button>
                 </div>
             </form>
+        </div>
+
+        <!-- EWS IHH Modal -->
+        <div x-show="showEwsIhhModal" 
+             x-transition:enter="ease-out duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             class="fixed inset-0 z-50 overflow-y-auto"
+             style="display: none;">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 transition-opacity" @click="showEwsIhhModal = false">
+                    <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
+                </div>
+
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+
+                <div x-show="showEwsIhhModal"
+                     x-transition:enter="ease-out duration-300"
+                     x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                     x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                     x-transition:leave="ease-in duration-200"
+                     x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                     x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                     @click.stop
+                     class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
+                    
+                    <!-- Modal Header -->
+                    <div class="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-lg font-bold text-white flex items-center">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                                </svg>
+                                EWS IHH Scoring Table
+                            </h3>
+                            <button @click="showEwsIhhModal = false" class="text-white hover:text-gray-200">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <p class="text-sm text-blue-100 mt-1">IJN Hospital Hijau Early Warning Score System</p>
+                    </div>
+
+                    <!-- Modal Body -->
+                    <div class="px-6 py-4">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full border-collapse text-sm">
+                                <thead>
+                                    <tr>
+                                        <th class="border border-gray-300 px-3 py-2 bg-gray-100 text-left font-semibold" rowspan="2">Early Warning Signs (EWS)</th>
+                                        <th class="border border-gray-300 px-3 py-2 bg-yellow-100 text-center font-semibold text-yellow-800" colspan="2">
+                                            Yellow Zone<br>
+                                            <span class="font-normal text-xs">Warning - Attention required (1)</span>
+                                        </th>
+                                        <th class="border border-gray-300 px-3 py-2 bg-red-100 text-center font-semibold text-red-800" colspan="2">
+                                            Pink Zone<br>
+                                            <span class="font-normal text-xs">Activate Trigger Protocol (2)</span>
+                                        </th>
+                                    </tr>
+                                    <tr>
+                                        <th class="border border-gray-300 px-3 py-2 bg-yellow-50 text-center text-xs font-medium">Higher range</th>
+                                        <th class="border border-gray-300 px-3 py-2 bg-yellow-50 text-center text-xs font-medium">Lower range</th>
+                                        <th class="border border-gray-300 px-3 py-2 bg-red-50 text-center text-xs font-medium">Higher range</th>
+                                        <th class="border border-gray-300 px-3 py-2 bg-red-50 text-center text-xs font-medium">Lower range</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="border border-gray-300 px-3 py-2 font-medium">Pulse / Heart rate (bpm)</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-yellow-50">100 - 120</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-yellow-50">41 - 59</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-red-50 font-semibold">&gt;120</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-red-50 font-semibold">≤40</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="border border-gray-300 px-3 py-2 font-medium">Respiration rate (breath/min)</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-yellow-50">21 - 24</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-yellow-50">9 - 11</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-red-50 font-semibold">&gt;25</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-red-50 font-semibold">≤8</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="border border-gray-300 px-3 py-2 font-medium">Blood Pressure (mmHg) Systolic</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-yellow-50">160 - 199</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-yellow-50">91 - 100</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-red-50 font-semibold">&gt;200</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-red-50 font-semibold">≤90</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="border border-gray-300 px-3 py-2 font-medium">Oxygen Saturation (SpO2)</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-yellow-50">N/A</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-yellow-50">92 - 95</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-red-50 font-semibold">N/A</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-red-50 font-semibold">≤91</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="border border-gray-300 px-3 py-2 font-medium">Temperature (Celsius)</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-yellow-50">38 - 38.9</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-yellow-50">35.1 - 35.9</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-red-50 font-semibold">≥39</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center bg-red-50 font-semibold">≤35</td>
+                                    </tr>
+                                    <tr class="bg-gray-50">
+                                        <td class="border border-gray-300 px-3 py-2 font-medium">Level of Consciousness</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center" colspan="2">&lt; 5</td>
+                                        <td class="border border-gray-300 px-3 py-2 text-center text-xs" colspan="2">Patient responds to Verbal / Pain Stimulus / New Onset of Confusion / Unconscious</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Score Interpretation -->
+                        <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div class="bg-green-50 border border-green-200 rounded-lg p-3">
+                                <div class="flex items-center">
+                                    <div class="w-8 h-8 bg-green-500 text-white rounded-lg flex items-center justify-center font-bold mr-2">0</div>
+                                    <div>
+                                        <span class="text-sm font-semibold text-green-800">Normal</span>
+                                        <p class="text-xs text-green-600">All vitals in normal range</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                                <div class="flex items-center">
+                                    <div class="w-8 h-8 bg-yellow-500 text-white rounded-lg flex items-center justify-center font-bold mr-2">1</div>
+                                    <div>
+                                        <span class="text-sm font-semibold text-yellow-800">Warning</span>
+                                        <p class="text-xs text-yellow-600">Yellow Zone - Monitor closely</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-red-50 border border-red-200 rounded-lg p-3">
+                                <div class="flex items-center">
+                                    <div class="w-8 h-8 bg-red-500 text-white rounded-lg flex items-center justify-center font-bold mr-2">2</div>
+                                    <div>
+                                        <span class="text-sm font-semibold text-red-800">Trigger</span>
+                                        <p class="text-xs text-red-600">Pink Zone - Activate protocol</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Response Guidelines -->
+                        <div class="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <h4 class="text-sm font-semibold text-blue-800 mb-2">Response Guidelines</h4>
+                            <ul class="text-xs text-blue-700 space-y-1">
+                                <li><span class="font-semibold">Total Score 0:</span> Continue routine monitoring (every 4-6 hours)</li>
+                                <li><span class="font-semibold">Total Score 1-3:</span> Increase monitoring frequency, notify nurse-in-charge</li>
+                                <li><span class="font-semibold">Total Score ≥4:</span> Urgent assessment required, notify medical officer immediately</li>
+                                <li><span class="font-semibold">Any single parameter Score 2:</span> Immediate clinical review regardless of total score</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Modal Footer -->
+                    <div class="bg-gray-50 px-6 py-3 flex justify-end">
+                        <button type="button"
+                                @click="showEwsIhhModal = false"
+                                class="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-300 transition-colors">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1223,7 +1418,7 @@
             // Clinical settings
             const savedClinicalSettings = @json($clinicalSettings ?? []);
             const defaultClinicalSettings = {
-                ews_system: 'news2'
+                ews_system: 'ews_ihh'
             };
             const clinicalSettingsData = { ...defaultClinicalSettings, ...savedClinicalSettings };
 
@@ -1241,6 +1436,7 @@
                 clinicalSettings: clinicalSettingsData,
                 patientVitalsMode: savedPatientVitalsMode,
                 bedBoxVitalsMode: savedBedBoxVitalsMode,
+                showEwsIhhModal: false,
                 newOption: {
                     value: '',
                     label: '',
@@ -1316,17 +1512,19 @@
 
                 getEWSSystemName() {
                     const names = {
+                        'ews_ihh': 'EWS IHH (IJN Hospital Hijau)',
                         'news2': 'NEWS2 (National Early Warning Score 2)',
                         'news': 'NEWS (National Early Warning Score)',
                         'mews': 'MEWS (Modified Early Warning Score)',
                         'pews': 'PEWS (Pediatric Early Warning Score)',
                         'custom': 'Custom/Hospital Specific'
                     };
-                    return names[this.clinicalSettings.ews_system] || 'NEWS2';
+                    return names[this.clinicalSettings.ews_system] || 'EWS IHH';
                 },
 
                 getEWSSystemDescription() {
                     const descs = {
+                        'ews_ihh': 'IHH standard scoring with 5 vital parameters: pulse, respiration rate, systolic BP, SpO2, and temperature. Uses Yellow Zone (Score 1) and Pink Zone (Score 2) triggers.',
                         'news2': 'Scores 6 vital parameters: respiratory rate, oxygen saturation, systolic blood pressure, pulse rate, level of consciousness, and temperature.',
                         'news': 'Original scoring system with 6 parameters, widely used internationally.',
                         'mews': 'Simplified 5-parameter scoring for rapid assessment.',

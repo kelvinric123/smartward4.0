@@ -10,6 +10,84 @@
         body {
             font-family: 'Inter', sans-serif;
         }
+        
+        /* IHH Chart Styles */
+        .ihh-chart {
+            font-size: 9px;
+            border-collapse: collapse;
+            width: 100%;
+        }
+        .ihh-chart th, .ihh-chart td {
+            border: 1px solid #999;
+            padding: 0;
+            text-align: center;
+            height: 14px;
+            min-width: 24px;
+        }
+        .ihh-chart .section-header {
+            background: #f0f0f0;
+            font-weight: bold;
+            text-align: left;
+            padding: 2px 4px;
+        }
+        .ihh-chart .score-col {
+            width: 20px;
+            font-weight: bold;
+        }
+        /* Temperature zones - Score 0: White, Score 1: Orange, Score 2: Red */
+        .ihh-temp-high2 { background: #f4cccc; }
+        .ihh-temp-high1 { background: #fce5cd; }
+        .ihh-temp-normal { background: #ffffff; }
+        .ihh-temp-low1 { background: #fce5cd; }
+        .ihh-temp-low2 { background: #f4cccc; }
+        /* Blood Pressure zones - Score 0: White, Score 1: Orange, Score 2: Red */
+        .ihh-bp-high2 { background: #f4cccc; }
+        .ihh-bp-high1 { background: #fce5cd; }
+        .ihh-bp-normal { background: #ffffff; }
+        .ihh-bp-low1 { background: #fce5cd; }
+        .ihh-bp-low2 { background: #f4cccc; }
+        /* Pulse Rate zones - Score 0: White, Score 1: Orange, Score 2: Red */
+        .ihh-pr-high2 { background: #f4cccc; }
+        .ihh-pr-high1 { background: #fce5cd; }
+        .ihh-pr-normal { background: #ffffff; }
+        .ihh-pr-low1 { background: #fce5cd; }
+        .ihh-pr-low2 { background: #f4cccc; }
+        /* Respiration Rate zones - Score 0: White, Score 1: Orange, Score 2: Red */
+        .ihh-rr-high2 { background: #f4cccc; }
+        .ihh-rr-high1 { background: #fce5cd; }
+        .ihh-rr-normal { background: #ffffff; }
+        .ihh-rr-low1 { background: #fce5cd; }
+        .ihh-rr-low2 { background: #f4cccc; }
+        .ihh-marker {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background: #000;
+            border-radius: 50%;
+        }
+        .ihh-marker-x {
+            font-weight: bold;
+            font-size: 10px;
+        }
+        .ihh-marker-systolic {
+            font-weight: bold;
+            font-size: 11px;
+            line-height: 1;
+            color: #000;
+        }
+        .ihh-marker-diastolic {
+            font-weight: bold;
+            font-size: 11px;
+            line-height: 1;
+            color: #000;
+        }
+        .ihh-label-col {
+            width: 40px;
+            text-align: right;
+            padding-right: 3px !important;
+            font-weight: bold;
+            background: #f9f9f9;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -709,12 +787,21 @@
                                 <button type="button"
                                         @click="view = 'graph'"
                                         :class="view === 'graph' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
-                                        class="px-3 py-1 font-semibold flex items-center space-x-1">
+                                        class="px-3 py-1 font-semibold flex items-center space-x-1 border-r border-gray-200">
                                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                               d="M4 19h16M5 16l4-6 4 4 6-10"/>
                                     </svg>
                                     <span>Graph</span>
+                                </button>
+                                <button type="button"
+                                        @click="view = 'ihh'"
+                                        :class="view === 'ihh' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
+                                        class="px-3 py-1 font-semibold flex items-center space-x-1">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                    </svg>
+                                    <span>IHH</span>
                                 </button>
                             </div>
                         </div>
@@ -863,6 +950,200 @@
                         <template x-if="view === 'graph'">
                             <div class="mt-2 h-72 md:h-80">
                                 <canvas x-ref="vitalsChart"></canvas>
+                            </div>
+                        </template>
+
+                        <template x-if="view === 'ihh'">
+                            <div class="mt-2">
+                                @if($vitalsMode === 'real')
+                                    @php
+                                        $ihhVitals = \App\Models\VitalSign::where('patient_id', $patient->id ?? 0)
+                                            ->orderBy('recorded_at', 'desc')
+                                            ->limit(10)
+                                            ->get()
+                                            ->reverse()
+                                            ->values();
+                                    @endphp
+                                    @if($ihhVitals->count() > 0)
+                                        <div class="overflow-x-auto border border-gray-300 rounded-lg bg-white">
+                                            <!-- Chart Header -->
+                                            <div class="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white p-2">
+                                                <div class="flex items-center justify-between">
+                                                    <div>
+                                                        <h3 class="font-bold text-xs">MODIFIED CLINICAL CHART - EARLY WARNING SCORE (EWS)</h3>
+                                                    </div>
+                                                    <div class="text-right text-[10px]">
+                                                        <span class="inline-flex items-center mr-2"><span class="w-2 h-2 bg-red-300 border border-red-400 mr-1"></span>2</span>
+                                                        <span class="inline-flex items-center mr-2"><span class="w-2 h-2 bg-orange-200 border border-orange-300 mr-1"></span>1</span>
+                                                        <span class="inline-flex items-center"><span class="w-2 h-2 bg-white border border-gray-400 mr-1"></span>0</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <table class="ihh-chart">
+                                                <thead>
+                                                    <tr class="bg-gray-100">
+                                                        <th class="ihh-label-col" rowspan="2">TIME</th>
+                                                        <th class="score-col" rowspan="2">S</th>
+                                                        @foreach($ihhVitals as $vital)
+                                                            <th class="text-[8px] px-1">{{ $vital->recorded_at->format('d/m') }}</th>
+                                                        @endforeach
+                                                    </tr>
+                                                    <tr class="bg-gray-50">
+                                                        @foreach($ihhVitals as $vital)
+                                                            <th class="text-[8px] px-1">{{ $vital->recorded_at->format('H:i') }}</th>
+                                                        @endforeach
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <!-- Temperature: ≥39 or ≤35=2, 38-38.9 or 35.1-35.9=1, 36-37.9=0 -->
+                                                    <tr><td class="section-header" colspan="{{ 2 + count($ihhVitals) }}"><span class="text-indigo-700">Temp °C</span></td></tr>
+                                                    @php $tempRanges = [['min'=>39,'max'=>42,'label'=>'≥39','class'=>'ihh-temp-high2','score'=>2],['min'=>38,'max'=>38.9,'label'=>'38','class'=>'ihh-temp-high1','score'=>1],['min'=>36,'max'=>37.9,'label'=>'36-37.9','class'=>'ihh-temp-normal','score'=>0],['min'=>35.1,'max'=>35.9,'label'=>'35.1','class'=>'ihh-temp-low1','score'=>1],['min'=>34,'max'=>35,'label'=>'≤35','class'=>'ihh-temp-low2','score'=>2]]; @endphp
+                                                    @foreach($tempRanges as $range)
+                                                        <tr>
+                                                            <td class="ihh-label-col {{ $range['class'] }}">{{ $range['label'] }}</td>
+                                                            <td class="score-col {{ $range['class'] }}">{{ $range['score'] }}</td>
+                                                            @foreach($ihhVitals as $vital)
+                                                                <td class="{{ $range['class'] }}">@if($vital->temperature && $vital->temperature >= $range['min'] && $vital->temperature <= $range['max'])<span class="ihh-marker"></span>@endif</td>
+                                                            @endforeach
+                                                        </tr>
+                                                    @endforeach
+
+                                                    <!-- BP Systolic: >200 or ≤90=2, 160-199 or 91-100=1, 101-159=0 -->
+                                                    <tr><td class="section-header" colspan="{{ 2 + count($ihhVitals) }}"><span class="text-indigo-700">BP</span> <span class="text-gray-500 text-[8px]">▲Sys ▼Dia</span></td></tr>
+                                                    @php $bpRanges = [['min'=>201,'max'=>300,'label'=>'>200','class'=>'ihh-bp-high2'],['min'=>160,'max'=>200,'label'=>'160-200','class'=>'ihh-bp-high1'],['min'=>101,'max'=>159,'label'=>'101-159','class'=>'ihh-bp-normal'],['min'=>91,'max'=>100,'label'=>'91-100','class'=>'ihh-bp-low1'],['min'=>60,'max'=>90,'label'=>'≤90','class'=>'ihh-bp-low2']]; @endphp
+                                                    @foreach($bpRanges as $range)
+                                                        <tr>
+                                                            <td class="ihh-label-col {{ $range['class'] }}">{{ $range['label'] }}</td>
+                                                            <td class="score-col {{ $range['class'] }}"></td>
+                                                            @foreach($ihhVitals as $vital)
+                                                                @php
+                                                                    $hasSys = $vital->systolic_bp && $vital->systolic_bp >= $range['min'] && $vital->systolic_bp <= $range['max'];
+                                                                    $hasDia = $vital->diastolic_bp && $vital->diastolic_bp >= $range['min'] && $vital->diastolic_bp <= $range['max'];
+                                                                    $isBetween = $vital->systolic_bp && $vital->diastolic_bp && $range['max'] < $vital->systolic_bp && $range['min'] > $vital->diastolic_bp;
+                                                                @endphp
+                                                                <td class="{{ $range['class'] }}" style="position:relative;">@if($hasSys)<span class="ihh-marker-systolic">▲</span>@elseif($hasDia)<span class="ihh-marker-diastolic">▼</span>@elseif($isBetween)<span style="display:inline-block;width:2px;height:14px;background:#000;"></span>@endif</td>
+                                                            @endforeach
+                                                        </tr>
+                                                    @endforeach
+
+                                                    <!-- Pulse: >120 or ≤40=2, 100-120 or 41-59=1, 60-99=0 -->
+                                                    <tr><td class="section-header" colspan="{{ 2 + count($ihhVitals) }}"><span class="text-indigo-700">PR bpm</span></td></tr>
+                                                    @php $prRanges = [['min'=>121,'max'=>250,'label'=>'>120','class'=>'ihh-pr-high2','score'=>2],['min'=>100,'max'=>120,'label'=>'100-120','class'=>'ihh-pr-high1','score'=>1],['min'=>60,'max'=>99,'label'=>'60-99','class'=>'ihh-pr-normal','score'=>0],['min'=>41,'max'=>59,'label'=>'41-59','class'=>'ihh-pr-low1','score'=>1],['min'=>0,'max'=>40,'label'=>'≤40','class'=>'ihh-pr-low2','score'=>2]]; @endphp
+                                                    @foreach($prRanges as $range)
+                                                        <tr>
+                                                            <td class="ihh-label-col {{ $range['class'] }}">{{ $range['label'] }}</td>
+                                                            <td class="score-col {{ $range['class'] }}">{{ $range['score'] }}</td>
+                                                            @foreach($ihhVitals as $vital)
+                                                                <td class="{{ $range['class'] }}">@if($vital->pulse_rate && $vital->pulse_rate >= $range['min'] && $vital->pulse_rate <= $range['max'])<span class="ihh-marker"></span>@endif</td>
+                                                            @endforeach
+                                                        </tr>
+                                                    @endforeach
+
+                                                    <!-- RR: >25 or ≤8=2, 21-24 or 9-11=1, 12-20=0 -->
+                                                    <tr><td class="section-header" colspan="{{ 2 + count($ihhVitals) }}"><span class="text-indigo-700">RR /min</span></td></tr>
+                                                    @php $rrRanges = [['min'=>26,'max'=>60,'label'=>'>25','class'=>'ihh-rr-high2','score'=>2],['min'=>21,'max'=>25,'label'=>'21-24','class'=>'ihh-rr-high1','score'=>1],['min'=>12,'max'=>20,'label'=>'12-20','class'=>'ihh-rr-normal','score'=>0],['min'=>9,'max'=>11,'label'=>'9-11','class'=>'ihh-rr-low1','score'=>1],['min'=>0,'max'=>8,'label'=>'≤8','class'=>'ihh-rr-low2','score'=>2]]; @endphp
+                                                    @foreach($rrRanges as $range)
+                                                        <tr>
+                                                            <td class="ihh-label-col {{ $range['class'] }}">{{ $range['label'] }}</td>
+                                                            <td class="score-col {{ $range['class'] }}">{{ $range['score'] }}</td>
+                                                            @foreach($ihhVitals as $vital)
+                                                                <td class="{{ $range['class'] }}">@if($vital->respiratory_rate && $vital->respiratory_rate >= $range['min'] && $vital->respiratory_rate <= $range['max'])<span class="ihh-marker-x">×</span>@endif</td>
+                                                            @endforeach
+                                                        </tr>
+                                                    @endforeach
+
+                                                    <!-- SpO2: ≤91=2, 92-95=1, ≥96=0 -->
+                                                    <tr><td class="section-header" colspan="{{ 2 + count($ihhVitals) }}"><span class="text-indigo-700">SpO2 %</span></td></tr>
+                                                    @php $spo2Ranges = [['min'=>96,'max'=>100,'label'=>'≥96','class'=>'ihh-temp-normal','score'=>0],['min'=>92,'max'=>95,'label'=>'92-95','class'=>'ihh-temp-low1','score'=>1],['min'=>0,'max'=>91,'label'=>'≤91','class'=>'ihh-temp-low2','score'=>2]]; @endphp
+                                                    @foreach($spo2Ranges as $range)
+                                                        <tr>
+                                                            <td class="ihh-label-col {{ $range['class'] }}">{{ $range['label'] }}</td>
+                                                            <td class="score-col {{ $range['class'] }}">{{ $range['score'] }}</td>
+                                                            @foreach($ihhVitals as $vital)
+                                                                <td class="{{ $range['class'] }}">@if($vital->spo2 && $vital->spo2 >= $range['min'] && $vital->spo2 <= $range['max'])<span class="ihh-marker"></span>@endif</td>
+                                                            @endforeach
+                                                        </tr>
+                                                    @endforeach
+
+                                                    <!-- Total EWS Score -->
+                                                    <tr class="bg-gray-200 font-bold">
+                                                        <td class="ihh-label-col bg-gray-300">TOTAL</td>
+                                                        <td class="score-col bg-gray-300">EWS</td>
+                                                        @foreach($ihhVitals as $vital)
+                                                            @php
+                                                                $ewsScore = 0;
+                                                                // PULSE/HR: Score 2 = >120 or ≤40, Score 1 = 100-120 or 41-59
+                                                                $pr = $vital->pulse_rate;
+                                                                if ($pr !== null && $pr !== '' && is_numeric($pr)) {
+                                                                    $pr = intval($pr);
+                                                                    if ($pr > 120 || $pr <= 40) { $ewsScore += 2; }
+                                                                    elseif (($pr >= 100 && $pr <= 120) || ($pr >= 41 && $pr <= 59)) { $ewsScore += 1; }
+                                                                }
+                                                                // RESPIRATION: Score 2 = >25 or ≤8, Score 1 = 21-24 or 9-11
+                                                                $rr = $vital->respiratory_rate;
+                                                                if ($rr !== null && $rr !== '' && is_numeric($rr)) {
+                                                                    $rr = intval($rr);
+                                                                    if ($rr > 25 || $rr <= 8) { $ewsScore += 2; }
+                                                                    elseif (($rr >= 21 && $rr <= 24) || ($rr >= 9 && $rr <= 11)) { $ewsScore += 1; }
+                                                                }
+                                                                // BP SYS: Score 2 = >200 or ≤90, Score 1 = 160-199 or 91-100
+                                                                $sbp = $vital->systolic_bp;
+                                                                if ($sbp !== null && $sbp !== '' && is_numeric($sbp)) {
+                                                                    $sbp = intval($sbp);
+                                                                    if ($sbp > 200 || $sbp <= 90) { $ewsScore += 2; }
+                                                                    elseif (($sbp >= 160 && $sbp <= 199) || ($sbp >= 91 && $sbp <= 100)) { $ewsScore += 1; }
+                                                                }
+                                                                // SPO2: Score 2 = ≤91, Score 1 = 92-95
+                                                                $spo2 = $vital->spo2;
+                                                                if ($spo2 !== null && $spo2 !== '' && is_numeric($spo2)) {
+                                                                    $spo2 = intval($spo2);
+                                                                    if ($spo2 <= 91) { $ewsScore += 2; }
+                                                                    elseif ($spo2 >= 92 && $spo2 <= 95) { $ewsScore += 1; }
+                                                                }
+                                                                // TEMP: Score 2 = ≥39 or ≤35, Score 1 = 38-38.9 or 35.1-35.9
+                                                                $temp = $vital->temperature;
+                                                                if ($temp !== null && $temp !== '' && is_numeric($temp)) {
+                                                                    $temp = floatval($temp);
+                                                                    if ($temp >= 39 || $temp <= 35) { $ewsScore += 2; }
+                                                                    elseif (($temp >= 38 && $temp <= 38.9) || ($temp >= 35.1 && $temp <= 35.9)) { $ewsScore += 1; }
+                                                                }
+                                                                $scoreClass = $ewsScore >= 4 ? 'bg-red-500 text-white' : ($ewsScore >= 2 ? 'bg-orange-400 text-white' : 'bg-green-500 text-white');
+                                                            @endphp
+                                                            <td class="{{ $scoreClass }} font-bold">{{ $ewsScore }}</td>
+                                                        @endforeach
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+
+                                            <div class="p-2 bg-gray-50 border-t text-[8px]">
+                                                <div class="flex justify-between mb-1">
+                                                    <span><span class="ihh-marker inline-block align-middle"></span> Temp/PR/SpO2 &nbsp; <span class="ihh-marker-systolic">▲</span>Sys <span class="ihh-marker-diastolic">▼</span>Dia &nbsp; <span class="ihh-marker-x">×</span> RR</span>
+                                                    <span><span class="px-1 bg-white border rounded">0</span> <span class="px-1 bg-orange-200 text-orange-800 rounded">1</span> <span class="px-1 bg-red-200 text-red-800 rounded">2</span></span>
+                                                </div>
+                                                <div class="text-center text-gray-500">Monitor <b class="text-blue-600">4-6 hourly</b> | If abnormal, <b class="text-red-600">repeat in few mins</b></div>
+                                            </div>
+                                        </div>
+                                    @else
+                                        <div class="text-center py-6 text-gray-500">
+                                            <p class="text-sm">No vital signs recorded for IHH chart.</p>
+                                        </div>
+                                    @endif
+                                @else
+                                    <!-- Demo IHH Chart -->
+                                    <div class="overflow-x-auto border border-gray-300 rounded-lg bg-white">
+                                        <div class="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white p-2">
+                                            <h3 class="font-bold text-xs">MODIFIED CLINICAL CHART - EARLY WARNING SCORE (EWS) - Demo</h3>
+                                        </div>
+                                        <div class="p-4 text-center text-gray-500">
+                                            <svg class="w-12 h-12 mx-auto text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                            </svg>
+                                            <p class="text-sm">IHH Chart requires real vital signs data.</p>
+                                            <p class="text-xs text-gray-400 mt-1">Enable real data mode in Settings → Bed Box Config</p>
+                                        </div>
+                                    </div>
+                                @endif
                             </div>
                         </template>
                     @endif

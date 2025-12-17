@@ -105,8 +105,18 @@ class WardDashboardController extends Controller
         $nurses = Nurse::where('is_active', true)->get();
         $anaesthetists = Anaesthetist::where('is_active', true)->get();
         
+        // Get user settings early for EWS system configuration
+        $userSettings = WardDashboardSetting::where('user_id', Auth::id())->first();
+        
+        // Get clinical settings for EWS system
+        $defaultClinicalSettings = ['ews_system' => 'ews_ihh'];
+        $clinicalSettings = $userSettings && is_array($userSettings->clinical_settings) 
+            ? array_merge($defaultClinicalSettings, $userSettings->clinical_settings)
+            : $defaultClinicalSettings;
+        $ewsSystem = $clinicalSettings['ews_system'] ?? 'ews_ihh';
+
         // Generate bed data for the selected ward
-        $beds = $this->generateBedData($selectedWard, $wardPatients, $consultants, $nurses, $movementsByPatient);
+        $beds = $this->generateBedData($selectedWard, $wardPatients, $consultants, $nurses, $movementsByPatient, $ewsSystem);
         
         // Calculate statistics based on admitted patients only
         $admittedPatients = Patient::where('ward_id', $selectedWardId)
@@ -221,7 +231,7 @@ class WardDashboardController extends Controller
             ['key' => 'allergies', 'visible' => true],
         ];
         
-        $userSettings = WardDashboardSetting::where('user_id', Auth::id())->first();
+        // $userSettings already fetched earlier for EWS system
         $bedBoxDisplay = $userSettings && is_array($userSettings->bed_box_display) 
             ? $userSettings->bed_box_display 
             : $defaultBedBoxDisplay;
@@ -303,7 +313,7 @@ class WardDashboardController extends Controller
         }
     }
     
-    private function generateBedData($ward, $wardPatients, $consultants, $nurses, $movementsByPatient)
+    private function generateBedData($ward, $wardPatients, $consultants, $nurses, $movementsByPatient, $ewsSystem = 'ews_ihh')
     {
         $beds = [];
         // Use actual ward beds (aligns with Beds index)
@@ -407,7 +417,7 @@ class WardDashboardController extends Controller
                     ->orderBy('recorded_at', 'desc')
                     ->first();
                 
-                $ewsData = $this->calculateEWS($latestVitals);
+                $ewsData = $this->calculateEWS($latestVitals, $ewsSystem);
                 
                 // Get nurse on duty from schedule assignment
                 $nurseOnDuty = $nurseAssignments[$wardBed->id] ?? null;
@@ -2210,9 +2220,9 @@ class WardDashboardController extends Controller
 
     /**
      * Calculate Early Warning Score (EWS) based on vital signs
-     * Using NEWS2 (National Early Warning Score 2) scoring system
+     * Supports multiple scoring systems: EWS IHH, NEWS2, NEWS, MEWS, PEWS
      */
-    private function calculateEWS(?VitalSign $vitals): array
+    private function calculateEWS(?VitalSign $vitals, string $ewsSystem = 'ews_ihh'): array
     {
         if (!$vitals) {
             return [
@@ -2221,6 +2231,102 @@ class WardDashboardController extends Controller
             ];
         }
 
+        // Route to appropriate scoring system
+        switch ($ewsSystem) {
+            case 'ews_ihh':
+                return $this->calculateEWS_IHH($vitals);
+            case 'news2':
+            case 'news':
+                return $this->calculateEWS_NEWS2($vitals);
+            case 'mews':
+                return $this->calculateEWS_MEWS($vitals);
+            case 'pews':
+                return $this->calculateEWS_PEWS($vitals);
+            default:
+                return $this->calculateEWS_IHH($vitals);
+        }
+    }
+
+    /**
+     * EWS IHH (IJN Hospital Hijau) scoring system
+     * Yellow Zone (Score 1): Warning - Attention required
+     * Pink Zone (Score 2): Activate Trigger Protocol
+     */
+    private function calculateEWS_IHH(VitalSign $vitals): array
+    {
+        $score = 0;
+
+        // Pulse Rate scoring (bpm)
+        // Yellow Zone (1): 100-120 (high), 41-59 (low)
+        // Pink Zone (2): >120, ≤40
+        if ($vitals->pulse_rate !== null) {
+            $pr = $vitals->pulse_rate;
+            if ($pr > 120 || $pr <= 40) {
+                $score += 2;
+            } elseif (($pr >= 100 && $pr <= 120) || ($pr >= 41 && $pr <= 59)) {
+                $score += 1;
+            }
+        }
+
+        // Respiratory Rate scoring (breaths per minute)
+        // Yellow Zone (1): 21-24 (high), 9-11 (low)
+        // Pink Zone (2): >25, ≤8
+        if ($vitals->respiratory_rate !== null) {
+            $rr = $vitals->respiratory_rate;
+            if ($rr > 25 || $rr <= 8) {
+                $score += 2;
+            } elseif (($rr >= 21 && $rr <= 24) || ($rr >= 9 && $rr <= 11)) {
+                $score += 1;
+            }
+        }
+
+        // Systolic Blood Pressure scoring (mmHg)
+        // Yellow Zone (1): 160-199 (high), 91-100 (low)
+        // Pink Zone (2): >200, ≤90
+        if ($vitals->systolic_bp !== null) {
+            $sbp = $vitals->systolic_bp;
+            if ($sbp > 200 || $sbp <= 90) {
+                $score += 2;
+            } elseif (($sbp >= 160 && $sbp <= 199) || ($sbp >= 91 && $sbp <= 100)) {
+                $score += 1;
+            }
+        }
+
+        // SpO2 scoring (oxygen saturation %)
+        // Yellow Zone (1): 92-95 (low only)
+        // Pink Zone (2): ≤91
+        if ($vitals->spo2 !== null) {
+            $spo2 = $vitals->spo2;
+            if ($spo2 <= 91) {
+                $score += 2;
+            } elseif ($spo2 >= 92 && $spo2 <= 95) {
+                $score += 1;
+            }
+        }
+
+        // Temperature scoring (°C)
+        // Yellow Zone (1): 38-38.9 (high), 35.1-35.9 (low)
+        // Pink Zone (2): ≥39, ≤35
+        if ($vitals->temperature !== null) {
+            $temp = (float) $vitals->temperature;
+            if ($temp >= 39 || $temp <= 35) {
+                $score += 2;
+            } elseif (($temp >= 38 && $temp <= 38.9) || ($temp >= 35.1 && $temp <= 35.9)) {
+                $score += 1;
+            }
+        }
+
+        return [
+            'score' => $score,
+            'has_vitals' => true,
+        ];
+    }
+
+    /**
+     * NEWS2 (National Early Warning Score 2) scoring system
+     */
+    private function calculateEWS_NEWS2(VitalSign $vitals): array
+    {
         $score = 0;
 
         // Respiratory Rate scoring (breaths per minute)
@@ -2271,6 +2377,99 @@ class WardDashboardController extends Controller
             elseif ($temp <= 38.0) $score += 0;
             elseif ($temp <= 39.0) $score += 1;
             else $score += 2;
+        }
+
+        return [
+            'score' => $score,
+            'has_vitals' => true,
+        ];
+    }
+
+    /**
+     * MEWS (Modified Early Warning Score) scoring system
+     */
+    private function calculateEWS_MEWS(VitalSign $vitals): array
+    {
+        $score = 0;
+
+        // Systolic Blood Pressure
+        if ($vitals->systolic_bp !== null) {
+            $sbp = $vitals->systolic_bp;
+            if ($sbp <= 70) $score += 3;
+            elseif ($sbp <= 80) $score += 2;
+            elseif ($sbp <= 100) $score += 1;
+            elseif ($sbp <= 199) $score += 0;
+            else $score += 2;
+        }
+
+        // Heart Rate
+        if ($vitals->pulse_rate !== null) {
+            $hr = $vitals->pulse_rate;
+            if ($hr <= 40) $score += 2;
+            elseif ($hr <= 50) $score += 1;
+            elseif ($hr <= 100) $score += 0;
+            elseif ($hr <= 110) $score += 1;
+            elseif ($hr <= 129) $score += 2;
+            else $score += 3;
+        }
+
+        // Respiratory Rate
+        if ($vitals->respiratory_rate !== null) {
+            $rr = $vitals->respiratory_rate;
+            if ($rr < 9) $score += 2;
+            elseif ($rr <= 14) $score += 0;
+            elseif ($rr <= 20) $score += 1;
+            elseif ($rr <= 29) $score += 2;
+            else $score += 3;
+        }
+
+        // Temperature
+        if ($vitals->temperature !== null) {
+            $temp = (float) $vitals->temperature;
+            if ($temp < 35) $score += 2;
+            elseif ($temp <= 38.4) $score += 0;
+            else $score += 2;
+        }
+
+        return [
+            'score' => $score,
+            'has_vitals' => true,
+        ];
+    }
+
+    /**
+     * PEWS (Pediatric Early Warning Score) scoring system
+     */
+    private function calculateEWS_PEWS(VitalSign $vitals): array
+    {
+        $score = 0;
+
+        // Heart Rate (pediatric ranges)
+        if ($vitals->pulse_rate !== null) {
+            $hr = $vitals->pulse_rate;
+            if ($hr < 60 || $hr > 150) $score += 2;
+            elseif ($hr < 70 || $hr > 130) $score += 1;
+        }
+
+        // Respiratory Rate (pediatric ranges)
+        if ($vitals->respiratory_rate !== null) {
+            $rr = $vitals->respiratory_rate;
+            if ($rr < 10 || $rr > 40) $score += 2;
+            elseif ($rr < 15 || $rr > 30) $score += 1;
+        }
+
+        // SpO2
+        if ($vitals->spo2 !== null) {
+            $spo2 = $vitals->spo2;
+            if ($spo2 < 90) $score += 2;
+            elseif ($spo2 < 95) $score += 1;
+        }
+
+        // Temperature
+        if ($vitals->temperature !== null) {
+            $temp = (float) $vitals->temperature;
+            if ($temp < 36 || $temp > 39) $score += 2;
+            elseif ($temp < 36.5 || $temp > 38) $score += 1;
         }
 
         return [
