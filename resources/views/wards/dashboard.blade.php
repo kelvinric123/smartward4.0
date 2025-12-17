@@ -54,6 +54,83 @@
         /* 4K specific icon and badge sizing */
         .fullscreen-res-3840x2160 .bed-card svg { transform: scale(1.3); }
         .fullscreen-res-3840x2160 .bed-card .clinical-badge { font-size: 0.9rem; padding: 0.375rem 0.625rem; }
+
+        /* 4K Resolution Modal Sizing - targets body class for fixed modals */
+        body.fullscreen-res-3840x2160 .fixed.inset-0 .sm\:max-w-6xl {
+            max-width: 90rem !important; /* Increased from 72rem */
+        }
+        body.fullscreen-res-3840x2160 .fixed.inset-0 .sm\:max-w-5xl {
+            max-width: 80rem !important; /* Increased from 64rem */
+        }
+        body.fullscreen-res-3840x2160 .fixed.inset-0 .sm\:max-w-4xl {
+            max-width: 72rem !important; /* Increased from 56rem */
+        }
+        /* 4K Resolution iframe heights */
+        body.fullscreen-res-3840x2160 .fixed.inset-0 iframe.h-\[650px\] {
+            height: 900px !important;
+        }
+        body.fullscreen-res-3840x2160 .fixed.inset-0 iframe.h-\[600px\] {
+            height: 850px !important;
+        }
+        body.fullscreen-res-3840x2160 .fixed.inset-0 iframe.h-\[550px\] {
+            height: 800px !important;
+        }
+        /* 4K Resolution content area heights for non-iframe modals */
+        body.fullscreen-res-3840x2160 .fixed.inset-0 .max-h-\[600px\] {
+            max-height: 850px !important;
+        }
+        /* 4K Resolution modal text and padding */
+        body.fullscreen-res-3840x2160 .fixed.inset-0 h3.text-lg {
+            font-size: 1.5rem !important;
+            line-height: 2rem !important;
+        }
+        body.fullscreen-res-3840x2160 .fixed.inset-0 .text-sm {
+            font-size: 1.1rem !important;
+        }
+        body.fullscreen-res-3840x2160 .fixed.inset-0 .text-xs {
+            font-size: 0.95rem !important;
+        }
+        body.fullscreen-res-3840x2160 .fixed.inset-0 .sm\:p-6 {
+            padding: 2rem !important;
+        }
+        /* 4K Resolution modal buttons */
+        body.fullscreen-res-3840x2160 .fixed.inset-0 button,
+        body.fullscreen-res-3840x2160 .fixed.inset-0 a.inline-flex {
+            font-size: 1.1rem !important;
+            padding: 0.75rem 1.5rem !important;
+        }
+        /* 4K Resolution modal icons */
+        body.fullscreen-res-3840x2160 .fixed.inset-0 .h-12.w-12 {
+            height: 4rem !important;
+            width: 4rem !important;
+        }
+        body.fullscreen-res-3840x2160 .fixed.inset-0 .h-6.w-6 {
+            height: 2rem !important;
+            width: 2rem !important;
+        }
+        /* 4K Resolution grid items in modals */
+        body.fullscreen-res-3840x2160 .fixed.inset-0 .grid.grid-cols-1 {
+            gap: 1rem !important;
+        }
+        body.fullscreen-res-3840x2160 .fixed.inset-0 .p-3 {
+            padding: 1.25rem !important;
+        }
+        body.fullscreen-res-3840x2160 .fixed.inset-0 .p-4 {
+            padding: 1.5rem !important;
+        }
+        body.fullscreen-res-3840x2160 .fixed.inset-0 .mb-4 {
+            margin-bottom: 1.5rem !important;
+        }
+        body.fullscreen-res-3840x2160 .fixed.inset-0 .mb-6 {
+            margin-bottom: 2rem !important;
+        }
+        /* 4K Resolution font sizes for modal content */
+        body.fullscreen-res-3840x2160 .fixed.inset-0 .font-medium {
+            font-size: 1.2rem !important;
+        }
+        body.fullscreen-res-3840x2160 .fixed.inset-0 .font-semibold {
+            font-size: 1.3rem !important;
+        }
     </style>
     <x-slot name="header">
         <div class="flex items-center justify-between" x-data="{ 
@@ -209,8 +286,22 @@
         customFullscreen: localStorage.getItem('wardDashboardFullscreen') === 'true', 
         fullscreenGrid: '{{ $fullscreenGrid }}', 
         fullscreenTextClass: '{{ $fullscreenTextClass }}',
-        fullscreenResolutionClass: '{{ $fullscreenResolutionClass }}'
-    }" @toggle-custom-fullscreen.window="customFullscreen = $event.detail.enabled" :class="[customFullscreen ? fullscreenTextClass : '', customFullscreen ? fullscreenResolutionClass : '', customFullscreen ? 'h-[calc(100vh-80px)] overflow-hidden' : '']">
+        fullscreenResolutionClass: '{{ $fullscreenResolutionClass }}',
+        init() {
+            // Apply body class on initial load if fullscreen is enabled
+            if (this.customFullscreen && this.fullscreenResolutionClass) {
+                document.body.classList.add(this.fullscreenResolutionClass);
+            }
+        }
+    }" @toggle-custom-fullscreen.window="
+        customFullscreen = $event.detail.enabled;
+        // Toggle resolution class on body for fixed modals
+        if (customFullscreen && fullscreenResolutionClass) {
+            document.body.classList.add(fullscreenResolutionClass);
+        } else if (fullscreenResolutionClass) {
+            document.body.classList.remove(fullscreenResolutionClass);
+        }
+    " :class="[customFullscreen ? fullscreenTextClass : '', customFullscreen ? fullscreenResolutionClass : '', customFullscreen ? 'h-[calc(100vh-80px)] overflow-hidden' : '']">
         <div class="mx-auto flex-1 flex flex-col overflow-hidden w-full" :class="customFullscreen ? 'px-2' : 'px-[5%]'">
             <!-- Tabs and Action Buttons -->
             <div class="flex-shrink-0 mb-4 flex items-center justify-between" :class="customFullscreen ? 'mb-2' : 'mb-6'">
@@ -2201,94 +2292,77 @@
             </div>
             <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
             <div x-show="open" @click.stop x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
-                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div class="bg-white px-4 pt-4 pb-3 sm:p-4">
                     <div class="sm:flex sm:items-start">
-                        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-cyan-100 sm:mx-0 sm:h-10 sm:w-10">
-                            <svg class="h-6 w-6 text-cyan-600" fill="currentColor" viewBox="0 0 20 20">
+                        <div class="hidden sm:flex mx-auto flex-shrink-0 items-center justify-center h-8 w-8 rounded-full bg-cyan-100 sm:mx-0">
+                            <svg class="h-5 w-5 text-cyan-600" fill="currentColor" viewBox="0 0 20 20">
                                 <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/>
                             </svg>
                         </div>
-                        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-2">
+                        <div class="text-center sm:text-left sm:ml-3 flex-1">
+                            <h3 class="text-base font-medium text-gray-900 mb-1.5">
                                 Consultants & Their Patients
                             </h3>
                             
-                            <!-- Role Legend -->
-                            <div class="flex flex-wrap items-center gap-3 mb-4 text-xs">
-                                <span class="text-gray-500">Roles:</span>
-                                <span class="inline-flex items-center px-2 py-0.5 rounded border bg-blue-100 text-blue-800 border-blue-200">
-                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                                    </svg>
-                                    Attending (PV1-7)
-                                </span>
-                                <span class="inline-flex items-center px-2 py-0.5 rounded border bg-purple-100 text-purple-800 border-purple-200">
-                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                    </svg>
-                                    Referring (PV1-8)
-                                </span>
-                                <span class="inline-flex items-center px-2 py-0.5 rounded border bg-green-100 text-green-800 border-green-200">
-                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                                    </svg>
-                                    Consulting (PV1-9)
-                                </span>
+                            <!-- Role Legend - Compact -->
+                            <div class="flex flex-wrap items-center gap-2 mb-3 text-xs text-gray-500">
+                                <span>Roles:</span>
+                                <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span>Attending</span>
+                                <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-purple-500"></span>Referring</span>
+                                <span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500"></span>Consulting</span>
                             </div>
                             
-                            <!-- Search Box -->
-                            <div class="mb-4">
+                            <!-- Search Box - Compact -->
+                            <div class="mb-3">
                                 <div class="relative">
-                                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <div class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                        <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                                         </svg>
                                     </div>
                                     <input type="text" 
                                            x-model="searchQuery"
-                                           placeholder="Search consultants, patients, MRN, or bed..."
-                                           class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                                           placeholder="Search consultant, patient, MRN, bed..."
+                                           class="block w-full pl-8 pr-8 py-1.5 border border-gray-300 rounded-md text-sm placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500">
                                     <button x-show="searchQuery" 
                                             @click="searchQuery = ''" 
-                                            class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
-                                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            class="absolute inset-y-0 right-0 pr-2.5 flex items-center text-gray-400 hover:text-gray-600">
+                                        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                                         </svg>
                                     </button>
                                 </div>
                             </div>
                             
-                            <div class="mt-4 max-h-[500px] overflow-y-auto">
+                            <div class="mt-3 max-h-[60vh] overflow-y-auto">
                                 <template x-if="getFilteredConsultants().length > 0">
-                                    <div>
+                                    <div class="space-y-3">
                                         <template x-for="consultant in getFilteredConsultants()" :key="consultant.id">
-                                            <div class="mb-6 bg-gray-50 rounded-lg p-4 border border-gray-200">
-                                                <h4 class="font-semibold text-lg text-cyan-700 mb-3 flex items-center cursor-pointer hover:text-cyan-900"
+                                            <div class="bg-gray-50 rounded-lg p-2.5 border border-gray-200">
+                                                <h4 class="font-medium text-sm text-cyan-700 mb-2 flex items-center cursor-pointer hover:text-cyan-900"
                                                     @click="highlightAndFilterBeds(consultant.patients.map(p => p.bed_number).filter(b => b), 'consultant')">
-                                                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                                    <svg class="w-4 h-4 mr-1.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                                                         <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/>
                                                     </svg>
-                                                    <span x-text="consultant.name"></span>
-                                                    <span class="ml-2 text-sm bg-cyan-100 text-cyan-800 px-2 py-1 rounded-full" x-text="consultant.patients.length + ' patient(s)'"></span>
+                                                    <span x-text="consultant.name" class="truncate"></span>
+                                                    <span class="ml-1.5 text-xs bg-cyan-100 text-cyan-800 px-1.5 py-0.5 rounded-full flex-shrink-0" x-text="consultant.patients.length"></span>
                                                 </h4>
-                                                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5">
                                                     <template x-for="patient in consultant.patients" :key="patient.id + '_' + patient.role">
-                                                        <div class="bg-white p-3 rounded border border-gray-300 hover:border-cyan-500 cursor-pointer transition-all hover:shadow-md"
-                                                             @click="highlightAndFilterBeds([patient.bed_number], 'bed')">
-                                                            <div class="flex items-center justify-between">
-                                                                <div class="flex-1 min-w-0">
-                                                                    <div class="font-medium text-gray-900 truncate" x-text="patient.name"></div>
-                                                                    <div class="text-sm text-gray-600">MRN: <span x-text="patient.mrn"></span></div>
-                                                                    <!-- Role Badge -->
-                                                                    <span class="inline-flex items-center mt-1 px-2 py-0.5 rounded text-xs font-medium border"
-                                                                          :class="getRoleBadgeClass(patient.role)"
-                                                                          x-text="getRoleLabel(patient.role)">
-                                                                    </span>
-                                                                </div>
-                                                                <div class="text-right ml-2 flex-shrink-0">
-                                                                    <div class="text-sm font-semibold text-cyan-700" x-text="patient.bed_number || 'N/A'"></div>
-                                                                    <div class="text-xs text-gray-500">Click to view</div>
-                                                                </div>
+                                                        <div class="bg-white px-2 py-1.5 rounded border border-gray-200 hover:border-cyan-400 cursor-pointer transition-colors text-xs"
+                                                             @click="highlightAndFilterBeds([patient.bed_number], 'bed')"
+                                                             :title="patient.name + ' (MRN: ' + patient.mrn + ') - ' + getRoleLabel(patient.role)">
+                                                            <div class="flex items-center gap-1.5">
+                                                                <!-- Role indicator dot -->
+                                                                <span class="w-2 h-2 rounded-full flex-shrink-0"
+                                                                      :class="{
+                                                                          'bg-blue-500': patient.role === 'attending',
+                                                                          'bg-purple-500': patient.role === 'referring',
+                                                                          'bg-green-500': patient.role === 'consulting',
+                                                                          'bg-gray-400': !['attending', 'referring', 'consulting'].includes(patient.role)
+                                                                      }"></span>
+                                                                <span class="truncate flex-1 text-gray-800" x-text="patient.name"></span>
+                                                                <span class="text-cyan-600 font-medium flex-shrink-0" x-text="patient.bed_number || '-'"></span>
                                                             </div>
                                                         </div>
                                                     </template>
@@ -2298,28 +2372,28 @@
                                     </div>
                                 </template>
                                 <template x-if="getFilteredConsultants().length === 0 && searchQuery">
-                                    <div class="text-center text-gray-500 py-8">
-                                        <svg class="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <div class="text-center text-gray-500 py-6">
+                                        <svg class="w-10 h-10 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
                                         </svg>
-                                        <p>No consultants or patients match "<span x-text="searchQuery" class="font-medium"></span>"</p>
-                                        <button @click="searchQuery = ''" class="mt-2 text-cyan-600 hover:text-cyan-800 text-sm">Clear search</button>
+                                        <p class="text-sm">No results for "<span x-text="searchQuery" class="font-medium"></span>"</p>
+                                        <button @click="searchQuery = ''" class="mt-1 text-cyan-600 hover:text-cyan-800 text-xs">Clear</button>
                                     </div>
                                 </template>
                                 <template x-if="consultants.length === 0 && !searchQuery">
-                                    <div class="text-center text-gray-500 py-8">
-                                        <svg class="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <div class="text-center text-gray-500 py-6">
+                                        <svg class="w-10 h-10 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
                                         </svg>
-                                        <p>No consultants assigned to patients yet.</p>
+                                        <p class="text-sm">No consultants assigned yet.</p>
                                     </div>
                                 </template>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                    <button @click="closeModal()" type="button" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 sm:w-auto sm:text-sm">
+                <div class="bg-gray-50 px-4 py-2 sm:px-4 sm:flex sm:flex-row-reverse">
+                    <button @click="closeModal()" type="button" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-3 py-1.5 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-cyan-500 sm:w-auto">
                         Close
                     </button>
                 </div>
