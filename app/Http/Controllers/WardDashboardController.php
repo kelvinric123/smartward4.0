@@ -189,6 +189,7 @@ class WardDashboardController extends Controller
             ['key' => 'ews', 'visible' => true, 'order' => 4],
             ['key' => 'mrn', 'visible' => true, 'order' => 5],
             ['key' => 'admit_button', 'visible' => true, 'order' => 6],
+            ['key' => 'prebook_button', 'visible' => true, 'order' => 7],
         ];
 
         $defaultPatientInfoDisplay = [
@@ -799,6 +800,78 @@ class WardDashboardController extends Controller
         }
     }
     
+    public function cancelPrebook(Request $request, $patientId)
+    {
+        try {
+            $patient = Patient::findOrFail($patientId);
+            
+            if ($patient->status !== 'prebook') {
+                Log::warning('Cancel prebook failed: Patient not in prebook status', [
+                    'patient_id' => $patientId,
+                    'current_status' => $patient->status,
+                    'user_id' => Auth::id(),
+                ]);
+                return back()->with('error', 'Patient is not in prebook status!');
+            }
+            
+            $wardId = $patient->ward_id;
+            $bedNumber = $patient->bed_number;
+            $patientName = $patient->name;
+            $mrn = $patient->mrn;
+            
+            // Update bed status in Bed table
+            $bed = Bed::where('ward_id', $wardId)
+                ->where('bed_number', $bedNumber)
+                ->first();
+            if ($bed) {
+                $bed->update([
+                    'status' => 'available',
+                    'patient_id' => null,
+                ]);
+            }
+            
+            // Clear patient's ward and bed assignment
+            $patient->update([
+                'ward_id' => null,
+                'bed_number' => null,
+                'status' => 'active',
+                'consultant_id' => null,
+                'nurse_id' => null,
+                'anaesthetist_id' => null,
+            ]);
+            
+            // Create admission log for cancel prebook
+            AdmissionLog::create([
+                'patient_id' => $patient->id,
+                'ward_id' => $wardId,
+                'user_id' => Auth::id(),
+                'bed_number' => $bedNumber,
+                'action' => 'cancel-prebook',
+                'patient_name' => $patientName,
+                'mrn' => $mrn,
+            ]);
+            
+            Log::info('Prebook cancelled successfully', [
+                'patient_id' => $patient->id,
+                'patient_name' => $patientName,
+                'mrn' => $mrn,
+                'ward_id' => $wardId,
+                'bed_number' => $bedNumber,
+                'user_id' => Auth::id(),
+            ]);
+            
+            return back()->with('success', 'Prebook cancelled successfully!');
+        } catch (\Exception $e) {
+            Log::error('Cancel prebook failed', [
+                'error' => $e->getMessage(),
+                'patient_id' => $patientId,
+                'user_id' => Auth::id(),
+            ]);
+            
+            return back()->with('error', 'Failed to cancel prebook: ' . $e->getMessage());
+        }
+    }
+    
     public function admissionLogs(Request $request)
     {
         $wardId = $request->input('ward_id');
@@ -1040,6 +1113,7 @@ class WardDashboardController extends Controller
             ['key' => 'ews', 'visible' => true, 'order' => 4],
             ['key' => 'mrn', 'visible' => true, 'order' => 5],
             ['key' => 'admit_button', 'visible' => true, 'order' => 6],
+            ['key' => 'prebook_button', 'visible' => true, 'order' => 7],
         ];
 
         $defaultPatientInfoDisplay = [

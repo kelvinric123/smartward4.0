@@ -29,7 +29,7 @@
                 <!-- Page Heading -->
                 @isset($header)
                     <header class="bg-white/80 backdrop-blur-sm shadow-sm border-b border-blue-100">
-                        <div class="mx-auto py-6 px-4 sm:px-6 lg:px-8" :class="hideNav ? 'max-w-full' : 'max-w-7xl'">
+                        <div class="mx-auto py-6" :class="hideNav ? 'max-w-full px-4' : 'max-w-7xl px-4 sm:px-6 lg:px-8'">
                             {{ $header }}
                         </div>
                     </header>
@@ -42,7 +42,7 @@
                 
                 <!-- Footer -->
                 <footer x-show="!hideFooter" x-transition class="bg-white/60 backdrop-blur-sm border-t border-blue-100 py-4">
-                    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="mx-auto" :class="hideNav ? 'max-w-full px-4' : 'max-w-7xl px-4 sm:px-6 lg:px-8'">
                         <div class="flex items-center justify-between">
                             <div class="text-sm text-gray-600">
                                 <span class="font-semibold text-blue-600">PHKL</span> Smart Ward 4.0

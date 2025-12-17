@@ -324,6 +324,62 @@
                                 </label>
                             </div>
                         </div>
+
+                        <!-- Resolution for Fullscreen -->
+                        <div class="mt-4 pt-4 border-t border-gray-200">
+                            <h5 class="text-xs font-semibold text-gray-600 mb-3 flex items-center">
+                                <svg class="w-3.5 h-3.5 mr-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                                </svg>
+                                Resolution
+                            </h5>
+                            <p class="text-xs text-gray-500 mb-3">Optimize display for specific screen resolutions in fullscreen mode.</p>
+                            <div class="grid grid-cols-3 gap-2">
+                                <label class="flex flex-col items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-lg border-2 cursor-pointer transition-all"
+                                       :class="dashboardDisplaySettings.fullscreen_resolution === 'default' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'">
+                                    <input type="radio" 
+                                           name="fullscreen_resolution_radio"
+                                           value="default"
+                                           x-model="dashboardDisplaySettings.fullscreen_resolution"
+                                           class="sr-only">
+                                    <div class="w-8 h-5 bg-gray-300 rounded mb-1 flex items-center justify-center">
+                                        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                                        </svg>
+                                    </div>
+                                    <span class="text-xs font-semibold text-gray-700">Default</span>
+                                    <span class="text-[10px] text-gray-500">Auto-detect</span>
+                                </label>
+
+                                <label class="flex flex-col items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-lg border-2 cursor-pointer transition-all"
+                                       :class="dashboardDisplaySettings.fullscreen_resolution === '1920x1080' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'">
+                                    <input type="radio" 
+                                           name="fullscreen_resolution_radio"
+                                           value="1920x1080"
+                                           x-model="dashboardDisplaySettings.fullscreen_resolution"
+                                           class="sr-only">
+                                    <div class="w-10 h-6 bg-blue-200 rounded mb-1 flex items-center justify-center border border-blue-300">
+                                        <span class="text-[8px] font-bold text-blue-600">FHD</span>
+                                    </div>
+                                    <span class="text-xs font-semibold text-gray-700">1920×1080</span>
+                                    <span class="text-[10px] text-gray-500">Full HD</span>
+                                </label>
+
+                                <label class="flex flex-col items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-lg border-2 cursor-pointer transition-all"
+                                       :class="dashboardDisplaySettings.fullscreen_resolution === '3840x2160' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'">
+                                    <input type="radio" 
+                                           name="fullscreen_resolution_radio"
+                                           value="3840x2160"
+                                           x-model="dashboardDisplaySettings.fullscreen_resolution"
+                                           class="sr-only">
+                                    <div class="w-12 h-7 bg-purple-200 rounded mb-1 flex items-center justify-center border border-purple-300">
+                                        <span class="text-[8px] font-bold text-purple-600">4K</span>
+                                    </div>
+                                    <span class="text-xs font-semibold text-gray-700">3840×2160</span>
+                                    <span class="text-[10px] text-gray-500">4K UHD</span>
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -994,7 +1050,8 @@
                 { key: 'admitted_duration', label: 'Admitted Duration', description: 'Days and hours since admission', visible: true, order: 3 },
                 { key: 'ews', label: 'EWS', description: 'Early Warning Score indicator', visible: true, order: 4 },
                 { key: 'mrn', label: 'MRN', description: 'Medical Record Number in header', visible: true, order: 5 },
-                { key: 'admit_button', label: 'Patient Details Button', description: 'Show/hide Patient Details button on bed box', visible: true, order: 6 },
+                { key: 'admit_button', label: 'Admit Patient Button', description: 'Show/hide Admit button on empty beds', visible: true, order: 6 },
+                { key: 'prebook_button', label: 'Prebook Button', description: 'Show/hide Prebook button on empty beds', visible: true, order: 7 },
             ];
 
             const defaultPatientInfoItems = [
@@ -1158,7 +1215,8 @@
             const defaultDashboardDisplay = {
                 patient_name_mask: 'full',
                 fullscreen_mode: 'medium',
-                fullscreen_text_size: 'medium'
+                fullscreen_text_size: 'medium',
+                fullscreen_resolution: 'default'
             };
             const dashboardDisplaySettings = { ...defaultDashboardDisplay, ...savedDashboardDisplay };
 
@@ -1305,8 +1363,8 @@
                         { key: 'admitted_duration', label: 'Admitted Duration', description: 'Days and hours since admission', visible: true, order: 3 },
                         { key: 'ews', label: 'EWS', description: 'Early Warning Score indicator', visible: true, order: 4 },
                         { key: 'mrn', label: 'MRN', description: 'Medical Record Number in header', visible: true, order: 5 },
-                        { key: 'admit_button', label: 'Admit Patient Button', description: 'Quick action button for patient details', visible: true, order: 6 },
-                        { key: 'prebook_button', label: 'Prebook Button', description: 'Quick action button for prebooking', visible: true, order: 7 },
+                        { key: 'admit_button', label: 'Admit Patient Button', description: 'Show/hide Admit button on empty beds', visible: true, order: 6 },
+                        { key: 'prebook_button', label: 'Prebook Button', description: 'Show/hide Prebook button on empty beds', visible: true, order: 7 },
                     ];
                     this.initSortable();
                 },

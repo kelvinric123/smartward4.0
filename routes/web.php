@@ -88,6 +88,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/ward-dashboard/admit-patient', [WardDashboardController::class, 'admitPatient'])->name('ward.admit-patient');
     Route::post('/ward-dashboard/prebook-patient', [WardDashboardController::class, 'prebookPatient'])->name('ward.prebook-patient');
     Route::post('/ward-dashboard/check-in-prebook/{patient}', [WardDashboardController::class, 'checkInPrebook'])->name('ward.check-in-prebook');
+    Route::post('/ward-dashboard/cancel-prebook/{patient}', [WardDashboardController::class, 'cancelPrebook'])->name('ward.cancel-prebook');
     Route::get('/ward-dashboard/admission-logs', [WardDashboardController::class, 'admissionLogs'])->name('ward.admission-logs');
     Route::get('/ward-dashboard/patients', [WardDashboardController::class, 'patientsList'])->name('ward.patients-list');
     Route::get('/ward-dashboard/patient-details', [WardDashboardController::class, 'patientDetails'])->name('ward.patient-details');

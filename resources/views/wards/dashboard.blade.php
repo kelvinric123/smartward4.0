@@ -21,6 +21,39 @@
         .fullscreen-text-large .bed-card .text-sm { font-size: 0.95rem; }
         .fullscreen-text-large .bed-card .text-xs { font-size: 0.8rem; }
         .fullscreen-text-large .bed-card h3, .fullscreen-text-large .bed-card .font-bold { font-size: 1.1rem; }
+
+        /* Resolution-specific styles for 1920x1080 (Full HD) */
+        .fullscreen-res-1920x1080 .bed-card { font-size: 0.9rem; }
+        .fullscreen-res-1920x1080 .bed-card .text-sm { font-size: 0.85rem; }
+        .fullscreen-res-1920x1080 .bed-card .text-xs { font-size: 0.75rem; }
+        .fullscreen-res-1920x1080 .bed-card h3, 
+        .fullscreen-res-1920x1080 .bed-card .font-bold { font-size: 1rem; }
+        .fullscreen-res-1920x1080 .bed-card .px-4 { padding-left: 1rem; padding-right: 1rem; }
+        .fullscreen-res-1920x1080 .bed-card .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+        .fullscreen-res-1920x1080 .bed-card .p-3 { padding: 0.75rem; }
+        .fullscreen-res-1920x1080 .bed-card .space-y-2 > * + * { margin-top: 0.5rem; }
+        .fullscreen-res-1920x1080 .bed-card .w-4 { width: 1rem; height: 1rem; }
+        .fullscreen-res-1920x1080 .bed-card .gap-4 { gap: 0.75rem; }
+
+        /* Resolution-specific styles for 3840x2160 (4K UHD) */
+        .fullscreen-res-3840x2160 .bed-card { font-size: 1.25rem; }
+        .fullscreen-res-3840x2160 .bed-card .text-sm { font-size: 1.15rem; }
+        .fullscreen-res-3840x2160 .bed-card .text-xs { font-size: 1rem; }
+        .fullscreen-res-3840x2160 .bed-card h3, 
+        .fullscreen-res-3840x2160 .bed-card .font-bold { font-size: 1.4rem; }
+        .fullscreen-res-3840x2160 .bed-card .px-4 { padding-left: 1.5rem; padding-right: 1.5rem; }
+        .fullscreen-res-3840x2160 .bed-card .py-2 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+        .fullscreen-res-3840x2160 .bed-card .p-3 { padding: 1.25rem; }
+        .fullscreen-res-3840x2160 .bed-card .space-y-2 > * + * { margin-top: 0.75rem; }
+        .fullscreen-res-3840x2160 .bed-card .w-4 { width: 1.5rem; height: 1.5rem; }
+        .fullscreen-res-3840x2160 .bed-card .gap-4 { gap: 1.25rem; }
+        .fullscreen-res-3840x2160 .bed-card .rounded-lg { border-radius: 0.75rem; }
+        .fullscreen-res-3840x2160 .bed-card .px-2 { padding-left: 0.75rem; padding-right: 0.75rem; }
+        .fullscreen-res-3840x2160 .bed-card .py-1 { padding-top: 0.375rem; padding-bottom: 0.375rem; }
+        .fullscreen-res-3840x2160 .bed-card .px-1\.5 { padding-left: 0.5rem; padding-right: 0.5rem; }
+        /* 4K specific icon and badge sizing */
+        .fullscreen-res-3840x2160 .bed-card svg { transform: scale(1.3); }
+        .fullscreen-res-3840x2160 .bed-card .clinical-badge { font-size: 0.9rem; padding: 0.375rem 0.625rem; }
     </style>
     <x-slot name="header">
         <div class="flex items-center justify-between" x-data="{ 
@@ -111,6 +144,15 @@
         $fullscreenTextSize = $dashboardDisplay['fullscreen_text_size'] ?? 'medium';
         $fullscreenTextClass = $fullscreenTextSizeClasses[$fullscreenTextSize] ?? $fullscreenTextSizeClasses['medium'];
         
+        // Resolution classes for fullscreen mode
+        $fullscreenResolutionClasses = [
+            'default' => '',
+            '1920x1080' => 'fullscreen-res-1920x1080',
+            '3840x2160' => 'fullscreen-res-3840x2160',
+        ];
+        $fullscreenResolution = $dashboardDisplay['fullscreen_resolution'] ?? 'default';
+        $fullscreenResolutionClass = $fullscreenResolutionClasses[$fullscreenResolution] ?? '';
+        
         // Patient name masking function
         $maskPatientName = function($fullName) use ($dashboardDisplay) {
             $mask = $dashboardDisplay['patient_name_mask'] ?? 'full';
@@ -155,16 +197,21 @@
     @php
         // Helper function to check if field is visible - defined here so it's accessible for all bed types
         $isVisible = function($key) use ($bedBoxConfig) {
-            return isset($bedBoxConfig[$key]) && ($bedBoxConfig[$key]['visible'] ?? true);
+            // If not in config, default to true (especially for new keys like prebook_button)
+            if (!isset($bedBoxConfig[$key])) {
+                return true;
+            }
+            return $bedBoxConfig[$key]['visible'] ?? true;
         };
     @endphp
 
     <div class="py-6 flex flex-col" x-data="{ 
         customFullscreen: localStorage.getItem('wardDashboardFullscreen') === 'true', 
         fullscreenGrid: '{{ $fullscreenGrid }}', 
-        fullscreenTextClass: '{{ $fullscreenTextClass }}' 
-    }" @toggle-custom-fullscreen.window="customFullscreen = $event.detail.enabled" :class="[customFullscreen ? fullscreenTextClass : '', customFullscreen ? 'h-[calc(100vh-80px)] overflow-hidden' : '']">
-        <div class="mx-auto px-[5%] flex-1 flex flex-col overflow-hidden w-full" :class="customFullscreen ? 'px-2' : ''">
+        fullscreenTextClass: '{{ $fullscreenTextClass }}',
+        fullscreenResolutionClass: '{{ $fullscreenResolutionClass }}'
+    }" @toggle-custom-fullscreen.window="customFullscreen = $event.detail.enabled" :class="[customFullscreen ? fullscreenTextClass : '', customFullscreen ? fullscreenResolutionClass : '', customFullscreen ? 'h-[calc(100vh-80px)] overflow-hidden' : '']">
+        <div class="mx-auto flex-1 flex flex-col overflow-hidden w-full" :class="customFullscreen ? 'px-2' : 'px-[5%]'">
             <!-- Tabs and Action Buttons -->
             <div class="flex-shrink-0 mb-4 flex items-center justify-between" :class="customFullscreen ? 'mb-2' : 'mb-6'">
                 <div class="flex items-center space-x-2">
@@ -227,7 +274,8 @@
                     @if($bed['status'] === 'occupied' && !empty($bed['is_outside']))
                         <!-- Patient is OUTSIDE (Sent to Procedure) - Orange/Amber Theme -->
                         <div
-                            class="bed-card bg-gradient-to-br from-orange-50 to-amber-50 rounded-lg shadow-md border-2 border-orange-400 overflow-hidden transition-all duration-300 h-[280px] flex flex-col animate-pulse-subtle"
+                            class="bed-card bg-gradient-to-br from-orange-50 to-amber-50 rounded-lg shadow-md border-2 border-orange-400 transition-all duration-300 h-[280px] flex flex-col animate-pulse-subtle"
+                            style="overflow: visible;"
                             data-section="{{ $bed['section'] ?? 1 }}"
                             data-next-movement-time="{{ $bed['next_movement_time_iso'] ?? '' }}"
                             data-next-movement-location="{{ $bed['next_movement_location'] ?? '' }}"
@@ -294,23 +342,24 @@
                             </div>
                         </div>
                     @elseif($bed['status'] === 'occupied')
-                        <!-- Occupied Bed - Color based on Gender: Red for Female, Blue for Male -->
-                        <!-- Pending Discharge: Green border and header -->
+                        <!-- Occupied Bed - Color based on Gender: Pink for Female, Blue for Male -->
+                        <!-- Pending Discharge: Yellow border and header -->
                         @php
                             $isPendingDischarge = $bed['is_pending_discharge'] ?? false;
                             if ($isPendingDischarge) {
-                                // Pending discharge - use green theme
-                                $borderClass = 'border-green-500';
-                                $bgClass = 'bg-gradient-to-r from-green-500 to-emerald-600';
+                                // Pending discharge - use yellow theme
+                                $borderClass = 'border-yellow-500';
+                                $bgClass = 'bg-gradient-to-r from-yellow-500 to-yellow-600';
                             } else {
                                 // Normal - color based on gender
-                                $genderColor = strtolower($bed['gender']) === 'female' ? 'red' : 'blue';
-                                $borderClass = strtolower($bed['gender']) === 'female' ? 'border-red-500' : 'border-blue-500';
-                                $bgClass = strtolower($bed['gender']) === 'female' ? 'bg-red-500' : 'bg-blue-500';
+                                $genderColor = strtolower($bed['gender']) === 'female' ? 'pink' : 'blue';
+                                $borderClass = strtolower($bed['gender']) === 'female' ? 'border-pink-500' : 'border-blue-500';
+                                $bgClass = strtolower($bed['gender']) === 'female' ? 'bg-pink-500' : 'bg-blue-500';
                             }
                         @endphp
                         <div
-                            class="bed-card bg-white rounded-lg shadow-md border-2 {{ $borderClass }} overflow-hidden transition-all duration-300 h-[280px] flex flex-col {{ $isPendingDischarge ? 'ring-2 ring-green-300' : '' }}"
+                            class="bed-card bg-white rounded-lg shadow-md border-2 {{ $borderClass }} transition-all duration-300 h-[280px] flex flex-col {{ $isPendingDischarge ? 'ring-2 ring-yellow-300' : '' }}"
+                            style="overflow: visible;"
                             data-section="{{ $bed['section'] ?? 1 }}"
                             data-next-movement-time="{{ $bed['next_movement_time_iso'] ?? '' }}"
                             data-next-movement-location="{{ $bed['next_movement_location'] ?? '' }}"
@@ -392,207 +441,256 @@
                                 @endphp
 
                                 <!-- Clinical Indicators Row - Touch Screen Friendly -->
-                                <div class="flex items-center flex-wrap gap-1 pt-2" x-data="{ openPopover: null }">
-                                    {{-- Pending Discharge Status Badge --}}
-                                    @if($bed['is_pending_discharge'] ?? false)
-                                    <span class="px-1.5 py-0.5 bg-green-500 text-white text-xs rounded font-bold flex items-center">
-                                        <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-                                        </svg>
-                                        DC
-                                    </span>
-                                    @endif
-                                    
-                                    @if($isVisible('ews'))
-                                        @if($bed['ews_has_vitals'] && $bed['ews'] !== null)
-                                            @php
-                                                $ewsScore = $bed['ews'];
-                                                if ($ewsScore <= 2) {
-                                                    $ewsBgClass = 'bg-green-500';
-                                                } elseif ($ewsScore <= 4) {
-                                                    $ewsBgClass = 'bg-yellow-500';
-                                                } elseif ($ewsScore <= 6) {
-                                                    $ewsBgClass = 'bg-orange-500';
-                                                } else {
-                                                    $ewsBgClass = 'bg-red-500';
-                                                }
-                                            @endphp
-                                            <span class="px-1.5 py-0.5 {{ $ewsBgClass }} text-white text-xs rounded font-bold">EWS: {{ $ewsScore }}</span>
-                                            @if($ewsScore >= 5)
-                                                <svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                                                </svg>
+                                <div class="flex items-center justify-between pt-2 overflow-visible" x-data="{ openPopover: null }">
+                                    {{-- Left side: EWS/No Vitals + Pending Discharge --}}
+                                    <div class="flex items-center gap-1 shrink-0">
+                                        @if($isVisible('ews'))
+                                            @if($bed['ews_has_vitals'] && $bed['ews'] !== null)
+                                                @php
+                                                    $ewsScore = $bed['ews'];
+                                                    if ($ewsScore <= 2) {
+                                                        $ewsBgClass = 'bg-green-500';
+                                                    } elseif ($ewsScore <= 4) {
+                                                        $ewsBgClass = 'bg-yellow-500';
+                                                    } elseif ($ewsScore <= 6) {
+                                                        $ewsBgClass = 'bg-orange-500';
+                                                    } else {
+                                                        $ewsBgClass = 'bg-red-500';
+                                                    }
+                                                @endphp
+                                                <span class="px-1.5 py-0.5 {{ $ewsBgClass }} text-white text-xs rounded font-bold">EWS: {{ $ewsScore }}</span>
+                                                @if($ewsScore >= 5)
+                                                    <svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                                                    </svg>
+                                                @endif
+                                            @else
+                                                <span class="px-1.5 py-0.5 bg-gray-400 text-white text-xs rounded font-medium">No vitals</span>
                                             @endif
-                                        @else
-                                            <span class="px-1.5 py-0.5 bg-gray-400 text-white text-xs rounded font-medium">No vitals</span>
                                         @endif
-                                    @endif
+                                        
+                                        {{-- Pending Discharge Status Badge --}}
+                                        @if($bed['is_pending_discharge'] ?? false)
+                                        <span class="px-1.5 py-0.5 bg-yellow-500 text-white text-xs rounded font-bold flex items-center">
+                                            <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                                            </svg>
+                                            DC
+                                        </span>
+                                        @endif
+                                    </div>
 
-                                    {{-- Nursing Level - Click to show details --}}
-                                    @if($showPatientInfo('nursing_level') && !empty($bed['nursing_level']) && $bed['nursing_level'] !== 'none')
-                                    @php
-                                        $levelColors = [
-                                            'level_1' => ['bg' => 'bg-green-500', 'text' => 'text-white', 'border' => 'border-green-600'],
-                                            'level_2' => ['bg' => 'bg-blue-500', 'text' => 'text-white', 'border' => 'border-blue-600'],
-                                            'level_3' => ['bg' => 'bg-yellow-500', 'text' => 'text-white', 'border' => 'border-yellow-600'],
-                                            'level_4' => ['bg' => 'bg-red-500', 'text' => 'text-white', 'border' => 'border-red-600'],
-                                        ];
-                                        $levelNum = ['level_1' => '1', 'level_2' => '2', 'level_3' => '3', 'level_4' => '4'];
-                                        $levelDesc = ['level_1' => 'Minimal Care', 'level_2' => 'Moderate Care', 'level_3' => 'Maximum Care', 'level_4' => 'Intensive Care'];
-                                        $currentLevel = $levelColors[$bed['nursing_level']] ?? ['bg' => 'bg-purple-500', 'text' => 'text-white', 'border' => 'border-purple-600'];
-                                    @endphp
-                                    <div class="relative">
-                                        <button type="button" @click="openPopover = openPopover === 'nursing_{{ $bed['patient_id'] }}' ? null : 'nursing_{{ $bed['patient_id'] }}'" 
-                                                class="px-1.5 py-0.5 {{ $currentLevel['bg'] }} {{ $currentLevel['text'] }} text-xs rounded font-bold flex items-center cursor-pointer border {{ $currentLevel['border'] }}">
-                                            <!-- Nursing Care Icon -->
-                                            <svg class="w-3.5 h-3.5 mr-0.5" fill="currentColor" viewBox="0 0 24 24">
+                                    {{-- Right side: Clinical Status Grid (4x2) --}}
+                                    <div class="grid grid-cols-4 gap-1 overflow-visible" style="width: 116px;">
+                                        {{-- Row 1: Nursing Level, NBM, Fall Risk, Isolation --}}
+                                        {{-- Nursing Level - Click to show details --}}
+                                        @if($showPatientInfo('nursing_level') && !empty($bed['nursing_level']) && $bed['nursing_level'] !== 'none')
+                                        @php
+                                            $levelColors = [
+                                                'level_1' => ['bg' => 'bg-green-500', 'text' => 'text-white', 'border' => 'border-green-600'],
+                                                'level_2' => ['bg' => 'bg-blue-500', 'text' => 'text-white', 'border' => 'border-blue-600'],
+                                                'level_3' => ['bg' => 'bg-yellow-500', 'text' => 'text-white', 'border' => 'border-yellow-600'],
+                                                'level_4' => ['bg' => 'bg-red-500', 'text' => 'text-white', 'border' => 'border-red-600'],
+                                            ];
+                                            $levelNum = ['level_1' => '1', 'level_2' => '2', 'level_3' => '3', 'level_4' => '4'];
+                                            $levelDesc = ['level_1' => 'Minimal Care', 'level_2' => 'Moderate Care', 'level_3' => 'Maximum Care', 'level_4' => 'Intensive Care'];
+                                            $currentLevel = $levelColors[$bed['nursing_level']] ?? ['bg' => 'bg-purple-500', 'text' => 'text-white', 'border' => 'border-purple-600'];
+                                        @endphp
+                                        <div class="relative">
+                                            <button type="button" @click="openPopover = openPopover === 'nursing_{{ $bed['patient_id'] }}' ? null : 'nursing_{{ $bed['patient_id'] }}'" 
+                                                    class="w-6 h-6 {{ $currentLevel['bg'] }} {{ $currentLevel['text'] }} text-xs rounded flex items-center justify-center cursor-pointer border {{ $currentLevel['border'] }}" title="Nursing Level">
+                                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                                </svg>
+                                            </button>
+                                            <div x-show="openPopover === 'nursing_{{ $bed['patient_id'] }}'" 
+                                                 @click.away="openPopover = null"
+                                                 x-transition
+                                                 class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 bg-white rounded-lg shadow-2xl border border-gray-200 p-2 whitespace-nowrap">
+                                                <div class="text-xs font-bold text-gray-800 mb-1">Nursing Level {{ $levelNum[$bed['nursing_level']] ?? '?' }}</div>
+                                                <div class="text-xs text-gray-600">{{ $levelDesc[$bed['nursing_level']] ?? 'Unknown Level' }}</div>
+                                            </div>
+                                        </div>
+                                        @else
+                                        <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center" title="Nursing Level">
+                                            <svg class="w-3.5 h-3.5 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
                                                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                                             </svg>
-                                            {{ $levelNum[$bed['nursing_level']] ?? '?' }}
-                                        </button>
-                                        <div x-show="openPopover === 'nursing_{{ $bed['patient_id'] }}'" 
-                                             @click.away="openPopover = null"
-                                             x-transition
-                                             class="absolute z-50 bottom-full left-0 mb-1 w-40 bg-white rounded-lg shadow-xl border border-gray-200 p-2">
-                                            <div class="text-xs font-bold text-gray-800 mb-1">Nursing Level {{ $levelNum[$bed['nursing_level']] ?? '?' }}</div>
-                                            <div class="text-xs text-gray-600">{{ $levelDesc[$bed['nursing_level']] ?? 'Unknown Level' }}</div>
                                         </div>
-                                    </div>
-                                    @endif
+                                        @endif
 
-                                    {{-- Diet Type - NBM (Nil by mouth) with click details --}}
-                                    @if($showPatientInfo('diet_type') && ($bed['has_nbm'] ?? false))
-                                    <div class="relative">
-                                        <button type="button" @click="openPopover = openPopover === 'nbm_{{ $bed['patient_id'] }}' ? null : 'nbm_{{ $bed['patient_id'] }}'"
-                                                class="px-1.5 py-0.5 bg-red-600 text-white text-xs rounded font-bold flex items-center cursor-pointer border border-red-700">
-                                            <!-- NBM Icon - Crossed utensils -->
-                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                        {{-- Diet Type - NBM (Nil by mouth) with click details --}}
+                                        @if($showPatientInfo('diet_type') && ($bed['has_nbm'] ?? false))
+                                        <div class="relative">
+                                            <button type="button" @click="openPopover = openPopover === 'nbm_{{ $bed['patient_id'] }}' ? null : 'nbm_{{ $bed['patient_id'] }}'"
+                                                    class="w-6 h-6 bg-red-600 text-white text-xs rounded flex items-center justify-center cursor-pointer border border-red-700" title="NBM">
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                                                    <path d="M3 3v6c0 1 1 2 2 2h3c1 0 2-1 2-2V3M6 3v18"/>
+                                                    <line x1="2" y1="2" x2="22" y2="22" stroke-width="3"/>
+                                                    <path d="M15 3h4v6a3 3 0 01-3 3h-1M17 12v9"/>
+                                                </svg>
+                                            </button>
+                                            <div x-show="openPopover === 'nbm_{{ $bed['patient_id'] }}'" 
+                                                 @click.away="openPopover = null"
+                                                 x-transition
+                                                 class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-36 bg-white rounded-lg shadow-2xl border border-gray-200 p-2 whitespace-nowrap">
+                                                <div class="text-xs font-bold text-red-700 mb-1">⚠️ NBM</div>
+                                                <div class="text-xs text-gray-600">Nil By Mouth</div>
+                                                <div class="text-xs text-gray-500 mt-1">No food or drink</div>
+                                            </div>
+                                        </div>
+                                        @else
+                                        <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center" title="Diet">
+                                            <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                                                 <path d="M3 3v6c0 1 1 2 2 2h3c1 0 2-1 2-2V3M6 3v18"/>
-                                                <line x1="2" y1="2" x2="22" y2="22" stroke-width="3"/>
                                                 <path d="M15 3h4v6a3 3 0 01-3 3h-1M17 12v9"/>
                                             </svg>
-                                        </button>
-                                        <div x-show="openPopover === 'nbm_{{ $bed['patient_id'] }}'" 
-                                             @click.away="openPopover = null"
-                                             x-transition
-                                             class="absolute z-50 bottom-full left-0 mb-1 w-36 bg-white rounded-lg shadow-xl border border-gray-200 p-2">
-                                            <div class="text-xs font-bold text-red-700 mb-1">⚠️ NBM</div>
-                                            <div class="text-xs text-gray-600">Nil By Mouth</div>
-                                            <div class="text-xs text-gray-500 mt-1">No food or drink</div>
                                         </div>
-                                    </div>
-                                    @endif
+                                        @endif
 
-                                    {{-- Fall Risk - Click to show level --}}
-                                    @if($showPatientInfo('fall_risk') && !empty($bed['fall_risk']) && $bed['fall_risk'] !== 'none')
-                                    @php
-                                        $fallColors = [
-                                            'low' => ['bg' => 'bg-green-500', 'text' => 'text-white', 'border' => 'border-green-600', 'level' => '1'],
-                                            'moderate' => ['bg' => 'bg-yellow-500', 'text' => 'text-white', 'border' => 'border-yellow-600', 'level' => '2'],
-                                            'high' => ['bg' => 'bg-orange-500', 'text' => 'text-white', 'border' => 'border-orange-600', 'level' => '3'],
-                                            'alert_active' => ['bg' => 'bg-red-500', 'text' => 'text-white', 'border' => 'border-red-600', 'level' => '4'],
-                                        ];
-                                        $fallDesc = [
-                                            'low' => 'Low Risk - Standard precautions',
-                                            'moderate' => 'Moderate Risk - Enhanced monitoring',
-                                            'high' => 'High Risk - Close supervision',
-                                            'alert_active' => 'Alert Active - Constant observation',
-                                        ];
-                                        $currentFall = $fallColors[$bed['fall_risk']] ?? ['bg' => 'bg-orange-500', 'text' => 'text-white', 'border' => 'border-orange-600', 'level' => '?'];
-                                    @endphp
-                                    <div class="relative">
-                                        <button type="button" @click="openPopover = openPopover === 'fall_{{ $bed['patient_id'] }}' ? null : 'fall_{{ $bed['patient_id'] }}'"
-                                                class="px-1.5 py-0.5 {{ $currentFall['bg'] }} {{ $currentFall['text'] }} text-xs rounded font-bold flex items-center cursor-pointer border {{ $currentFall['border'] }}">
-                                            <!-- Fall Risk Icon - Person falling -->
-                                            <svg class="w-3.5 h-3.5 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                        {{-- Fall Risk - Click to show level --}}
+                                        @if($showPatientInfo('fall_risk') && !empty($bed['fall_risk']) && $bed['fall_risk'] !== 'none')
+                                        @php
+                                            $fallColors = [
+                                                'low' => ['bg' => 'bg-green-500', 'text' => 'text-white', 'border' => 'border-green-600', 'level' => '1'],
+                                                'moderate' => ['bg' => 'bg-yellow-500', 'text' => 'text-white', 'border' => 'border-yellow-600', 'level' => '2'],
+                                                'high' => ['bg' => 'bg-orange-500', 'text' => 'text-white', 'border' => 'border-orange-600', 'level' => '3'],
+                                                'alert_active' => ['bg' => 'bg-red-500', 'text' => 'text-white', 'border' => 'border-red-600', 'level' => '4'],
+                                            ];
+                                            $fallDesc = [
+                                                'low' => 'Low Risk - Standard precautions',
+                                                'moderate' => 'Moderate Risk - Enhanced monitoring',
+                                                'high' => 'High Risk - Close supervision',
+                                                'alert_active' => 'Alert Active - Constant observation',
+                                            ];
+                                            $currentFall = $fallColors[$bed['fall_risk']] ?? ['bg' => 'bg-orange-500', 'text' => 'text-white', 'border' => 'border-orange-600', 'level' => '?'];
+                                        @endphp
+                                        <div class="relative">
+                                            <button type="button" @click="openPopover = openPopover === 'fall_{{ $bed['patient_id'] }}' ? null : 'fall_{{ $bed['patient_id'] }}'"
+                                                    class="w-6 h-6 {{ $currentFall['bg'] }} {{ $currentFall['text'] }} text-xs rounded flex items-center justify-center cursor-pointer border {{ $currentFall['border'] }}" title="Fall Risk">
+                                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                                    <circle cx="17" cy="4" r="2"/>
+                                                    <path d="M15 8l-3 4 4 2.5M12 12l-3.5-1.5M17 14.5l1.5 4.5M14 14.5l-2 5.5"/>
+                                                    <path d="M3 20h18" stroke-width="1.5"/>
+                                                </svg>
+                                            </button>
+                                            <div x-show="openPopover === 'fall_{{ $bed['patient_id'] }}'" 
+                                                 @click.away="openPopover = null"
+                                                 x-transition
+                                                 class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-white rounded-lg shadow-2xl border border-gray-200 p-2 whitespace-nowrap">
+                                                <div class="text-xs font-bold text-gray-800 mb-1">⚠️ Fall Risk Level {{ $currentFall['level'] }}</div>
+                                                <div class="text-xs text-gray-600">{{ $fallDesc[$bed['fall_risk']] ?? 'Unknown Risk' }}</div>
+                                            </div>
+                                        </div>
+                                        @else
+                                        <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center" title="Fall Risk">
+                                            <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                                                 <circle cx="17" cy="4" r="2"/>
                                                 <path d="M15 8l-3 4 4 2.5M12 12l-3.5-1.5M17 14.5l1.5 4.5M14 14.5l-2 5.5"/>
                                                 <path d="M3 20h18" stroke-width="1.5"/>
                                             </svg>
-                                            {{ $currentFall['level'] }}
-                                        </button>
-                                        <div x-show="openPopover === 'fall_{{ $bed['patient_id'] }}'" 
-                                             @click.away="openPopover = null"
-                                             x-transition
-                                             class="absolute z-50 bottom-full left-0 mb-1 w-48 bg-white rounded-lg shadow-xl border border-gray-200 p-2">
-                                            <div class="text-xs font-bold text-gray-800 mb-1">⚠️ Fall Risk Level {{ $currentFall['level'] }}</div>
-                                            <div class="text-xs text-gray-600">{{ $fallDesc[$bed['fall_risk']] ?? 'Unknown Risk' }}</div>
                                         </div>
-                                    </div>
-                                    @endif
+                                        @endif
 
-                                    {{-- Isolation Type - Click to show category --}}
-                                    @if($showPatientInfo('isolation_type') && !empty($bed['isolation_type']) && $bed['isolation_type'] !== 'none')
-                                    @php
-                                        $criticalIsolations = ['covid', 'tb', 'airborne', 'COVID', 'TB', 'AIR'];
-                                        $isoCode = strtoupper($bed['isolation_type']);
-                                        $isCriticalIso = in_array($bed['isolation_type'], $criticalIsolations) || in_array($isoCode, $criticalIsolations);
-                                        $isoColors = $isCriticalIso 
-                                            ? ['bg' => 'bg-red-600', 'text' => 'text-white', 'border' => 'border-red-700'] 
-                                            : ['bg' => 'bg-yellow-500', 'text' => 'text-white', 'border' => 'border-yellow-600'];
-                                        $isoDisplayName = $bed['isolation_type_name'] ?? ucfirst(str_replace('_', ' ', $bed['isolation_type']));
-                                    @endphp
-                                    <div class="relative">
-                                        <button type="button" @click="openPopover = openPopover === 'iso_{{ $bed['patient_id'] }}' ? null : 'iso_{{ $bed['patient_id'] }}'"
-                                                class="px-1.5 py-0.5 {{ $isoColors['bg'] }} {{ $isoColors['text'] }} text-xs rounded font-bold flex items-center cursor-pointer border {{ $isoColors['border'] }}">
-                                            <!-- Virus Icon -->
-                                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                        {{-- Isolation Type - Click to show category --}}
+                                        @if($showPatientInfo('isolation_type') && !empty($bed['isolation_type']) && $bed['isolation_type'] !== 'none')
+                                        @php
+                                            $criticalIsolations = ['covid', 'tb', 'airborne', 'COVID', 'TB', 'AIR'];
+                                            $isoCode = strtoupper($bed['isolation_type']);
+                                            $isCriticalIso = in_array($bed['isolation_type'], $criticalIsolations) || in_array($isoCode, $criticalIsolations);
+                                            $isoColors = $isCriticalIso 
+                                                ? ['bg' => 'bg-red-600', 'text' => 'text-white', 'border' => 'border-red-700'] 
+                                                : ['bg' => 'bg-yellow-500', 'text' => 'text-white', 'border' => 'border-yellow-600'];
+                                            $isoDisplayName = $bed['isolation_type_name'] ?? ucfirst(str_replace('_', ' ', $bed['isolation_type']));
+                                        @endphp
+                                        <div class="relative">
+                                            <button type="button" @click="openPopover = openPopover === 'iso_{{ $bed['patient_id'] }}' ? null : 'iso_{{ $bed['patient_id'] }}'"
+                                                    class="w-6 h-6 {{ $isoColors['bg'] }} {{ $isoColors['text'] }} text-xs rounded flex items-center justify-center cursor-pointer border {{ $isoColors['border'] }}" title="Isolation">
+                                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                                    <circle cx="12" cy="12" r="4"/>
+                                                    <circle cx="12" cy="3" r="1.5"/>
+                                                    <circle cx="12" cy="21" r="1.5"/>
+                                                    <circle cx="3" cy="12" r="1.5"/>
+                                                    <circle cx="21" cy="12" r="1.5"/>
+                                                    <circle cx="5.6" cy="5.6" r="1.2"/>
+                                                    <circle cx="18.4" cy="18.4" r="1.2"/>
+                                                    <circle cx="5.6" cy="18.4" r="1.2"/>
+                                                    <circle cx="18.4" cy="5.6" r="1.2"/>
+                                                </svg>
+                                            </button>
+                                            <div x-show="openPopover === 'iso_{{ $bed['patient_id'] }}'" 
+                                                 @click.away="openPopover = null"
+                                                 x-transition
+                                                 class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-white rounded-lg shadow-2xl border border-gray-200 p-2 whitespace-nowrap">
+                                                <div class="text-xs font-bold {{ $isCriticalIso ? 'text-red-700' : 'text-yellow-700' }} mb-1">🦠 Isolation Required</div>
+                                                <div class="text-xs text-gray-800 font-semibold">{{ $isoDisplayName }}</div>
+                                                @if($isCriticalIso)
+                                                <div class="text-xs text-red-600 mt-1">⚠️ Critical - Full PPE required</div>
+                                                @endif
+                                            </div>
+                                        </div>
+                                        @else
+                                        <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center" title="Isolation">
+                                            <svg class="w-3.5 h-3.5 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
                                                 <circle cx="12" cy="12" r="4"/>
                                                 <circle cx="12" cy="3" r="1.5"/>
                                                 <circle cx="12" cy="21" r="1.5"/>
                                                 <circle cx="3" cy="12" r="1.5"/>
                                                 <circle cx="21" cy="12" r="1.5"/>
-                                                <circle cx="5.6" cy="5.6" r="1.2"/>
-                                                <circle cx="18.4" cy="18.4" r="1.2"/>
-                                                <circle cx="5.6" cy="18.4" r="1.2"/>
-                                                <circle cx="18.4" cy="5.6" r="1.2"/>
                                             </svg>
-                                        </button>
-                                        <div x-show="openPopover === 'iso_{{ $bed['patient_id'] }}'" 
-                                             @click.away="openPopover = null"
-                                             x-transition
-                                             class="absolute z-50 bottom-full left-0 mb-1 w-48 bg-white rounded-lg shadow-xl border border-gray-200 p-2">
-                                            <div class="text-xs font-bold {{ $isCriticalIso ? 'text-red-700' : 'text-yellow-700' }} mb-1">🦠 Isolation Required</div>
-                                            <div class="text-xs text-gray-800 font-semibold">{{ $isoDisplayName }}</div>
-                                            @if($isCriticalIso)
-                                            <div class="text-xs text-red-600 mt-1">⚠️ Critical - Full PPE required</div>
-                                            @endif
                                         </div>
-                                    </div>
-                                    @endif
+                                        @endif
 
-                                    {{-- Allergies - Click to show list --}}
-                                    @if($showPatientInfo('allergies') && !empty($bed['allergies']) && is_array($bed['allergies']) && count($bed['allergies']) > 0)
-                                    @php
-                                        $allergyList = collect($bed['allergies'])->map(function($a) {
-                                            return is_array($a) ? ($a['allergen'] ?? $a['allergen_code'] ?? 'Unknown') : $a;
-                                        })->toArray();
-                                        $allergyCount = count($allergyList);
-                                    @endphp
-                                    <div class="relative">
-                                        <button type="button" @click="openPopover = openPopover === 'allergy_{{ $bed['patient_id'] }}' ? null : 'allergy_{{ $bed['patient_id'] }}'"
-                                                class="px-1.5 py-0.5 bg-pink-600 text-white text-xs rounded font-bold flex items-center cursor-pointer border border-pink-700">
-                                            <!-- Allergy Warning Icon -->
-                                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                        {{-- Row 2: Allergies + 3 empty placeholders --}}
+                                        {{-- Allergies - Click to show list --}}
+                                        @if($showPatientInfo('allergies') && !empty($bed['allergies']) && is_array($bed['allergies']) && count($bed['allergies']) > 0)
+                                        @php
+                                            $allergyList = collect($bed['allergies'])->map(function($a) {
+                                                return is_array($a) ? ($a['allergen'] ?? $a['allergen_code'] ?? 'Unknown') : $a;
+                                            })->toArray();
+                                            $allergyCount = count($allergyList);
+                                        @endphp
+                                        <div class="relative">
+                                            <button type="button" @click="openPopover = openPopover === 'allergy_{{ $bed['patient_id'] }}' ? null : 'allergy_{{ $bed['patient_id'] }}'"
+                                                    class="w-6 h-6 bg-pink-600 text-white text-xs rounded flex items-center justify-center cursor-pointer border border-pink-700" title="Allergies">
+                                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                                    <path d="M12 2L1 21h22L12 2zm0 3.5L19.5 19h-15L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/>
+                                                </svg>
+                                            </button>
+                                            <div x-show="openPopover === 'allergy_{{ $bed['patient_id'] }}'" 
+                                                 @click.away="openPopover = null"
+                                                 x-transition
+                                                 class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-white rounded-lg shadow-2xl border border-gray-200 p-2">
+                                                <div class="text-xs font-bold text-pink-700 mb-2">⚠️ Allergies ({{ $allergyCount }})</div>
+                                                <ul class="space-y-1">
+                                                    @foreach($allergyList as $allergy)
+                                                    <li class="text-xs text-gray-700 flex items-center">
+                                                        <span class="w-1.5 h-1.5 bg-pink-500 rounded-full mr-2"></span>
+                                                        {{ $allergy }}
+                                                    </li>
+                                                    @endforeach
+                                                </ul>
+                                            </div>
+                                        </div>
+                                        @else
+                                        <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center" title="Allergies">
+                                            <svg class="w-3.5 h-3.5 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
                                                 <path d="M12 2L1 21h22L12 2zm0 3.5L19.5 19h-15L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/>
                                             </svg>
-                                        </button>
-                                        <div x-show="openPopover === 'allergy_{{ $bed['patient_id'] }}'" 
-                                             @click.away="openPopover = null"
-                                             x-transition
-                                             class="absolute z-50 bottom-full right-0 mb-1 w-52 bg-white rounded-lg shadow-xl border border-gray-200 p-2">
-                                            <div class="text-xs font-bold text-pink-700 mb-2">⚠️ Allergies ({{ $allergyCount }})</div>
-                                            <ul class="space-y-1">
-                                                @foreach($allergyList as $allergy)
-                                                <li class="text-xs text-gray-700 flex items-center">
-                                                    <span class="w-1.5 h-1.5 bg-pink-500 rounded-full mr-2"></span>
-                                                    {{ $allergy }}
-                                                </li>
-                                                @endforeach
-                                            </ul>
+                                        </div>
+                                        @endif
+
+                                        {{-- 3 Empty placeholder boxes for future indicators --}}
+                                        <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center" title="Reserved">
+                                            <span class="text-gray-400 text-xs">-</span>
+                                        </div>
+                                        <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center" title="Reserved">
+                                            <span class="text-gray-400 text-xs">-</span>
+                                        </div>
+                                        <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center" title="Reserved">
+                                            <span class="text-gray-400 text-xs">-</span>
                                         </div>
                                     </div>
-                                    @endif
                                 </div>
                             </div>
 
@@ -725,15 +823,25 @@
                                     </svg>
                                     Booked: {{ $bed['booked_datetime'] }}
                                 </div>
-                                <form method="POST" action="{{ route('ward.check-in-prebook', $bed['patient_id']) }}">
-                                    @csrf
-                                    <button type="submit" class="w-full mt-2 px-3 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-lg font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center">
-                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                        </svg>
-                                        Check In Patient
-                                    </button>
-                                </form>
+                                <div class="flex gap-2 mt-2">
+                                    <form method="POST" action="{{ route('ward.check-in-prebook', $bed['patient_id']) }}" class="flex-1">
+                                        @csrf
+                                        <button type="submit" class="w-full px-3 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-lg font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center">
+                                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                            </svg>
+                                            Check In
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="{{ route('ward.cancel-prebook', $bed['patient_id']) }}" onsubmit="return confirm('Are you sure you want to cancel this prebook?')">
+                                        @csrf
+                                        <button type="submit" class="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center" title="Cancel Prebook">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                            </svg>
+                                        </button>
+                                    </form>
+                                </div>
                             </div>
                         </div>
                     @else
@@ -878,13 +986,205 @@
         </div>
     </div>
 
+    @php
+        $modalPatients = \App\Models\Patient::where('is_active', true)->whereNull('ward_id')->get(['id', 'name', 'mrn']);
+        $modalConsultants = \App\Models\Consultant::where('is_active', true)->get(['id', 'name']);
+        $modalNurses = \App\Models\Nurse::where('is_active', true)->get(['id', 'name']);
+        $modalAnaesthetists = \App\Models\Anaesthetist::where('is_active', true)->get(['id', 'name']);
+    @endphp
+
+    <script>
+        window.modalData = {
+            patients: @json($modalPatients),
+            consultants: @json($modalConsultants),
+            nurses: @json($modalNurses),
+            anaesthetists: @json($modalAnaesthetists)
+        };
+
+        function admitModalComponent() {
+            return {
+                open: false,
+                bedNumber: '',
+                wardId: null,
+                patientSearch: '',
+                patientDropdownOpen: false,
+                selectedPatient: null,
+                patients: window.modalData.patients,
+                get filteredPatients() {
+                    if (!this.patientSearch) return this.patients;
+                    const search = this.patientSearch.toLowerCase();
+                    return this.patients.filter(p => p.name.toLowerCase().includes(search) || (p.mrn && p.mrn.toLowerCase().includes(search)));
+                },
+                selectPatient(patient) {
+                    this.selectedPatient = patient;
+                    this.patientSearch = patient.name + ' (MRN: ' + patient.mrn + ')';
+                    this.patientDropdownOpen = false;
+                },
+                clearPatient() {
+                    this.selectedPatient = null;
+                    this.patientSearch = '';
+                },
+                consultantSearch: '',
+                consultantDropdownOpen: false,
+                selectedConsultant: null,
+                consultants: window.modalData.consultants,
+                get filteredConsultants() {
+                    if (!this.consultantSearch) return this.consultants;
+                    const search = this.consultantSearch.toLowerCase();
+                    return this.consultants.filter(c => c.name.toLowerCase().includes(search));
+                },
+                selectConsultant(consultant) {
+                    this.selectedConsultant = consultant;
+                    this.consultantSearch = consultant.name;
+                    this.consultantDropdownOpen = false;
+                },
+                clearConsultant() {
+                    this.selectedConsultant = null;
+                    this.consultantSearch = '';
+                },
+                nurseSearch: '',
+                nurseDropdownOpen: false,
+                selectedNurse: null,
+                nurses: window.modalData.nurses,
+                get filteredNurses() {
+                    if (!this.nurseSearch) return this.nurses;
+                    const search = this.nurseSearch.toLowerCase();
+                    return this.nurses.filter(n => n.name.toLowerCase().includes(search));
+                },
+                selectNurse(nurse) {
+                    this.selectedNurse = nurse;
+                    this.nurseSearch = nurse.name;
+                    this.nurseDropdownOpen = false;
+                },
+                clearNurse() {
+                    this.selectedNurse = null;
+                    this.nurseSearch = '';
+                },
+                anaesthetistSearch: '',
+                anaesthetistDropdownOpen: false,
+                selectedAnaesthetist: null,
+                anaesthetists: window.modalData.anaesthetists,
+                get filteredAnaesthetists() {
+                    if (!this.anaesthetistSearch) return this.anaesthetists;
+                    const search = this.anaesthetistSearch.toLowerCase();
+                    return this.anaesthetists.filter(a => a.name.toLowerCase().includes(search));
+                },
+                selectAnaesthetist(anaesthetist) {
+                    this.selectedAnaesthetist = anaesthetist;
+                    this.anaesthetistSearch = anaesthetist.name;
+                    this.anaesthetistDropdownOpen = false;
+                },
+                clearAnaesthetist() {
+                    this.selectedAnaesthetist = null;
+                    this.anaesthetistSearch = '';
+                },
+                resetForm() {
+                    this.patientSearch = '';
+                    this.selectedPatient = null;
+                    this.consultantSearch = '';
+                    this.selectedConsultant = null;
+                    this.nurseSearch = '';
+                    this.selectedNurse = null;
+                    this.anaesthetistSearch = '';
+                    this.selectedAnaesthetist = null;
+                }
+            };
+        }
+
+        function prebookModalComponent() {
+            return {
+                open: false,
+                bedNumber: '',
+                wardId: null,
+                patientSearch: '',
+                patientDropdownOpen: false,
+                selectedPatient: null,
+                patients: window.modalData.patients,
+                get filteredPatients() {
+                    if (!this.patientSearch) return this.patients;
+                    const search = this.patientSearch.toLowerCase();
+                    return this.patients.filter(p => p.name.toLowerCase().includes(search) || (p.mrn && p.mrn.toLowerCase().includes(search)));
+                },
+                selectPatient(patient) {
+                    this.selectedPatient = patient;
+                    this.patientSearch = patient.name + ' (MRN: ' + patient.mrn + ')';
+                    this.patientDropdownOpen = false;
+                },
+                clearPatient() {
+                    this.selectedPatient = null;
+                    this.patientSearch = '';
+                },
+                consultantSearch: '',
+                consultantDropdownOpen: false,
+                selectedConsultant: null,
+                consultants: window.modalData.consultants,
+                get filteredConsultants() {
+                    if (!this.consultantSearch) return this.consultants;
+                    const search = this.consultantSearch.toLowerCase();
+                    return this.consultants.filter(c => c.name.toLowerCase().includes(search));
+                },
+                selectConsultant(consultant) {
+                    this.selectedConsultant = consultant;
+                    this.consultantSearch = consultant.name;
+                    this.consultantDropdownOpen = false;
+                },
+                clearConsultant() {
+                    this.selectedConsultant = null;
+                    this.consultantSearch = '';
+                },
+                nurseSearch: '',
+                nurseDropdownOpen: false,
+                selectedNurse: null,
+                nurses: window.modalData.nurses,
+                get filteredNurses() {
+                    if (!this.nurseSearch) return this.nurses;
+                    const search = this.nurseSearch.toLowerCase();
+                    return this.nurses.filter(n => n.name.toLowerCase().includes(search));
+                },
+                selectNurse(nurse) {
+                    this.selectedNurse = nurse;
+                    this.nurseSearch = nurse.name;
+                    this.nurseDropdownOpen = false;
+                },
+                clearNurse() {
+                    this.selectedNurse = null;
+                    this.nurseSearch = '';
+                },
+                anaesthetistSearch: '',
+                anaesthetistDropdownOpen: false,
+                selectedAnaesthetist: null,
+                anaesthetists: window.modalData.anaesthetists,
+                get filteredAnaesthetists() {
+                    if (!this.anaesthetistSearch) return this.anaesthetists;
+                    const search = this.anaesthetistSearch.toLowerCase();
+                    return this.anaesthetists.filter(a => a.name.toLowerCase().includes(search));
+                },
+                selectAnaesthetist(anaesthetist) {
+                    this.selectedAnaesthetist = anaesthetist;
+                    this.anaesthetistSearch = anaesthetist.name;
+                    this.anaesthetistDropdownOpen = false;
+                },
+                clearAnaesthetist() {
+                    this.selectedAnaesthetist = null;
+                    this.anaesthetistSearch = '';
+                },
+                resetForm() {
+                    this.patientSearch = '';
+                    this.selectedPatient = null;
+                    this.consultantSearch = '';
+                    this.selectedConsultant = null;
+                    this.nurseSearch = '';
+                    this.selectedNurse = null;
+                    this.anaesthetistSearch = '';
+                    this.selectedAnaesthetist = null;
+                }
+            };
+        }
+    </script>
+
     <!-- Admit Patient Modal -->
-    <div x-data="{ 
-        open: false, 
-        bedNumber: '', 
-        wardId: null 
-    }" 
-    @open-admit-modal.window="open = true; bedNumber = $event.detail.bedNumber; wardId = $event.detail.wardId"
+    <div x-data="admitModalComponent()" 
+    @open-admit-modal.window="open = true; bedNumber = $event.detail.bedNumber; wardId = $event.detail.wardId; resetForm()"
     x-show="open" 
     class="fixed inset-0 z-50 overflow-y-auto" 
     style="display: none;">
@@ -900,6 +1200,10 @@
                     @csrf
                     <input type="hidden" name="ward_id" x-model="wardId">
                     <input type="hidden" name="bed_number" x-model="bedNumber">
+                    <input type="hidden" name="patient_id" :value="selectedPatient ? selectedPatient.id : ''">
+                    <input type="hidden" name="consultant_id" :value="selectedConsultant ? selectedConsultant.id : ''">
+                    <input type="hidden" name="nurse_id" :value="selectedNurse ? selectedNurse.id : ''">
+                    <input type="hidden" name="anaesthetist_id" :value="selectedAnaesthetist ? selectedAnaesthetist.id : ''">
                     
                     <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                         <div class="sm:flex sm:items-start">
@@ -914,51 +1218,129 @@
                                 </h3>
                                 
                                 <div class="space-y-4">
-                                    <div>
-                                        <label for="patient_id" class="block text-sm font-medium text-gray-700">Select Patient</label>
-                                        <select name="patient_id" id="patient_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                            <option value="">Choose a patient...</option>
-                                            @foreach(\App\Models\Patient::where('is_active', true)->whereNull('ward_id')->get() as $patient)
-                                                <option value="{{ $patient->id }}">{{ $patient->name }} (MRN: {{ $patient->mrn }})</option>
-                                            @endforeach
-                                        </select>
+                                    <!-- Patient Searchable Dropdown -->
+                                    <div class="relative">
+                                        <label class="block text-sm font-medium text-gray-700">Select Patient <span class="text-red-500">*</span></label>
+                                        <div class="mt-1 relative">
+                                            <input type="text" 
+                                                   x-model="patientSearch" 
+                                                   @focus="patientDropdownOpen = true"
+                                                   @click="patientDropdownOpen = true"
+                                                   @input="patientDropdownOpen = true; selectedPatient = null"
+                                                   placeholder="Search by name or MRN..."
+                                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 pr-10"
+                                                   :class="{'border-red-300': !selectedPatient && patientSearch}"
+                                                   required>
+                                            <button type="button" x-show="patientSearch" @click="clearPatient()" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                            </button>
+                                        </div>
+                                        <div x-show="patientDropdownOpen && filteredPatients.length > 0" 
+                                             @click.away="patientDropdownOpen = false"
+                                             class="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-48 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
+                                            <template x-for="patient in filteredPatients" :key="patient.id">
+                                                <div @click="selectPatient(patient)" 
+                                                     class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-green-50"
+                                                     :class="{'bg-green-100': selectedPatient && selectedPatient.id === patient.id}">
+                                                    <span class="block truncate" x-text="patient.name + ' (MRN: ' + patient.mrn + ')'"></span>
+                                                </div>
+                                            </template>
+                                        </div>
+                                        <p x-show="patientDropdownOpen && filteredPatients.length === 0 && patientSearch" class="mt-1 text-xs text-gray-500">No patients found matching your search</p>
                                     </div>
                                     
-                                    <div>
-                                        <label for="consultant_id" class="block text-sm font-medium text-gray-700">Consultant (Optional)</label>
-                                        <select name="consultant_id" id="consultant_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                            <option value="">Choose a consultant...</option>
-                                            @foreach(\App\Models\Consultant::where('is_active', true)->get() as $consultant)
-                                                <option value="{{ $consultant->id }}">{{ $consultant->name }}</option>
-                                            @endforeach
-                                        </select>
+                                    <!-- Consultant Searchable Dropdown -->
+                                    <div class="relative">
+                                        <label class="block text-sm font-medium text-gray-700">Consultant (Optional)</label>
+                                        <div class="mt-1 relative">
+                                            <input type="text" 
+                                                   x-model="consultantSearch" 
+                                                   @focus="consultantDropdownOpen = true"
+                                                   @click="consultantDropdownOpen = true"
+                                                   @input="consultantDropdownOpen = true; selectedConsultant = null"
+                                                   placeholder="Search consultant..."
+                                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 pr-10">
+                                            <button type="button" x-show="consultantSearch" @click="clearConsultant()" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                            </button>
+                                        </div>
+                                        <div x-show="consultantDropdownOpen && filteredConsultants.length > 0" 
+                                             @click.away="consultantDropdownOpen = false"
+                                             class="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-48 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
+                                            <template x-for="consultant in filteredConsultants" :key="consultant.id">
+                                                <div @click="selectConsultant(consultant)" 
+                                                     class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-green-50"
+                                                     :class="{'bg-green-100': selectedConsultant && selectedConsultant.id === consultant.id}">
+                                                    <span class="block truncate" x-text="consultant.name"></span>
+                                                </div>
+                                            </template>
+                                        </div>
                                     </div>
                                     
-                                    <div>
-                                        <label for="nurse_id" class="block text-sm font-medium text-gray-700">Nurse (Optional)</label>
-                                        <select name="nurse_id" id="nurse_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                            <option value="">Choose a nurse...</option>
-                                            @foreach(\App\Models\Nurse::where('is_active', true)->get() as $nurse)
-                                                <option value="{{ $nurse->id }}">{{ $nurse->name }}</option>
-                                            @endforeach
-                                        </select>
+                                    <!-- Nurse Searchable Dropdown -->
+                                    <div class="relative">
+                                        <label class="block text-sm font-medium text-gray-700">Nurse (Optional)</label>
+                                        <div class="mt-1 relative">
+                                            <input type="text" 
+                                                   x-model="nurseSearch" 
+                                                   @focus="nurseDropdownOpen = true"
+                                                   @click="nurseDropdownOpen = true"
+                                                   @input="nurseDropdownOpen = true; selectedNurse = null"
+                                                   placeholder="Search nurse..."
+                                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 pr-10">
+                                            <button type="button" x-show="nurseSearch" @click="clearNurse()" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                            </button>
+                                        </div>
+                                        <div x-show="nurseDropdownOpen && filteredNurses.length > 0" 
+                                             @click.away="nurseDropdownOpen = false"
+                                             class="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-48 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
+                                            <template x-for="nurse in filteredNurses" :key="nurse.id">
+                                                <div @click="selectNurse(nurse)" 
+                                                     class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-green-50"
+                                                     :class="{'bg-green-100': selectedNurse && selectedNurse.id === nurse.id}">
+                                                    <span class="block truncate" x-text="nurse.name"></span>
+                                                </div>
+                                            </template>
+                                        </div>
                                     </div>
                                     
-                                    <div>
-                                        <label for="anaesthetist_id" class="block text-sm font-medium text-gray-700">Anaesthetist (Optional)</label>
-                                        <select name="anaesthetist_id" id="anaesthetist_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                            <option value="">Choose an anaesthetist...</option>
-                                            @foreach(\App\Models\Anaesthetist::where('is_active', true)->get() as $anaesthetist)
-                                                <option value="{{ $anaesthetist->id }}">{{ $anaesthetist->name }}</option>
-                                            @endforeach
-                                        </select>
+                                    <!-- Anaesthetist Searchable Dropdown -->
+                                    <div class="relative">
+                                        <label class="block text-sm font-medium text-gray-700">Anaesthetist (Optional)</label>
+                                        <div class="mt-1 relative">
+                                            <input type="text" 
+                                                   x-model="anaesthetistSearch" 
+                                                   @focus="anaesthetistDropdownOpen = true"
+                                                   @click="anaesthetistDropdownOpen = true"
+                                                   @input="anaesthetistDropdownOpen = true; selectedAnaesthetist = null"
+                                                   placeholder="Search anaesthetist..."
+                                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 pr-10">
+                                            <button type="button" x-show="anaesthetistSearch" @click="clearAnaesthetist()" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                            </button>
+                                        </div>
+                                        <div x-show="anaesthetistDropdownOpen && filteredAnaesthetists.length > 0" 
+                                             @click.away="anaesthetistDropdownOpen = false"
+                                             class="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-48 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
+                                            <template x-for="anaesthetist in filteredAnaesthetists" :key="anaesthetist.id">
+                                                <div @click="selectAnaesthetist(anaesthetist)" 
+                                                     class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-green-50"
+                                                     :class="{'bg-green-100': selectedAnaesthetist && selectedAnaesthetist.id === anaesthetist.id}">
+                                                    <span class="block truncate" x-text="anaesthetist.name"></span>
+                                                </div>
+                                            </template>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                     <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                        <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm">
+                        <button type="submit" 
+                                :disabled="!selectedPatient"
+                                :class="{'opacity-50 cursor-not-allowed': !selectedPatient}"
+                                class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm">
                             Admit Patient
                         </button>
                         <button @click="open = false" x-on:click="open = false" type="button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
@@ -971,14 +1353,10 @@
     </div>
 
     <!-- Prebook Patient Modal -->
-    <div x-data="{ 
-        open: false, 
-        bedNumber: '', 
-        wardId: null 
-    }" 
-    @open-prebook-modal.window="open = true; bedNumber = $event.detail.bedNumber; wardId = $event.detail.wardId"
-    x-show="open" 
-    class="fixed inset-0 z-50 overflow-y-auto" 
+    <div x-data="prebookModalComponent()"
+    @open-prebook-modal.window="open = true; bedNumber = $event.detail.bedNumber; wardId = $event.detail.wardId; resetForm()"
+    x-show="open"
+    class="fixed inset-0 z-50 overflow-y-auto"
     style="display: none;">
         <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
             <div x-show="open" @click="open = false" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 transition-opacity" aria-hidden="true">
@@ -992,6 +1370,10 @@
                     @csrf
                     <input type="hidden" name="ward_id" x-model="wardId">
                     <input type="hidden" name="bed_number" x-model="bedNumber">
+                    <input type="hidden" name="patient_id" :value="selectedPatient ? selectedPatient.id : ''">
+                    <input type="hidden" name="consultant_id" :value="selectedConsultant ? selectedConsultant.id : ''">
+                    <input type="hidden" name="nurse_id" :value="selectedNurse ? selectedNurse.id : ''">
+                    <input type="hidden" name="anaesthetist_id" :value="selectedAnaesthetist ? selectedAnaesthetist.id : ''">
                     
                     <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                         <div class="sm:flex sm:items-start">
@@ -1006,47 +1388,119 @@
                                 </h3>
                                 
                                 <div class="space-y-4">
-                                    <div>
-                                        <label for="prebook_patient_id" class="block text-sm font-medium text-gray-700">Select Patient (Optional)</label>
-                                        <select name="patient_id" id="prebook_patient_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                            <option value="">Choose a patient...</option>
-                                            @foreach(\App\Models\Patient::where('is_active', true)->whereNull('ward_id')->get() as $patient)
-                                                <option value="{{ $patient->id }}">{{ $patient->name }} (MRN: {{ $patient->mrn }})</option>
-                                            @endforeach
-                                        </select>
+                                    <!-- Patient Searchable Dropdown (Optional) -->
+                                    <div class="relative">
+                                        <label class="block text-sm font-medium text-gray-700">Select Patient (Optional)</label>
+                                        <div class="mt-1 relative">
+                                            <input type="text" 
+                                                   x-model="patientSearch" 
+                                                   @focus="patientDropdownOpen = true"
+                                                   @click="patientDropdownOpen = true"
+                                                   @input="patientDropdownOpen = true; selectedPatient = null"
+                                                   placeholder="Search by name or MRN..."
+                                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-10">
+                                            <button type="button" x-show="patientSearch" @click="clearPatient()" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                            </button>
+                                        </div>
+                                        <div x-show="patientDropdownOpen && filteredPatients.length > 0" 
+                                             @click.away="patientDropdownOpen = false"
+                                             class="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-48 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
+                                            <template x-for="patient in filteredPatients" :key="patient.id">
+                                                <div @click="selectPatient(patient)" 
+                                                     class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-blue-50"
+                                                     :class="{'bg-blue-100': selectedPatient && selectedPatient.id === patient.id}">
+                                                    <span class="block truncate" x-text="patient.name + ' (MRN: ' + patient.mrn + ')'"></span>
+                                                </div>
+                                            </template>
+                                        </div>
                                         <p class="mt-1 text-xs text-gray-500">Leave empty to prebook bed without patient details</p>
                                     </div>
                                     
                                     <div class="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label for="prebook_consultant_id" class="block text-sm font-medium text-gray-700">Consultant (Optional)</label>
-                                            <select name="consultant_id" id="prebook_consultant_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                                <option value="">Choose a consultant...</option>
-                                                @foreach(\App\Models\Consultant::where('is_active', true)->get() as $consultant)
-                                                    <option value="{{ $consultant->id }}">{{ $consultant->name }}</option>
-                                                @endforeach
-                                            </select>
+                                        <!-- Consultant Searchable Dropdown -->
+                                        <div class="relative">
+                                            <label class="block text-sm font-medium text-gray-700">Consultant (Optional)</label>
+                                            <div class="mt-1 relative">
+                                                <input type="text" 
+                                                       x-model="consultantSearch" 
+                                                       @focus="consultantDropdownOpen = true"
+                                                       @click="consultantDropdownOpen = true"
+                                                       @input="consultantDropdownOpen = true; selectedConsultant = null"
+                                                       placeholder="Search..."
+                                                       class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-8 text-sm">
+                                                <button type="button" x-show="consultantSearch" @click="clearConsultant()" class="absolute inset-y-0 right-0 pr-2 flex items-center text-gray-400 hover:text-gray-600">
+                                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                </button>
+                                            </div>
+                                            <div x-show="consultantDropdownOpen && filteredConsultants.length > 0" 
+                                                 @click.away="consultantDropdownOpen = false"
+                                                 class="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-40 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
+                                                <template x-for="consultant in filteredConsultants" :key="consultant.id">
+                                                    <div @click="selectConsultant(consultant)" 
+                                                         class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-blue-50"
+                                                         :class="{'bg-blue-100': selectedConsultant && selectedConsultant.id === consultant.id}">
+                                                        <span class="block truncate" x-text="consultant.name"></span>
+                                                    </div>
+                                                </template>
+                                            </div>
                                         </div>
                                         
-                                        <div>
-                                            <label for="prebook_nurse_id" class="block text-sm font-medium text-gray-700">Nurse (Optional)</label>
-                                            <select name="nurse_id" id="prebook_nurse_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                                <option value="">Choose a nurse...</option>
-                                                @foreach(\App\Models\Nurse::where('is_active', true)->get() as $nurse)
-                                                    <option value="{{ $nurse->id }}">{{ $nurse->name }}</option>
-                                                @endforeach
-                                            </select>
+                                        <!-- Nurse Searchable Dropdown -->
+                                        <div class="relative">
+                                            <label class="block text-sm font-medium text-gray-700">Nurse (Optional)</label>
+                                            <div class="mt-1 relative">
+                                                <input type="text" 
+                                                       x-model="nurseSearch" 
+                                                       @focus="nurseDropdownOpen = true"
+                                                       @click="nurseDropdownOpen = true"
+                                                       @input="nurseDropdownOpen = true; selectedNurse = null"
+                                                       placeholder="Search..."
+                                                       class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-8 text-sm">
+                                                <button type="button" x-show="nurseSearch" @click="clearNurse()" class="absolute inset-y-0 right-0 pr-2 flex items-center text-gray-400 hover:text-gray-600">
+                                                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                                </button>
+                                            </div>
+                                            <div x-show="nurseDropdownOpen && filteredNurses.length > 0" 
+                                                 @click.away="nurseDropdownOpen = false"
+                                                 class="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-40 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
+                                                <template x-for="nurse in filteredNurses" :key="nurse.id">
+                                                    <div @click="selectNurse(nurse)" 
+                                                         class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-blue-50"
+                                                         :class="{'bg-blue-100': selectedNurse && selectedNurse.id === nurse.id}">
+                                                        <span class="block truncate" x-text="nurse.name"></span>
+                                                    </div>
+                                                </template>
+                                            </div>
                                         </div>
                                     </div>
                                     
-                                    <div>
-                                        <label for="prebook_anaesthetist_id" class="block text-sm font-medium text-gray-700">Anaesthetist (Optional)</label>
-                                        <select name="anaesthetist_id" id="prebook_anaesthetist_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
-                                            <option value="">Choose an anaesthetist...</option>
-                                            @foreach(\App\Models\Anaesthetist::where('is_active', true)->get() as $anaesthetist)
-                                                <option value="{{ $anaesthetist->id }}">{{ $anaesthetist->name }}</option>
-                                            @endforeach
-                                        </select>
+                                    <!-- Anaesthetist Searchable Dropdown -->
+                                    <div class="relative">
+                                        <label class="block text-sm font-medium text-gray-700">Anaesthetist (Optional)</label>
+                                        <div class="mt-1 relative">
+                                            <input type="text" 
+                                                   x-model="anaesthetistSearch" 
+                                                   @focus="anaesthetistDropdownOpen = true"
+                                                   @click="anaesthetistDropdownOpen = true"
+                                                   @input="anaesthetistDropdownOpen = true; selectedAnaesthetist = null"
+                                                   placeholder="Search anaesthetist..."
+                                                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-10">
+                                            <button type="button" x-show="anaesthetistSearch" @click="clearAnaesthetist()" class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                                <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                            </button>
+                                        </div>
+                                        <div x-show="anaesthetistDropdownOpen && filteredAnaesthetists.length > 0" 
+                                             @click.away="anaesthetistDropdownOpen = false"
+                                             class="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-48 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
+                                            <template x-for="anaesthetist in filteredAnaesthetists" :key="anaesthetist.id">
+                                                <div @click="selectAnaesthetist(anaesthetist)" 
+                                                     class="cursor-pointer select-none relative py-2 pl-3 pr-9 hover:bg-blue-50"
+                                                     :class="{'bg-blue-100': selectedAnaesthetist && selectedAnaesthetist.id === anaesthetist.id}">
+                                                    <span class="block truncate" x-text="anaesthetist.name"></span>
+                                                </div>
+                                            </template>
+                                        </div>
                                     </div>
                                     
                                     <div class="grid grid-cols-2 gap-4">
