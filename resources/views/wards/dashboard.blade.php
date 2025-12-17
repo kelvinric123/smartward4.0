@@ -2138,14 +2138,65 @@
         </div>
     </div>
 
+    <!-- Consultants Modal Component Script -->
+    <script>
+        function consultantsModalComponent() {
+            return {
+                open: false,
+                searchQuery: '',
+                consultants: @json($consultantPatients ?? []),
+                
+                getFilteredConsultants() {
+                    if (!this.searchQuery.trim()) return this.consultants;
+                    const query = this.searchQuery.toLowerCase();
+                    return this.consultants.filter(consultant => {
+                        if (consultant.name.toLowerCase().includes(query)) return true;
+                        return consultant.patients.some(patient => 
+                            patient.name.toLowerCase().includes(query) ||
+                            (patient.mrn && patient.mrn.toLowerCase().includes(query)) ||
+                            (patient.bed_number && patient.bed_number.toLowerCase().includes(query))
+                        );
+                    });
+                },
+                
+                getRoleBadgeClass(role) {
+                    const classes = {
+                        'attending': 'bg-blue-100 text-blue-800 border-blue-200',
+                        'referring': 'bg-purple-100 text-purple-800 border-purple-200',
+                        'consulting': 'bg-green-100 text-green-800 border-green-200'
+                    };
+                    return classes[role] || 'bg-gray-100 text-gray-800 border-gray-200';
+                },
+                
+                getRoleLabel(role) {
+                    const labels = {
+                        'attending': 'Attending',
+                        'referring': 'Referring',
+                        'consulting': 'Consulting'
+                    };
+                    return labels[role] || role;
+                },
+                
+                openModal() {
+                    this.open = true;
+                    this.searchQuery = '';
+                },
+                
+                closeModal() {
+                    this.open = false;
+                }
+            };
+        }
+    </script>
+
     <!-- Consultants Modal -->
-    <div x-data="{ open: false }" 
-         @open-consultants-modal.window="open = true"
+    <div x-data="consultantsModalComponent()" 
+         @open-consultants-modal.window="openModal()"
          x-show="open" 
          class="fixed inset-0 z-50 overflow-y-auto" 
          style="display: none;">
         <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-            <div x-show="open" @click="open = false" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 transition-opacity" aria-hidden="true">
+            <div x-show="open" @click="closeModal()" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 transition-opacity" aria-hidden="true">
                 <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
             </div>
             <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
@@ -2158,54 +2209,117 @@
                             </svg>
                         </div>
                         <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+                            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-2">
                                 Consultants & Their Patients
                             </h3>
-                            <div class="mt-4 max-h-[600px] overflow-y-auto">
-                                @if(isset($consultantPatients) && count($consultantPatients) > 0)
-                                    @foreach($consultantPatients as $consultant)
-                                        <div class="mb-6 bg-gray-50 rounded-lg p-4 border border-gray-200">
-                                            <h4 class="font-semibold text-lg text-cyan-700 mb-3 flex items-center cursor-pointer"
-                                                onclick='highlightAndFilterBeds(@json(collect($consultant["patients"])->pluck("bed_number")), "consultant")'>
-                                                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/>
-                                                </svg>
-                                                {{ $consultant['name'] }}
-                                                <span class="ml-2 text-sm bg-cyan-100 text-cyan-800 px-2 py-1 rounded-full">{{ count($consultant['patients']) }} patient(s)</span>
-                                            </h4>
-                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                @foreach($consultant['patients'] as $patient)
-                                                    <div class="bg-white p-3 rounded border border-gray-300 hover:border-cyan-500 cursor-pointer transition-all hover:shadow-md"
-                                                         onclick='highlightAndFilterBeds(@json([$patient["bed_number"]]), "bed")'>
-                                                        <div class="flex items-center justify-between">
-                                                            <div>
-                                                                <div class="font-medium text-gray-900">{{ $patient['name'] }}</div>
-                                                                <div class="text-sm text-gray-600">MRN: {{ $patient['mrn'] }}</div>
-                                                            </div>
-                                                            <div class="text-right">
-                                                                <div class="text-sm font-semibold text-cyan-700">{{ $patient['bed_number'] }}</div>
-                                                                <div class="text-xs text-gray-500">Click to view</div>
+                            
+                            <!-- Role Legend -->
+                            <div class="flex flex-wrap items-center gap-3 mb-4 text-xs">
+                                <span class="text-gray-500">Roles:</span>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded border bg-blue-100 text-blue-800 border-blue-200">
+                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                    </svg>
+                                    Attending (PV1-7)
+                                </span>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded border bg-purple-100 text-purple-800 border-purple-200">
+                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                    </svg>
+                                    Referring (PV1-8)
+                                </span>
+                                <span class="inline-flex items-center px-2 py-0.5 rounded border bg-green-100 text-green-800 border-green-200">
+                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                                    </svg>
+                                    Consulting (PV1-9)
+                                </span>
+                            </div>
+                            
+                            <!-- Search Box -->
+                            <div class="mb-4">
+                                <div class="relative">
+                                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                        </svg>
+                                    </div>
+                                    <input type="text" 
+                                           x-model="searchQuery"
+                                           placeholder="Search consultants, patients, MRN, or bed..."
+                                           class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                                    <button x-show="searchQuery" 
+                                            @click="searchQuery = ''" 
+                                            class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
+                                        <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-4 max-h-[500px] overflow-y-auto">
+                                <template x-if="getFilteredConsultants().length > 0">
+                                    <div>
+                                        <template x-for="consultant in getFilteredConsultants()" :key="consultant.id">
+                                            <div class="mb-6 bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                                <h4 class="font-semibold text-lg text-cyan-700 mb-3 flex items-center cursor-pointer hover:text-cyan-900"
+                                                    @click="highlightAndFilterBeds(consultant.patients.map(p => p.bed_number).filter(b => b), 'consultant')">
+                                                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"/>
+                                                    </svg>
+                                                    <span x-text="consultant.name"></span>
+                                                    <span class="ml-2 text-sm bg-cyan-100 text-cyan-800 px-2 py-1 rounded-full" x-text="consultant.patients.length + ' patient(s)'"></span>
+                                                </h4>
+                                                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                    <template x-for="patient in consultant.patients" :key="patient.id + '_' + patient.role">
+                                                        <div class="bg-white p-3 rounded border border-gray-300 hover:border-cyan-500 cursor-pointer transition-all hover:shadow-md"
+                                                             @click="highlightAndFilterBeds([patient.bed_number], 'bed')">
+                                                            <div class="flex items-center justify-between">
+                                                                <div class="flex-1 min-w-0">
+                                                                    <div class="font-medium text-gray-900 truncate" x-text="patient.name"></div>
+                                                                    <div class="text-sm text-gray-600">MRN: <span x-text="patient.mrn"></span></div>
+                                                                    <!-- Role Badge -->
+                                                                    <span class="inline-flex items-center mt-1 px-2 py-0.5 rounded text-xs font-medium border"
+                                                                          :class="getRoleBadgeClass(patient.role)"
+                                                                          x-text="getRoleLabel(patient.role)">
+                                                                    </span>
+                                                                </div>
+                                                                <div class="text-right ml-2 flex-shrink-0">
+                                                                    <div class="text-sm font-semibold text-cyan-700" x-text="patient.bed_number || 'N/A'"></div>
+                                                                    <div class="text-xs text-gray-500">Click to view</div>
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                @endforeach
+                                                    </template>
+                                                </div>
                                             </div>
-                                        </div>
-                                    @endforeach
-                                @else
+                                        </template>
+                                    </div>
+                                </template>
+                                <template x-if="getFilteredConsultants().length === 0 && searchQuery">
+                                    <div class="text-center text-gray-500 py-8">
+                                        <svg class="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                        </svg>
+                                        <p>No consultants or patients match "<span x-text="searchQuery" class="font-medium"></span>"</p>
+                                        <button @click="searchQuery = ''" class="mt-2 text-cyan-600 hover:text-cyan-800 text-sm">Clear search</button>
+                                    </div>
+                                </template>
+                                <template x-if="consultants.length === 0 && !searchQuery">
                                     <div class="text-center text-gray-500 py-8">
                                         <svg class="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
                                         </svg>
                                         <p>No consultants assigned to patients yet.</p>
                                     </div>
-                                @endif
+                                </template>
                             </div>
                         </div>
                     </div>
                 </div>
                 <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                    <button @click="open = false" type="button" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 sm:w-auto sm:text-sm">
+                    <button @click="closeModal()" type="button" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 sm:w-auto sm:text-sm">
                         Close
                     </button>
                 </div>

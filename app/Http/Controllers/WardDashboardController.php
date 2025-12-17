@@ -1900,8 +1900,10 @@ class WardDashboardController extends Controller
      */
     /**
      * Get consultants and their patients for the ward dashboard bottom bar
-     * Includes consultants from care providers (consulting role - PV1-9)
-     * and old consultant field for backward compatibility
+     * Includes all doctors from care providers with their roles:
+     * - Attending (PV1-7): Primary physician responsible for patient care
+     * - Referring (PV1-8): Physician who referred the patient
+     * - Consulting (PV1-9): Additional specialists consulted
      */
     private function getConsultantPatients($wardId)
     {
@@ -1917,122 +1919,154 @@ class WardDashboardController extends Controller
         Log::info('getConsultantPatients Debug', [
             'ward_id' => $wardId,
             'patient_count' => $patients->count(),
-            'patients' => $patients->map(function($p) {
-                return [
-                    'id' => $p->id,
-                    'name' => $p->name,
-                    'consultant_id' => $p->consultant_id,
-                    'has_consultant_relation' => $p->consultant ? true : false,
-                    'consultant_name' => $p->consultant ? $p->consultant->name : null,
-                ];
-            })->toArray()
         ]);
         
+        // Helper function to add patient to consultant with role
+        $addPatientToConsultant = function($consultantId, $consultantName, $patient, $role) use (&$consultants) {
+            if (!$consultantId || !$consultantName) {
+                return;
+            }
+            
+            if (!isset($consultants[$consultantId])) {
+                $consultants[$consultantId] = [
+                    'id' => $consultantId,
+                    'name' => $consultantName,
+                    'patients' => []
+                ];
+            }
+            
+            // Check if patient already added with this role
+            $patientKey = $patient->id . '_' . $role;
+            $patientExists = false;
+            foreach ($consultants[$consultantId]['patients'] as $p) {
+                if (($p['id'] . '_' . $p['role']) === $patientKey) {
+                    $patientExists = true;
+                    break;
+                }
+            }
+            
+            if (!$patientExists) {
+                $consultants[$consultantId]['patients'][] = [
+                    'id' => $patient->id,
+                    'name' => $patient->name,
+                    'mrn' => $patient->mrn,
+                    'bed_number' => $patient->bed_number,
+                    'role' => $role,
+                ];
+            }
+        };
+        
         foreach ($patients as $patient) {
-            // Add consultants from care providers (consulting role)
+            // Add Attending Doctors (PV1-7) - Primary physician
+            $attendingDoctors = $patient->activeCareProviders()
+                ->where('role', \App\Models\PatientCareProvider::ROLE_ATTENDING)
+                ->get();
+            
+            foreach ($attendingDoctors as $provider) {
+                if ($provider->consultant_id && $provider->consultant) {
+                    $addPatientToConsultant(
+                        $provider->consultant_id,
+                        $provider->consultant->name,
+                        $patient,
+                        'attending'
+                    );
+                } elseif ($provider->doctor_name || $provider->doctor_code) {
+                    // Use doctor code as ID for unlinked doctors
+                    $doctorKey = 'unlinked_' . ($provider->doctor_code ?: md5($provider->doctor_name));
+                    $addPatientToConsultant(
+                        $doctorKey,
+                        $provider->doctor_name ?: $provider->doctor_code,
+                        $patient,
+                        'attending'
+                    );
+                }
+            }
+            
+            // Add Referring Doctors (PV1-8)
+            $referringDoctors = $patient->activeCareProviders()
+                ->where('role', \App\Models\PatientCareProvider::ROLE_REFERRING)
+                ->get();
+            
+            foreach ($referringDoctors as $provider) {
+                if ($provider->consultant_id && $provider->consultant) {
+                    $addPatientToConsultant(
+                        $provider->consultant_id,
+                        $provider->consultant->name,
+                        $patient,
+                        'referring'
+                    );
+                } elseif ($provider->doctor_name || $provider->doctor_code) {
+                    $doctorKey = 'unlinked_' . ($provider->doctor_code ?: md5($provider->doctor_name));
+                    $addPatientToConsultant(
+                        $doctorKey,
+                        $provider->doctor_name ?: $provider->doctor_code,
+                        $patient,
+                        'referring'
+                    );
+                }
+            }
+            
+            // Add Consulting Doctors (PV1-9)
             $consultingDoctors = $patient->activeCareProviders()
                 ->where('role', \App\Models\PatientCareProvider::ROLE_CONSULTING)
                 ->get();
             
             foreach ($consultingDoctors as $provider) {
                 if ($provider->consultant_id && $provider->consultant) {
-                    $consultantId = $provider->consultant_id;
-                    $consultantName = $provider->consultant->name;
-                    
-                    if (!isset($consultants[$consultantId])) {
-                        $consultants[$consultantId] = [
-                            'id' => $consultantId,
-                            'name' => $consultantName,
-                            'patients' => []
-                        ];
-                    }
-                    
-                    // Check if patient already added to avoid duplicates
-                    $patientExists = false;
-                    foreach ($consultants[$consultantId]['patients'] as $p) {
-                        if ($p['id'] === $patient->id) {
-                            $patientExists = true;
+                    $addPatientToConsultant(
+                        $provider->consultant_id,
+                        $provider->consultant->name,
+                        $patient,
+                        'consulting'
+                    );
+                } elseif ($provider->doctor_name || $provider->doctor_code) {
+                    $doctorKey = 'unlinked_' . ($provider->doctor_code ?: md5($provider->doctor_name));
+                    $addPatientToConsultant(
+                        $doctorKey,
+                        $provider->doctor_name ?: $provider->doctor_code,
+                        $patient,
+                        'consulting'
+                    );
+                }
+            }
+            
+            // Add primary consultant (for backward compatibility) - treat as attending
+            if ($patient->consultant_id && $patient->consultant) {
+                // Check if this patient already has this consultant as attending
+                $alreadyHasAttending = false;
+                if (isset($consultants[$patient->consultant_id])) {
+                    foreach ($consultants[$patient->consultant_id]['patients'] as $p) {
+                        if ($p['id'] === $patient->id && $p['role'] === 'attending') {
+                            $alreadyHasAttending = true;
                             break;
                         }
                     }
-                    
-                    if (!$patientExists) {
-                        $consultants[$consultantId]['patients'][] = [
-                            'id' => $patient->id,
-                            'name' => $patient->name,
-                            'mrn' => $patient->mrn,
-                            'bed_number' => $patient->bed_number,
-                        ];
-                    }
+                }
+                
+                if (!$alreadyHasAttending) {
+                    $addPatientToConsultant(
+                        $patient->consultant_id,
+                        $patient->consultant->name,
+                        $patient,
+                        'attending'
+                    );
                 }
             }
             
-            // Add primary consultant (for backward compatibility)
-            if ($patient->consultant_id && $patient->consultant) {
-                $consultantId = $patient->consultant_id;
-                $consultantName = $patient->consultant->name;
-                
-                if (!isset($consultants[$consultantId])) {
-                    $consultants[$consultantId] = [
-                        'id' => $consultantId,
-                        'name' => $consultantName,
-                        'patients' => []
-                    ];
-                }
-                
-                // Check if patient already added to avoid duplicates
-                $patientExists = false;
-                foreach ($consultants[$consultantId]['patients'] as $p) {
-                    if ($p['id'] === $patient->id) {
-                        $patientExists = true;
-                        break;
-                    }
-                }
-                
-                if (!$patientExists) {
-                    $consultants[$consultantId]['patients'][] = [
-                        'id' => $patient->id,
-                        'name' => $patient->name,
-                        'mrn' => $patient->mrn,
-                        'bed_number' => $patient->bed_number,
-                    ];
-                }
-            }
-            
-            // Add consultants from bed_consultant pivot
+            // Add consultants from bed_consultant pivot (treat as consulting)
             $bed = Bed::where('ward_id', $wardId)
                 ->where('patient_id', $patient->id)
                 ->with('consultants')
                 ->first();
             
             if ($bed && $bed->consultants) {
-                $bedConsultants = $bed->consultants;
-                foreach ($bedConsultants as $consultant) {
-                    if (!isset($consultants[$consultant->id])) {
-                        $consultants[$consultant->id] = [
-                            'id' => $consultant->id,
-                            'name' => $consultant->name,
-                            'patients' => []
-                        ];
-                    }
-                    
-                    // Check if patient already added
-                    $patientExists = false;
-                    foreach ($consultants[$consultant->id]['patients'] as $p) {
-                        if ($p['id'] === $patient->id) {
-                            $patientExists = true;
-                            break;
-                        }
-                    }
-                    
-                    if (!$patientExists) {
-                        $consultants[$consultant->id]['patients'][] = [
-                            'id' => $patient->id,
-                            'name' => $patient->name,
-                            'mrn' => $patient->mrn,
-                            'bed_number' => $patient->bed_number,
-                        ];
-                    }
+                foreach ($bed->consultants as $consultant) {
+                    $addPatientToConsultant(
+                        $consultant->id,
+                        $consultant->name,
+                        $patient,
+                        'consulting'
+                    );
                 }
             }
         }
