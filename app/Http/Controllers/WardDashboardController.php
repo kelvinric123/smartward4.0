@@ -18,6 +18,7 @@ use App\Models\ShiftSetting;
 use App\Models\WardScheduleAssignment;
 use App\Models\DietType;
 use App\Models\IsolationType;
+use App\Models\PatientCareProvider;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
@@ -90,7 +91,7 @@ class WardDashboardController extends Controller
         // Get patients for the selected ward
         $wardPatients = Patient::where('ward_id', $selectedWardId)
             ->where('is_active', true)
-            ->with(['consultant', 'nurse', 'anaesthetist'])
+            ->with(['consultant', 'nurse', 'anaesthetist', 'activeCareProviders.consultant', 'activeCareProviders.anaesthetist'])
             ->get();
 
         // Load movements for these patients (for current location & upcoming schedules)
@@ -119,7 +120,18 @@ class WardDashboardController extends Controller
         $uniqueAnaesthetistIds = collect();
         
         foreach ($admittedPatients as $patient) {
-            // Count consultants (including multiple via bed_consultant)
+            // Count consultants from care providers (consulting role)
+            $consultingDoctors = $patient->activeCareProviders()
+                ->where('role', \App\Models\PatientCareProvider::ROLE_CONSULTING)
+                ->get();
+            
+            foreach ($consultingDoctors as $provider) {
+                if ($provider->consultant_id) {
+                    $uniqueConsultantIds->push($provider->consultant_id);
+                }
+            }
+            
+            // Also count from old consultant_id field for backward compatibility
             if ($patient->consultant_id) {
                 $uniqueConsultantIds->push($patient->consultant_id);
             }
@@ -139,7 +151,16 @@ class WardDashboardController extends Controller
                 $uniqueNurseIds->push($patient->nurse_id);
             }
             
-            // Count anaesthetists
+            // Count anaesthetists from care providers (consulting role with anaesthetist link)
+            $anaesthetistProviders = $patient->activeCareProviders()
+                ->whereNotNull('anaesthetist_id')
+                ->get();
+            
+            foreach ($anaesthetistProviders as $provider) {
+                $uniqueAnaesthetistIds->push($provider->anaesthetist_id);
+            }
+            
+            // Also count from old anaesthetist_id field for backward compatibility
             if ($patient->anaesthetist_id) {
                 $uniqueAnaesthetistIds->push($patient->anaesthetist_id);
             }
@@ -391,6 +412,15 @@ class WardDashboardController extends Controller
                 // Get nurse on duty from schedule assignment
                 $nurseOnDuty = $nurseAssignments[$wardBed->id] ?? null;
 
+                // Get attending doctor from care providers (ADT PV1-7)
+                // The attending doctor is the main doctor that will visit the patient
+                // Falls back to old consultant field for backward compatibility
+                $attendingDoctor = $patient->activeCareProviders()
+                    ->where('role', \App\Models\PatientCareProvider::ROLE_ATTENDING)
+                    ->first();
+                $attendingDoctorName = $attendingDoctor ? $attendingDoctor->display_name : 
+                    ($patient->consultant ? $patient->consultant->name : 'Not Assigned');
+
                 $beds[] = [
                     'number' => $bedNumber,
                     'bed_id' => $wardBed->id,
@@ -402,7 +432,7 @@ class WardDashboardController extends Controller
                     'patient_id' => $patient->id,
                     'mrn' => $patient->mrn,
                     'patient_name' => $patient->name,
-                    'consultant' => $patient->consultant ? $patient->consultant->name : 'Not Assigned',
+                    'consultant' => $attendingDoctorName,
                     'nurse' => $patient->nurse ? $patient->nurse->name : 'Not Assigned',
                     'nurse_on_duty' => $nurseOnDuty ? $nurseOnDuty['nurse_name'] : null,
                     'current_shift' => $currentShiftCode,
@@ -1868,6 +1898,11 @@ class WardDashboardController extends Controller
     /**
      * Get patients grouped by consultant
      */
+    /**
+     * Get consultants and their patients for the ward dashboard bottom bar
+     * Includes consultants from care providers (consulting role - PV1-9)
+     * and old consultant field for backward compatibility
+     */
     private function getConsultantPatients($wardId)
     {
         $consultants = [];
@@ -1876,7 +1911,7 @@ class WardDashboardController extends Controller
         $patients = Patient::where('ward_id', $wardId)
             ->where('is_active', true)
             ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
-            ->with('consultant')
+            ->with(['consultant', 'activeCareProviders.consultant'])
             ->get();
         
         Log::info('getConsultantPatients Debug', [
@@ -1894,7 +1929,45 @@ class WardDashboardController extends Controller
         ]);
         
         foreach ($patients as $patient) {
-            // Add primary consultant
+            // Add consultants from care providers (consulting role)
+            $consultingDoctors = $patient->activeCareProviders()
+                ->where('role', \App\Models\PatientCareProvider::ROLE_CONSULTING)
+                ->get();
+            
+            foreach ($consultingDoctors as $provider) {
+                if ($provider->consultant_id && $provider->consultant) {
+                    $consultantId = $provider->consultant_id;
+                    $consultantName = $provider->consultant->name;
+                    
+                    if (!isset($consultants[$consultantId])) {
+                        $consultants[$consultantId] = [
+                            'id' => $consultantId,
+                            'name' => $consultantName,
+                            'patients' => []
+                        ];
+                    }
+                    
+                    // Check if patient already added to avoid duplicates
+                    $patientExists = false;
+                    foreach ($consultants[$consultantId]['patients'] as $p) {
+                        if ($p['id'] === $patient->id) {
+                            $patientExists = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!$patientExists) {
+                        $consultants[$consultantId]['patients'][] = [
+                            'id' => $patient->id,
+                            'name' => $patient->name,
+                            'mrn' => $patient->mrn,
+                            'bed_number' => $patient->bed_number,
+                        ];
+                    }
+                }
+            }
+            
+            // Add primary consultant (for backward compatibility)
             if ($patient->consultant_id && $patient->consultant) {
                 $consultantId = $patient->consultant_id;
                 $consultantName = $patient->consultant->name;
@@ -2010,6 +2083,11 @@ class WardDashboardController extends Controller
     /**
      * Get patients grouped by anaesthetist
      */
+    /**
+     * Get anaesthetists and their patients for the ward dashboard bottom bar
+     * Includes anaesthetists from care providers (any role with anaesthetist link)
+     * and old anaesthetist field for backward compatibility
+     */
     private function getAnaesthetistPatients($wardId)
     {
         $anaesthetists = [];
@@ -2018,11 +2096,49 @@ class WardDashboardController extends Controller
         $patients = Patient::where('ward_id', $wardId)
             ->where('is_active', true)
             ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
-            ->whereNotNull('anaesthetist_id')
-            ->with('anaesthetist')
+            ->with(['anaesthetist', 'activeCareProviders.anaesthetist'])
             ->get();
         
         foreach ($patients as $patient) {
+            // Get anaesthetists from care providers (consulting or attending role with anaesthetist link)
+            $anaesthetistProviders = $patient->activeCareProviders()
+                ->whereNotNull('anaesthetist_id')
+                ->get();
+            
+            foreach ($anaesthetistProviders as $provider) {
+                if ($provider->anaesthetist) {
+                    $anaesthetistId = $provider->anaesthetist_id;
+                    $anaesthetistName = $provider->anaesthetist->name;
+                    
+                    if (!isset($anaesthetists[$anaesthetistId])) {
+                        $anaesthetists[$anaesthetistId] = [
+                            'id' => $anaesthetistId,
+                            'name' => $anaesthetistName,
+                            'patients' => []
+                        ];
+                    }
+                    
+                    // Check if patient already added to avoid duplicates
+                    $patientExists = false;
+                    foreach ($anaesthetists[$anaesthetistId]['patients'] as $p) {
+                        if ($p['id'] === $patient->id) {
+                            $patientExists = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!$patientExists) {
+                        $anaesthetists[$anaesthetistId]['patients'][] = [
+                            'id' => $patient->id,
+                            'name' => $patient->name,
+                            'mrn' => $patient->mrn,
+                            'bed_number' => $patient->bed_number,
+                        ];
+                    }
+                }
+            }
+            
+            // Also include from old anaesthetist_id field for backward compatibility
             if ($patient->anaesthetist_id && $patient->anaesthetist) {
                 $anaesthetistId = $patient->anaesthetist_id;
                 $anaesthetistName = $patient->anaesthetist->name;
@@ -2035,12 +2151,23 @@ class WardDashboardController extends Controller
                     ];
                 }
                 
-                $anaesthetists[$anaesthetistId]['patients'][] = [
-                    'id' => $patient->id,
-                    'name' => $patient->name,
-                    'mrn' => $patient->mrn,
-                    'bed_number' => $patient->bed_number,
-                ];
+                // Check if patient already added to avoid duplicates
+                $patientExists = false;
+                foreach ($anaesthetists[$anaesthetistId]['patients'] as $p) {
+                    if ($p['id'] === $patient->id) {
+                        $patientExists = true;
+                        break;
+                    }
+                }
+                
+                if (!$patientExists) {
+                    $anaesthetists[$anaesthetistId]['patients'][] = [
+                        'id' => $patient->id,
+                        'name' => $patient->name,
+                        'mrn' => $patient->mrn,
+                        'bed_number' => $patient->bed_number,
+                    ];
+                }
             }
         }
         
