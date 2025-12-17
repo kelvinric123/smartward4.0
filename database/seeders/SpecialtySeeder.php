@@ -90,3 +90,4 @@ class SpecialtySeeder extends Seeder
 
 
 
+

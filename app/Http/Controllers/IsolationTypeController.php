@@ -76,3 +76,4 @@ class IsolationTypeController extends Controller
 
 
 
+

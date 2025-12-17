@@ -44,3 +44,4 @@ class IsolationTypeSeeder extends Seeder
 
 
 
+
