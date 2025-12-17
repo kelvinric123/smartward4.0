@@ -16,6 +16,7 @@ use App\Models\Bed;
 use App\Models\Consultant;
 use App\Models\Nurse;
 use App\Models\Anaesthetist;
+use App\Models\Patient;
 use App\Models\DietType;
 use App\Models\IsolationType;
 use Illuminate\Http\Request;
@@ -746,6 +747,61 @@ class AdtConfigurationController extends Controller
             $anaesthetists = collect();
         }
 
+        // Get patients for patient selection dropdown
+        try {
+            $patients = Patient::with(['ward', 'bed', 'consultant', 'nurse', 'anaesthetist'])
+                ->whereIn('status', [Patient::STATUS_ADMITTED, Patient::STATUS_PENDING_DISCHARGE, Patient::STATUS_PREBOOK])
+                ->orderBy('name')
+                ->get()
+                ->map(function ($patient) {
+                    // Format address for HL7
+                    $addressStr = '';
+                    if ($patient->address) {
+                        if (is_array($patient->address)) {
+                            $addr = $patient->address;
+                            $parts = array_filter([
+                                $addr['street'] ?? '',
+                                $addr['city'] ?? '',
+                                $addr['state'] ?? '',
+                                $addr['postal_code'] ?? '',
+                                $addr['country'] ?? 'MYS'
+                            ]);
+                            $addressStr = implode('^', $parts);
+                        } else {
+                            $addressStr = $patient->address;
+                        }
+                    }
+                    
+                    return [
+                        'id' => $patient->id,
+                        'mrn' => $patient->mrn ?? '',
+                        'rn' => $patient->rn ?? '',
+                        'ic_passport' => $patient->ic_passport ?? '',
+                        'name' => $patient->name ?? '',
+                        'date_of_birth' => $patient->date_of_birth ? $patient->date_of_birth->format('Ymd') : '',
+                        'gender' => $patient->gender ?? 'U',
+                        'phone' => $patient->phone ?? '',
+                        'address' => $addressStr,
+                        'race' => $patient->race ?? '',
+                        'visit_number' => $patient->visit_number ?? '',
+                        'status' => $patient->status,
+                        'ward_id' => $patient->ward_id,
+                        'ward_code' => $patient->ward->ward_code ?? '',
+                        'ward_name' => $patient->ward->ward_name ?? '',
+                        'bed_code' => $patient->bed->bed_id ?? $patient->bed_number ?? '',
+                        'consultant_code' => $patient->consultant->personnel_code ?? '',
+                        'consultant_name' => $patient->consultant->name ?? '',
+                        'nurse_code' => $patient->nurse->personnel_code ?? '',
+                        'nurse_name' => $patient->nurse->name ?? '',
+                        'anaesthetist_code' => $patient->anaesthetist->personnel_code ?? '',
+                        'anaesthetist_name' => $patient->anaesthetist->name ?? '',
+                        'admitted_at' => $patient->admitted_at ? $patient->admitted_at->format('YmdHis') : '',
+                    ];
+                });
+        } catch (\Exception $e) {
+            $patients = collect();
+        }
+
         return view('integration.adt.test', compact(
             'configuration', 
             'sampleMessages', 
@@ -757,7 +813,8 @@ class AdtConfigurationController extends Controller
             'beds',
             'consultants',
             'nurses',
-            'anaesthetists'
+            'anaesthetists',
+            'patients'
         ));
     }
 

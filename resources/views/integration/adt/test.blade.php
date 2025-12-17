@@ -177,6 +177,42 @@
                             <span class="inline-flex items-center justify-center w-6 h-6 rounded bg-green-100 text-green-700 text-xs font-bold mr-2">PID</span>
                             Patient Identification
                         </h4>
+                        
+                        <!-- Patient Selection Dropdown -->
+                        <div class="mb-4 p-4 bg-green-50 rounded-xl border border-green-200">
+                            <div class="flex items-center justify-between">
+                                <div class="flex-1 mr-4">
+                                    <label class="block text-xs font-medium text-green-700 mb-1">
+                                        <span class="inline-flex items-center">
+                                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                                            </svg>
+                                            Select Patient to Auto-fill
+                                        </span>
+                                    </label>
+                                    <select x-model="params.selectedPatient" @change="onPatientChange()"
+                                            class="w-full text-sm rounded-lg border-green-300 shadow-sm focus:border-green-500 focus:ring-green-500">
+                                        <option value="">-- Select Patient (Optional) --</option>
+                                        @foreach($patients as $patient)
+                                            <option value="{{ $patient['id'] }}">
+                                                {{ $patient['mrn'] }} - {{ $patient['name'] }} 
+                                                @if($patient['status'] === 'admitted') (Admitted) @elseif($patient['status'] === 'pending_discharge') (Pending Discharge) @else (Pre-book) @endif
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <button @click="clearPatientSelection()" 
+                                        x-show="params.selectedPatient"
+                                        class="px-3 py-1.5 text-sm bg-green-100 hover:bg-green-200 text-green-700 rounded-lg transition-colors"
+                                        title="Clear patient selection">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <p class="mt-2 text-xs text-green-600">Selecting a patient will auto-fill the PID, PV1, and Care Team fields below.</p>
+                        </div>
+                        
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div>
                                 <label class="block text-xs font-medium text-gray-500 mb-1">MRN</label>
@@ -402,6 +438,70 @@
                                     <input type="text" x-model="params.nurseName" @input="generateMessage()"
                                            class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 bg-gray-50"
                                            placeholder="Nurse Name">
+                                </div>
+                            </div>
+
+                            <!-- Referring Doctor (PV1-8) -->
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1">
+                                    <span class="inline-flex items-center">
+                                        <svg class="w-3 h-3 mr-1 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z"/>
+                                        </svg>
+                                        Referring Doctor (PV1-8)
+                                    </span>
+                                </label>
+                                <select x-model="params.selectedReferringDoctor" @change="onReferringDoctorChange()"
+                                        class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500">
+                                    <option value="">-- Select Referring Doctor --</option>
+                                    @foreach($consultants as $consultant)
+                                        <option value="{{ $consultant->personnel_code }}|{{ $consultant->name }}">
+                                            {{ $consultant->personnel_code }} - {{ $consultant->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="lg:col-span-2">
+                                <label class="block text-xs font-medium text-gray-500 mb-1">Referring Doctor Code / Name (Auto-filled)</label>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <input type="text" x-model="params.referringDoctorCode" @input="generateMessage()"
+                                           class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 font-mono bg-gray-50"
+                                           placeholder="DREF01">
+                                    <input type="text" x-model="params.referringDoctorName" @input="generateMessage()"
+                                           class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 bg-gray-50"
+                                           placeholder="Referring Doctor Name">
+                                </div>
+                            </div>
+
+                            <!-- Consulting Doctor (PV1-9) -->
+                            <div>
+                                <label class="block text-xs font-medium text-gray-500 mb-1">
+                                    <span class="inline-flex items-center">
+                                        <svg class="w-3 h-3 mr-1 text-teal-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+                                        </svg>
+                                        Consulting Doctor (PV1-9)
+                                    </span>
+                                </label>
+                                <select x-model="params.selectedConsultingDoctor" @change="onConsultingDoctorChange()"
+                                        class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500">
+                                    <option value="">-- Select Consulting Doctor --</option>
+                                    @foreach($consultants as $consultant)
+                                        <option value="{{ $consultant->personnel_code }}|{{ $consultant->name }}">
+                                            {{ $consultant->personnel_code }} - {{ $consultant->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="lg:col-span-2">
+                                <label class="block text-xs font-medium text-gray-500 mb-1">Consulting Doctor Code / Name (Auto-filled)</label>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <input type="text" x-model="params.consultingDoctorCode" @input="generateMessage()"
+                                           class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 font-mono bg-gray-50"
+                                           placeholder="DCONS01">
+                                    <input type="text" x-model="params.consultingDoctorName" @input="generateMessage()"
+                                           class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 bg-gray-50"
+                                           placeholder="Consulting Doctor Name">
                                 </div>
                             </div>
                         </div>
@@ -665,6 +765,7 @@
                 
                 // Database data for dropdowns
                 allBeds: @json($beds),
+                allPatients: @json($patients),
                 
                 // Default parameters
                 defaultParams: {
@@ -674,6 +775,7 @@
                     receivingApp: 'IWARD',
                     messageControlId: '50690.0',
                     // PID
+                    selectedPatient: '',
                     mrn: '3300746940',
                     icPassport: 'PP^N7356938',
                     patientName: 'TEST SST PATIENT',
@@ -701,6 +803,14 @@
                     selectedNurse: '',
                     nurseCode: '',
                     nurseName: '',
+                    // Referring Doctor (PV1-8)
+                    selectedReferringDoctor: '',
+                    referringDoctorCode: '',
+                    referringDoctorName: '',
+                    // Consulting Doctor (PV1-9)
+                    selectedConsultingDoctor: '',
+                    consultingDoctorCode: '',
+                    consultingDoctorName: '',
                     // A08 specific
                     selectedDietTypes: [],
                     dietType: 'DMD, REGD^DIABETIC DIET, REGULAR DIET',
@@ -738,6 +848,13 @@
                     this.params.selectedDoctor = '';
                     this.params.selectedAnaesthetist = '';
                     this.params.selectedNurse = '';
+                    this.params.selectedPatient = '';
+                    this.params.selectedReferringDoctor = '';
+                    this.params.selectedConsultingDoctor = '';
+                    this.params.referringDoctorCode = '';
+                    this.params.referringDoctorName = '';
+                    this.params.consultingDoctorCode = '';
+                    this.params.consultingDoctorName = '';
                     // Set current datetime
                     const now = new Date();
                     const datetime = now.getFullYear().toString() +
@@ -831,6 +948,109 @@
                     this.generateMessage();
                 },
 
+                // Patient selection handler - auto-fills PID, PV1, and Care Team fields
+                onPatientChange() {
+                    if (!this.params.selectedPatient) {
+                        return;
+                    }
+                    
+                    const patientId = parseInt(this.params.selectedPatient);
+                    const patient = this.allPatients.find(p => p.id === patientId);
+                    
+                    if (!patient) {
+                        return;
+                    }
+                    
+                    // Auto-fill PID fields
+                    this.params.mrn = patient.mrn || '';
+                    this.params.icPassport = patient.ic_passport ? 'PP^' + patient.ic_passport : '';
+                    this.params.patientName = patient.name || '';
+                    this.params.dob = patient.date_of_birth || '';
+                    this.params.gender = patient.gender || 'U';
+                    this.params.phone = patient.phone ? '0^' + patient.phone : '';
+                    this.params.address = patient.address || '';
+                    this.params.nationality = patient.race || 'MYS';
+                    
+                    // Auto-fill PV1 fields
+                    this.params.visitNumber = patient.visit_number || '';
+                    if (patient.admitted_at) {
+                        this.params.admitDateTime = patient.admitted_at;
+                    }
+                    
+                    // Auto-fill ward and bed
+                    if (patient.ward_code) {
+                        this.params.wardCode = patient.ward_code;
+                        this.params.wardName = patient.ward_name || '';
+                        // Try to auto-select the ward in dropdown
+                        const wardOption = Array.from(document.querySelectorAll('select[x-model="params.selectedWard"] option')).find(opt => opt.value.includes(patient.ward_code));
+                        if (wardOption) {
+                            this.params.selectedWard = wardOption.value;
+                        }
+                    }
+                    if (patient.bed_code) {
+                        this.params.bedCode = patient.bed_code;
+                    }
+                    
+                    // Auto-fill Care Team - Attending Doctor
+                    if (patient.consultant_code) {
+                        this.params.doctorCode = patient.consultant_code;
+                        this.params.doctorName = patient.consultant_name || '';
+                        this.params.selectedDoctor = patient.consultant_code + '|' + (patient.consultant_name || '');
+                    }
+                    
+                    // Auto-fill Care Team - Nurse
+                    if (patient.nurse_code) {
+                        this.params.nurseCode = patient.nurse_code;
+                        this.params.nurseName = patient.nurse_name || '';
+                        this.params.selectedNurse = patient.nurse_code + '|' + (patient.nurse_name || '');
+                    }
+                    
+                    // Auto-fill Care Team - Anaesthetist
+                    if (patient.anaesthetist_code) {
+                        this.params.anaesthetistCode = patient.anaesthetist_code;
+                        this.params.anaesthetistName = patient.anaesthetist_name || '';
+                        this.params.selectedAnaesthetist = patient.anaesthetist_code + '|' + (patient.anaesthetist_name || '');
+                    }
+                    
+                    this.generateMessage();
+                },
+
+                // Clear patient selection
+                clearPatientSelection() {
+                    this.params.selectedPatient = '';
+                    this.generateMessage();
+                },
+
+                // Referring Doctor selection handler (PV1-8)
+                onReferringDoctorChange() {
+                    if (!this.params.selectedReferringDoctor) {
+                        this.params.referringDoctorCode = '';
+                        this.params.referringDoctorName = '';
+                    } else {
+                        const parts = this.params.selectedReferringDoctor.split('|');
+                        if (parts.length >= 2) {
+                            this.params.referringDoctorCode = parts[0];
+                            this.params.referringDoctorName = parts[1];
+                        }
+                    }
+                    this.generateMessage();
+                },
+
+                // Consulting Doctor selection handler (PV1-9)
+                onConsultingDoctorChange() {
+                    if (!this.params.selectedConsultingDoctor) {
+                        this.params.consultingDoctorCode = '';
+                        this.params.consultingDoctorName = '';
+                    } else {
+                        const parts = this.params.selectedConsultingDoctor.split('|');
+                        if (parts.length >= 2) {
+                            this.params.consultingDoctorCode = parts[0];
+                            this.params.consultingDoctorName = parts[1];
+                        }
+                    }
+                    this.generateMessage();
+                },
+
                 updateDietTypeString() {
                     if (this.params.selectedDietTypes.length === 0) {
                         this.params.dietType = '';
@@ -879,6 +1099,13 @@
                     this.params.selectedWard = '';
                     this.params.selectedBed = '';
                     this.params.selectedDoctor = '';
+                    this.params.selectedPatient = '';
+                    this.params.selectedReferringDoctor = '';
+                    this.params.selectedConsultingDoctor = '';
+                    this.params.referringDoctorCode = '';
+                    this.params.referringDoctorName = '';
+                    this.params.consultingDoctorCode = '';
+                    this.params.consultingDoctorName = '';
                     
                     // Update ward/bed based on message type
                     if (type === 'A01' || type === 'A11') {
@@ -925,12 +1152,12 @@
                     // Build care team components for PV1
                     // PV1-7: Attending Doctor, PV1-8: Referring Doctor, PV1-9: Consulting Doctor
                     const attendingDoc = p.doctorCode ? `${p.doctorCode}^${p.doctorName}` : '';
-                    const anaesthetist = p.anaesthetistCode ? `${p.anaesthetistCode}^${p.anaesthetistName}` : '';
-                    const nurse = p.nurseCode ? `${p.nurseCode}^${p.nurseName}` : '';
+                    const referringDoc = p.referringDoctorCode ? `${p.referringDoctorCode}^${p.referringDoctorName}` : '';
+                    const consultingDoc = p.consultingDoctorCode ? `${p.consultingDoctorCode}^${p.consultingDoctorName}` : '';
                     
                     // PV1 Segment - varies by type
-                    // Format: PV1|1|Class|Location|||WardInfo|AttDoc|RefDoc|ConsDoc|...
-                    let pv1 = `PV1|1|${p.patientClass}|${p.wardCode}^${p.bedCode}^${p.bedCode}|||${p.wardCode}^${p.wardName}|${attendingDoc}|${anaesthetist}|${nurse}|||||||||||||${p.visitNumber}|15^4^1^C000020027~15^1^99^|`;
+                    // Format: PV1|1|Class|Location|||WardInfo|AttDoc(7)|RefDoc(8)|ConsDoc(9)|...
+                    let pv1 = `PV1|1|${p.patientClass}|${p.wardCode}^${p.bedCode}^${p.bedCode}|||${p.wardCode}^${p.wardName}|${attendingDoc}|${referringDoc}|${consultingDoc}|||||||||||||${p.visitNumber}|15^4^1^C000020027~15^1^99^|`;
                     
                     if (type === 'A03') {
                         // Add discharge datetime for A03
