@@ -172,3 +172,7 @@ class PatientCareProvider extends Model
         return $this->consultant_id !== null || $this->anaesthetist_id !== null;
     }
 }
+
+
+
+
