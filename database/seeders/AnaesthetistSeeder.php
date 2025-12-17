@@ -70,3 +70,4 @@ class AnaesthetistSeeder extends Seeder
 
 
 
+

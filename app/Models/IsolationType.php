@@ -54,3 +54,4 @@ class IsolationType extends Model
 
 
 
+

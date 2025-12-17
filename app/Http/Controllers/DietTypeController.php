@@ -74,3 +74,4 @@ class DietTypeController extends Controller
 
 
 
+
