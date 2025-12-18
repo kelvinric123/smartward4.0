@@ -480,19 +480,19 @@
                         </h4>
                         <div class="bg-gray-100 rounded-lg p-4">
                             <!-- Bed Box Preview Card -->
-                            <div class="bg-white rounded-lg shadow-md border-2 border-blue-500 overflow-hidden max-w-xs mx-auto">
+                            <div class="bg-white rounded-lg shadow-md border-2 border-blue-500 overflow-hidden max-w-xs mx-auto h-[280px] flex flex-col">
                                 <!-- Header -->
-                                <div class="px-4 py-2 bg-blue-500 text-white flex items-center justify-between">
+                                <div class="px-4 py-2 bg-blue-500 text-white flex items-center justify-between flex-shrink-0">
                                     <span class="font-bold">Bed 01</span>
-                                    <span class="text-sm" x-show="bedBoxItems.find(i => i.key === 'mrn')?.visible">MRN: 12345678</span>
+                                    <span class="text-sm" x-show="bedBoxItems.find(i => i.key === 'mrn')?.visible">12345678</span>
                                 </div>
                                 
                                 <!-- Content Area -->
-                                <div class="p-3 space-y-2">
+                                <div class="p-3 space-y-1.5 flex-1 overflow-hidden">
                                     <template x-for="item in visibleItems" :key="item.key">
-                                        <div class="flex items-center text-sm" :class="item.key === 'patient_name' ? 'font-semibold text-gray-800' : 'text-xs text-gray-600'">
+                                        <div class="flex items-center text-sm min-w-0" :class="item.key === 'patient_name' ? 'font-semibold text-gray-800' : 'text-xs text-gray-600'">
                                             <svg class="w-4 h-4 mr-2 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" x-html="getIcon(item.key)"></svg>
-                                            <span x-text="getSampleValue(item.key)"></span>
+                                            <span class="truncate" x-text="getSampleValue(item.key)"></span>
                                         </div>
                                     </template>
                                     
@@ -503,9 +503,9 @@
                                 </div>
 
                                 <!-- Footer Buttons: 1-Patient Details, 2-Vital Signs, 3-ECG, 4-Clinical -->
-                                <div class="flex items-center space-x-1 border-t px-3 py-2">
+                                <div class="flex items-center space-x-1 border-t px-3 py-2 flex-shrink-0 mt-auto">
                                     {{-- Button 1: Patient Details --}}
-                                    <template x-if="bedBoxItems.find(i => i.key === 'admit_button')?.visible">
+                                    <template x-if="bedBoxItems.find(i => i.key === 'patient_details_button')?.visible">
                                         <button type="button" class="flex-1 p-2 text-gray-600 hover:bg-gray-100 rounded transition-colors" title="Patient Details">
                                             <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
@@ -1245,8 +1245,9 @@
                 { key: 'admitted_duration', label: 'Admitted Duration', description: 'Days and hours since admission', visible: true, order: 3 },
                 { key: 'ews', label: 'EWS', description: 'Early Warning Score indicator', visible: true, order: 4 },
                 { key: 'mrn', label: 'MRN', description: 'Medical Record Number in header', visible: true, order: 5 },
-                { key: 'admit_button', label: 'Admit Patient Button', description: 'Show/hide Admit button on empty beds', visible: true, order: 6 },
-                { key: 'prebook_button', label: 'Prebook Button', description: 'Show/hide Prebook button on empty beds', visible: true, order: 7 },
+                { key: 'patient_details_button', label: 'Patient Details Button', description: 'Show/hide Patient Details button on occupied beds', visible: true, order: 6 },
+                { key: 'admit_button', label: 'Admit Patient Button', description: 'Show/hide Admit button on empty beds', visible: true, order: 7 },
+                { key: 'prebook_button', label: 'Prebook Button', description: 'Show/hide Prebook button on empty beds', visible: true, order: 8 },
             ];
 
             const defaultPatientInfoItems = [
@@ -1536,7 +1537,7 @@
                 
                 get visibleItems() {
                     return this.bedBoxItems
-                        .filter(item => item.visible && !['mrn', 'ews', 'admit_button', 'prebook_button'].includes(item.key));
+                        .filter(item => item.visible && !['mrn', 'ews', 'patient_details_button', 'admit_button', 'prebook_button'].includes(item.key));
                 },
                 
                 toggleVisibility(key) {
@@ -1561,8 +1562,9 @@
                         { key: 'admitted_duration', label: 'Admitted Duration', description: 'Days and hours since admission', visible: true, order: 3 },
                         { key: 'ews', label: 'EWS', description: 'Early Warning Score indicator', visible: true, order: 4 },
                         { key: 'mrn', label: 'MRN', description: 'Medical Record Number in header', visible: true, order: 5 },
-                        { key: 'admit_button', label: 'Admit Patient Button', description: 'Show/hide Admit button on empty beds', visible: true, order: 6 },
-                        { key: 'prebook_button', label: 'Prebook Button', description: 'Show/hide Prebook button on empty beds', visible: true, order: 7 },
+                        { key: 'patient_details_button', label: 'Patient Details Button', description: 'Show/hide Patient Details button on occupied beds', visible: true, order: 6 },
+                        { key: 'admit_button', label: 'Admit Patient Button', description: 'Show/hide Admit button on empty beds', visible: true, order: 7 },
+                        { key: 'prebook_button', label: 'Prebook Button', description: 'Show/hide Prebook button on empty beds', visible: true, order: 8 },
                     ];
                     this.initSortable();
                 },

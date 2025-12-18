@@ -375,50 +375,45 @@
                         >
                             <div class="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white flex items-center justify-between">
                                 <span class="font-bold bed-number cursor-pointer" onclick='highlightAndFilterBeds(@json([$bed["number"]]), "bed")'>{{ $bed['number'] }}</span>
-                                <div class="flex items-center space-x-2">
-                                    <span class="px-2 py-0.5 text-[11px] font-semibold rounded-full border {{ $bedStatusColors[$bed['status']] ?? 'bg-gray-100 text-gray-800 border-gray-200' }}">
-                                        {{ ucfirst($bed['status']) }}
-                                    </span>
-                                    <span class="text-xs bg-white/30 px-2 py-1 rounded font-semibold flex items-center">
-                                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-                                    </svg>
-                                    OUTSIDE
-                                    </span>
-                                </div>
+                                <span class="text-xs bg-white/30 px-2 py-1 rounded font-semibold flex items-center">
+                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                                </svg>
+                                OUTSIDE
+                                </span>
                             </div>
-                            <div class="p-3 space-y-2 flex-1">
+                            <div class="p-3 space-y-1.5 flex-1 overflow-hidden">
                                 <!-- Location Badge -->
-                                <div class="bg-orange-100 border border-orange-300 rounded-lg p-3 text-center">
-                                    <div class="flex items-center justify-center mb-1">
-                                        <svg class="w-5 h-5 text-orange-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div class="bg-orange-100 border border-orange-300 rounded-lg p-2 text-center">
+                                    <div class="flex items-center justify-center mb-1 min-w-0">
+                                        <svg class="w-5 h-5 text-orange-600 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
                                         </svg>
-                                        <span class="text-sm font-bold text-orange-700">Sent to {{ $bed['current_movement_location'] }}</span>
+                                        <span class="text-sm font-bold text-orange-700 truncate" title="Sent to {{ $bed['current_movement_location'] }}">Sent to {{ $bed['current_movement_location'] }}</span>
                                     </div>
-                                    <div class="text-xs text-orange-600">
+                                    <div class="text-xs text-orange-600 truncate">
                                         Since: {{ $bed['current_movement_sent_at'] ?? '-' }}
                                     </div>
                                 </div>
 
                                 <!-- Patient Info -->
-                                <div class="flex items-center text-sm">
-                                    <svg class="w-4 h-4 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div class="flex items-center text-sm min-w-0">
+                                    <svg class="w-4 h-4 mr-2 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                                     </svg>
-                                    <span class="font-semibold text-gray-800">{{ $maskPatientName($bed['patient_name']) }}</span>
+                                    <span class="font-semibold text-gray-800 truncate" title="{{ $bed['patient_name'] }}">{{ $maskPatientName($bed['patient_name']) }}</span>
                                 </div>
-                                <div class="flex items-center text-xs text-gray-600">
-                                    <svg class="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div class="flex items-center text-xs text-gray-600 min-w-0">
+                                    <svg class="w-3 h-3 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
                                     </svg>
-                                    <span>MRN: {{ $bed['mrn'] }}</span>
+                                    <span class="truncate">{{ $bed['mrn'] }}</span>
                                 </div>
                             </div>
 
                             <!-- Single Return Button -->
-                            <div class="border-t border-orange-200 px-3 py-2 bg-orange-50">
+                            <div class="border-t border-orange-200 px-3 py-2 bg-orange-50 flex-shrink-0 mt-auto">
                                 <form method="POST" action="{{ route('ward.patient-movements.return', $bed['current_movement_id']) }}" class="w-full">
                                     @csrf
                                     <input type="hidden" name="from_dashboard" value="1">
@@ -470,58 +465,53 @@
                                     </span>
                                     @endif
                                 </div>
-                                <div class="flex items-center space-x-2">
-                                    <span class="px-2 py-0.5 text-[11px] font-semibold rounded-full border {{ $bedStatusColors[$bed['status']] ?? 'bg-gray-100 text-gray-800 border-gray-200' }}">
-                                        {{ ucfirst($bed['status']) }}
-                                    </span>
-                                    @if($isVisible('mrn'))
-                                    <span class="text-sm">MRN: {{ $bed['mrn'] }}</span>
-                                    @endif
-                                </div>
+                                @if($isVisible('mrn'))
+                                <span class="text-sm">{{ $bed['mrn'] }}</span>
+                                @endif
                             </div>
-                            <div class="p-3 space-y-2 flex-1">
+                            <div class="p-3 space-y-1.5 flex-1 overflow-hidden">
                                 @if($isVisible('patient_name'))
-                                <div class="flex items-center text-sm">
-                                    <svg class="w-4 h-4 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div class="flex items-center text-sm min-w-0">
+                                    <svg class="w-4 h-4 mr-2 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                                     </svg>
-                                    <span class="font-semibold text-gray-800">{{ $maskPatientName($bed['patient_name']) }}</span>
+                                    <span class="font-semibold text-gray-800 truncate" title="{{ $bed['patient_name'] }}">{{ $maskPatientName($bed['patient_name']) }}</span>
                                 </div>
                                 @endif
                                 @if($isVisible('consultant'))
-                                <div class="flex items-center text-xs text-gray-600">
-                                    <svg class="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div class="flex items-center text-xs text-gray-600 min-w-0">
+                                    <svg class="w-3 h-3 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                                     </svg>
-                                    <span>{{ $bed['consultant'] }}</span>
+                                    <span class="truncate" title="{{ $bed['consultant'] }}">{{ $bed['consultant'] }}</span>
                                 </div>
                                 @endif
                                 @if($isVisible('nurse'))
-                                <div class="flex items-center text-xs text-gray-600">
-                                    <svg class="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div class="flex items-center text-xs text-gray-600 min-w-0">
+                                    <svg class="w-3 h-3 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
                                     </svg>
                                     @if(!empty($bed['nurse_on_duty']))
-                                        <span class="text-pink-600 font-medium" title="Nurse on duty ({{ $bed['current_shift'] ?? '' }} shift)">{{ $bed['nurse_on_duty'] }}</span>
+                                        <span class="text-pink-600 font-medium truncate" title="Nurse on duty ({{ $bed['current_shift'] ?? '' }} shift): {{ $bed['nurse_on_duty'] }}">{{ $bed['nurse_on_duty'] }}</span>
                                     @else
                                         <span class="text-gray-400">No nurse assigned</span>
                                     @endif
                                 </div>
                                 @endif
                                 @if(!empty($bed['next_movement_location']) && !empty($bed['next_movement_time_display']))
-                                <div class="flex items-center text-xs text-amber-600">
-                                    <svg class="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div class="flex items-center text-xs text-amber-600 min-w-0">
+                                    <svg class="w-3 h-3 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                                     </svg>
-                                    <span>Next: {{ $bed['next_movement_location'] }} at {{ $bed['next_movement_time_display'] }}</span>
+                                    <span class="truncate" title="Next: {{ $bed['next_movement_location'] }} at {{ $bed['next_movement_time_display'] }}">Next: {{ $bed['next_movement_location'] }} at {{ $bed['next_movement_time_display'] }}</span>
                                 </div>
                                 @endif
                                 @if($isVisible('admitted_duration'))
-                                <div class="flex items-center text-xs text-gray-600">
-                                    <svg class="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div class="flex items-center text-xs text-gray-600 min-w-0">
+                                    <svg class="w-3 h-3 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                                     </svg>
-                                    <span>{{ $bed['days'] }} days, {{ $bed['hours'] }} hours</span>
+                                    <span class="truncate">{{ $bed['days'] }} days, {{ $bed['hours'] }} hours</span>
                                 </div>
                                 @endif
 
@@ -558,16 +548,6 @@
                                             @else
                                                 <span class="px-1.5 py-0.5 bg-gray-400 text-white text-xs rounded font-medium">No vitals</span>
                                             @endif
-                                        @endif
-                                        
-                                        {{-- Pending Discharge Status Badge --}}
-                                        @if($bed['is_pending_discharge'] ?? false)
-                                        <span class="px-1.5 py-0.5 bg-yellow-500 text-white text-xs rounded font-bold flex items-center">
-                                            <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-                                            </svg>
-                                            DC
-                                        </span>
                                         @endif
                                     </div>
 
@@ -785,9 +765,9 @@
                                 </div>
                             </div>
 
-                            <div class="flex items-center space-x-1 border-t px-3 py-2">
+                            <div class="flex items-center space-x-1 border-t px-3 py-2 flex-shrink-0 mt-auto">
                                 {{-- Button 1: Patient Details --}}
-                                @if($isVisible('admit_button'))
+                                @if($isVisible('patient_details_button'))
                                 <button
                                     class="flex-1 p-2 text-gray-600 hover:bg-gray-100 rounded transition-colors"
                                     title="Patient Details"
@@ -858,81 +838,68 @@
                         <div class="bed-card bg-white rounded-lg shadow-md border-2 {{ $prebookBorderClass }} overflow-hidden transition-all duration-300 h-[280px] flex flex-col" data-section="{{ $bed['section'] ?? 1 }}">
                             <div class="px-4 py-2 {{ $prebookBgClass }} text-white flex items-center justify-between">
                                 <span class="font-bold bed-number cursor-pointer" onclick='highlightAndFilterBeds(@json([$bed["number"]]), "bed")'>{{ $bed['number'] }}</span>
-                                <div class="flex items-center space-x-2">
-                                    <span class="px-2 py-0.5 text-[11px] font-semibold rounded-full border {{ $bedStatusColors[$bed['status']] ?? 'bg-gray-100 text-gray-800 border-gray-200' }}">
-                                        {{ ucfirst($bed['status']) }}
-                                    </span>
-                                    <span class="text-xs bg-white/30 px-2 py-1 rounded font-semibold">PREBOOKED</span>
-                                </div>
+                                <span class="text-xs bg-white/30 px-2 py-1 rounded font-semibold">PREBOOKED</span>
                             </div>
-                            <div class="p-3 space-y-2 flex-1">
-                                <div class="{{ $prebookInfoBg }} border rounded-lg p-3 mb-2">
-                                    <div class="flex items-center justify-center mb-2">
-                                        <svg class="w-6 h-6 {{ $prebookIconColor }} mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div class="p-3 space-y-1.5 flex-1 overflow-hidden">
+                                <div class="{{ $prebookInfoBg }} border rounded-lg p-2 mb-1">
+                                    <div class="flex items-center justify-center">
+                                        <svg class="w-5 h-5 {{ $prebookIconColor }} mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                                         </svg>
                                         <span class="text-sm font-bold {{ $prebookInfoText }}">Bed is Prebooked</span>
                                     </div>
                                 </div>
-                                <div class="flex items-center text-sm">
-                                    <svg class="w-4 h-4 mr-2 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div class="flex items-center text-sm min-w-0">
+                                    <svg class="w-4 h-4 mr-2 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                                     </svg>
-                                    <span class="font-semibold text-gray-800">{{ $maskPatientName($bed['patient_name']) }}</span>
+                                    <span class="font-semibold text-gray-800 truncate" title="{{ $bed['patient_name'] }}">{{ $maskPatientName($bed['patient_name']) }}</span>
                                 </div>
                                 @if($bed['mrn'])
-                                <div class="flex items-center text-xs text-gray-600">
-                                    <svg class="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div class="flex items-center text-xs text-gray-600 min-w-0">
+                                    <svg class="w-3 h-3 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
                                     </svg>
-                                    <span>MRN: {{ $bed['mrn'] }}</span>
+                                    <span class="truncate">{{ $bed['mrn'] }}</span>
                                 </div>
                                 @endif
-                                <div class="flex items-center text-xs text-gray-600">
-                                    <svg class="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div class="flex items-center text-xs text-gray-600 min-w-0">
+                                    <svg class="w-3 h-3 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
                                     </svg>
-                                    <span>Consultant: {{ $bed['consultant'] ?? 'Not Assigned' }}</span>
+                                    <span class="truncate" title="{{ $bed['consultant'] ?? 'Not Assigned' }}">{{ $bed['consultant'] ?? 'Not Assigned' }}</span>
                                 </div>
-                                <div class="flex items-center text-xs text-gray-600">
-                                    <svg class="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div class="flex items-center text-xs text-gray-600 min-w-0">
+                                    <svg class="w-3 h-3 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                                     </svg>
-                                    <span>Gender: {{ ucfirst($bed['gender'] ?? 'N/A') }}</span>
+                                    <span>{{ ucfirst($bed['gender'] ?? 'N/A') }}@if($bed['age']), {{ $bed['age'] }} y/o @endif</span>
                                 </div>
-                                @if($bed['age'])
-                                <div class="flex items-center text-xs text-gray-600">
-                                    <svg class="w-3 h-3 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                    </svg>
-                                    <span>Age: {{ $bed['age'] }}</span>
-                                </div>
-                                @endif
-                                <div class="text-xs text-gray-600 bg-pink-50 p-2 rounded border border-pink-200">
-                                    <svg class="w-3 h-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <div class="text-xs text-gray-600 bg-pink-50 p-1.5 rounded border border-pink-200 truncate" title="Booked: {{ $bed['booked_datetime'] }}">
+                                    <svg class="w-3 h-3 inline mr-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                                     </svg>
                                     Booked: {{ $bed['booked_datetime'] }}
                                 </div>
-                                <div class="flex gap-2 mt-2">
-                                    <form method="POST" action="{{ route('ward.check-in-prebook', $bed['patient_id']) }}" class="flex-1">
-                                        @csrf
-                                        <button type="submit" class="w-full px-3 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-lg font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center">
-                                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                                            </svg>
-                                            Check In
-                                        </button>
-                                    </form>
-                                    <form method="POST" action="{{ route('ward.cancel-prebook', $bed['patient_id']) }}" onsubmit="return confirm('Are you sure you want to cancel this prebook?')">
-                                        @csrf
-                                        <button type="submit" class="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center" title="Cancel Prebook">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                                            </svg>
-                                        </button>
-                                    </form>
-                                </div>
+                            </div>
+                            <div class="flex gap-2 px-3 py-2 border-t flex-shrink-0 mt-auto">
+                                <form method="POST" action="{{ route('ward.check-in-prebook', $bed['patient_id']) }}" class="flex-1">
+                                    @csrf
+                                    <button type="submit" class="w-full px-3 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-lg font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center">
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                        Check In
+                                    </button>
+                                </form>
+                                <form method="POST" action="{{ route('ward.cancel-prebook', $bed['patient_id']) }}" onsubmit="return confirm('Are you sure you want to cancel this prebook?')">
+                                    @csrf
+                                    <button type="submit" class="px-3 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center" title="Cancel Prebook">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                        </svg>
+                                    </button>
+                                </form>
                             </div>
                         </div>
                     @else
