@@ -7,20 +7,58 @@
         .animate-pulse-subtle {
             animation: pulse-subtle 2s ease-in-out infinite;
         }
+        /* Fullscreen bed card base styles - ensure fixed height and truncation */
+        .fullscreen-text-small .bed-card,
+        .fullscreen-text-medium .bed-card,
+        .fullscreen-text-large .bed-card {
+            display: flex;
+            flex-direction: column;
+        }
+        .fullscreen-text-small .bed-card .truncate,
+        .fullscreen-text-medium .bed-card .truncate,
+        .fullscreen-text-large .bed-card .truncate {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .fullscreen-text-small .bed-card .min-w-0,
+        .fullscreen-text-medium .bed-card .min-w-0,
+        .fullscreen-text-large .bed-card .min-w-0 {
+            min-width: 0;
+        }
+        .fullscreen-text-small .bed-card .flex-shrink-0,
+        .fullscreen-text-medium .bed-card .flex-shrink-0,
+        .fullscreen-text-large .bed-card .flex-shrink-0 {
+            flex-shrink: 0;
+        }
+        .fullscreen-text-small .bed-card .overflow-hidden,
+        .fullscreen-text-medium .bed-card .overflow-hidden,
+        .fullscreen-text-large .bed-card .overflow-hidden {
+            overflow: hidden;
+        }
+        .fullscreen-text-small .bed-card .mt-auto,
+        .fullscreen-text-medium .bed-card .mt-auto,
+        .fullscreen-text-large .bed-card .mt-auto {
+            margin-top: auto;
+        }
+
         /* Fullscreen text size classes */
         .fullscreen-text-small .bed-card { font-size: 0.75rem; }
         .fullscreen-text-small .bed-card .text-sm { font-size: 0.7rem; }
         .fullscreen-text-small .bed-card .text-xs { font-size: 0.6rem; }
         .fullscreen-text-small .bed-card h3, .fullscreen-text-small .bed-card .font-bold { font-size: 0.8rem; }
+        .fullscreen-text-small .bed-card .space-y-1\.5 > * + * { margin-top: 0.25rem; }
         
         .fullscreen-text-medium .bed-card { font-size: 0.875rem; }
         .fullscreen-text-medium .bed-card .text-sm { font-size: 0.8rem; }
         .fullscreen-text-medium .bed-card .text-xs { font-size: 0.7rem; }
+        .fullscreen-text-medium .bed-card .space-y-1\.5 > * + * { margin-top: 0.3rem; }
         
         .fullscreen-text-large .bed-card { font-size: 1rem; }
         .fullscreen-text-large .bed-card .text-sm { font-size: 0.95rem; }
         .fullscreen-text-large .bed-card .text-xs { font-size: 0.8rem; }
         .fullscreen-text-large .bed-card h3, .fullscreen-text-large .bed-card .font-bold { font-size: 1.1rem; }
+        .fullscreen-text-large .bed-card .space-y-1\.5 > * + * { margin-top: 0.35rem; }
 
         /* Resolution-specific styles for 1920x1080 (Full HD) */
         .fullscreen-res-1920x1080 .bed-card { font-size: 0.9rem; }
@@ -32,8 +70,13 @@
         .fullscreen-res-1920x1080 .bed-card .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
         .fullscreen-res-1920x1080 .bed-card .p-3 { padding: 0.75rem; }
         .fullscreen-res-1920x1080 .bed-card .space-y-2 > * + * { margin-top: 0.5rem; }
+        .fullscreen-res-1920x1080 .bed-card .space-y-1\.5 > * + * { margin-top: 0.375rem; }
         .fullscreen-res-1920x1080 .bed-card .w-4 { width: 1rem; height: 1rem; }
         .fullscreen-res-1920x1080 .bed-card .gap-4 { gap: 0.75rem; }
+        /* Ensure truncation and fixed layout works */
+        .fullscreen-res-1920x1080 .bed-card .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .fullscreen-res-1920x1080 .bed-card .min-w-0 { min-width: 0; }
+        .fullscreen-res-1920x1080 .bed-card .flex-shrink-0 { flex-shrink: 0; }
 
         /* Resolution-specific styles for 3840x2160 (4K UHD) */
         .fullscreen-res-3840x2160 .bed-card { font-size: 1.25rem; }
@@ -45,6 +88,7 @@
         .fullscreen-res-3840x2160 .bed-card .py-2 { padding-top: 0.75rem; padding-bottom: 0.75rem; }
         .fullscreen-res-3840x2160 .bed-card .p-3 { padding: 1.25rem; }
         .fullscreen-res-3840x2160 .bed-card .space-y-2 > * + * { margin-top: 0.75rem; }
+        .fullscreen-res-3840x2160 .bed-card .space-y-1\.5 > * + * { margin-top: 0.5rem; }
         .fullscreen-res-3840x2160 .bed-card .w-4 { width: 1.5rem; height: 1.5rem; }
         .fullscreen-res-3840x2160 .bed-card .gap-4 { gap: 1.25rem; }
         .fullscreen-res-3840x2160 .bed-card .rounded-lg { border-radius: 0.75rem; }
@@ -54,6 +98,10 @@
         /* 4K specific icon and badge sizing */
         .fullscreen-res-3840x2160 .bed-card svg { transform: scale(1.3); }
         .fullscreen-res-3840x2160 .bed-card .clinical-badge { font-size: 0.9rem; padding: 0.375rem 0.625rem; }
+        /* Ensure truncation and fixed layout works */
+        .fullscreen-res-3840x2160 .bed-card .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .fullscreen-res-3840x2160 .bed-card .min-w-0 { min-width: 0; }
+        .fullscreen-res-3840x2160 .bed-card .flex-shrink-0 { flex-shrink: 0; }
 
         /* 4K Resolution Modal Sizing - targets body class for fixed modals */
         body.fullscreen-res-3840x2160 .fixed.inset-0 .sm\:max-w-6xl {
