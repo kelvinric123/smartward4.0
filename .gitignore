@@ -35,3 +35,8 @@ HL7/received_messages/*.hl7
 # MP5sc Listener (track config, ignore runtime files)
 mp5sc_listener/listener/.env
 mp5sc_listener/.git/
+
+# B.Braun Listener (track config, ignore runtime files)
+bbraun/.env
+bbraun/logs/
+bbraun/venv/

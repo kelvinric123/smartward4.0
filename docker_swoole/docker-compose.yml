@@ -232,6 +232,56 @@ services:
         max-file: "5"
         tag: "smartward4-mp5sc"
 
+  # B.Braun HL7 Infusion Pump Listener Container
+  bbraun:
+    build:
+      context: ..
+      dockerfile: bbraun/Dockerfile
+    container_name: smartward4-bbraun
+    restart: unless-stopped
+    ports:
+      - "${BBRAUN_PORT:-5001}:5001"
+    environment:
+      # Listener Configuration
+      BBRAUN_HOST: "0.0.0.0"
+      BBRAUN_PORT: "5001"
+      # Database Configuration (connects to smartward container's internal MySQL)
+      DB_HOST: "smartward"
+      DB_PORT: "3306"
+      DB_NAME: "${DB_DATABASE:-smartward}"
+      DB_USER: "${DB_USERNAME:-root}"
+      DB_PASSWORD: "${DB_PASSWORD:-smartward_secret}"
+      # Development Mode (disabled by default)
+      DEV_MODE: "${BBRAUN_DEV_MODE:-false}"
+      DEV_ASSIGN_MRN: "${BBRAUN_DEV_ASSIGN_MRN:-}"
+      # Python unbuffered for real-time logs
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      - smartward
+    volumes:
+      # Persist logs
+      - bbraun_logs:/app/bbraun/logs
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "5001"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: "256M"
+        reservations:
+          cpus: "0.25"
+          memory: "64M"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        tag: "smartward4-bbraun"
+
 volumes:
   smartward_mysql:
     driver: local
@@ -252,6 +302,8 @@ volumes:
   ecg_logs:
     driver: local
   mp5sc_logs:
+    driver: local
+  bbraun_logs:
     driver: local
 
 networks:

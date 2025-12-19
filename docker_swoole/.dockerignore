@@ -96,3 +96,17 @@ mp5sc_listener/listener/README.md
 mp5sc_listener/listener/env.example
 mp5sc_listener/.git/
 
+# =============================================================================
+# B.Braun HL7 Listener - Keep these files (NOT ignored)
+# =============================================================================
+!bbraun/
+!bbraun/Dockerfile
+!bbraun/requirements.txt
+!bbraun/bbraun_hl7_listener.py
+!bbraun/.env.example
+
+# Ignore B.Braun development/runtime files
+bbraun/.env
+bbraun/venv/
+bbraun/logs/
+bbraun/__pycache__/
