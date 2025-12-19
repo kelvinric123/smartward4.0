@@ -19,6 +19,7 @@ use App\Models\WardScheduleAssignment;
 use App\Models\DietType;
 use App\Models\IsolationType;
 use App\Models\PatientCareProvider;
+use App\Models\Infusion;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
@@ -74,6 +75,9 @@ class WardDashboardController extends Controller
                     'nurses' => 0,
                     'ratio' => '0:0',
                     'occupancy' => 0,
+                    'infusions' => 0,
+                    'infusion_warnings' => 0,
+                    'infusion_alarms' => 0,
                 ],
                 'selectedWard' => null,
                 'consultantPatients' => [],
@@ -195,6 +199,11 @@ class WardDashboardController extends Controller
             }
         }
         
+        // Get infusion statistics for this ward
+        $activeInfusions = Infusion::inWard($selectedWardId)->active()->count();
+        $infusionWarnings = Infusion::inWard($selectedWardId)->running()->withWarnings()->count();
+        $infusionAlarms = Infusion::inWard($selectedWardId)->alarming()->count();
+
         $statistics = [
             'available' => count(array_filter($beds, fn($bed) => $bed['status'] === 'available')),
             'cleaning' => count(array_filter($beds, fn($bed) => $bed['status'] === 'cleaning')),
@@ -204,6 +213,9 @@ class WardDashboardController extends Controller
             'nurses' => $nurseCount,
             'ratio' => $ratio,
             'occupancy' => round((count(array_filter($beds, fn($bed) => $bed['status'] === 'occupied')) / max(count($beds), 1)) * 100),
+            'infusions' => $activeInfusions,
+            'infusion_warnings' => $infusionWarnings,
+            'infusion_alarms' => $infusionAlarms,
         ];
         
         // Prepare staff-patient groupings for modals
