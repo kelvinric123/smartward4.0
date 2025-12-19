@@ -379,51 +379,98 @@ class DatabaseManager:
     
     def _update_infusion_record(self, parsed_data: dict, patient_mrn: str) -> Optional[int]:
         """Update or create infusion record in the infusions table"""
-        if not self.connection or not patient_mrn:
+        if not self.connection:
             return None
         
         try:
             cursor = self.connection.cursor(dictionary=True)
             infusion_data = parsed_data.get('infusion_data', {})
+            device_id = infusion_data.get('device_id', '')
             
             # Skip if no meaningful infusion data
-            if not infusion_data.get('medication_name') and not infusion_data.get('pump_status'):
+            if not infusion_data.get('flow_rate') and not infusion_data.get('pump_status'):
                 return None
             
-            # Find patient by MRN
-            cursor.execute("SELECT id, ward_id FROM patients WHERE mrn = %s LIMIT 1", (patient_mrn,))
-            patient = cursor.fetchone()
+            patient_id = None
+            ward_id = None
+            pump_id = None
             
-            if not patient:
-                self.logger.debug(f"Patient with MRN {patient_mrn} not found, skipping infusion update")
+            # First, check if the pump is linked to a patient (via device_id)
+            if device_id:
+                cursor.execute(
+                    """SELECT ip.id as pump_id, ip.patient_id, ip.ward_id as pump_ward_id,
+                              p.id as linked_patient_id, p.ward_id as patient_ward_id, p.name as patient_name
+                       FROM infusion_pumps ip
+                       LEFT JOIN patients p ON ip.patient_id = p.id
+                       WHERE ip.device_id = %s
+                       LIMIT 1""",
+                    (device_id,)
+                )
+                pump_record = cursor.fetchone()
+                
+                if pump_record:
+                    pump_id = pump_record['pump_id']
+                    # Update pump last_seen and device info
+                    cursor.execute(
+                        """UPDATE infusion_pumps SET 
+                            last_seen_at = NOW(), 
+                            is_active = 1,
+                            pump_model = COALESCE(%s, pump_model),
+                            device_uuid = COALESCE(%s, device_uuid)
+                           WHERE id = %s""",
+                        (infusion_data.get('pump_model'), infusion_data.get('device_uuid'), pump_id)
+                    )
+                    
+                    # If pump is linked to a patient, use that patient
+                    if pump_record['linked_patient_id']:
+                        patient_id = pump_record['linked_patient_id']
+                        ward_id = pump_record['patient_ward_id']
+                        self.logger.info(f"Using linked patient: {pump_record['patient_name']} (ID: {patient_id}) for pump {device_id}")
+                    else:
+                        ward_id = pump_record['pump_ward_id']
+                else:
+                    # Pump not found, will create later if we have a patient
+                    pass
+            
+            # If no patient from pump link, try to find by MRN (if it's a valid MRN)
+            if not patient_id and patient_mrn and patient_mrn.lower() not in ['unknown patient', 'unknown', '']:
+                cursor.execute("SELECT id, ward_id FROM patients WHERE mrn = %s LIMIT 1", (patient_mrn,))
+                patient = cursor.fetchone()
+                if patient:
+                    patient_id = patient['id']
+                    ward_id = patient['ward_id']
+                    self.logger.info(f"Found patient by MRN: {patient_mrn} (ID: {patient_id})")
+            
+            # If still no patient, we can't create an infusion record
+            if not patient_id:
+                if device_id and not pump_id:
+                    # At least create/update the pump record so it can be linked later
+                    cursor.execute(
+                        """INSERT INTO infusion_pumps (device_id, device_name, device_type, pump_model, device_uuid, is_active, last_seen_at, created_at, updated_at)
+                           VALUES (%s, %s, %s, %s, %s, 1, NOW(), NOW(), NOW())
+                           ON DUPLICATE KEY UPDATE 
+                               last_seen_at = NOW(), 
+                               is_active = 1,
+                               pump_model = COALESCE(VALUES(pump_model), pump_model),
+                               device_uuid = COALESCE(VALUES(device_uuid), device_uuid)""",
+                        (device_id, infusion_data.get('pump_model', device_id), 'B.Braun Syringe Pump', 
+                         infusion_data.get('pump_model'), infusion_data.get('device_uuid'))
+                    )
+                    self.logger.info(f"Pump {device_id} registered/updated, waiting to be linked to a patient")
+                else:
+                    self.logger.debug(f"No linked patient for pump {device_id} and MRN '{patient_mrn}' not found")
                 cursor.close()
                 return None
             
-            patient_id = patient['id']
-            ward_id = patient['ward_id']
-            device_id = infusion_data.get('device_id', '')
-            
-            # Find or create pump
-            pump_id = None
-            if device_id:
-                cursor.execute("SELECT id FROM infusion_pumps WHERE device_id = %s LIMIT 1", (device_id,))
-                pump = cursor.fetchone()
-                
-                if pump:
-                    pump_id = pump['id']
-                    # Update last_seen
-                    cursor.execute(
-                        "UPDATE infusion_pumps SET last_seen_at = NOW(), is_active = 1 WHERE id = %s",
-                        (pump_id,)
-                    )
-                else:
-                    # Create new pump
-                    cursor.execute(
-                        """INSERT INTO infusion_pumps (device_id, device_name, device_type, ward_id, is_active, last_seen_at, created_at, updated_at)
-                           VALUES (%s, %s, %s, %s, 1, NOW(), NOW(), NOW())""",
-                        (device_id, infusion_data.get('pump_model', device_id), 'B.Braun Syringe Pump', ward_id)
-                    )
-                    pump_id = cursor.lastrowid
+            # Create pump if it doesn't exist
+            if not pump_id and device_id:
+                cursor.execute(
+                    """INSERT INTO infusion_pumps (device_id, device_name, device_type, pump_model, device_uuid, ward_id, is_active, last_seen_at, created_at, updated_at)
+                       VALUES (%s, %s, %s, %s, %s, %s, 1, NOW(), NOW(), NOW())""",
+                    (device_id, infusion_data.get('pump_model', device_id), 'B.Braun Syringe Pump',
+                     infusion_data.get('pump_model'), infusion_data.get('device_uuid'), ward_id)
+                )
+                pump_id = cursor.lastrowid
             
             # Find existing active infusion for this patient/pump/medication
             medication_name = infusion_data.get('medication_name', 'Unknown')
