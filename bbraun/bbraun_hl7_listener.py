@@ -965,8 +965,9 @@ class BbraunHL7Parser:
             if mdc_field:
                 # Handle each MDC field type
                 if mdc_field == 'pump_status':
-                    raw_status = obs_value.upper().replace('^', '-')
-                    infusion_data['pump_status'] = INFUSION_STATUS_MAP.get(raw_status, obs_value.lower())
+                    # Clean up status value: strip leading ^, convert to uppercase, replace remaining ^ with -
+                    raw_status = obs_value.upper().lstrip('^').replace('^', '-')
+                    infusion_data['pump_status'] = INFUSION_STATUS_MAP.get(raw_status, obs_value.lower().lstrip('^'))
                 
                 elif mdc_field == 'flow_rate_current':
                     try:
@@ -1186,8 +1187,9 @@ class BbraunHL7Parser:
                         pass
                 
                 elif 'STATUS' in obs_name_upper and not infusion_data['pump_status']:
-                    raw_status = obs_value.upper()
-                    infusion_data['pump_status'] = INFUSION_STATUS_MAP.get(raw_status, obs_value.lower())
+                    # Clean up status value: strip leading ^, convert to uppercase, replace remaining ^ with -
+                    raw_status = obs_value.upper().lstrip('^').replace('^', '-')
+                    infusion_data['pump_status'] = INFUSION_STATUS_MAP.get(raw_status, obs_value.lower().lstrip('^'))
         
         # Derive status from alarm state if needed
         if infusion_data['alarm_state'] == 'active' and not infusion_data['pump_status']:
