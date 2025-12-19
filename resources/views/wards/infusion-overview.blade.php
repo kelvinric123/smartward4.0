@@ -126,8 +126,20 @@
 
                             <!-- Medication -->
                             <div class="bg-white/70 rounded-lg p-2 border border-gray-200">
-                                <div class="text-xs text-gray-500">Medication</div>
-                                <div class="font-semibold text-gray-800 text-sm truncate">{{ $infusion->medication_name }}</div>
+                                <div class="flex justify-between items-start">
+                                    <div class="flex-1 min-w-0">
+                                        <div class="text-xs text-gray-500">Medication</div>
+                                        <div class="font-semibold text-gray-800 text-sm truncate">{{ $infusion->medication_name }}</div>
+                                        @if($infusion->formatted_concentration)
+                                            <div class="text-xs text-gray-500">{{ $infusion->formatted_concentration }}</div>
+                                        @endif
+                                    </div>
+                                    @if($infusion->delivery_mode)
+                                        <span class="ml-2 px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">
+                                            {{ $infusion->delivery_mode_display }}
+                                        </span>
+                                    @endif
+                                </div>
                             </div>
 
                             <!-- Progress Bar -->
@@ -155,18 +167,88 @@
                                     <div class="font-bold {{ $infusion->is_warning ? 'text-amber-700' : 'text-gray-800' }} text-sm">{{ $infusion->formatted_remaining_time }}</div>
                                 </div>
                                 <div class="bg-white/70 rounded p-1.5 border border-gray-100">
-                                    <div class="text-xs text-gray-500">Pump</div>
-                                    <div class="font-bold text-gray-800 text-xs truncate">{{ $infusion->infusionPump->device_id ?? 'N/A' }}</div>
+                                    <div class="text-xs text-gray-500">
+                                        @if($infusion->formatted_syringe)
+                                            Syringe
+                                        @else
+                                            Pump
+                                        @endif
+                                    </div>
+                                    <div class="font-bold text-gray-800 text-xs truncate">
+                                        @if($infusion->formatted_syringe)
+                                            {{ $infusion->syringe_size }}ml
+                                        @else
+                                            {{ $infusion->infusionPump->device_id ?? 'N/A' }}
+                                        @endif
+                                    </div>
                                 </div>
                             </div>
 
+                            <!-- Pump Info with Battery/Power Status -->
+                            @if($infusion->infusionPump)
+                                @php $pump = $infusion->infusionPump; @endphp
+                                <div class="flex items-center justify-between text-xs bg-gray-50 rounded p-1.5 border border-gray-100">
+                                    <div class="flex items-center space-x-2">
+                                        <!-- Pump Model -->
+                                        <span class="text-gray-600 truncate max-w-[100px]" title="{{ $pump->pump_model ?? $pump->device_id }}">
+                                            {{ $pump->pump_model ? \Illuminate\Support\Str::limit($pump->pump_model, 20) : $pump->device_id }}
+                                        </span>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <!-- Power/Battery Status -->
+                                        @if($pump->power_status === 'mains')
+                                            <span class="flex items-center text-green-600" title="Plugged In">
+                                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/>
+                                                </svg>
+                                            </span>
+                                        @elseif($pump->battery_percent !== null)
+                                            @php
+                                                $batteryColor = $pump->battery_percent >= 50 ? 'text-green-600' : ($pump->battery_percent >= 20 ? 'text-yellow-600' : 'text-red-600');
+                                            @endphp
+                                            <span class="flex items-center {{ $batteryColor }}" title="Battery: {{ $pump->battery_percent }}%">
+                                                <svg class="w-3.5 h-3.5 mr-0.5" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path d="M2 6h12v8H2V6zm14 2h1.5a.5.5 0 01.5.5v3a.5.5 0 01-.5.5H16V8z"/>
+                                                    <path fill-rule="evenodd" d="M3 7h10v6H3V7z" clip-rule="evenodd" style="opacity: {{ $pump->battery_percent / 100 }}"/>
+                                                </svg>
+                                                <span class="text-xs">{{ $pump->battery_percent }}%</span>
+                                            </span>
+                                        @endif
+                                        
+                                        <!-- WiFi Strength -->
+                                        @if($pump->wifi_strength !== null)
+                                            @php
+                                                $wifiColor = $pump->wifi_strength >= 60 ? 'text-green-600' : ($pump->wifi_strength >= 40 ? 'text-yellow-600' : 'text-red-600');
+                                            @endphp
+                                            <span class="flex items-center {{ $wifiColor }}" title="WiFi: {{ $pump->wifi_strength }}%">
+                                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M17.778 8.222c-4.296-4.296-11.26-4.296-15.556 0A1 1 0 01.808 6.808c5.076-5.077 13.308-5.077 18.384 0a1 1 0 01-1.414 1.414zM14.95 11.05a7 7 0 00-9.9 0 1 1 0 01-1.414-1.414 9 9 0 0112.728 0 1 1 0 01-1.414 1.414zM12.12 13.88a3 3 0 00-4.242 0 1 1 0 01-1.415-1.415 5 5 0 017.072 0 1 1 0 01-1.415 1.415zM9 16a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clip-rule="evenodd"/>
+                                                </svg>
+                                            </span>
+                                        @endif
+                                    </div>
+                                </div>
+                            @endif
+
                             <!-- Alarm Message -->
                             @if($infusion->status === 'alarming' && $infusion->alarm_message)
-                                <div class="bg-red-100 border border-red-300 rounded-lg p-2 text-xs text-red-700 flex items-start">
+                                @php
+                                    $alarmBgColor = match($infusion->alarm_priority) {
+                                        'high' => 'bg-red-100 border-red-400 text-red-800',
+                                        'medium' => 'bg-orange-100 border-orange-400 text-orange-800',
+                                        'low' => 'bg-yellow-100 border-yellow-400 text-yellow-800',
+                                        'technical' => 'bg-blue-100 border-blue-400 text-blue-800',
+                                        default => 'bg-red-100 border-red-300 text-red-700',
+                                    };
+                                @endphp
+                                <div class="{{ $alarmBgColor }} border rounded-lg p-2 text-xs flex items-start">
                                     <svg class="w-4 h-4 mr-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
                                     </svg>
                                     <div>
+                                        @if($infusion->alarm_priority)
+                                            <span class="font-bold uppercase text-[10px]">{{ $infusion->alarm_priority_display }}</span> • 
+                                        @endif
                                         <strong>{{ $infusion->alarm_type ? ucfirst(str_replace('_', ' ', $infusion->alarm_type)) : 'ALARM' }}:</strong>
                                         {{ $infusion->alarm_message }}
                                     </div>

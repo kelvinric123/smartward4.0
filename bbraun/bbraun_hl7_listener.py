@@ -59,16 +59,109 @@ BBRAUN_MESSAGE_TYPES = {
 INFUSION_STATUS_MAP = {
     'RUN': 'running',
     'RUNNING': 'running',
+    'PUMP-STATUS-INFUSING': 'running',
     'PAUSE': 'paused',
     'PAUSED': 'paused',
     'STOP': 'stopped',
     'STOPPED': 'stopped',
+    'PUMP-STATUS-NOT-INFUSING': 'stopped',
     'COMPLETE': 'completed',
     'COMPLETED': 'completed',
     'ALARM': 'alarming',
     'ALARMING': 'alarming',
     'PENDING': 'pending',
     'IDLE': 'pending',
+}
+
+# MDC (Medical Device Communication) Code Mappings
+# Reference: IEEE 11073-10101 Medical Device Communication nomenclature
+MDC_CODES = {
+    # Pump Status & Delivery
+    '184519': 'pump_status',           # MDC_PUMP_INFUSING_STATUS
+    '158014': 'flow_rate_current',     # MDC_FLOW_FLUID_PUMP_CURRENT (mL/h)
+    '157784': 'flow_rate_programmed',  # MDC_FLOW_FLUID_PUMP
+    '158005': 'delivery_status',       # MDC_DEV_PUMP_CURRENT_DELIVERY_STATUS
+    '158006': 'not_delivering_reason', # MDC_DEV_PUMP_NOT_DELIVERING_REASON
+    '158008': 'delivery_mode',         # MDC_DEV_PUMP_PROGRAM_DELIVERY_MODE
+    
+    # Volume Data
+    '157884': 'total_volume',          # MDC_VOL_FLUID_TBI (Total Volume to Be Infused)
+    '157872': 'remaining_volume',      # MDC_VOL_FLUID_TBI_REMAIN
+    '157993': 'infused_volume',        # MDC_VOL_FLUID_DELIV_TOTAL
+    '157992': 'segment_volume',        # MDC_VOL_FLUID_DELIV_SEGMENT
+    
+    # Time Data
+    '157996': 'programmed_time',       # MDC_TIME_PD_PROG (seconds)
+    '157916': 'remaining_time',        # MDC_TIME_PD_REMAIN (seconds)
+    
+    # Drug/Medication
+    '184514': 'drug_name',             # MDC_DRUG_NAME_LABEL
+    '157760': 'drug_concentration',    # MDC_CONC_DRUG (mg/mL)
+    '184520': 'drug_library_name',     # MDC_PUMP_DRUG_LIBRARY_NAME
+    '184516': 'care_area',             # MDC_PUMP_DRUG_LIBRARY_CARE_AREA
+    
+    # Dose Data
+    '157999': 'dose_tbi',              # MDC_DOSE_DRUG_TBI (Total Dose to Be Infused)
+    '158000': 'dose_remaining',        # MDC_DOSE_DRUG_TBI_REMAIN
+    '158001': 'dose_delivered',        # MDC_DOSE_DRUG_DELIV_TOTAL
+    
+    # Device Information
+    '67880': 'pump_model',             # MDC_ATTR_ID_MODEL
+    '67972': 'device_uuid',            # MDC_ATTR_SYS_ID
+    '531976': 'firmware_version',      # MDC_ID_PROD_SPEC_FW
+    
+    # Syringe Data
+    '157880': 'syringe_size',          # MDC_VOL_SYRINGE
+    '157984': 'syringe_actual_vol',    # MDC_VOL_SYRINGE_ACTUAL
+    '184488': 'syringe_manufacturer',  # MDC_SYRINGE_MANUFACTURER
+    
+    # Power & Battery
+    '67925': 'power_status',           # MDC_ATTR_POWER_STAT (onBattery/onMains)
+    '67996': 'battery_percent',        # MDC_ATTR_VAL_BATT_CHARGE
+    '67976': 'battery_time_remaining', # MDC_ATTR_TIME_BATT_REMAIN (minutes)
+    '68020': 'battery_status',         # MDC_ATTR_BATT_STAT
+    '68023': 'battery_capacity',       # MDC_ATTR_CAPAC_BATT_FULL
+    
+    # Network/WiFi
+    '69408': 'wifi_state',             # MDC_NCC_WIRELESS_STATE
+    '69410': 'device_ip',              # MDC_NCC_WIRELESS_DEVICE_IPV4_ADDR
+    '69416': 'device_mac',             # MDC_NCC_WIRELESS_MAC
+    '69417': 'wifi_ssid',              # MDC_NCC_WIRELESS_SSID
+    '69425': 'wifi_strength',          # MDC_NCC_WIRELESS_STRENGTH_PERCENT
+    
+    # Alarm/Alert Data
+    '196616': 'alarm_event',           # MDC_EVT_ALARM
+    '68012': 'alarm_condition',        # MDC_ATTR_AL_COND
+    '68480': 'alert_source',           # MDC_ATTR_ALERT_SOURCE
+    '68481': 'event_phase',            # MDC_ATTR_EVENT_PHASE (start/update/end)
+    '68482': 'alarm_state',            # MDC_ATTR_ALARM_STATE (active/inactive)
+    '68483': 'alarm_inactivation',     # MDC_ATTR_ALARM_INACTIVATION_STATE
+    '68484': 'alarm_priority',         # MDC_ATTR_ALARM_PRIORITY (PH/PM/PL/ST)
+    '68485': 'alert_type',             # MDC_ATTR_ALERT_TYPE
+    '68546': 'alert_text',             # MDC_ATTR_ALERT_TEXT
+    
+    # Events
+    '68487': 'event_condition',        # MDC_ATTR_EVT_COND
+    '68488': 'event_source',           # MDC_ATTR_EVT_SOURCE
+    
+    # Patient Data
+    '68063': 'patient_weight',         # MDC_ATTR_PT_WEIGHT (kg)
+}
+
+# MDC Event Codes
+MDC_EVENTS = {
+    '197288': 'delivery_start',        # MDC_EVT_PUMP_DELIV_START
+    '197292': 'delivery_complete',     # MDC_EVT_PUMP_DELIV_COMP
+    '197334': 'near_completion',       # MDC_EVT_VOL_INFUS_NEAR_COMP
+    '197218': 'syringe_barrel_fault',  # MDC_EVT_SYRINGE_BARREL_CAPTURE_FAULT
+}
+
+# Alarm Priority Mapping
+ALARM_PRIORITY_MAP = {
+    'PH': 'high',       # Physiological High
+    'PM': 'medium',     # Physiological Medium
+    'PL': 'low',        # Physiological Low
+    'ST': 'technical',  # Technical/System
 }
 
 
@@ -189,7 +282,7 @@ class DatabaseManager:
             
             msh = parsed_data.get('msh', {})
             pid = parsed_data.get('pid', {})
-            obx = parsed_data.get('obx', {})
+            pv1 = parsed_data.get('pv1', {})
             
             # Development mode: override patient MRN
             patient_mrn = pid.get('mrn', '')
@@ -204,15 +297,22 @@ class DatabaseManager:
                 INSERT INTO bbraun_hl7_logs (
                     message_control_id, message_type, event_type,
                     sending_application, sending_facility,
-                    patient_mrn, patient_name,
-                    device_id, medication_name,
+                    patient_mrn, patient_name, ward, room, bed,
+                    device_id, device_uuid, pump_model, medication_name,
                     flow_rate, total_volume, infused_volume, remaining_volume,
-                    pump_status, alarm_type, alarm_message,
+                    remaining_minutes, drug_concentration, dose_rate, dose_unit,
+                    syringe_size, delivery_mode,
+                    pump_status, alarm_type, alarm_message, alarm_priority, alarm_state,
+                    power_status, battery_percent, battery_minutes_remaining,
+                    wifi_strength, device_ip,
                     raw_message, parsed_data,
                     source_ip, status, error_message,
                     created_at, updated_at
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
             """
             
@@ -226,15 +326,33 @@ class DatabaseManager:
                 msh.get('sending_facility', ''),
                 patient_mrn,
                 pid.get('name', ''),
+                pv1.get('ward', ''),
+                pv1.get('room', ''),
+                pv1.get('bed', ''),
                 infusion_data.get('device_id', ''),
+                infusion_data.get('device_uuid', ''),
+                infusion_data.get('pump_model', ''),
                 infusion_data.get('medication_name', ''),
                 infusion_data.get('flow_rate'),
                 infusion_data.get('total_volume'),
                 infusion_data.get('infused_volume'),
                 infusion_data.get('remaining_volume'),
+                infusion_data.get('remaining_minutes'),
+                infusion_data.get('drug_concentration'),
+                infusion_data.get('dose_total'),
+                infusion_data.get('dose_unit', ''),
+                infusion_data.get('syringe_size'),
+                infusion_data.get('delivery_mode', ''),
                 infusion_data.get('pump_status', ''),
                 infusion_data.get('alarm_type', ''),
                 infusion_data.get('alarm_message', ''),
+                infusion_data.get('alarm_priority', ''),
+                infusion_data.get('alarm_state', ''),
+                infusion_data.get('power_status', ''),
+                infusion_data.get('battery_percent'),
+                infusion_data.get('battery_minutes_remaining'),
+                infusion_data.get('wifi_strength'),
+                infusion_data.get('device_ip', ''),
                 raw_message,
                 json.dumps(parsed_data),
                 source_ip,
@@ -249,10 +367,173 @@ class DatabaseManager:
             cursor.close()
             
             self.logger.info(f"Message logged to database with ID: {log_id}")
+            
+            # Also update the infusions table if patient exists
+            self._update_infusion_record(parsed_data, patient_mrn)
+            
             return log_id
             
         except Exception as e:
             self.logger.error(f"Error logging message to database: {str(e)}")
+            return None
+    
+    def _update_infusion_record(self, parsed_data: dict, patient_mrn: str) -> Optional[int]:
+        """Update or create infusion record in the infusions table"""
+        if not self.connection or not patient_mrn:
+            return None
+        
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            infusion_data = parsed_data.get('infusion_data', {})
+            
+            # Skip if no meaningful infusion data
+            if not infusion_data.get('medication_name') and not infusion_data.get('pump_status'):
+                return None
+            
+            # Find patient by MRN
+            cursor.execute("SELECT id, ward_id FROM patients WHERE mrn = %s LIMIT 1", (patient_mrn,))
+            patient = cursor.fetchone()
+            
+            if not patient:
+                self.logger.debug(f"Patient with MRN {patient_mrn} not found, skipping infusion update")
+                cursor.close()
+                return None
+            
+            patient_id = patient['id']
+            ward_id = patient['ward_id']
+            device_id = infusion_data.get('device_id', '')
+            
+            # Find or create pump
+            pump_id = None
+            if device_id:
+                cursor.execute("SELECT id FROM infusion_pumps WHERE device_id = %s LIMIT 1", (device_id,))
+                pump = cursor.fetchone()
+                
+                if pump:
+                    pump_id = pump['id']
+                    # Update last_seen
+                    cursor.execute(
+                        "UPDATE infusion_pumps SET last_seen_at = NOW(), is_active = 1 WHERE id = %s",
+                        (pump_id,)
+                    )
+                else:
+                    # Create new pump
+                    cursor.execute(
+                        """INSERT INTO infusion_pumps (device_id, device_name, device_type, ward_id, is_active, last_seen_at, created_at, updated_at)
+                           VALUES (%s, %s, %s, %s, 1, NOW(), NOW(), NOW())""",
+                        (device_id, infusion_data.get('pump_model', device_id), 'B.Braun Syringe Pump', ward_id)
+                    )
+                    pump_id = cursor.lastrowid
+            
+            # Find existing active infusion for this patient/pump/medication
+            medication_name = infusion_data.get('medication_name', 'Unknown')
+            cursor.execute(
+                """SELECT id FROM infusions 
+                   WHERE patient_id = %s 
+                   AND infusion_pump_id = %s 
+                   AND medication_name = %s 
+                   AND status IN ('pending', 'running', 'paused', 'alarming')
+                   ORDER BY created_at DESC LIMIT 1""",
+                (patient_id, pump_id, medication_name)
+            )
+            existing = cursor.fetchone()
+            
+            # Map pump_status
+            pump_status = infusion_data.get('pump_status', '')
+            if not pump_status:
+                pump_status = 'running' if infusion_data.get('flow_rate', 0) > 0 else 'pending'
+            
+            # Calculate warning status (< 15 minutes remaining)
+            remaining_minutes = infusion_data.get('remaining_minutes')
+            is_warning = remaining_minutes is not None and remaining_minutes <= 15 and pump_status == 'running'
+            
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            if existing:
+                # Update existing infusion
+                cursor.execute(
+                    """UPDATE infusions SET
+                        flow_rate = COALESCE(%s, flow_rate),
+                        total_volume = COALESCE(%s, total_volume),
+                        infused_volume = COALESCE(%s, infused_volume),
+                        remaining_volume = COALESCE(%s, remaining_volume),
+                        remaining_minutes = COALESCE(%s, remaining_minutes),
+                        dose_rate = COALESCE(%s, dose_rate),
+                        dose_unit = COALESCE(%s, dose_unit),
+                        status = %s,
+                        alarm_type = COALESCE(%s, alarm_type),
+                        alarm_message = COALESCE(%s, alarm_message),
+                        is_warning = %s,
+                        last_updated_at = %s,
+                        updated_at = %s
+                    WHERE id = %s""",
+                    (
+                        infusion_data.get('flow_rate'),
+                        infusion_data.get('total_volume'),
+                        infusion_data.get('infused_volume'),
+                        infusion_data.get('remaining_volume'),
+                        remaining_minutes,
+                        infusion_data.get('dose_total'),
+                        infusion_data.get('dose_unit', ''),
+                        pump_status,
+                        infusion_data.get('alarm_type', ''),
+                        infusion_data.get('alarm_message', ''),
+                        is_warning,
+                        now,
+                        now,
+                        existing['id']
+                    )
+                )
+                
+                # Mark as completed if status is completed
+                if pump_status == 'completed':
+                    cursor.execute(
+                        "UPDATE infusions SET completed_at = %s WHERE id = %s AND completed_at IS NULL",
+                        (now, existing['id'])
+                    )
+                
+                self.logger.info(f"Updated infusion record ID: {existing['id']}")
+                cursor.close()
+                return existing['id']
+            else:
+                # Create new infusion
+                cursor.execute(
+                    """INSERT INTO infusions (
+                        patient_id, infusion_pump_id, medication_name, medication_code,
+                        total_volume, infused_volume, remaining_volume, flow_rate,
+                        dose_rate, dose_unit, remaining_minutes,
+                        status, alarm_type, alarm_message, is_warning,
+                        started_at, last_updated_at, created_at, updated_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    (
+                        patient_id,
+                        pump_id,
+                        medication_name,
+                        infusion_data.get('medication_code', ''),
+                        infusion_data.get('total_volume'),
+                        infusion_data.get('infused_volume', 0),
+                        infusion_data.get('remaining_volume'),
+                        infusion_data.get('flow_rate'),
+                        infusion_data.get('dose_total'),
+                        infusion_data.get('dose_unit', ''),
+                        remaining_minutes,
+                        pump_status,
+                        infusion_data.get('alarm_type', ''),
+                        infusion_data.get('alarm_message', ''),
+                        is_warning,
+                        now if pump_status == 'running' else None,
+                        now,
+                        now,
+                        now
+                    )
+                )
+                infusion_id = cursor.lastrowid
+                self.logger.info(f"Created new infusion record ID: {infusion_id}")
+                cursor.close()
+                return infusion_id
+                
+        except Exception as e:
+            self.logger.error(f"Error updating infusion record: {str(e)}")
             return None
     
     def close(self):
@@ -276,9 +557,12 @@ class BbraunHL7Parser:
             'msh': {},
             'pid': {},
             'pv1': {},
+            'orc': {},
             'obr': {},
             'obx': [],
             'rxe': {},
+            'rxg': {},
+            'rxr': {},
             'infusion_data': {},
         }
         
@@ -310,6 +594,7 @@ class BbraunHL7Parser:
             result['obr'] = self._parse_obr(result['segments'].get('OBR', []))
             result['obx'] = self._parse_obx_list(result['segments'].get('OBX', []))
             result['rxe'] = self._parse_rxe(result['segments'].get('RXE', []))
+            result['rxg'] = self._parse_rxg(result['segments'].get('RXG', []))
             
             # Extract infusion-specific data
             result['infusion_data'] = self._extract_infusion_data(result)
@@ -471,35 +756,134 @@ class BbraunHL7Parser:
             'give_rate_units': self._get_field(rxe, 23),
         }
     
+    def _parse_rxg(self, rxg: list) -> dict:
+        """Parse RXG (Pharmacy/Treatment Give) segment - from RGV^O15 messages"""
+        if not rxg:
+            return {}
+        
+        # RXG|1|||0002^Sample Test Drug|150||mL^mL^UCUM^263762^MDC_DIM_MILLI_L^MDC||||||||15|mg/h^...
+        give_code = self._get_field(rxg, 4)
+        give_parts = give_code.split('^') if give_code else []
+        
+        return {
+            'give_sub_id': self._get_field(rxg, 1),
+            'dispense_sub_id': self._get_field(rxg, 2),
+            'quantity_timing': self._get_field(rxg, 3),
+            'give_code': give_code,
+            'medication_code': give_parts[0] if give_parts else '',
+            'medication_name': give_parts[1] if len(give_parts) > 1 else '',
+            'give_amount': self._get_field(rxg, 5),
+            'give_units': self._get_field(rxg, 7),
+            'give_dosage_form': self._get_field(rxg, 8),
+            'give_rate_amount': self._get_field(rxg, 15),
+            'give_rate_units': self._get_field(rxg, 16),
+            'give_strength': self._get_field(rxg, 17),
+            'give_strength_units': self._get_field(rxg, 18),
+            'substance_lot_number': self._get_field(rxg, 19),
+            'substance_expiration': self._get_field(rxg, 20),
+            'vtbi': self._get_field(rxg, 23),
+            'vtbi_units': self._get_field(rxg, 24),
+        }
+    
     def _extract_infusion_data(self, parsed: dict) -> dict:
-        """Extract infusion-specific data from parsed segments"""
+        """Extract infusion-specific data from parsed segments using MDC codes"""
         infusion_data = {
+            # Device Info
             'device_id': '',
+            'device_uuid': '',
+            'pump_model': '',
+            'firmware_version': '',
+            
+            # Medication
             'medication_name': '',
             'medication_code': '',
+            'drug_concentration': None,
+            'drug_concentration_unit': '',
+            'care_area': '',
+            
+            # Flow & Volume
             'flow_rate': None,
+            'flow_rate_programmed': None,
             'total_volume': None,
             'infused_volume': None,
             'remaining_volume': None,
+            
+            # Time
+            'programmed_minutes': None,
             'remaining_minutes': None,
+            
+            # Dose
+            'dose_total': None,
+            'dose_remaining': None,
+            'dose_delivered': None,
+            'dose_unit': '',
+            
+            # Status
             'pump_status': '',
+            'delivery_status': '',
+            'delivery_mode': '',
+            'not_delivering_reason': '',
+            
+            # Syringe
+            'syringe_size': None,
+            'syringe_actual_vol': None,
+            'syringe_manufacturer': '',
+            
+            # Power & Battery
+            'power_status': '',
+            'battery_percent': None,
+            'battery_minutes_remaining': None,
+            'battery_status': '',
+            
+            # Network
+            'wifi_state': '',
+            'wifi_strength': None,
+            'device_ip': '',
+            
+            # Alarm
             'alarm_type': '',
             'alarm_message': '',
+            'alarm_priority': '',
+            'alarm_state': '',
+            'event_phase': '',
+            
+            # Patient
+            'patient_weight': None,
         }
         
         msh = parsed.get('msh', {})
         rxe = parsed.get('rxe', {})
+        rxg = parsed.get('rxg', {})
+        obr = parsed.get('obr', {})
         obx_list = parsed.get('obx', [])
         
-        # Get device ID from sending application
-        infusion_data['device_id'] = msh.get('sending_application', '')
+        # Get device ID from sending application (e.g., PAT_DEVICE_BBRAUN^0012211839000001^EUI-64)
+        sending_app = msh.get('sending_application', '')
+        if sending_app:
+            # Extract EUI-64 device identifier if present
+            if '^' in sending_app:
+                parts = sending_app.split('^')
+                if len(parts) >= 2:
+                    infusion_data['device_id'] = parts[1]  # Use the EUI-64 portion
+                else:
+                    infusion_data['device_id'] = sending_app
+            else:
+                infusion_data['device_id'] = sending_app
         
-        # Get medication info from RXE
+        # Get medication info from OBR (observation request - drug name in component 4)
+        if obr:
+            universal_service = obr.get('universal_service_id', '')
+            if universal_service and '^' in universal_service:
+                parts = universal_service.split('^')
+                if parts[0] and not parts[0].isdigit():
+                    infusion_data['medication_name'] = parts[0]
+        
+        # Get medication info from RXE/RXG
         if rxe:
-            infusion_data['medication_name'] = rxe.get('medication_name', '')
+            if not infusion_data['medication_name']:
+                infusion_data['medication_name'] = rxe.get('medication_name', '')
             infusion_data['medication_code'] = rxe.get('medication_code', '')
             
-            # Try to get flow rate from RXE
             rate_str = rxe.get('give_rate_amount', '')
             if rate_str:
                 try:
@@ -507,59 +891,260 @@ class BbraunHL7Parser:
                 except:
                     pass
         
-        # Extract data from OBX segments
+        if rxg:
+            if not infusion_data['medication_name']:
+                infusion_data['medication_name'] = rxg.get('medication_name', '')
+            if rxg.get('give_amount'):
+                try:
+                    infusion_data['total_volume'] = float(rxg.get('give_amount'))
+                except:
+                    pass
+        
+        # Extract data from OBX segments using MDC codes
         for obx in obx_list:
-            obs_code = obx.get('observation_code', '').upper()
+            obs_id = obx.get('observation_id', '')
+            obs_code = obx.get('observation_code', '')
             obs_name = obx.get('observation_name', '').upper()
             obs_value = obx.get('observation_value', '')
+            units = obx.get('units', '')
             
-            # B.Braun specific observation codes
-            if obs_code in ['FLOWRATE', 'RATE', 'FLOW'] or 'FLOW' in obs_name:
-                try:
-                    infusion_data['flow_rate'] = float(obs_value)
-                except:
-                    pass
+            # Skip empty values
+            if not obs_value:
+                continue
             
-            elif obs_code in ['TOTALVOL', 'VTBI', 'TOTVOL'] or 'TOTAL' in obs_name and 'VOL' in obs_name:
-                try:
-                    infusion_data['total_volume'] = float(obs_value)
-                except:
-                    pass
+            # Look up MDC code mapping
+            mdc_field = MDC_CODES.get(obs_code, '')
             
-            elif obs_code in ['INFVOL', 'INFUSED', 'GIVENVOL'] or 'INFUSED' in obs_name:
-                try:
-                    infusion_data['infused_volume'] = float(obs_value)
-                except:
-                    pass
-            
-            elif obs_code in ['REMVOL', 'REMAINING', 'RESTVOL'] or 'REMAIN' in obs_name and 'VOL' in obs_name:
-                try:
-                    infusion_data['remaining_volume'] = float(obs_value)
-                except:
-                    pass
-            
-            elif obs_code in ['REMTIME', 'TIMEREM', 'TTEND'] or 'TIME' in obs_name and 'REMAIN' in obs_name:
-                try:
-                    infusion_data['remaining_minutes'] = int(obs_value)
-                except:
-                    pass
-            
-            elif obs_code in ['STATUS', 'PUMPSTATUS', 'STATE'] or 'STATUS' in obs_name:
-                raw_status = obs_value.upper()
-                infusion_data['pump_status'] = INFUSION_STATUS_MAP.get(raw_status, obs_value.lower())
-            
-            elif obs_code in ['ALARM', 'ALARMTYPE', 'ALERT'] or 'ALARM' in obs_name:
-                infusion_data['alarm_type'] = obs_value
-            
-            elif obs_code in ['ALARMMSG', 'ALERTMSG'] or 'MESSAGE' in obs_name:
-                infusion_data['alarm_message'] = obs_value
-            
-            elif obs_code in ['DRUGNAME', 'MEDICATION', 'MED'] or 'DRUG' in obs_name or 'MED' in obs_name:
-                if not infusion_data['medication_name']:
+            if mdc_field:
+                # Handle each MDC field type
+                if mdc_field == 'pump_status':
+                    raw_status = obs_value.upper().replace('^', '-')
+                    infusion_data['pump_status'] = INFUSION_STATUS_MAP.get(raw_status, obs_value.lower())
+                
+                elif mdc_field == 'flow_rate_current':
+                    try:
+                        infusion_data['flow_rate'] = float(obs_value)
+                    except:
+                        pass
+                
+                elif mdc_field == 'flow_rate_programmed':
+                    try:
+                        infusion_data['flow_rate_programmed'] = float(obs_value)
+                    except:
+                        pass
+                
+                elif mdc_field == 'total_volume':
+                    try:
+                        infusion_data['total_volume'] = float(obs_value)
+                    except:
+                        pass
+                
+                elif mdc_field == 'remaining_volume':
+                    try:
+                        infusion_data['remaining_volume'] = float(obs_value)
+                    except:
+                        pass
+                
+                elif mdc_field == 'infused_volume':
+                    try:
+                        infusion_data['infused_volume'] = float(obs_value)
+                    except:
+                        pass
+                
+                elif mdc_field == 'remaining_time':
+                    try:
+                        # Convert seconds to minutes
+                        seconds = int(obs_value)
+                        infusion_data['remaining_minutes'] = int(seconds / 60)
+                    except:
+                        pass
+                
+                elif mdc_field == 'programmed_time':
+                    try:
+                        seconds = int(obs_value)
+                        infusion_data['programmed_minutes'] = int(seconds / 60)
+                    except:
+                        pass
+                
+                elif mdc_field == 'drug_name':
                     infusion_data['medication_name'] = obs_value
+                
+                elif mdc_field == 'drug_concentration':
+                    try:
+                        infusion_data['drug_concentration'] = float(obs_value)
+                        # Extract unit from units field
+                        if units and '^' in units:
+                            unit_parts = units.split('^')
+                            infusion_data['drug_concentration_unit'] = unit_parts[3] if len(unit_parts) > 3 else ''
+                    except:
+                        pass
+                
+                elif mdc_field == 'care_area':
+                    infusion_data['care_area'] = obs_value
+                
+                elif mdc_field == 'dose_tbi':
+                    try:
+                        infusion_data['dose_total'] = float(obs_value)
+                        if units and '^' in units:
+                            unit_parts = units.split('^')
+                            infusion_data['dose_unit'] = unit_parts[3] if len(unit_parts) > 3 else ''
+                    except:
+                        pass
+                
+                elif mdc_field == 'dose_remaining':
+                    try:
+                        infusion_data['dose_remaining'] = float(obs_value)
+                    except:
+                        pass
+                
+                elif mdc_field == 'dose_delivered':
+                    try:
+                        infusion_data['dose_delivered'] = float(obs_value)
+                    except:
+                        pass
+                
+                elif mdc_field == 'pump_model':
+                    infusion_data['pump_model'] = obs_value
+                
+                elif mdc_field == 'device_uuid':
+                    infusion_data['device_uuid'] = obs_value
+                
+                elif mdc_field == 'firmware_version':
+                    infusion_data['firmware_version'] = obs_value
+                
+                elif mdc_field == 'syringe_size':
+                    try:
+                        infusion_data['syringe_size'] = float(obs_value)
+                    except:
+                        pass
+                
+                elif mdc_field == 'syringe_actual_vol':
+                    try:
+                        infusion_data['syringe_actual_vol'] = float(obs_value)
+                    except:
+                        pass
+                
+                elif mdc_field == 'syringe_manufacturer':
+                    infusion_data['syringe_manufacturer'] = obs_value
+                
+                elif mdc_field == 'power_status':
+                    # Parse onBattery(1) or onMains(0)
+                    if 'battery' in obs_value.lower():
+                        infusion_data['power_status'] = 'battery'
+                    elif 'mains' in obs_value.lower():
+                        infusion_data['power_status'] = 'mains'
+                    else:
+                        infusion_data['power_status'] = obs_value
+                
+                elif mdc_field == 'battery_percent':
+                    try:
+                        infusion_data['battery_percent'] = int(float(obs_value))
+                    except:
+                        pass
+                
+                elif mdc_field == 'battery_time_remaining':
+                    try:
+                        infusion_data['battery_minutes_remaining'] = int(float(obs_value))
+                    except:
+                        pass
+                
+                elif mdc_field == 'battery_status':
+                    infusion_data['battery_status'] = obs_value
+                
+                elif mdc_field == 'wifi_state':
+                    infusion_data['wifi_state'] = obs_value
+                
+                elif mdc_field == 'wifi_strength':
+                    try:
+                        infusion_data['wifi_strength'] = int(float(obs_value))
+                    except:
+                        pass
+                
+                elif mdc_field == 'device_ip':
+                    infusion_data['device_ip'] = obs_value
+                
+                elif mdc_field == 'delivery_status':
+                    status_val = obs_value.lower().replace('^', '-')
+                    if 'delivering' in status_val and 'not' not in status_val:
+                        infusion_data['delivery_status'] = 'delivering'
+                    elif 'not-delivering' in status_val:
+                        infusion_data['delivery_status'] = 'not_delivering'
+                    else:
+                        infusion_data['delivery_status'] = status_val
+                
+                elif mdc_field == 'delivery_mode':
+                    mode_val = obs_value.lower().replace('^', '-')
+                    if 'continuous' in mode_val:
+                        infusion_data['delivery_mode'] = 'continuous'
+                    elif 'bolus' in mode_val:
+                        infusion_data['delivery_mode'] = 'bolus'
+                    elif 'intermittent' in mode_val:
+                        infusion_data['delivery_mode'] = 'intermittent'
+                    else:
+                        infusion_data['delivery_mode'] = mode_val
+                
+                elif mdc_field == 'not_delivering_reason':
+                    reason_val = obs_value.lower().replace('^', '-')
+                    infusion_data['not_delivering_reason'] = reason_val
+                
+                elif mdc_field == 'alarm_state':
+                    infusion_data['alarm_state'] = obs_value.lower()
+                
+                elif mdc_field == 'alarm_priority':
+                    infusion_data['alarm_priority'] = ALARM_PRIORITY_MAP.get(obs_value, obs_value.lower())
+                
+                elif mdc_field == 'alert_text':
+                    infusion_data['alarm_message'] = obs_value
+                
+                elif mdc_field == 'alert_type':
+                    infusion_data['alarm_type'] = obs_value
+                
+                elif mdc_field == 'event_phase':
+                    infusion_data['event_phase'] = obs_value.lower()
+                
+                elif mdc_field == 'alarm_condition':
+                    # Parse alarm condition code
+                    if '^' in obs_value:
+                        parts = obs_value.split('^')
+                        event_code = parts[0]
+                        event_name = MDC_EVENTS.get(event_code, parts[1] if len(parts) > 1 else '')
+                        if event_name:
+                            infusion_data['alarm_type'] = event_name
+                
+                elif mdc_field == 'event_condition':
+                    # Parse event type (delivery start, complete, etc.)
+                    if '^' in obs_value:
+                        parts = obs_value.split('^')
+                        event_code = parts[0]
+                        event_name = MDC_EVENTS.get(event_code, '')
+                        if event_name == 'delivery_start':
+                            infusion_data['pump_status'] = 'running'
+                        elif event_name == 'delivery_complete':
+                            infusion_data['pump_status'] = 'completed'
+                
+                elif mdc_field == 'patient_weight':
+                    try:
+                        infusion_data['patient_weight'] = float(obs_value)
+                    except:
+                        pass
             
-            elif obs_code in ['DEVICEID', 'PUMPID', 'DEVICE'] or 'DEVICE' in obs_name:
-                infusion_data['device_id'] = obs_value
+            # Fallback: Legacy parsing for non-MDC codes
+            else:
+                obs_name_upper = obs_name.upper() if obs_name else ''
+                
+                if 'FLOW' in obs_name_upper and not infusion_data['flow_rate']:
+                    try:
+                        infusion_data['flow_rate'] = float(obs_value)
+                    except:
+                        pass
+                
+                elif 'STATUS' in obs_name_upper and not infusion_data['pump_status']:
+                    raw_status = obs_value.upper()
+                    infusion_data['pump_status'] = INFUSION_STATUS_MAP.get(raw_status, obs_value.lower())
+        
+        # Derive status from alarm state if needed
+        if infusion_data['alarm_state'] == 'active' and not infusion_data['pump_status']:
+            infusion_data['pump_status'] = 'alarming'
         
         return infusion_data
 
@@ -696,11 +1281,12 @@ class BbraunHL7Listener:
         self.logger.info(f"\n{'-'*40}")
         self.logger.info(f"DEVICE INFORMATION")
         self.logger.info(f"{'-'*40}")
-        self.logger.info(f"Sending App      : {msh.get('sending_application', 'N/A')}")
-        self.logger.info(f"Sending Facility : {msh.get('sending_facility', 'N/A')}")
         self.logger.info(f"Device ID        : {infusion.get('device_id', 'N/A')}")
+        self.logger.info(f"Pump Model       : {infusion.get('pump_model', 'N/A')}")
+        self.logger.info(f"Device UUID      : {infusion.get('device_uuid', 'N/A')}")
+        self.logger.info(f"Firmware         : {infusion.get('firmware_version', 'N/A')}")
         
-        if pid.get('mrn'):
+        if pid.get('mrn') and pid.get('mrn') != 'Unknown Patient':
             self.logger.info(f"\n{'-'*40}")
             self.logger.info(f"PATIENT INFORMATION")
             self.logger.info(f"{'-'*40}")
@@ -719,19 +1305,46 @@ class BbraunHL7Listener:
         self.logger.info(f"INFUSION DATA")
         self.logger.info(f"{'-'*40}")
         self.logger.info(f"Medication       : {infusion.get('medication_name', 'N/A')}")
+        if infusion.get('drug_concentration'):
+            self.logger.info(f"Concentration    : {infusion.get('drug_concentration')} {infusion.get('drug_concentration_unit', 'mg/mL')}")
+        if infusion.get('care_area'):
+            self.logger.info(f"Care Area        : {infusion.get('care_area')}")
         self.logger.info(f"Flow Rate        : {infusion.get('flow_rate', 'N/A')} ml/hr")
         self.logger.info(f"Total Volume     : {infusion.get('total_volume', 'N/A')} ml")
         self.logger.info(f"Infused Volume   : {infusion.get('infused_volume', 'N/A')} ml")
         self.logger.info(f"Remaining Volume : {infusion.get('remaining_volume', 'N/A')} ml")
         self.logger.info(f"Remaining Time   : {infusion.get('remaining_minutes', 'N/A')} min")
         self.logger.info(f"Status           : {infusion.get('pump_status', 'N/A')}")
+        self.logger.info(f"Delivery Mode    : {infusion.get('delivery_mode', 'N/A')}")
+        self.logger.info(f"Delivery Status  : {infusion.get('delivery_status', 'N/A')}")
         
-        if infusion.get('alarm_type'):
+        if infusion.get('syringe_size'):
             self.logger.info(f"\n{'-'*40}")
-            self.logger.info(f"ALARM")
+            self.logger.info(f"SYRINGE DATA")
             self.logger.info(f"{'-'*40}")
+            self.logger.info(f"Syringe Size     : {infusion.get('syringe_size')} ml")
+            self.logger.info(f"Actual Volume    : {infusion.get('syringe_actual_vol', 'N/A')} ml")
+            self.logger.info(f"Manufacturer     : {infusion.get('syringe_manufacturer', 'N/A')}")
+        
+        if infusion.get('power_status') or infusion.get('battery_percent') is not None:
+            self.logger.info(f"\n{'-'*40}")
+            self.logger.info(f"POWER STATUS")
+            self.logger.info(f"{'-'*40}")
+            self.logger.info(f"Power Source     : {infusion.get('power_status', 'N/A')}")
+            self.logger.info(f"Battery          : {infusion.get('battery_percent', 'N/A')}%")
+            self.logger.info(f"Battery Time     : {infusion.get('battery_minutes_remaining', 'N/A')} min")
+            self.logger.info(f"WiFi Strength    : {infusion.get('wifi_strength', 'N/A')}%")
+            self.logger.info(f"Device IP        : {infusion.get('device_ip', 'N/A')}")
+        
+        if infusion.get('alarm_type') or infusion.get('alarm_message') or infusion.get('alarm_state') == 'active':
+            self.logger.info(f"\n{'-'*40}")
+            self.logger.info(f"ALARM/ALERT")
+            self.logger.info(f"{'-'*40}")
+            self.logger.info(f"State            : {infusion.get('alarm_state', 'N/A')}")
+            self.logger.info(f"Priority         : {infusion.get('alarm_priority', 'N/A')}")
             self.logger.info(f"Type             : {infusion.get('alarm_type', 'N/A')}")
             self.logger.info(f"Message          : {infusion.get('alarm_message', 'N/A')}")
+            self.logger.info(f"Phase            : {infusion.get('event_phase', 'N/A')}")
         
         self.logger.info(f"\n{'-'*40}\n")
     

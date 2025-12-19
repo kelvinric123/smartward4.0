@@ -15,6 +15,9 @@ class Infusion extends Model
         'infusion_pump_id',
         'medication_name',
         'medication_code',
+        'drug_concentration',
+        'drug_concentration_unit',
+        'care_area',
         'total_volume',
         'infused_volume',
         'remaining_volume',
@@ -25,8 +28,12 @@ class Infusion extends Model
         'elapsed_minutes',
         'remaining_minutes',
         'status',
+        'delivery_mode',
+        'syringe_size',
+        'syringe_manufacturer',
         'alarm_type',
         'alarm_message',
+        'alarm_priority',
         'is_warning',
         'warning_threshold_minutes',
         'started_at',
@@ -41,6 +48,8 @@ class Infusion extends Model
         'remaining_volume' => 'decimal:2',
         'flow_rate' => 'decimal:2',
         'dose_rate' => 'decimal:4',
+        'drug_concentration' => 'decimal:4',
+        'syringe_size' => 'decimal:2',
         'is_warning' => 'boolean',
         'started_at' => 'datetime',
         'completed_at' => 'datetime',
@@ -185,6 +194,111 @@ class Infusion extends Model
         $mins = $this->remaining_minutes % 60;
 
         return sprintf('%02d:%02d', $hours, $mins);
+    }
+
+    /**
+     * Get formatted concentration with unit.
+     */
+    public function getFormattedConcentrationAttribute(): ?string
+    {
+        if ($this->drug_concentration === null) {
+            return null;
+        }
+
+        $unit = $this->drug_concentration_unit ?: 'mg/mL';
+        return number_format($this->drug_concentration, 2) . ' ' . $unit;
+    }
+
+    /**
+     * Get formatted dose rate with unit.
+     */
+    public function getFormattedDoseRateAttribute(): ?string
+    {
+        if ($this->dose_rate === null) {
+            return null;
+        }
+
+        $unit = $this->dose_unit ?: 'units/hr';
+        return number_format($this->dose_rate, 2) . ' ' . $unit;
+    }
+
+    /**
+     * Get formatted syringe info.
+     */
+    public function getFormattedSyringeAttribute(): ?string
+    {
+        if ($this->syringe_size === null) {
+            return null;
+        }
+
+        $info = number_format($this->syringe_size, 0) . ' mL';
+        if ($this->syringe_manufacturer) {
+            $info .= ' (' . $this->syringe_manufacturer . ')';
+        }
+        return $info;
+    }
+
+    /**
+     * Get delivery mode display name.
+     */
+    public function getDeliveryModeDisplayAttribute(): string
+    {
+        return match($this->delivery_mode) {
+            'continuous' => 'Continuous',
+            'bolus' => 'Bolus',
+            'intermittent' => 'Intermittent',
+            'loading' => 'Loading Dose',
+            'tapering' => 'Tapering',
+            default => ucfirst($this->delivery_mode ?? 'Standard'),
+        };
+    }
+
+    /**
+     * Get alarm priority display.
+     */
+    public function getAlarmPriorityDisplayAttribute(): string
+    {
+        return match($this->alarm_priority) {
+            'high' => 'High Priority',
+            'medium' => 'Medium Priority',
+            'low' => 'Low Priority',
+            'technical' => 'Technical',
+            default => ucfirst($this->alarm_priority ?? ''),
+        };
+    }
+
+    /**
+     * Get alarm priority color for UI.
+     */
+    public function getAlarmPriorityColorAttribute(): string
+    {
+        return match($this->alarm_priority) {
+            'high' => 'red',
+            'medium' => 'orange',
+            'low' => 'yellow',
+            'technical' => 'blue',
+            default => 'gray',
+        };
+    }
+
+    /**
+     * Check if this is a high-priority alarm.
+     */
+    public function isHighPriorityAlarm(): bool
+    {
+        return $this->status === self::STATUS_ALARMING && $this->alarm_priority === 'high';
+    }
+
+    /**
+     * Get estimated completion time.
+     */
+    public function getEstimatedCompletionAttribute(): ?\Carbon\Carbon
+    {
+        if ($this->remaining_minutes === null || $this->status !== self::STATUS_RUNNING) {
+            return null;
+        }
+
+        return now()->addMinutes($this->remaining_minutes);
     }
 }
 

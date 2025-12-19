@@ -19,15 +19,33 @@ class BbraunHl7Log extends Model
         'sending_facility',
         'patient_mrn',
         'patient_name',
+        'ward',
+        'room',
+        'bed',
         'device_id',
+        'device_uuid',
+        'pump_model',
         'medication_name',
+        'drug_concentration',
         'flow_rate',
         'total_volume',
         'infused_volume',
         'remaining_volume',
+        'remaining_minutes',
+        'dose_rate',
+        'dose_unit',
+        'syringe_size',
+        'delivery_mode',
         'pump_status',
         'alarm_type',
         'alarm_message',
+        'alarm_priority',
+        'alarm_state',
+        'power_status',
+        'battery_percent',
+        'battery_minutes_remaining',
+        'wifi_strength',
+        'device_ip',
         'raw_message',
         'parsed_data',
         'source_ip',
@@ -41,6 +59,13 @@ class BbraunHl7Log extends Model
         'total_volume' => 'decimal:2',
         'infused_volume' => 'decimal:2',
         'remaining_volume' => 'decimal:2',
+        'drug_concentration' => 'decimal:4',
+        'dose_rate' => 'decimal:4',
+        'syringe_size' => 'decimal:2',
+        'remaining_minutes' => 'integer',
+        'battery_percent' => 'integer',
+        'battery_minutes_remaining' => 'integer',
+        'wifi_strength' => 'integer',
     ];
 
     /**
@@ -112,5 +137,113 @@ class BbraunHl7Log extends Model
     public function scopeWithPumpStatus($query, string $pumpStatus)
     {
         return $query->where('pump_status', $pumpStatus);
+    }
+
+    /**
+     * Scope for alarm messages.
+     */
+    public function scopeAlarms($query)
+    {
+        return $query->where('alarm_state', 'active')
+            ->orWhereNotNull('alarm_message');
+    }
+
+    /**
+     * Scope for power/battery messages.
+     */
+    public function scopePowerStatus($query)
+    {
+        return $query->whereNotNull('power_status')
+            ->orWhereNotNull('battery_percent');
+    }
+
+    /**
+     * Get alarm priority color.
+     */
+    public function getAlarmPriorityColorAttribute(): string
+    {
+        return match ($this->alarm_priority) {
+            'high' => 'bg-red-100 text-red-700',
+            'medium' => 'bg-orange-100 text-orange-700',
+            'low' => 'bg-yellow-100 text-yellow-700',
+            'technical' => 'bg-blue-100 text-blue-700',
+            default => 'bg-gray-100 text-gray-600',
+        };
+    }
+
+    /**
+     * Get power status color.
+     */
+    public function getPowerStatusColorAttribute(): string
+    {
+        if ($this->power_status === 'mains') {
+            return 'bg-green-100 text-green-700';
+        }
+
+        if ($this->battery_percent !== null) {
+            if ($this->battery_percent >= 50) {
+                return 'bg-green-100 text-green-700';
+            } elseif ($this->battery_percent >= 20) {
+                return 'bg-yellow-100 text-yellow-700';
+            } else {
+                return 'bg-red-100 text-red-700';
+            }
+        }
+
+        return 'bg-gray-100 text-gray-600';
+    }
+
+    /**
+     * Get formatted remaining time.
+     */
+    public function getFormattedRemainingTimeAttribute(): string
+    {
+        if ($this->remaining_minutes === null) {
+            return '--:--';
+        }
+
+        $hours = floor($this->remaining_minutes / 60);
+        $mins = $this->remaining_minutes % 60;
+
+        return sprintf('%d:%02d', $hours, $mins);
+    }
+
+    /**
+     * Get formatted battery time.
+     */
+    public function getFormattedBatteryTimeAttribute(): string
+    {
+        if ($this->battery_minutes_remaining === null) {
+            return '--:--';
+        }
+
+        $hours = floor($this->battery_minutes_remaining / 60);
+        $mins = $this->battery_minutes_remaining % 60;
+
+        return sprintf('%d:%02d', $hours, $mins);
+    }
+
+    /**
+     * Check if this is an alarm message.
+     */
+    public function isAlarmMessage(): bool
+    {
+        return $this->alarm_state === 'active' || !empty($this->alarm_message);
+    }
+
+    /**
+     * Check if pump is on battery.
+     */
+    public function isOnBattery(): bool
+    {
+        return $this->power_status === 'battery';
+    }
+
+    /**
+     * Get the infusion data from parsed_data.
+     */
+    public function getInfusionDataAttribute(): array
+    {
+        return $this->parsed_data['infusion_data'] ?? [];
     }
 }
