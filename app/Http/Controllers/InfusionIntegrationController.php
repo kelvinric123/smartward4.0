@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BbraunHl7Log;
 use App\Models\Infusion;
 use App\Models\InfusionApiLog;
 use App\Models\InfusionApiUser;
@@ -19,14 +20,27 @@ class InfusionIntegrationController extends Controller
      */
     public function index(): View
     {
-        $apiUsers = InfusionApiUser::latest()->get();
-        
-        $recentLogs = InfusionApiLog::with('apiUser')
-            ->latest()
-            ->limit(20)
+        // Get HL7 logs from B.Braun listener
+        $hl7Logs = BbraunHl7Log::latest()
+            ->limit(50)
             ->get();
 
         $pumps = InfusionPump::with('ward')->latest()->get();
+
+        // MLLP Configuration from environment
+        $mllpConfig = [
+            'host' => env('BBRAUN_HOST', '0.0.0.0'),
+            'port' => env('BBRAUN_PORT', '5001'),
+            'protocol' => 'MLLP (Minimal Lower Layer Protocol)',
+            'hl7_version' => '2.x',
+            'supported_messages' => ['ORU', 'ORM', 'ADT', 'RAS', 'RDE', 'RGV'],
+        ];
+
+        // Check if listener is running (by checking recent logs)
+        $lastLog = BbraunHl7Log::latest()->first();
+        $listenerStatus = $lastLog && $lastLog->created_at->diffInMinutes(now()) < 5 
+            ? 'active' 
+            : 'inactive';
 
         $stats = [
             'total_pumps' => InfusionPump::count(),
@@ -34,63 +48,66 @@ class InfusionIntegrationController extends Controller
             'active_infusions' => Infusion::active()->count(),
             'warnings' => Infusion::running()->withWarnings()->count(),
             'alarms' => Infusion::alarming()->count(),
+            'total_hl7_messages' => BbraunHl7Log::count(),
+            'messages_today' => BbraunHl7Log::whereDate('created_at', today())->count(),
+            'error_messages' => BbraunHl7Log::where('status', 'error')->count(),
         ];
 
-        return view('integration.infusion.index', compact('apiUsers', 'recentLogs', 'pumps', 'stats'));
+        return view('integration.infusion.index', compact('hl7Logs', 'pumps', 'stats', 'mllpConfig', 'listenerStatus'));
     }
 
     /**
-     * Store a new API user.
+     * Store a new pump user (register pump manually).
      */
-    public function storeApiUser(Request $request)
+    public function storePump(Request $request)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'username' => 'required|string|max:255|unique:infusion_api_users,username',
-            'password' => 'required|string|min:8',
-            'description' => 'nullable|string|max:1000',
+            'device_id' => 'required|string|max:255|unique:infusion_pumps,device_id',
+            'device_name' => 'nullable|string|max:255',
+            'device_type' => 'nullable|string|max:255',
+            'location' => 'nullable|string|max:255',
+            'ward_id' => 'nullable|exists:wards,id',
         ]);
 
-        InfusionApiUser::create($validated);
+        $validated['is_active'] = true;
+
+        InfusionPump::create($validated);
 
         return redirect()->route('infusion-integration.index')
-            ->with('success', 'Infusion API user created successfully.');
+            ->with('success', 'Infusion pump registered successfully.');
     }
 
     /**
-     * Update an existing API user.
+     * Update an existing pump.
      */
-    public function updateApiUser(Request $request, InfusionApiUser $apiUser)
+    public function updatePump(Request $request, InfusionPump $pump)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'username' => 'required|string|max:255|unique:infusion_api_users,username,' . $apiUser->id,
-            'password' => 'nullable|string|min:8',
-            'description' => 'nullable|string|max:1000',
+            'device_id' => 'required|string|max:255|unique:infusion_pumps,device_id,' . $pump->id,
+            'device_name' => 'nullable|string|max:255',
+            'device_type' => 'nullable|string|max:255',
+            'location' => 'nullable|string|max:255',
+            'ward_id' => 'nullable|exists:wards,id',
             'is_active' => 'boolean',
         ]);
 
-        if (empty($validated['password'])) {
-            unset($validated['password']);
-        }
-
         $validated['is_active'] = $request->has('is_active');
 
-        $apiUser->update($validated);
+        $pump->update($validated);
 
         return redirect()->route('infusion-integration.index')
-            ->with('success', 'Infusion API user updated successfully.');
+            ->with('success', 'Infusion pump updated successfully.');
     }
 
     /**
-     * Delete an API user.
+     * Delete a pump.
      */
-    public function destroyApiUser(InfusionApiUser $apiUser)
+    public function destroyPump(InfusionPump $pump)
     {
-        $apiUser->delete();
+        $pump->delete();
 
         return redirect()->route('infusion-integration.index')
-            ->with('success', 'Infusion API user deleted successfully.');
+            ->with('success', 'Infusion pump deleted successfully.');
     }
 
     /**
@@ -155,6 +172,116 @@ class InfusionIntegrationController extends Controller
         $completedInfusions = $infusions->filter(fn($i) => $i->status === 'completed');
 
         return view('wards.patient-infusions', compact('patient', 'infusions', 'activeInfusions', 'completedInfusions'));
+    }
+
+    /**
+     * Patient Pump Link Modal (iframe content).
+     */
+    public function patientPumpLink(Request $request): View
+    {
+        $patientId = $request->get('patient_id');
+        $patient = Patient::find($patientId);
+
+        // Get pumps linked to this patient
+        $linkedPumps = $patient 
+            ? InfusionPump::with('ward')
+                ->where('patient_id', $patientId)
+                ->get()
+            : collect();
+
+        // Get available (unlinked) pumps
+        $availablePumps = InfusionPump::with('ward')
+            ->available()
+            ->get();
+
+        return view('wards.patient-pump-link', compact('patient', 'linkedPumps', 'availablePumps'));
+    }
+
+    /**
+     * Link a pump to a patient.
+     */
+    public function linkPumpToPatient(Request $request)
+    {
+        $validated = $request->validate([
+            'patient_id' => 'required|exists:patients,id',
+            'pump_id' => 'required|exists:infusion_pumps,id',
+        ]);
+
+        $pump = InfusionPump::findOrFail($validated['pump_id']);
+        
+        // Unlink from any existing patient first
+        if ($pump->patient_id && $pump->patient_id != $validated['patient_id']) {
+            $pump->unlinkFromPatient();
+        }
+
+        $pump->linkToPatient($validated['patient_id']);
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Pump linked to patient successfully.',
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Pump linked to patient successfully.');
+    }
+
+    /**
+     * Link a pump to a patient by device ID (for scanner).
+     */
+    public function linkPumpByDeviceId(Request $request)
+    {
+        $validated = $request->validate([
+            'patient_id' => 'required|exists:patients,id',
+            'device_id' => 'required|string|max:255',
+        ]);
+
+        // Find or create the pump by device ID
+        $pump = InfusionPump::where('device_id', $validated['device_id'])->first();
+        
+        if (!$pump) {
+            // Auto-register the pump
+            $patient = Patient::find($validated['patient_id']);
+            $pump = InfusionPump::create([
+                'device_id' => $validated['device_id'],
+                'device_name' => $validated['device_id'],
+                'ward_id' => $patient->ward_id ?? null,
+                'is_active' => true,
+            ]);
+        }
+        
+        // Unlink from any existing patient first
+        if ($pump->patient_id && $pump->patient_id != $validated['patient_id']) {
+            $pump->unlinkFromPatient();
+        }
+
+        $pump->linkToPatient($validated['patient_id']);
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Pump "' . $pump->device_id . '" linked to patient successfully.',
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Pump linked to patient successfully.');
+    }
+
+    /**
+     * Unlink a pump from a patient.
+     */
+    public function unlinkPumpFromPatient(Request $request, InfusionPump $pump)
+    {
+        $pump->unlinkFromPatient();
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Pump unlinked from patient successfully.',
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Pump unlinked from patient successfully.');
     }
 
     // ============================================
@@ -581,18 +708,18 @@ class InfusionIntegrationController extends Controller
     }
 
     /**
-     * Clear API logs.
+     * Clear HL7 logs.
      */
     public function clearLogs(Request $request)
     {
-        if ($request->api_user_id) {
-            InfusionApiLog::where('infusion_api_user_id', $request->api_user_id)->delete();
+        if ($request->device_id) {
+            BbraunHl7Log::where('device_id', $request->device_id)->delete();
         } else {
-            InfusionApiLog::truncate();
+            BbraunHl7Log::truncate();
         }
 
         return redirect()->route('infusion-integration.index')
-            ->with('success', 'Infusion API logs cleared successfully.');
+            ->with('success', 'HL7 message logs cleared successfully.');
     }
 }
 

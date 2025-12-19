@@ -134,16 +134,20 @@ Route::middleware('auth')->group(function () {
     Route::put('/vital-sign-integration/device/{device}', [VitalSignIntegrationController::class, 'updateDevice'])->name('vital-sign-integration.device.update');
     Route::delete('/vital-sign-integration/device/{device}', [VitalSignIntegrationController::class, 'destroyDevice'])->name('vital-sign-integration.device.destroy');
 
-    // Infusion Integration Routes
+    // Infusion Integration Routes (B.Braun HL7/MLLP)
     Route::get('/infusion-integration', [InfusionIntegrationController::class, 'index'])->name('infusion-integration.index');
-    Route::post('/infusion-integration/api-user', [InfusionIntegrationController::class, 'storeApiUser'])->name('infusion-integration.api-user.store');
-    Route::put('/infusion-integration/api-user/{apiUser}', [InfusionIntegrationController::class, 'updateApiUser'])->name('infusion-integration.api-user.update');
-    Route::delete('/infusion-integration/api-user/{apiUser}', [InfusionIntegrationController::class, 'destroyApiUser'])->name('infusion-integration.api-user.destroy');
+    Route::post('/infusion-integration/pump', [InfusionIntegrationController::class, 'storePump'])->name('infusion-integration.pump.store');
+    Route::put('/infusion-integration/pump/{pump}', [InfusionIntegrationController::class, 'updatePump'])->name('infusion-integration.pump.update');
+    Route::delete('/infusion-integration/pump/{pump}', [InfusionIntegrationController::class, 'destroyPump'])->name('infusion-integration.pump.destroy');
     Route::post('/infusion-integration/logs/clear', [InfusionIntegrationController::class, 'clearLogs'])->name('infusion-integration.logs.clear');
 
     // Ward Infusion Overview (iframe)
     Route::get('/ward-dashboard/infusion-overview', [InfusionIntegrationController::class, 'wardOverview'])->name('ward.infusion-overview');
     Route::get('/ward-dashboard/patient-infusions', [InfusionIntegrationController::class, 'patientInfusions'])->name('ward.patient-infusions');
+    Route::get('/ward-dashboard/patient-pump-link', [InfusionIntegrationController::class, 'patientPumpLink'])->name('ward.patient-pump-link');
+    Route::post('/ward-dashboard/link-pump', [InfusionIntegrationController::class, 'linkPumpToPatient'])->name('ward.link-pump');
+    Route::post('/ward-dashboard/link-pump-by-device-id', [InfusionIntegrationController::class, 'linkPumpByDeviceId'])->name('ward.link-pump-by-device-id');
+    Route::post('/ward-dashboard/unlink-pump/{pump}', [InfusionIntegrationController::class, 'unlinkPumpFromPatient'])->name('ward.unlink-pump');
 
     // ECG Routes
     Route::get('/ecg', [EcgController::class, 'index'])->name('ecg.index');

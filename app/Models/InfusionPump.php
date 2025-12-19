@@ -17,6 +17,8 @@ class InfusionPump extends Model
         'device_type',
         'location',
         'ward_id',
+        'patient_id',
+        'linked_at',
         'is_active',
         'last_seen_at',
     ];
@@ -24,6 +26,7 @@ class InfusionPump extends Model
     protected $casts = [
         'is_active' => 'boolean',
         'last_seen_at' => 'datetime',
+        'linked_at' => 'datetime',
     ];
 
     /**
@@ -32,6 +35,60 @@ class InfusionPump extends Model
     public function ward(): BelongsTo
     {
         return $this->belongsTo(Ward::class);
+    }
+
+    /**
+     * Get the patient this pump is linked to.
+     */
+    public function patient(): BelongsTo
+    {
+        return $this->belongsTo(Patient::class);
+    }
+
+    /**
+     * Link pump to a patient.
+     */
+    public function linkToPatient(int $patientId): void
+    {
+        $this->update([
+            'patient_id' => $patientId,
+            'linked_at' => now(),
+        ]);
+    }
+
+    /**
+     * Unlink pump from patient.
+     */
+    public function unlinkFromPatient(): void
+    {
+        $this->update([
+            'patient_id' => null,
+            'linked_at' => null,
+        ]);
+    }
+
+    /**
+     * Check if pump is linked to a patient.
+     */
+    public function isLinked(): bool
+    {
+        return $this->patient_id !== null;
+    }
+
+    /**
+     * Scope for pumps linked to a specific patient.
+     */
+    public function scopeLinkedToPatient($query, int $patientId)
+    {
+        return $query->where('patient_id', $patientId);
+    }
+
+    /**
+     * Scope for unlinked (available) pumps.
+     */
+    public function scopeAvailable($query)
+    {
+        return $query->whereNull('patient_id')->where('is_active', true);
     }
 
     /**

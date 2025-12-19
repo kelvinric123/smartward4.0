@@ -847,14 +847,14 @@
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12h4l3-9 4 18 3-9h4"/>
                                     </svg>
                                 </button>
-                                {{-- Button 4: Clinical --}}
+                                {{-- Button 4: Infusion Pump --}}
                                 <button 
-                                    class="flex-1 p-2 text-cyan-600 hover:bg-cyan-50 rounded transition-colors" 
-                                    title="Clinical"
-                                    onclick="window.dispatchEvent(new CustomEvent('open-clinical-modal', { detail: { patientId: {{ $bed['patient_id'] }} } }))"
+                                    class="flex-1 p-2 text-purple-600 hover:bg-purple-50 rounded transition-colors" 
+                                    title="Infusion Pump"
+                                    onclick="window.dispatchEvent(new CustomEvent('open-infusion-pump-modal', { detail: { patientId: {{ $bed['patient_id'] }} } }))"
                                 >
                                     <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
                                     </svg>
                                 </button>
                             </div>
@@ -2041,12 +2041,12 @@
         </div>
     </div>
 
-    <!-- Clinical Modal -->
+    <!-- Infusion Pump Modal -->
     <div x-data="{ 
             open: false, 
             patientId: null
          }"
-         @open-clinical-modal.window="open = true; patientId = $event.detail.patientId"
+         @open-infusion-pump-modal.window="open = true; patientId = $event.detail.patientId"
          x-show="open"
          class="fixed inset-0 z-50 overflow-y-auto"
          style="display: none;">
@@ -2074,26 +2074,26 @@
                  x-transition:leave="ease-in duration-200"
                  x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
                  x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                 class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+                 class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
 
                 <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                     <div class="sm:flex sm:items-start">
-                        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-cyan-100 sm:mx-0 sm:h-10 sm:w-10">
-                            <svg class="h-6 w-6 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+                        <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-purple-100 sm:mx-0 sm:h-10 sm:w-10">
+                            <svg class="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
                             </svg>
                         </div>
                         <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
                             <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
-                                Clinical Information
+                                Link Infusion Pump
                             </h3>
 
                             <div class="mt-2">
                                 <template x-if="patientId">
                                     <iframe
-                                        :src="'{{ route('ward.patient-details') }}?patient_id=' + patientId + '&tabs=additional'"
+                                        :src="'{{ route('ward.patient-pump-link') }}?patient_id=' + patientId"
                                         class="w-full h-[550px] border-0 rounded-lg"
-                                        title="Clinical Information">
+                                        title="Link Infusion Pump">
                                     </iframe>
                                 </template>
                                 <template x-if="!patientId">
@@ -2108,7 +2108,7 @@
                 <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
                     <button @click="open = false"
                             type="button"
-                            class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cyan-500 sm:w-auto sm:text-sm">
+                            class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 sm:w-auto sm:text-sm">
                         Close
                     </button>
                 </div>
