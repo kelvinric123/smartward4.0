@@ -54,3 +54,4 @@ return new class extends Migration
         Schema::dropIfExists('bbraun_hl7_logs');
     }
 };
+
