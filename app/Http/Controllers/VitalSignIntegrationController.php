@@ -21,7 +21,7 @@ class VitalSignIntegrationController extends Controller
         $apiUsers = ApiUser::withCount('apiLogs')
             ->latest()
             ->get();
-        
+
         $recentLogs = VitalSignApiLog::with('apiUser')
             ->latest()
             ->limit(20)
@@ -54,19 +54,19 @@ class VitalSignIntegrationController extends Controller
             $parsed = parse_url($appUrl);
             $ip = $parsed['host'] ?? '127.0.0.1';
             $port = $parsed['port'] ?? ($parsed['scheme'] === 'https' ? '443' : '80');
-            
+
             // If host is localhost, try to get actual IP
             if ($ip === 'localhost') {
                 $ip = $this->getLocalIp();
             }
-            
+
             return ['ip' => $ip, 'port' => (string) $port];
         }
-        
+
         // Fallback to request info
         $ip = request()->server('SERVER_ADDR') ?: $this->getLocalIp();
         $port = request()->server('SERVER_PORT') ?: '80';
-        
+
         return ['ip' => $ip, 'port' => (string) $port];
     }
 
@@ -78,11 +78,11 @@ class VitalSignIntegrationController extends Controller
         // Try to get from hostname
         $hostname = gethostname();
         $ip = gethostbyname($hostname);
-        
+
         if ($ip !== $hostname && filter_var($ip, FILTER_VALIDATE_IP)) {
             return $ip;
         }
-        
+
         // Try socket connection method (works better on some systems)
         if (function_exists('socket_create')) {
             $sock = @socket_create(AF_INET, SOCK_DGRAM, SOL_UDP);
@@ -95,7 +95,7 @@ class VitalSignIntegrationController extends Controller
                 }
             }
         }
-        
+
         return '127.0.0.1';
     }
 
@@ -213,10 +213,13 @@ class VitalSignIntegrationController extends Controller
         ];
 
         // Log this request
-        $this->logApiRequest($apiUser, '/api/vital-sign/login', 'POST', 
-            ['username' => $request->username], 
-            $responseData, 
-            200, 
+        $this->logApiRequest(
+            $apiUser,
+            '/api/vital-sign/login',
+            'POST',
+            ['username' => $request->username],
+            $responseData,
+            200,
             $startTime
         );
 
@@ -232,7 +235,7 @@ class VitalSignIntegrationController extends Controller
 
         // Validate bearer token
         $apiUser = $this->validateBearerToken($request);
-        
+
         if (!$apiUser) {
             return response()->json([
                 'success' => false,
@@ -260,10 +263,13 @@ class VitalSignIntegrationController extends Controller
                 'errors' => $validator->errors(),
             ];
 
-            $this->logApiRequest($apiUser, '/api/vital-sign/readings', 'POST', 
-                $request->all(), 
-                $responseData, 
-                422, 
+            $this->logApiRequest(
+                $apiUser,
+                '/api/vital-sign/readings',
+                'POST',
+                $request->all(),
+                $responseData,
+                422,
                 $startTime
             );
 
@@ -338,10 +344,13 @@ class VitalSignIntegrationController extends Controller
             ],
         ];
 
-        $this->logApiRequest($apiUser, '/api/vital-sign/readings', 'POST', 
-            $request->all(), 
-            $responseData, 
-            200, 
+        $this->logApiRequest(
+            $apiUser,
+            '/api/vital-sign/readings',
+            'POST',
+            $request->all(),
+            $responseData,
+            200,
             $startTime
         );
 
@@ -357,7 +366,7 @@ class VitalSignIntegrationController extends Controller
 
         // Validate bearer token
         $apiUser = $this->validateBearerToken($request);
-        
+
         if (!$apiUser) {
             return response()->json([
                 'success' => false,
@@ -366,7 +375,8 @@ class VitalSignIntegrationController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'patient_mrn' => 'required|string',
+            'patient_mrn' => 'nullable|string|required_without:patient_rn',
+            'patient_rn' => 'nullable|string|required_without:patient_mrn',
             'systolic_bp' => 'nullable|integer|min:0|max:300',
             'diastolic_bp' => 'nullable|integer|min:0|max:200',
             'pulse_rate' => 'nullable|integer|min:0|max:300',
@@ -375,6 +385,9 @@ class VitalSignIntegrationController extends Controller
             'respiratory_rate' => 'nullable|integer|min:0|max:100',
             'recorded_at' => 'nullable|date',
             'device_id' => 'nullable|string|max:100',
+        ], [
+            'patient_mrn.required_without' => 'Either Patient MRN or Patient RN is required',
+            'patient_rn.required_without' => 'Either Patient MRN or Patient RN is required',
         ]);
 
         if ($validator->fails()) {
@@ -384,18 +397,27 @@ class VitalSignIntegrationController extends Controller
                 'errors' => $validator->errors(),
             ];
 
-            $this->logApiRequest($apiUser, '/api/vital-sign/reading', 'POST', 
-                $request->all(), 
-                $responseData, 
-                422, 
+            $this->logApiRequest(
+                $apiUser,
+                '/api/vital-sign/reading',
+                'POST',
+                $request->all(),
+                $responseData,
+                422,
                 $startTime
             );
 
             return response()->json($responseData, 422);
         }
 
-        // Find patient by MRN
-        $patient = Patient::where('mrn', $request->patient_mrn)->first();
+        // Find patient by MRN or RN
+        $patient = null;
+        if ($request->patient_mrn) {
+            $patient = Patient::where('mrn', $request->patient_mrn)->first();
+        }
+        if (!$patient && $request->patient_rn) {
+            $patient = Patient::where('rn', $request->patient_rn)->first();
+        }
 
         if (!$patient) {
             $responseData = [
@@ -403,10 +425,13 @@ class VitalSignIntegrationController extends Controller
                 'message' => 'Patient not found',
             ];
 
-            $this->logApiRequest($apiUser, '/api/vital-sign/reading', 'POST', 
-                $request->all(), 
-                $responseData, 
-                404, 
+            $this->logApiRequest(
+                $apiUser,
+                '/api/vital-sign/reading',
+                'POST',
+                $request->all(),
+                $responseData,
+                404,
                 $startTime
             );
 
@@ -420,10 +445,13 @@ class VitalSignIntegrationController extends Controller
                 'message' => 'Patient is not currently admitted',
             ];
 
-            $this->logApiRequest($apiUser, '/api/vital-sign/reading', 'POST', 
-                $request->all(), 
-                $responseData, 
-                400, 
+            $this->logApiRequest(
+                $apiUser,
+                '/api/vital-sign/reading',
+                'POST',
+                $request->all(),
+                $responseData,
+                400,
                 $startTime
             );
 
@@ -458,10 +486,13 @@ class VitalSignIntegrationController extends Controller
             ],
         ];
 
-        $this->logApiRequest($apiUser, '/api/vital-sign/reading', 'POST', 
-            $request->all(), 
-            $responseData, 
-            200, 
+        $this->logApiRequest(
+            $apiUser,
+            '/api/vital-sign/reading',
+            'POST',
+            $request->all(),
+            $responseData,
+            200,
             $startTime
         );
 
@@ -476,7 +507,7 @@ class VitalSignIntegrationController extends Controller
         $startTime = microtime(true);
 
         $apiUser = $this->validateBearerToken($request);
-        
+
         if (!$apiUser) {
             return response()->json([
                 'success' => false,
@@ -491,10 +522,13 @@ class VitalSignIntegrationController extends Controller
             'message' => 'Logged out successfully',
         ];
 
-        $this->logApiRequest($apiUser, '/api/vital-sign/logout', 'POST', 
-            [], 
-            $responseData, 
-            200, 
+        $this->logApiRequest(
+            $apiUser,
+            '/api/vital-sign/logout',
+            'POST',
+            [],
+            $responseData,
+            200,
             $startTime
         );
 
@@ -507,13 +541,13 @@ class VitalSignIntegrationController extends Controller
     private function validateBearerToken(Request $request): ?ApiUser
     {
         $authHeader = $request->header('Authorization');
-        
+
         if (!$authHeader || !Str::startsWith($authHeader, 'Bearer ')) {
             return null;
         }
 
         $token = Str::after($authHeader, 'Bearer ');
-        
+
         return ApiUser::findByToken($token);
     }
 
@@ -521,11 +555,11 @@ class VitalSignIntegrationController extends Controller
      * Log API request.
      */
     private function logApiRequest(
-        ApiUser $apiUser, 
-        string $endpoint, 
-        string $method, 
-        array $requestData, 
-        array $responseData, 
+        ApiUser $apiUser,
+        string $endpoint,
+        string $method,
+        array $requestData,
+        array $responseData,
         int $statusCode,
         float $startTime
     ): void {
@@ -648,7 +682,7 @@ class VitalSignIntegrationController extends Controller
         // Validate passphrase
         $passphrase = $request->header('X-Passphrase');
         $expectedPassphrase = config('services.vital_sign_api.passphrase', 'qmedno1');
-        
+
         if ($passphrase !== $expectedPassphrase) {
             return response()->json([
                 'success' => false,
@@ -677,7 +711,7 @@ class VitalSignIntegrationController extends Controller
         // Validate passphrase
         $passphrase = $request->header('X-Passphrase');
         $expectedPassphrase = config('services.vital_sign_api.passphrase', 'qmedno1');
-        
+
         if ($passphrase !== $expectedPassphrase) {
             return response()->json([
                 'success' => false,
