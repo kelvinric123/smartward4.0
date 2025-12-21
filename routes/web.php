@@ -44,9 +44,15 @@ Route::middleware('auth')->group(function () {
 
     Route::resource('consultants', ConsultantController::class);
     Route::post('consultants/{consultant}/deactivate', [ConsultantController::class, 'deactivate'])->name('consultants.deactivate');
+    Route::get('consultants-bulk-upload', [ConsultantController::class, 'bulkUploadForm'])->name('consultants.bulk-upload');
+    Route::post('consultants-bulk-upload/preview', [ConsultantController::class, 'bulkUploadPreview'])->name('consultants.bulk-upload.preview');
+    Route::post('consultants-bulk-upload/confirm', [ConsultantController::class, 'bulkUploadConfirm'])->name('consultants.bulk-upload.confirm');
 
     Route::resource('anaesthetists', AnaesthetistController::class);
     Route::post('anaesthetists/{anaesthetist}/deactivate', [AnaesthetistController::class, 'deactivate'])->name('anaesthetists.deactivate');
+    Route::get('anaesthetists-bulk-upload', [AnaesthetistController::class, 'bulkUploadForm'])->name('anaesthetists.bulk-upload');
+    Route::post('anaesthetists-bulk-upload/preview', [AnaesthetistController::class, 'bulkUploadPreview'])->name('anaesthetists.bulk-upload.preview');
+    Route::post('anaesthetists-bulk-upload/confirm', [AnaesthetistController::class, 'bulkUploadConfirm'])->name('anaesthetists.bulk-upload.confirm');
 
     Route::resource('nurses', NurseController::class)->except(['show']);
     Route::post('nurses/{nurse}/deactivate', [NurseController::class, 'deactivate'])->name('nurses.deactivate');
