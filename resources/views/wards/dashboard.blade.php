@@ -880,9 +880,11 @@
                                                             @click.away="openPopover = null" x-transition
                                                             class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 bg-white rounded-lg shadow-2xl border border-gray-200 p-2 whitespace-nowrap">
                                                             <div class="text-xs font-bold text-gray-800 mb-1">Nursing Level
-                                                                {{ $levelNum[$bed['nursing_level']] ?? '?' }}</div>
+                                                                {{ $levelNum[$bed['nursing_level']] ?? '?' }}
+                                                            </div>
                                                             <div class="text-xs text-gray-600">
-                                                                {{ $levelDesc[$bed['nursing_level']] ?? 'Unknown Level' }}</div>
+                                                                {{ $levelDesc[$bed['nursing_level']] ?? 'Unknown Level' }}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 @else
@@ -900,7 +902,7 @@
                                                     <div class="relative">
                                                         <button type="button"
                                                             @click="openPopover = openPopover === 'nbm_{{ $bed['patient_id'] }}' ? null : 'nbm_{{ $bed['patient_id'] }}'"
-                                                            class="w-6 h-6 bg-red-600 text-white text-xs rounded flex items-center justify-center cursor-pointer border border-red-700"
+                                                            class="w-6 h-6 bg-pink-500 text-white text-xs rounded flex items-center justify-center cursor-pointer border border-pink-600"
                                                             title="NBM">
                                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor"
                                                                 viewBox="0 0 24 24" stroke-width="2.5">
@@ -912,7 +914,7 @@
                                                         <div x-show="openPopover === 'nbm_{{ $bed['patient_id'] }}'"
                                                             @click.away="openPopover = null" x-transition
                                                             class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-36 bg-white rounded-lg shadow-2xl border border-gray-200 p-2 whitespace-nowrap">
-                                                            <div class="text-xs font-bold text-red-700 mb-1">⚠️ NBM</div>
+                                                            <div class="text-xs font-bold text-pink-700 mb-1">⚠️ NBM</div>
                                                             <div class="text-xs text-gray-600">Nil By Mouth</div>
                                                             <div class="text-xs text-gray-500 mt-1">No food or drink</div>
                                                         </div>
@@ -962,9 +964,11 @@
                                                             @click.away="openPopover = null" x-transition
                                                             class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-white rounded-lg shadow-2xl border border-gray-200 p-2 whitespace-nowrap">
                                                             <div class="text-xs font-bold text-gray-800 mb-1">⚠️ Fall Risk Level
-                                                                {{ $currentFall['level'] }}</div>
+                                                                {{ $currentFall['level'] }}
+                                                            </div>
                                                             <div class="text-xs text-gray-600">
-                                                                {{ $fallDesc[$bed['fall_risk']] ?? 'Unknown Risk' }}</div>
+                                                                {{ $fallDesc[$bed['fall_risk']] ?? 'Unknown Risk' }}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 @else
@@ -985,9 +989,7 @@
                                                         $criticalIsolations = ['covid', 'tb', 'airborne', 'COVID', 'TB', 'AIR'];
                                                         $isoCode = strtoupper($bed['isolation_type']);
                                                         $isCriticalIso = in_array($bed['isolation_type'], $criticalIsolations) || in_array($isoCode, $criticalIsolations);
-                                                        $isoColors = $isCriticalIso
-                                                            ? ['bg' => 'bg-red-600', 'text' => 'text-white', 'border' => 'border-red-700']
-                                                            : ['bg' => 'bg-yellow-500', 'text' => 'text-white', 'border' => 'border-yellow-600'];
+                                                        $isoColors = ['bg' => 'bg-purple-600', 'text' => 'text-white', 'border' => 'border-purple-700'];
                                                         $isoDisplayName = $bed['isolation_type_name'] ?? ucfirst(str_replace('_', ' ', $bed['isolation_type']));
                                                     @endphp
                                                     <div class="relative">
@@ -1010,8 +1012,7 @@
                                                         <div x-show="openPopover === 'iso_{{ $bed['patient_id'] }}'"
                                                             @click.away="openPopover = null" x-transition
                                                             class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-white rounded-lg shadow-2xl border border-gray-200 p-2 whitespace-nowrap">
-                                                            <div
-                                                                class="text-xs font-bold {{ $isCriticalIso ? 'text-red-700' : 'text-yellow-700' }} mb-1">
+                                                            <div class="text-xs font-bold text-purple-700 mb-1">
                                                                 🦠 Isolation Required</div>
                                                             <div class="text-xs text-gray-800 font-semibold">{{ $isoDisplayName }}</div>
                                                             @if($isCriticalIso)
@@ -1044,7 +1045,7 @@
                                                     <div class="relative">
                                                         <button type="button"
                                                             @click="openPopover = openPopover === 'allergy_{{ $bed['patient_id'] }}' ? null : 'allergy_{{ $bed['patient_id'] }}'"
-                                                            class="w-6 h-6 bg-pink-600 text-white text-xs rounded flex items-center justify-center cursor-pointer border border-pink-700"
+                                                            class="w-6 h-6 bg-red-600 text-white text-xs rounded flex items-center justify-center cursor-pointer border border-red-700"
                                                             title="Allergies">
                                                             <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                                                                 <path
@@ -1054,12 +1055,12 @@
                                                         <div x-show="openPopover === 'allergy_{{ $bed['patient_id'] }}'"
                                                             @click.away="openPopover = null" x-transition
                                                             class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-white rounded-lg shadow-2xl border border-gray-200 p-2">
-                                                            <div class="text-xs font-bold text-pink-700 mb-2">⚠️ Allergies
+                                                            <div class="text-xs font-bold text-red-700 mb-2">⚠️ Allergies
                                                                 ({{ $allergyCount }})</div>
                                                             <ul class="space-y-1">
                                                                 @foreach($allergyList as $allergy)
                                                                     <li class="text-xs text-gray-700 flex items-center">
-                                                                        <span class="w-1.5 h-1.5 bg-pink-500 rounded-full mr-2"></span>
+                                                                        <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-2"></span>
                                                                         {{ $allergy }}
                                                                     </li>
                                                                 @endforeach
@@ -1076,207 +1077,258 @@
                                                     </div>
                                                 @endif
 
-                                                {{-- 3 Empty placeholder boxes for future indicators --}}
-                                                <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
-                                                    title="Reserved">
-                                                    <span class="text-gray-400 text-xs">-</span>
-                                                </div>
-                                                <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
-                                                    title="Reserved">
-                                                    <span class="text-gray-400 text-xs">-</span>
-                                                </div>
-                                                <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
-                                                    title="Reserved">
-                                                    <span class="text-gray-400 text-xs">-</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                                {{-- 2 Empty placeholder boxes + HGT indicator --}}
+                                                {{-- HGT (Blood Glucose) Monitoring - Click to show details --}}
+                                                @if($bed['hgt_enabled'] ?? false)
+                                                    @php
+                                                        $lastHgt = $bed['last_hgt'] ?? null;
+                                                        $hgtFrequency = $bed['hgt_frequency'] ?? 'N/A';
+                                                        $hgtFrequencyLabel = [
+                                                            'bd' => 'BD (Twice Daily)',
+                                                            'tds' => 'TDS (Three Times Daily)',
+                                                            'qid' => 'QID (Four Times Daily)',
+                                                            'pid' => 'PRN (As Needed)',
+                                                        ][$hgtFrequency] ?? $hgtFrequency;
+                                                        $hgtValue = $lastHgt['value'] ?? null;
+                                                        $hgtTime = $lastHgt['recorded_at'] ?? null;
+                                                        // Determine color based on value
+                                                        $hgtColor = 'teal';
+                                                        if ($hgtValue !== null) {
+                                                            if ($hgtValue < 4.0)
+                                                                $hgtColor = 'red';
+                                                            elseif ($hgtValue > 11.0)
+                                                                $hgtColor = 'orange';
+                                                        }
+                                                    @endphp
+                                                    <div class="relative">
+                                                        <button type="button"
+                                                            @click="openPopover = openPopover === 'hgt_{{ $bed['patient_id'] }}' ? null : 'hgt_{{ $bed['patient_id'] }}'"
+                                                            class="w-6 h-6 bg-{{ $hgtColor }}-500 text-white text-xs rounded flex items-center justify-center cursor-pointer border border-{{ $hgtColor }}-600"
+                                                            title="HGT">
+                                                            <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                                                <path d="M12 2c-1.1 0-2 .9-2 2v8c-2.2 1.2-3.5 3.5-3.5 6 0 3.6 2.9 6.5 6.5 6.5s6.5-2.9 6.5-6.5c0-2.5-1.3-4.8-3.5-6V4c0-1.1-.9-2-2-2zm-1 14.7c-1.3.5-2.2 1.8-2.2 3.3h6.4c0-1.5-.9-2.8-2.2-3.3V4h-2v12.7z"/>
+                                                            </svg>
+                                                        </button>
+                                                        <div x-show="openPopover === 'hgt_{{ $bed['patient_id'] }}'"
+                                                            @click.away="openPopover = null" x-transition
+                                                            class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-white rounded-lg shadow-2xl border border-gray-200 p-2 whitespace-nowrap">
+                                                            <div class="text-xs font-bold text-teal-700 mb-1">🩸 HGT Monitoring</div>
+                                                            <div class="text-xs text-gray-600">Frequency: {{ $hgtFrequencyLabel }}</div>
+                                                            @if($hgtValue !== null)
+                                                                <div class="mt-1 text-xs">
+                                                                    <span class="font-semibold text-{{ $hgtColor }}-600">{{ $hgtValue }} mmol/L</span>
+                                                                    <span class="text-gray-400">@ {{ $hgtTime }}</span>
+                                                                </div>
+                                                            @else
+                                                                <div class="text-xs text-gray-400 mt-1">No readings yet</div>
+                                                            @endif
+                                                        </div>
+                                                    </div>
+                                                @else
+                                                                <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
+                                                                    title="HGT">
+                                                                    <svg class="w-3.5 h-3.5 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                                                                        <path d="M12 2c-1.1 0-2 .9-2 2v8c-2.2 1.2-3.5 3.5-3.5 6 0 3.6 2.9 6.5 6.5 6.5s6.5-2.9 6.5-6.5c0-2.5-1.3-4.8-3.5-6V4c0-1.1-.9-2-2-2zm-1 14.7c-1.3.5-2.2 1.8-2.2 3.3h6.4c0-1.5-.9-2.8-2.2-3.3V4h-2v12.7z"/>
+                                                                    </svg>
+                                                                </div>
+                                                            @endif
 
-                                    <div class="flex items-center space-x-1 border-t px-3 py-2 flex-shrink-0 mt-auto">
-                                        {{-- Button 1: Patient Details --}}
-                                        @if($isVisible('patient_details_button'))
-                                            <button class="flex-1 p-2 text-gray-600 hover:bg-gray-100 rounded transition-colors"
-                                                title="Patient Details"
-                                                onclick="window.dispatchEvent(new CustomEvent('open-patient-details-modal', { detail: { patientId: {{ $bed['patient_id'] }} } }))">
-                                                <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M4 6h16M4 12h16M4 18h16" />
-                                                </svg>
-                                            </button>
-                                        @endif
-                                        {{-- Button 2: Vital Signs --}}
-                                        <button class="flex-1 p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                            title="Vital Signs"
-                                            onclick="window.dispatchEvent(new CustomEvent('open-vital-signs-modal', { detail: { patientId: {{ $bed['patient_id'] }} } }))">
-                                            <svg class="w-4 h-4 mx-auto" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fill-rule="evenodd"
-                                                    d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"
-                                                    clip-rule="evenodd" />
-                                            </svg>
-                                        </button>
-                                        {{-- Button 3: ECG --}}
-                                        <button class="flex-1 p-2 text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
-                                            title="ECG"
-                                            onclick="window.dispatchEvent(new CustomEvent('open-ecg-modal', { detail: { patientId: {{ $bed['patient_id'] }} } }))">
-                                            <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M3 12h4l3-9 4 18 3-9h4" />
-                                            </svg>
-                                        </button>
-                                        {{-- Button 4: Infusion Pump --}}
-                                        <button class="flex-1 p-2 text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                                            title="Infusion Pump"
-                                            onclick="window.dispatchEvent(new CustomEvent('open-infusion-pump-modal', { detail: { patientId: {{ $bed['patient_id'] }} } }))">
-                                            <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                                            </svg>
-                                        </button>
-                                    </div>
-                                </div>
+                                                            <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
+                                                                title="Reserved">
+                                                                <span class="text-gray-400 text-xs">-</span>
+                                                            </div>
+                                                            <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
+                                                                title="Reserved">
+                                                                <span class="text-gray-400 text-xs">-</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="flex items-center space-x-1 border-t px-3 py-2 flex-shrink-0 mt-auto">
+                                                    {{-- Button 1: Patient Details --}}
+                                                    @if($isVisible('patient_details_button'))
+                                                        <button class="flex-1 p-2 text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                                                            title="Patient Details"
+                                                            onclick="window.dispatchEvent(new CustomEvent('open-patient-details-modal', { detail: { patientId: {{ $bed['patient_id'] }} } }))">
+                                                            <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                    d="M4 6h16M4 12h16M4 18h16" />
+                                                            </svg>
+                                                        </button>
+                                                    @endif
+                                                    {{-- Button 2: Vital Signs --}}
+                                                    <button class="flex-1 p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                                        title="Vital Signs"
+                                                        onclick="window.dispatchEvent(new CustomEvent('open-vital-signs-modal', { detail: { patientId: {{ $bed['patient_id'] }} } }))">
+                                                        <svg class="w-4 h-4 mx-auto" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fill-rule="evenodd"
+                                                                d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"
+                                                                clip-rule="evenodd" />
+                                                        </svg>
+                                                    </button>
+                                                    {{-- Button 3: ECG --}}
+                                                    <button class="flex-1 p-2 text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                                                        title="ECG"
+                                                        onclick="window.dispatchEvent(new CustomEvent('open-ecg-modal', { detail: { patientId: {{ $bed['patient_id'] }} } }))">
+                                                        <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M3 12h4l3-9 4 18 3-9h4" />
+                                                        </svg>
+                                                    </button>
+                                                    {{-- Button 4: Infusion Pump --}}
+                                                    <button class="flex-1 p-2 text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                                                        title="Infusion Pump"
+                                                        onclick="window.dispatchEvent(new CustomEvent('open-infusion-pump-modal', { detail: { patientId: {{ $bed['patient_id'] }} } }))">
+                                                        <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
                             @elseif($bed['status'] === 'reserved')
-                                <!-- Reserved/Prebooked Bed - Color based on Gender -->
-                                @php
-                                    $prebookGender = strtolower($bed['gender'] ?? '');
-                                    if ($prebookGender === 'female') {
-                                        $prebookBorderClass = 'border-red-400';
-                                        $prebookBgClass = 'bg-gradient-to-r from-red-500 to-pink-500';
-                                        $prebookInfoBg = 'bg-red-50 border-red-200';
-                                        $prebookInfoText = 'text-red-700';
-                                        $prebookIconColor = 'text-red-500';
-                                    } elseif ($prebookGender === 'male') {
-                                        $prebookBorderClass = 'border-blue-400';
-                                        $prebookBgClass = 'bg-gradient-to-r from-blue-500 to-indigo-500';
-                                        $prebookInfoBg = 'bg-blue-50 border-blue-200';
-                                        $prebookInfoText = 'text-blue-700';
-                                        $prebookIconColor = 'text-blue-500';
-                                    } else {
-                                        $prebookBorderClass = 'border-gray-400';
-                                        $prebookBgClass = 'bg-gradient-to-r from-gray-500 to-slate-500';
-                                        $prebookInfoBg = 'bg-gray-50 border-gray-200';
-                                        $prebookInfoText = 'text-gray-700';
-                                        $prebookIconColor = 'text-gray-500';
-                                    }
-                                @endphp
-                                <div class="bed-card bg-white rounded-lg shadow-md border-2 {{ $prebookBorderClass }} overflow-hidden transition-all duration-300 h-[280px] flex flex-col"
-                                    data-section="{{ $bed['section'] ?? 1 }}">
-                                    <div class="px-4 py-2 {{ $prebookBgClass }} text-white flex items-center justify-between">
-                                        <span class="font-bold bed-number cursor-pointer"
-                                            onclick='highlightAndFilterBeds(@json([$bed["number"]]), "bed")'>{{ $bed['number'] }}</span>
-                                        <span class="text-xs bg-white/30 px-2 py-1 rounded font-semibold">PREBOOKED</span>
-                                    </div>
-                                    <div class="p-3 space-y-1.5 flex-1 overflow-hidden">
-                                        <div class="{{ $prebookInfoBg }} border rounded-lg p-2 mb-1">
-                                            <div class="flex items-center justify-center">
-                                                <svg class="w-5 h-5 {{ $prebookIconColor }} mr-2 flex-shrink-0" fill="none"
-                                                    stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                </svg>
-                                                <span class="text-sm font-bold {{ $prebookInfoText }}">Bed is Prebooked</span>
+                                        <!-- Reserved/Prebooked Bed - Color based on Gender -->
+                                        @php
+                                            $prebookGender = strtolower($bed['gender'] ?? '');
+                                            if ($prebookGender === 'female') {
+                                                $prebookBorderClass = 'border-red-400';
+                                                $prebookBgClass = 'bg-gradient-to-r from-red-500 to-pink-500';
+                                                $prebookInfoBg = 'bg-red-50 border-red-200';
+                                                $prebookInfoText = 'text-red-700';
+                                                $prebookIconColor = 'text-red-500';
+                                            } elseif ($prebookGender === 'male') {
+                                                $prebookBorderClass = 'border-blue-400';
+                                                $prebookBgClass = 'bg-gradient-to-r from-blue-500 to-indigo-500';
+                                                $prebookInfoBg = 'bg-blue-50 border-blue-200';
+                                                $prebookInfoText = 'text-blue-700';
+                                                $prebookIconColor = 'text-blue-500';
+                                            } else {
+                                                $prebookBorderClass = 'border-gray-400';
+                                                $prebookBgClass = 'bg-gradient-to-r from-gray-500 to-slate-500';
+                                                $prebookInfoBg = 'bg-gray-50 border-gray-200';
+                                                $prebookInfoText = 'text-gray-700';
+                                                $prebookIconColor = 'text-gray-500';
+                                            }
+                                        @endphp
+                                        <div class="bed-card bg-white rounded-lg shadow-md border-2 {{ $prebookBorderClass }} overflow-hidden transition-all duration-300 h-[280px] flex flex-col"
+                                            data-section="{{ $bed['section'] ?? 1 }}">
+                                            <div class="px-4 py-2 {{ $prebookBgClass }} text-white flex items-center justify-between">
+                                                <span class="font-bold bed-number cursor-pointer"
+                                                    onclick='highlightAndFilterBeds(@json([$bed["number"]]), "bed")'>{{ $bed['number'] }}</span>
+                                                <span class="text-xs bg-white/30 px-2 py-1 rounded font-semibold">PREBOOKED</span>
+                                            </div>
+                                            <div class="p-3 space-y-1.5 flex-1 overflow-hidden">
+                                                <div class="{{ $prebookInfoBg }} border rounded-lg p-2 mb-1">
+                                                    <div class="flex items-center justify-center">
+                                                        <svg class="w-5 h-5 {{ $prebookIconColor }} mr-2 flex-shrink-0" fill="none"
+                                                            stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                        </svg>
+                                                        <span class="text-sm font-bold {{ $prebookInfoText }}">Bed is Prebooked</span>
+                                                    </div>
+                                                </div>
+                                                {{-- Priority display: Patient Name, Consultant Name, Notes --}}
+                                                @if(!empty($bed['patient_name']) && !str_starts_with($bed['patient_name'], 'Prebooked Bed'))
+                                                    <div class="flex items-center text-sm min-w-0">
+                                                        <svg class="w-4 h-4 mr-2 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor"
+                                                            viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                        </svg>
+                                                        <span class="font-semibold text-gray-800 truncate"
+                                                            title="{{ $bed['patient_name'] }}">{{ $maskPatientName($bed['patient_name']) }}</span>
+                                                    </div>
+                                                @endif
+                                                @if(!empty($bed['consultant']) && $bed['consultant'] !== 'Not Assigned')
+                                                    <div class="flex items-center text-xs text-gray-600 min-w-0">
+                                                        <svg class="w-3 h-3 mr-2 flex-shrink-0" fill="none" stroke="currentColor"
+                                                            viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                        <span class="truncate" title="{{ $bed['consultant'] }}">{{ $bed['consultant'] }}</span>
+                                                    </div>
+                                                @endif
+                                                @if(!empty($bed['prebook_notes']))
+                                                    <div class="text-xs text-gray-600 bg-yellow-50 p-1.5 rounded border border-yellow-200 line-clamp-3"
+                                                        title="{{ $bed['prebook_notes'] }}">
+                                                        <svg class="w-3 h-3 inline mr-1 flex-shrink-0" fill="none" stroke="currentColor"
+                                                            viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                        </svg>
+                                                        {{ $bed['prebook_notes'] }}
+                                                    </div>
+                                                @endif
+                                            </div>
+                                            <div class="flex gap-2 px-3 py-2 border-t flex-shrink-0 mt-auto justify-center">
+                                                <form method="POST" action="{{ route('ward.cancel-prebook', $bed['patient_id']) }}"
+                                                    onsubmit="return confirm('Are you sure you want to cancel this prebook?')">
+                                                    @csrf
+                                                    <button type="submit"
+                                                        class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center"
+                                                        title="Cancel Prebook">
+                                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                        Cancel
+                                                    </button>
+                                                </form>
                                             </div>
                                         </div>
-                                        {{-- Priority display: Patient Name, Consultant Name, Notes --}}
-                                        @if(!empty($bed['patient_name']) && !str_starts_with($bed['patient_name'], 'Prebooked Bed'))
-                                            <div class="flex items-center text-sm min-w-0">
-                                                <svg class="w-4 h-4 mr-2 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor"
-                                                    viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                                </svg>
-                                                <span class="font-semibold text-gray-800 truncate"
-                                                    title="{{ $bed['patient_name'] }}">{{ $maskPatientName($bed['patient_name']) }}</span>
+                                    @else
+                                        <!-- Available Bed -->
+                                        <div class="bed-card bg-white rounded-lg shadow-md border-2 border-gray-300 overflow-hidden hover:border-green-400 transition-all duration-300 h-[280px] flex flex-col"
+                                            data-section="{{ $bed['section'] ?? 1 }}">
+                                            <div class="px-4 py-2 bg-gray-500 text-white flex items-center justify-between">
+                                                <span class="font-bold bed-number cursor-pointer"
+                                                    onclick='highlightAndFilterBeds(@json([$bed["number"]]), "bed")'>{{ $bed['number'] }}</span>
+                                                <span
+                                                    class="px-2 py-0.5 text-[11px] font-semibold rounded-full border {{ $bedStatusColors[$bed['status']] ?? 'bg-gray-100 text-gray-800 border-gray-200' }}">
+                                                    {{ ucfirst($bed['status']) }}
+                                                </span>
                                             </div>
-                                        @endif
-                                        @if(!empty($bed['consultant']) && $bed['consultant'] !== 'Not Assigned')
-                                            <div class="flex items-center text-xs text-gray-600 min-w-0">
-                                                <svg class="w-3 h-3 mr-2 flex-shrink-0" fill="none" stroke="currentColor"
-                                                    viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                <span class="truncate" title="{{ $bed['consultant'] }}">{{ $bed['consultant'] }}</span>
-                                            </div>
-                                        @endif
-                                        @if(!empty($bed['prebook_notes']))
-                                            <div class="text-xs text-gray-600 bg-yellow-50 p-1.5 rounded border border-yellow-200 line-clamp-3"
-                                                title="{{ $bed['prebook_notes'] }}">
-                                                <svg class="w-3 h-3 inline mr-1 flex-shrink-0" fill="none" stroke="currentColor"
-                                                    viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                </svg>
-                                                {{ $bed['prebook_notes'] }}
-                                            </div>
-                                        @endif
-                                    </div>
-                                    <div class="flex gap-2 px-3 py-2 border-t flex-shrink-0 mt-auto justify-center">
-                                        <form method="POST" action="{{ route('ward.cancel-prebook', $bed['patient_id']) }}"
-                                            onsubmit="return confirm('Are you sure you want to cancel this prebook?')">
-                                            @csrf
-                                            <button type="submit"
-                                                class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center"
-                                                title="Cancel Prebook">
-                                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
-                                                Cancel
-                                            </button>
-                                        </form>
-                                    </div>
-                                </div>
-                            @else
-                                <!-- Available Bed -->
-                                <div class="bed-card bg-white rounded-lg shadow-md border-2 border-gray-300 overflow-hidden hover:border-green-400 transition-all duration-300 h-[280px] flex flex-col"
-                                    data-section="{{ $bed['section'] ?? 1 }}">
-                                    <div class="px-4 py-2 bg-gray-500 text-white flex items-center justify-between">
-                                        <span class="font-bold bed-number cursor-pointer"
-                                            onclick='highlightAndFilterBeds(@json([$bed["number"]]), "bed")'>{{ $bed['number'] }}</span>
-                                        <span
-                                            class="px-2 py-0.5 text-[11px] font-semibold rounded-full border {{ $bedStatusColors[$bed['status']] ?? 'bg-gray-100 text-gray-800 border-gray-200' }}">
-                                            {{ ucfirst($bed['status']) }}
-                                        </span>
-                                    </div>
-                                    <div class="p-3 flex-1 flex items-center justify-center">
-                                        <div class="text-center">
-                                            <svg class="w-16 h-16 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor"
-                                                viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                            </svg>
-                                            <p class="text-gray-500 text-sm mb-4">No Patient</p>
-                                            @if($isVisible('admit_button'))
-                                                <button
-                                                    onclick="window.dispatchEvent(new CustomEvent('open-admit-modal', { detail: { bedNumber: '{{ $bed['number'] }}', wardId: {{ $selectedWard->id }} } }))"
-                                                    class="w-full px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-colors shadow mb-2">
-                                                    <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor"
+                                            <div class="p-3 flex-1 flex items-center justify-center">
+                                                <div class="text-center">
+                                                    <svg class="w-16 h-16 mx-auto text-gray-400 mb-3" fill="none" stroke="currentColor"
                                                         viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                            d="M12 4v16m8-8H4" />
+                                                            d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                                     </svg>
-                                                    Admit Patient
-                                                </button>
-                                            @endif
-                                            @if($isVisible('prebook_button'))
-                                                <button
-                                                    onclick="window.dispatchEvent(new CustomEvent('open-prebook-modal', { detail: { bedNumber: '{{ $bed['number'] }}', wardId: {{ $selectedWard->id }} } }))"
-                                                    class="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow">
-                                                    <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor"
-                                                        viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                    </svg>
-                                                    Prebook
-                                                </button>
-                                            @endif
+                                                    <p class="text-gray-500 text-sm mb-4">No Patient</p>
+                                                    @if($isVisible('admit_button'))
+                                                        <button
+                                                            onclick="window.dispatchEvent(new CustomEvent('open-admit-modal', { detail: { bedNumber: '{{ $bed['number'] }}', wardId: {{ $selectedWard->id }} } }))"
+                                                            class="w-full px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-medium transition-colors shadow mb-2">
+                                                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor"
+                                                                viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                    d="M12 4v16m8-8H4" />
+                                                            </svg>
+                                                            Admit Patient
+                                                        </button>
+                                                    @endif
+                                                    @if($isVisible('prebook_button'))
+                                                        <button
+                                                            onclick="window.dispatchEvent(new CustomEvent('open-prebook-modal', { detail: { bedNumber: '{{ $bed['number'] }}', wardId: {{ $selectedWard->id }} } }))"
+                                                            class="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow">
+                                                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor"
+                                                                viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                            </svg>
+                                                            Prebook
+                                                        </button>
+                                                    @endif
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
-                                </div>
-                            @endif
+                                    @endif
                         @endforeach
                     @else
                         <div class="col-span-full text-center py-12">
@@ -2814,7 +2866,8 @@
                                                             </div>
                                                             <div class="text-right">
                                                                 <div class="text-sm font-semibold text-pink-700">
-                                                                    {{ $patient['bed_number'] }}</div>
+                                                                    {{ $patient['bed_number'] }}
+                                                                </div>
                                                                 <div class="text-xs text-gray-500">Click to view</div>
                                                             </div>
                                                         </div>
@@ -2902,7 +2955,8 @@
                                                             </div>
                                                             <div class="text-right">
                                                                 <div class="text-sm font-semibold text-purple-700">
-                                                                    {{ $patient['bed_number'] }}</div>
+                                                                    {{ $patient['bed_number'] }}
+                                                                </div>
                                                                 <div class="text-xs text-gray-500">Click to view</div>
                                                             </div>
                                                         </div>

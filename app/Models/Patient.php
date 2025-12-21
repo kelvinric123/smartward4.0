@@ -42,6 +42,8 @@ class Patient extends Model
         'fall_risk',
         'isolation_type',
         'allergies',
+        'hgt_enabled',
+        'hgt_frequency',
     ];
 
     /**
@@ -64,6 +66,7 @@ class Patient extends Model
         'allergies' => 'array',
         'address' => 'array',
         'diet_types' => 'array',
+        'hgt_enabled' => 'boolean',
     ];
 
     /**
@@ -117,11 +120,11 @@ class Patient extends Model
             'id',
             'consultant_id'
         )->join('bed_consultant', 'consultants.id', '=', 'bed_consultant.consultant_id')
-         ->where('bed_consultant.bed_id', '=', function($query) {
-             $query->select('id')
-                   ->from('beds')
-                   ->whereColumn('beds.patient_id', 'patients.id');
-         });
+            ->where('bed_consultant.bed_id', '=', function ($query) {
+                $query->select('id')
+                    ->from('beds')
+                    ->whereColumn('beds.patient_id', 'patients.id');
+            });
     }
 
     public function movements(): HasMany
@@ -183,6 +186,22 @@ class Patient extends Model
     public function vitalSigns(): HasMany
     {
         return $this->hasMany(VitalSign::class);
+    }
+
+    /**
+     * Get all sugar readings for this patient
+     */
+    public function sugarReadings(): HasMany
+    {
+        return $this->hasMany(SugarReading::class)->orderBy('recorded_at', 'desc');
+    }
+
+    /**
+     * Get the latest sugar reading for this patient
+     */
+    public function latestSugarReading()
+    {
+        return $this->hasOne(SugarReading::class)->latestOfMany('recorded_at');
     }
 
     /**

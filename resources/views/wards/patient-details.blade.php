@@ -95,7 +95,7 @@
         use App\Models\DietType;
         use App\Models\IsolationType;
         use App\Models\PatientCareProvider;
-        
+
         $patientTabs = $patientDetailsTabs ?? [
             'info' => true,
             'additional' => true,
@@ -106,22 +106,22 @@
             'transfer' => true,
             'discharge' => true,
         ];
-        
+
         // Map old 'referral' key to 'careprovider' for backwards compatibility
         if (isset($patientTabs['referral'])) {
             $patientTabs['careprovider'] = $patientTabs['referral'];
             unset($patientTabs['referral']);
         }
-        
+
         // Get display names from database tables for clinical status summary
         $dietTypesArray = $patient && $patient->diet_types ? $patient->diet_types : [];
-        $dietTypeDisplay = count($dietTypesArray) > 0 
+        $dietTypeDisplay = count($dietTypesArray) > 0
             ? collect($dietTypesArray)->map(fn($dt) => DietType::getDisplayName($dt))->implode(', ')
             : 'Regular diet';
         $isolationTypeDisplay = $patient && $patient->isolation_type && $patient->isolation_type !== 'none'
-            ? IsolationType::getDisplayName($patient->isolation_type) 
+            ? IsolationType::getDisplayName($patient->isolation_type)
             : 'None';
-        
+
         // Get care providers from ADT (grouped by role)
         $attendingDoctors = $patient ? $patient->activeCareProviders()->where('role', PatientCareProvider::ROLE_ATTENDING)->get() : collect();
         $referringDoctors = $patient ? $patient->activeCareProviders()->where('role', PatientCareProvider::ROLE_REFERRING)->get() : collect();
@@ -312,7 +312,7 @@
                 <!-- Patient Additional Info - Clinical Indicators -->
                 @php
                     // Normalize allergies - convert object array to string array for UI
-                    $allergyStrings = collect($patient->allergies ?? [])->map(function($a) {
+                    $allergyStrings = collect($patient->allergies ?? [])->map(function ($a) {
                         if (is_array($a)) {
                             return $a['allergen'] ?? $a['allergen_code'] ?? json_encode($a);
                         }
@@ -438,7 +438,7 @@
                                 </div>
                             </label>
                             <p class="text-xs text-gray-500 mb-3">Allergies are managed by ADT system</p>
-                            
+
                             <!-- Allergies List (Read-only) -->
                             <div class="flex flex-wrap gap-2" x-show="allergies.length > 0">
                                 <template x-for="(allergy, index) in allergies" :key="index">
@@ -453,26 +453,126 @@
                             <p x-show="allergies.length === 0" class="text-sm text-gray-400 italic">No allergies recorded</p>
                         </div>
 
+                        <!-- Sugar Monitoring (HGT) -->
+                        <div class="border-t pt-6">
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                <div class="flex items-center">
+                                    <svg class="w-4 h-4 mr-2 text-teal-500" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M12 2c-1.1 0-2 .9-2 2v8c-2.2 1.2-3.5 3.5-3.5 6 0 3.6 2.9 6.5 6.5 6.5s6.5-2.9 6.5-6.5c0-2.5-1.3-4.8-3.5-6V4c0-1.1-.9-2-2-2zm-1 14.7c-1.3.5-2.2 1.8-2.2 3.3h6.4c0-1.5-.9-2.8-2.2-3.3V4h-2v12.7z"/>
+                                    </svg>
+                                    Sugar Monitoring (HGT)
+                                </div>
+                            </label>
+                            <p class="text-xs text-gray-500 mb-3">Configure blood glucose monitoring frequency and record readings</p>
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <!-- HGT Enabled Toggle -->
+                                <div class="flex items-center">
+                                    <label class="inline-flex items-center cursor-pointer">
+                                        <input type="checkbox" name="hgt_enabled" value="1" class="sr-only peer" {{ ($patient->hgt_enabled ?? false) ? 'checked' : '' }}>
+                                        <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-500"></div>
+                                        <span class="ms-3 text-sm font-medium text-gray-700">Enable HGT Monitoring</span>
+                                    </label>
+                                </div>
+
+                                <!-- HGT Frequency -->
+                                <div>
+                                    <label for="hgt_frequency" class="block text-xs font-medium text-gray-600 mb-1">Frequency</label>
+                                    <select id="hgt_frequency" name="hgt_frequency" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm">
+                                        <option value="">Select frequency...</option>
+                                        <option value="bd" {{ ($patient->hgt_frequency ?? '') === 'bd' ? 'selected' : '' }}>BD (Twice Daily)</option>
+                                        <option value="tds" {{ ($patient->hgt_frequency ?? '') === 'tds' ? 'selected' : '' }}>TDS (Three Times Daily)</option>
+                                        <option value="qid" {{ ($patient->hgt_frequency ?? '') === 'qid' ? 'selected' : '' }}>QID (Four Times Daily)</option>
+                                        <option value="pid" {{ ($patient->hgt_frequency ?? '') === 'pid' ? 'selected' : '' }}>PRN (As Needed)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Record New HGT Reading -->
+                            <div class="bg-teal-50 border border-teal-200 rounded-lg p-3 mb-3">
+                                <h5 class="text-xs font-semibold text-teal-700 mb-2">Record New HGT Reading</h5>
+                                <div class="flex items-end gap-2">
+                                    <div class="flex-1">
+                                        <label for="hgt_value" class="block text-xs font-medium text-gray-600 mb-1">Value (mmol/L)</label>
+                                        <input type="number" id="hgt_value" name="hgt_value" step="0.1" min="0" max="50" placeholder="e.g., 5.6" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm">
+                                    </div>
+                                    <button type="button" onclick="recordHgtReading()" class="px-3 py-2 bg-teal-600 text-white text-sm font-medium rounded-md hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500">
+                                        <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                        </svg>
+                                        Record
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Recent HGT Readings -->
+                            @php
+                                $recentHgtReadings = $patient->sugarReadings()->limit(5)->get();
+                            @endphp
+                            @if($recentHgtReadings->count() > 0)
+                                <div class="mt-3">
+                                    <h5 class="text-xs font-semibold text-gray-600 mb-2">Recent Readings</h5>
+                                    <div class="overflow-x-auto">
+                                        <table class="min-w-full text-xs border border-gray-200 rounded-lg overflow-hidden">
+                                            <thead class="bg-gray-50">
+                                                <tr>
+                                                    <th class="px-2 py-1 text-left font-medium text-gray-600 border-b">Time</th>
+                                                    <th class="px-2 py-1 text-left font-medium text-gray-600 border-b">Value</th>
+                                                    <th class="px-2 py-1 text-left font-medium text-gray-600 border-b">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach($recentHgtReadings as $reading)
+                                                    @php
+                                                        $statusColor = 'green';
+                                                        $statusText = 'Normal';
+                                                        if ($reading->value < 4.0) {
+                                                            $statusColor = 'red';
+                                                            $statusText = 'Low';
+                                                        } elseif ($reading->value > 11.0) {
+                                                            $statusColor = 'orange';
+                                                            $statusText = 'High';
+                                                        }
+                                                    @endphp
+                                                    <tr class="hover:bg-gray-50">
+                                                        <td class="px-2 py-1 border-b">{{ $reading->recorded_at->format('M d H:i') }}</td>
+                                                        <td class="px-2 py-1 border-b font-semibold text-{{ $statusColor }}-600">{{ $reading->value }} mmol/L</td>
+                                                        <td class="px-2 py-1 border-b">
+                                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-{{ $statusColor }}-100 text-{{ $statusColor }}-800">
+                                                                {{ $statusText }}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            @else
+                                <p class="text-xs text-gray-400 italic">No HGT readings recorded yet</p>
+                            @endif
+                        </div>
+
                         <!-- Patient Status -->
                         @if($patient->status === 'pending_discharge' || $patient->pending_discharge_at)
-                        <div class="border-t pt-6">
-                            <div class="bg-green-50 border border-green-200 rounded-lg p-4">
-                                <div class="flex items-center">
-                                    <svg class="w-6 h-6 text-green-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
-                                    </svg>
-                                    <div>
-                                        <h4 class="text-sm font-bold text-green-800">Pending Discharge</h4>
-                                        <p class="text-xs text-green-700">
-                                            Patient is awaiting discharge
-                                            @if($patient->pending_discharge_at)
-                                                since {{ $patient->pending_discharge_at->format('d M Y, H:i') }}
-                                            @endif
-                                        </p>
+                            <div class="border-t pt-6">
+                                <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+                                    <div class="flex items-center">
+                                        <svg class="w-6 h-6 text-green-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                                        </svg>
+                                        <div>
+                                            <h4 class="text-sm font-bold text-green-800">Pending Discharge</h4>
+                                            <p class="text-xs text-green-700">
+                                                Patient is awaiting discharge
+                                                @if($patient->pending_discharge_at)
+                                                    since {{ $patient->pending_discharge_at->format('d M Y, H:i') }}
+                                                @endif
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
                         @endif
 
                         <!-- Current Clinical Status Summary -->
@@ -529,15 +629,15 @@
                                 <div class="rounded-lg p-3 text-center border-2 {{ $hasNbm ? 'bg-red-100 border-red-300' : 'bg-cyan-50 border-cyan-200' }}">
                                     <div class="flex justify-center mb-1">
                                         @if($hasNbm)
-                                        <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                                            <path d="M3 3v6c0 1 1 2 2 2h3c1 0 2-1 2-2V3M6 3v18"/>
-                                            <line x1="2" y1="2" x2="22" y2="22" stroke-width="3"/>
-                                            <path d="M15 3h4v6a3 3 0 01-3 3h-1M17 12v9"/>
-                                        </svg>
+                                            <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                                <path d="M3 3v6c0 1 1 2 2 2h3c1 0 2-1 2-2V3M6 3v18"/>
+                                                <line x1="2" y1="2" x2="22" y2="22" stroke-width="3"/>
+                                                <path d="M15 3h4v6a3 3 0 01-3 3h-1M17 12v9"/>
+                                            </svg>
                                         @else
-                                        <svg class="w-5 h-5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                                            <path d="M3 3v6c0 1 1 2 2 2h3c1 0 2-1 2-2V3M6 3v18M15 3h4v6a3 3 0 01-3 3h-1M17 12v9"/>
-                                        </svg>
+                                            <svg class="w-5 h-5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                                                <path d="M3 3v6c0 1 1 2 2 2h3c1 0 2-1 2-2V3M6 3v18M15 3h4v6a3 3 0 01-3 3h-1M17 12v9"/>
+                                            </svg>
                                         @endif
                                     </div>
                                     <div class="{{ $hasNbm ? 'text-red-700' : 'text-cyan-700' }} font-semibold text-[10px]">Diet</div>
@@ -566,7 +666,7 @@
 
                                 {{-- Isolation with virus icon --}}
                                 @php 
-                                    $hasIsolation = $patient->isolation_type && $patient->isolation_type !== 'none';
+                                                                    $hasIsolation = $patient->isolation_type && $patient->isolation_type !== 'none';
                                     $criticalIsolations = ['covid', 'tb', 'airborne', 'COVID', 'TB', 'AIR'];
                                     $isCritical = $hasIsolation && (in_array($patient->isolation_type, $criticalIsolations) || in_array(strtoupper($patient->isolation_type), $criticalIsolations));
                                 @endphp
@@ -636,34 +736,34 @@
                             }
                             const ctx = this.$refs.vitalsChart.getContext('2d');
                             @if($vitalsMode === 'real')
-                            // Real data - fetch from patient's vital signs
-                            @php
-                                $realVitals = \App\Models\VitalSign::where('patient_id', $patient->id ?? 0)
-                                    ->orderBy('recorded_at', 'desc')
-                                    ->limit(10)
-                                    ->get()
-                                    ->reverse();
-                                $labels = $realVitals->map(fn($v) => $v->recorded_at->format('M d H:i'))->values()->toArray();
-                                $heartRates = $realVitals->pluck('pulse_rate')->toArray();
-                                $spo2Values = $realVitals->pluck('spo2')->toArray();
-                                $systolicValues = $realVitals->pluck('systolic_bp')->toArray();
-                                $diastolicValues = $realVitals->pluck('diastolic_bp')->toArray();
-                                $tempValues = $realVitals->map(fn($v) => (float)$v->temperature)->toArray();
-                            @endphp
-                            const labels = @json($labels);
-                            const heartRate = @json($heartRates);
-                            const spo2 = @json($spo2Values);
-                            const systolic = @json($systolicValues);
-                            const diastolic = @json($diastolicValues);
-                            const temperature = @json($tempValues);
+                                // Real data - fetch from patient's vital signs
+                                @php
+                                    $realVitals = \App\Models\VitalSign::where('patient_id', $patient->id ?? 0)
+                                        ->orderBy('recorded_at', 'desc')
+                                        ->limit(10)
+                                        ->get()
+                                        ->reverse();
+                                    $labels = $realVitals->map(fn($v) => $v->recorded_at->format('M d H:i'))->values()->toArray();
+                                    $heartRates = $realVitals->pluck('pulse_rate')->toArray();
+                                    $spo2Values = $realVitals->pluck('spo2')->toArray();
+                                    $systolicValues = $realVitals->pluck('systolic_bp')->toArray();
+                                    $diastolicValues = $realVitals->pluck('diastolic_bp')->toArray();
+                                    $tempValues = $realVitals->map(fn($v) => (float) $v->temperature)->toArray();
+                                @endphp
+                                const labels = @json($labels);
+                                const heartRate = @json($heartRates);
+                                const spo2 = @json($spo2Values);
+                                const systolic = @json($systolicValues);
+                                const diastolic = @json($diastolicValues);
+                                const temperature = @json($tempValues);
                             @else
-                            // Demo data
-                            const labels = ['Yesterday 20:00', 'Today 04:00', 'Today 08:00'];
-                            const heartRate = [78, 84, 80];
-                            const spo2 = [98, 97, 98];
-                            const systolic = [116, 124, 118];
-                            const diastolic = [74, 80, 76];
-                            const temperature = [36.9, 37.2, 37.0];
+                                // Demo data
+                                const labels = ['Yesterday 20:00', 'Today 04:00', 'Today 08:00'];
+                                const heartRate = [78, 84, 80];
+                                const spo2 = [98, 97, 98];
+                                const systolic = [116, 124, 118];
+                                const diastolic = [74, 80, 76];
+                                const temperature = [36.9, 37.2, 37.0];
                             @endif
 
                             this.chartInstance = new Chart(ctx, {
@@ -998,7 +1098,7 @@
                                                 <tbody>
                                                     <!-- Temperature: ≥39 or ≤35=2, 38-38.9 or 35.1-35.9=1, 36-37.9=0 -->
                                                     <tr><td class="section-header" colspan="{{ 2 + count($ihhVitals) }}"><span class="text-indigo-700">Temp °C</span></td></tr>
-                                                    @php $tempRanges = [['min'=>39,'max'=>42,'label'=>'≥39','class'=>'ihh-temp-high2','score'=>2],['min'=>38,'max'=>38.9,'label'=>'38','class'=>'ihh-temp-high1','score'=>1],['min'=>36,'max'=>37.9,'label'=>'36-37.9','class'=>'ihh-temp-normal','score'=>0],['min'=>35.1,'max'=>35.9,'label'=>'35.1','class'=>'ihh-temp-low1','score'=>1],['min'=>34,'max'=>35,'label'=>'≤35','class'=>'ihh-temp-low2','score'=>2]]; @endphp
+                                                    @php $tempRanges = [['min' => 39, 'max' => 42, 'label' => '≥39', 'class' => 'ihh-temp-high2', 'score' => 2], ['min' => 38, 'max' => 38.9, 'label' => '38', 'class' => 'ihh-temp-high1', 'score' => 1], ['min' => 36, 'max' => 37.9, 'label' => '36-37.9', 'class' => 'ihh-temp-normal', 'score' => 0], ['min' => 35.1, 'max' => 35.9, 'label' => '35.1', 'class' => 'ihh-temp-low1', 'score' => 1], ['min' => 34, 'max' => 35, 'label' => '≤35', 'class' => 'ihh-temp-low2', 'score' => 2]]; @endphp
                                                     @foreach($tempRanges as $range)
                                                         <tr>
                                                             <td class="ihh-label-col {{ $range['class'] }}">{{ $range['label'] }}</td>
@@ -1011,7 +1111,7 @@
 
                                                     <!-- BP Systolic: >200 or ≤90=2, 160-199 or 91-100=1, 101-159=0 -->
                                                     <tr><td class="section-header" colspan="{{ 2 + count($ihhVitals) }}"><span class="text-indigo-700">BP</span> <span class="text-gray-500 text-[8px]">▲Sys ▼Dia</span></td></tr>
-                                                    @php $bpRanges = [['min'=>201,'max'=>300,'label'=>'>200','class'=>'ihh-bp-high2'],['min'=>160,'max'=>200,'label'=>'160-200','class'=>'ihh-bp-high1'],['min'=>101,'max'=>159,'label'=>'101-159','class'=>'ihh-bp-normal'],['min'=>91,'max'=>100,'label'=>'91-100','class'=>'ihh-bp-low1'],['min'=>60,'max'=>90,'label'=>'≤90','class'=>'ihh-bp-low2']]; @endphp
+                                                    @php $bpRanges = [['min' => 201, 'max' => 300, 'label' => '>200', 'class' => 'ihh-bp-high2'], ['min' => 160, 'max' => 200, 'label' => '160-200', 'class' => 'ihh-bp-high1'], ['min' => 101, 'max' => 159, 'label' => '101-159', 'class' => 'ihh-bp-normal'], ['min' => 91, 'max' => 100, 'label' => '91-100', 'class' => 'ihh-bp-low1'], ['min' => 60, 'max' => 90, 'label' => '≤90', 'class' => 'ihh-bp-low2']]; @endphp
                                                     @foreach($bpRanges as $range)
                                                         <tr>
                                                             <td class="ihh-label-col {{ $range['class'] }}">{{ $range['label'] }}</td>
@@ -1029,7 +1129,7 @@
 
                                                     <!-- Pulse: >120 or ≤40=2, 100-120 or 41-59=1, 60-99=0 -->
                                                     <tr><td class="section-header" colspan="{{ 2 + count($ihhVitals) }}"><span class="text-indigo-700">PR bpm</span></td></tr>
-                                                    @php $prRanges = [['min'=>121,'max'=>250,'label'=>'>120','class'=>'ihh-pr-high2','score'=>2],['min'=>100,'max'=>120,'label'=>'100-120','class'=>'ihh-pr-high1','score'=>1],['min'=>60,'max'=>99,'label'=>'60-99','class'=>'ihh-pr-normal','score'=>0],['min'=>41,'max'=>59,'label'=>'41-59','class'=>'ihh-pr-low1','score'=>1],['min'=>0,'max'=>40,'label'=>'≤40','class'=>'ihh-pr-low2','score'=>2]]; @endphp
+                                                    @php $prRanges = [['min' => 121, 'max' => 250, 'label' => '>120', 'class' => 'ihh-pr-high2', 'score' => 2], ['min' => 100, 'max' => 120, 'label' => '100-120', 'class' => 'ihh-pr-high1', 'score' => 1], ['min' => 60, 'max' => 99, 'label' => '60-99', 'class' => 'ihh-pr-normal', 'score' => 0], ['min' => 41, 'max' => 59, 'label' => '41-59', 'class' => 'ihh-pr-low1', 'score' => 1], ['min' => 0, 'max' => 40, 'label' => '≤40', 'class' => 'ihh-pr-low2', 'score' => 2]]; @endphp
                                                     @foreach($prRanges as $range)
                                                         <tr>
                                                             <td class="ihh-label-col {{ $range['class'] }}">{{ $range['label'] }}</td>
@@ -1042,7 +1142,7 @@
 
                                                     <!-- RR: >25 or ≤8=2, 21-24 or 9-11=1, 12-20=0 -->
                                                     <tr><td class="section-header" colspan="{{ 2 + count($ihhVitals) }}"><span class="text-indigo-700">RR /min</span></td></tr>
-                                                    @php $rrRanges = [['min'=>26,'max'=>60,'label'=>'>25','class'=>'ihh-rr-high2','score'=>2],['min'=>21,'max'=>25,'label'=>'21-24','class'=>'ihh-rr-high1','score'=>1],['min'=>12,'max'=>20,'label'=>'12-20','class'=>'ihh-rr-normal','score'=>0],['min'=>9,'max'=>11,'label'=>'9-11','class'=>'ihh-rr-low1','score'=>1],['min'=>0,'max'=>8,'label'=>'≤8','class'=>'ihh-rr-low2','score'=>2]]; @endphp
+                                                    @php $rrRanges = [['min' => 26, 'max' => 60, 'label' => '>25', 'class' => 'ihh-rr-high2', 'score' => 2], ['min' => 21, 'max' => 25, 'label' => '21-24', 'class' => 'ihh-rr-high1', 'score' => 1], ['min' => 12, 'max' => 20, 'label' => '12-20', 'class' => 'ihh-rr-normal', 'score' => 0], ['min' => 9, 'max' => 11, 'label' => '9-11', 'class' => 'ihh-rr-low1', 'score' => 1], ['min' => 0, 'max' => 8, 'label' => '≤8', 'class' => 'ihh-rr-low2', 'score' => 2]]; @endphp
                                                     @foreach($rrRanges as $range)
                                                         <tr>
                                                             <td class="ihh-label-col {{ $range['class'] }}">{{ $range['label'] }}</td>
@@ -1055,7 +1155,7 @@
 
                                                     <!-- SpO2: ≤91=2, 92-95=1, ≥96=0 -->
                                                     <tr><td class="section-header" colspan="{{ 2 + count($ihhVitals) }}"><span class="text-indigo-700">SpO2 %</span></td></tr>
-                                                    @php $spo2Ranges = [['min'=>96,'max'=>100,'label'=>'≥96','class'=>'ihh-temp-normal','score'=>0],['min'=>92,'max'=>95,'label'=>'92-95','class'=>'ihh-temp-low1','score'=>1],['min'=>0,'max'=>91,'label'=>'≤91','class'=>'ihh-temp-low2','score'=>2]]; @endphp
+                                                    @php $spo2Ranges = [['min' => 96, 'max' => 100, 'label' => '≥96', 'class' => 'ihh-temp-normal', 'score' => 0], ['min' => 92, 'max' => 95, 'label' => '92-95', 'class' => 'ihh-temp-low1', 'score' => 1], ['min' => 0, 'max' => 91, 'label' => '≤91', 'class' => 'ihh-temp-low2', 'score' => 2]]; @endphp
                                                     @foreach($spo2Ranges as $range)
                                                         <tr>
                                                             <td class="ihh-label-col {{ $range['class'] }}">{{ $range['label'] }}</td>
@@ -1077,36 +1177,51 @@
                                                                 $pr = $vital->pulse_rate;
                                                                 if ($pr !== null && $pr !== '' && is_numeric($pr)) {
                                                                     $pr = intval($pr);
-                                                                    if ($pr > 120 || $pr <= 40) { $ewsScore += 2; }
-                                                                    elseif (($pr >= 100 && $pr <= 120) || ($pr >= 41 && $pr <= 59)) { $ewsScore += 1; }
+                                                                    if ($pr > 120 || $pr <= 40) {
+                                                                        $ewsScore += 2;
+                                                                    } elseif (($pr >= 100 && $pr <= 120) || ($pr >= 41 && $pr <= 59)) {
+                                                                        $ewsScore += 1;
+                                                                    }
                                                                 }
                                                                 // RESPIRATION: Score 2 = >25 or ≤8, Score 1 = 21-24 or 9-11
                                                                 $rr = $vital->respiratory_rate;
                                                                 if ($rr !== null && $rr !== '' && is_numeric($rr)) {
                                                                     $rr = intval($rr);
-                                                                    if ($rr > 25 || $rr <= 8) { $ewsScore += 2; }
-                                                                    elseif (($rr >= 21 && $rr <= 24) || ($rr >= 9 && $rr <= 11)) { $ewsScore += 1; }
+                                                                    if ($rr > 25 || $rr <= 8) {
+                                                                        $ewsScore += 2;
+                                                                    } elseif (($rr >= 21 && $rr <= 24) || ($rr >= 9 && $rr <= 11)) {
+                                                                        $ewsScore += 1;
+                                                                    }
                                                                 }
                                                                 // BP SYS: Score 2 = >200 or ≤90, Score 1 = 160-199 or 91-100
                                                                 $sbp = $vital->systolic_bp;
                                                                 if ($sbp !== null && $sbp !== '' && is_numeric($sbp)) {
                                                                     $sbp = intval($sbp);
-                                                                    if ($sbp > 200 || $sbp <= 90) { $ewsScore += 2; }
-                                                                    elseif (($sbp >= 160 && $sbp <= 199) || ($sbp >= 91 && $sbp <= 100)) { $ewsScore += 1; }
+                                                                    if ($sbp > 200 || $sbp <= 90) {
+                                                                        $ewsScore += 2;
+                                                                    } elseif (($sbp >= 160 && $sbp <= 199) || ($sbp >= 91 && $sbp <= 100)) {
+                                                                        $ewsScore += 1;
+                                                                    }
                                                                 }
                                                                 // SPO2: Score 2 = ≤91, Score 1 = 92-95
                                                                 $spo2 = $vital->spo2;
                                                                 if ($spo2 !== null && $spo2 !== '' && is_numeric($spo2)) {
                                                                     $spo2 = intval($spo2);
-                                                                    if ($spo2 <= 91) { $ewsScore += 2; }
-                                                                    elseif ($spo2 >= 92 && $spo2 <= 95) { $ewsScore += 1; }
+                                                                    if ($spo2 <= 91) {
+                                                                        $ewsScore += 2;
+                                                                    } elseif ($spo2 >= 92 && $spo2 <= 95) {
+                                                                        $ewsScore += 1;
+                                                                    }
                                                                 }
                                                                 // TEMP: Score 2 = ≥39 or ≤35, Score 1 = 38-38.9 or 35.1-35.9
                                                                 $temp = $vital->temperature;
                                                                 if ($temp !== null && $temp !== '' && is_numeric($temp)) {
                                                                     $temp = floatval($temp);
-                                                                    if ($temp >= 39 || $temp <= 35) { $ewsScore += 2; }
-                                                                    elseif (($temp >= 38 && $temp <= 38.9) || ($temp >= 35.1 && $temp <= 35.9)) { $ewsScore += 1; }
+                                                                    if ($temp >= 39 || $temp <= 35) {
+                                                                        $ewsScore += 2;
+                                                                    } elseif (($temp >= 38 && $temp <= 38.9) || ($temp >= 35.1 && $temp <= 35.9)) {
+                                                                        $ewsScore += 1;
+                                                                    }
                                                                 }
                                                                 $scoreClass = $ewsScore >= 4 ? 'bg-red-500 text-white' : ($ewsScore >= 2 ? 'bg-orange-400 text-white' : 'bg-green-500 text-white');
                                                             @endphp
@@ -1163,52 +1278,242 @@
                         <input type="hidden" name="patient_id" value="{{ $patient->id }}">
                         <input type="hidden" name="active_tab" value="movement">
 
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                        <div class="space-y-4">
+                            <!-- Quick Location Buttons -->
                             <div>
-                                <label class="block text-xs font-semibold text-gray-700 mb-1">Quick Location</label>
-                                <div class="flex flex-wrap gap-2 text-xs">
+                                <label class="block text-xs font-semibold text-gray-700 mb-2">Quick Location</label>
+                                <div class="grid grid-cols-3 md:grid-cols-5 gap-2 text-xs">
                                     <button type="button"
-                                            class="px-2 py-1 rounded border border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100"
-                                            onclick="document.getElementById('movement_location').value='Radiology'; document.getElementById('movement_location_type').value='radiology';">
+                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 transition-all font-medium"
+                                            onclick="selectQuickLocation('Radiology', 'radiology', this)">
+                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
                                         Radiology
                                     </button>
                                     <button type="button"
-                                            class="px-2 py-1 rounded border border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100"
-                                            onclick="document.getElementById('movement_location').value='Surgery'; document.getElementById('movement_location_type').value='surgery';">
+                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100 hover:border-purple-400 transition-all font-medium"
+                                            onclick="selectQuickLocation('Surgery', 'surgery', this)">
+                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/></svg>
                                         Surgery
                                     </button>
                                     <button type="button"
-                                            class="px-2 py-1 rounded border border-gray-200 text-gray-700 bg-gray-50 hover:bg-gray-100"
-                                            onclick="document.getElementById('movement_location').focus(); document.getElementById('movement_location_type').value='other';">
-                                        Other (type below)
+                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-red-200 text-red-700 bg-red-50 hover:bg-red-100 hover:border-red-400 transition-all font-medium"
+                                            onclick="selectQuickLocation('Cath Lab', 'cath_lab', this)">
+                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+                                        Cath Lab
+                                    </button>
+                                    <button type="button"
+                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-cyan-200 text-cyan-700 bg-cyan-50 hover:bg-cyan-100 hover:border-cyan-400 transition-all font-medium"
+                                            onclick="selectQuickLocation('Dialysis', 'dialysis', this)">
+                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+                                        Dialysis
+                                    </button>
+                                    <button type="button"
+                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-pink-200 text-pink-700 bg-pink-50 hover:bg-pink-100 hover:border-pink-400 transition-all font-medium"
+                                            onclick="selectQuickLocation('Heart Centre', 'heart_centre', this)">
+                                        <svg class="w-4 h-4 mx-auto mb-1" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                                        Heart Centre
+                                    </button>
+                                    <button type="button"
+                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-teal-200 text-teal-700 bg-teal-50 hover:bg-teal-100 hover:border-teal-400 transition-all font-medium"
+                                            onclick="selectQuickLocation('Lung Function Test', 'lung_function', this)">
+                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                                        Lung Function
+                                    </button>
+                                    <button type="button"
+                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 hover:border-indigo-400 transition-all font-medium"
+                                            onclick="selectQuickLocation('Specialist Clinic (SCC)', 'specialist_clinic', this)">
+                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                                        SCC
+                                    </button>
+                                    <button type="button"
+                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100 hover:border-orange-400 transition-all font-medium"
+                                            onclick="selectQuickLocation('Rehab', 'rehab', this)">
+                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        Rehab
+                                    </button>
+                                    <button type="button"
+                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 hover:border-emerald-400 transition-all font-medium"
+                                            onclick="selectQuickLocation('Endoscopy', 'endoscopy', this)">
+                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                        Endoscopy
+                                    </button>
+                                    <button type="button"
+                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-gray-200 text-gray-700 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 transition-all font-medium"
+                                            onclick="selectQuickLocation('', 'other', this); document.getElementById('movement_location').focus();">
+                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                                        Other
                                     </button>
                                 </div>
                             </div>
 
-                            <div>
-                                <label for="movement_location" class="block text-xs font-semibold text-gray-700 mb-1">
-                                    Destination / Location
-                                </label>
-                                <input type="text"
-                                       id="movement_location"
-                                       name="location"
-                                       required
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
-                                       placeholder="e.g. Radiology, OR 3, Cath Lab">
-                                <input type="hidden" id="movement_location_type" name="location_type" value="">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <!-- Destination Input -->
+                                <div>
+                                    <label for="movement_location" class="block text-xs font-semibold text-gray-700 mb-1">
+                                        Destination / Location
+                                    </label>
+                                    <input type="text"
+                                           id="movement_location"
+                                           name="location"
+                                           required
+                                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                           placeholder="Select above or type here">
+                                    <input type="hidden" id="movement_location_type" name="location_type" value="">
+                                </div>
+
+                                <!-- Date Picker -->
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-700 mb-1">
+                                        Scheduled Date
+                                    </label>
+                                    <input type="date"
+                                           id="movement_date"
+                                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                           value="{{ now()->format('Y-m-d') }}">
+                                </div>
                             </div>
 
-                            <div>
-                                <label for="movement_scheduled_at" class="block text-xs font-semibold text-gray-700 mb-1">
-                                    Scheduled Date &amp; Time
+                            <!-- Time Grid Picker -->
+                            <div x-data="{ timePeriod: 'morning' }">
+                                <label class="block text-xs font-semibold text-gray-700 mb-2">
+                                    Scheduled Time <span class="text-gray-400 font-normal">(15-min intervals)</span>
                                 </label>
-                                <input type="datetime-local"
-                                       id="movement_scheduled_at"
-                                       name="scheduled_at"
-                                       required
-                                       class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                                <div class="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                                    <!-- Time Period Tabs -->
+                                    <div class="flex gap-2 mb-3">
+                                        <button type="button" 
+                                                @click="timePeriod = 'morning'" 
+                                                :class="timePeriod === 'morning' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'"
+                                                class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-all border border-gray-200">
+                                            🌅 Morning
+                                            <span class="block text-[10px] opacity-75">6AM - 12PM</span>
+                                        </button>
+                                        <button type="button" 
+                                                @click="timePeriod = 'afternoon'" 
+                                                :class="timePeriod === 'afternoon' ? 'bg-orange-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'"
+                                                class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-all border border-gray-200">
+                                            ☀️ Afternoon
+                                            <span class="block text-[10px] opacity-75">12PM - 6PM</span>
+                                        </button>
+                                        <button type="button" 
+                                                @click="timePeriod = 'evening'" 
+                                                :class="timePeriod === 'evening' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'"
+                                                class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-all border border-gray-200">
+                                            🌙 Evening
+                                            <span class="block text-[10px] opacity-75">6PM - 12AM</span>
+                                        </button>
+                                    </div>
+
+                                    <!-- Morning Times -->
+                                    <div x-show="timePeriod === 'morning'" class="grid grid-cols-4 md:grid-cols-6 gap-2">
+                                        @php
+                                            $morningTimes = [];
+                                            for ($h = 6; $h < 12; $h++) {
+                                                foreach ([0, 15, 30, 45] as $m) {
+                                                    $morningTimes[] = sprintf('%02d:%02d', $h, $m);
+                                                }
+                                            }
+                                        @endphp
+                                        @foreach($morningTimes as $time)
+                                            <button type="button"
+                                                    class="time-slot-btn px-2 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-blue-100 hover:border-blue-400 hover:text-blue-700 transition-all text-sm font-medium"
+                                                    onclick="selectTime('{{ $time }}', this)">
+                                                {{ $time }}
+                                            </button>
+                                        @endforeach
+                                    </div>
+
+                                    <!-- Afternoon Times -->
+                                    <div x-show="timePeriod === 'afternoon'" class="grid grid-cols-4 md:grid-cols-6 gap-2">
+                                        @php
+                                            $afternoonTimes = [];
+                                            for ($h = 12; $h < 18; $h++) {
+                                                foreach ([0, 15, 30, 45] as $m) {
+                                                    $afternoonTimes[] = sprintf('%02d:%02d', $h, $m);
+                                                }
+                                            }
+                                        @endphp
+                                        @foreach($afternoonTimes as $time)
+                                            <button type="button"
+                                                    class="time-slot-btn px-2 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-orange-100 hover:border-orange-400 hover:text-orange-700 transition-all text-sm font-medium"
+                                                    onclick="selectTime('{{ $time }}', this)">
+                                                {{ $time }}
+                                            </button>
+                                        @endforeach
+                                    </div>
+
+                                    <!-- Evening Times -->
+                                    <div x-show="timePeriod === 'evening'" class="grid grid-cols-4 md:grid-cols-6 gap-2">
+                                        @php
+                                            $eveningTimes = [];
+                                            for ($h = 18; $h < 24; $h++) {
+                                                foreach ([0, 15, 30, 45] as $m) {
+                                                    $eveningTimes[] = sprintf('%02d:%02d', $h, $m);
+                                                }
+                                            }
+                                        @endphp
+                                        @foreach($eveningTimes as $time)
+                                            <button type="button"
+                                                    class="time-slot-btn px-2 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-indigo-100 hover:border-indigo-400 hover:text-indigo-700 transition-all text-sm font-medium"
+                                                    onclick="selectTime('{{ $time }}', this)">
+                                                {{ $time }}
+                                            </button>
+                                        @endforeach
+                                    </div>
+
+                                    <!-- Selected Time Display -->
+                                    <div class="mt-3 flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-gray-200">
+                                        <span class="text-xs text-gray-500">Selected:</span>
+                                        <span id="selected_time_display" class="text-sm font-bold text-blue-600">--:--</span>
+                                    </div>
+                                </div>
+                                <!-- Hidden input for form submission -->
+                                <input type="hidden" id="movement_time" value="">
+                                <input type="hidden" id="movement_scheduled_at" name="scheduled_at" required>
                             </div>
                         </div>
+
+                        <script>
+                            function selectQuickLocation(location, type, btn) {
+                                document.getElementById('movement_location').value = location;
+                                document.getElementById('movement_location_type').value = type;
+                                
+                                // Remove active state from all quick location buttons
+                                document.querySelectorAll('.quick-loc-btn').forEach(b => {
+                                    b.classList.remove('ring-2', 'ring-offset-2', 'ring-blue-500');
+                                });
+                                
+                                // Add active state to clicked button
+                                btn.classList.add('ring-2', 'ring-offset-2', 'ring-blue-500');
+                            }
+
+                            function selectTime(time, btn) {
+                                document.getElementById('movement_time').value = time;
+                                document.getElementById('selected_time_display').textContent = time;
+                                
+                                // Remove active state from all time buttons
+                                document.querySelectorAll('.time-slot-btn').forEach(b => {
+                                    b.classList.remove('bg-blue-600', 'bg-orange-500', 'bg-indigo-600', 'text-white', 'border-blue-600', 'border-orange-500', 'border-indigo-600');
+                                });
+                                
+                                // Add active state to clicked button
+                                btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
+                                
+                                // Update hidden scheduled_at field
+                                updateScheduledAt();
+                            }
+
+                            function updateScheduledAt() {
+                                const date = document.getElementById('movement_date').value;
+                                const time = document.getElementById('movement_time').value;
+                                if (date && time) {
+                                    document.getElementById('movement_scheduled_at').value = date + 'T' + time;
+                                }
+                            }
+
+                            // Update scheduled_at when date changes
+                            document.getElementById('movement_date').addEventListener('change', updateScheduledAt);
+                        </script>
 
                         <div>
                             <label for="movement_notes" class="block text-xs font-semibold text-gray-700 mb-1">
@@ -1527,7 +1832,7 @@
                     <p class="text-sm text-gray-600 mb-3">
                         Real-time infusion pump monitoring for this patient. Data is received from infusion pump gateways via HL7 integration.
                     </p>
-                    
+
                     <div class="mt-2">
                         <iframe src="{{ route('ward.patient-infusions') }}?patient_id={{ $patient->id }}" 
                                 class="w-full h-[450px] border-0 rounded-lg bg-gray-50"
@@ -1693,6 +1998,48 @@
             </div>
         @endif
     </div>
+
+<script>
+    function recordHgtReading() {
+        const valueInput = document.getElementById('hgt_value');
+        const value = parseFloat(valueInput.value);
+        
+        if (isNaN(value) || value <= 0 || value > 50) {
+            alert('Please enter a valid HGT value between 0.1 and 50 mmol/L');
+            return;
+        }
+        
+        const patientId = {{ $patient->id }};
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || 
+                         document.querySelector('input[name="_token"]')?.value;
+        
+        fetch('{{ route("ward.save-sugar-reading") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                patient_id: patientId,
+                value: value
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Reload the page to show the new reading
+                window.location.reload();
+            } else {
+                alert('Failed to record HGT reading: ' + (data.message || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error recording HGT:', error);
+            alert('Failed to record HGT reading. Please try again.');
+        });
+    }
+</script>
 </body>
 </html>
 

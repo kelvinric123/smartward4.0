@@ -490,6 +490,13 @@ class WardDashboardController extends Controller
                     'isolation_type' => $patient->isolation_type ?? 'none',
                     'isolation_type_name' => $patient->isolation_type && $patient->isolation_type !== 'none' ? IsolationType::getDisplayName($patient->isolation_type) : 'None',
                     'allergies' => $patient->allergies ?? [],
+                    // HGT (Blood Glucose) monitoring
+                    'hgt_enabled' => $patient->hgt_enabled ?? false,
+                    'hgt_frequency' => $patient->hgt_frequency ?? null,
+                    'last_hgt' => $patient->latestSugarReading ? [
+                        'value' => (float) $patient->latestSugarReading->value,
+                        'recorded_at' => $patient->latestSugarReading->recorded_at->format('M d H:i'),
+                    ] : null,
                     // Prebook notes from admission log
                     'prebook_notes' => $patient->status === 'prebook'
                         ? AdmissionLog::where('patient_id', $patient->id)
@@ -541,6 +548,10 @@ class WardDashboardController extends Controller
                     'isolation_type' => null,
                     'isolation_type_name' => null,
                     'allergies' => null,
+                    // HGT (Blood Glucose) monitoring
+                    'hgt_enabled' => false,
+                    'hgt_frequency' => null,
+                    'last_hgt' => null,
                 ];
             }
         }
@@ -1125,7 +1136,9 @@ class WardDashboardController extends Controller
         }
 
         if ($dbIsolationTypes->isNotEmpty()) {
-            $clinicalIndicatorOptions['isolation_type'] = $dbIsolationTypes->map(function ($it) {
+            // Prepend "None" option to ensure proper default value
+            $noneOption = [['value' => 'none', 'label' => 'No Isolation Precaution', 'color' => 'bg-gray-100 text-gray-600']];
+            $dbOptions = $dbIsolationTypes->map(function ($it) {
                 return [
                     'value' => $it->code,
                     'label' => $it->name,
@@ -1134,6 +1147,7 @@ class WardDashboardController extends Controller
                         : 'bg-yellow-100 text-yellow-700',
                 ];
             })->toArray();
+            $clinicalIndicatorOptions['isolation_type'] = array_merge($noneOption, $dbOptions);
         }
 
         return view('wards.patient-details', [
@@ -1240,7 +1254,9 @@ class WardDashboardController extends Controller
         }
 
         if ($dbIsolationTypes->isNotEmpty()) {
-            $clinicalIndicatorOptions['isolation_type'] = $dbIsolationTypes->map(function ($it) {
+            // Prepend "None" option to ensure proper default value
+            $noneOption = [['value' => 'none', 'label' => 'No Isolation Precaution', 'color' => 'bg-gray-100 text-gray-600']];
+            $dbOptions = $dbIsolationTypes->map(function ($it) {
                 return [
                     'value' => $it->code,
                     'label' => $it->name,
@@ -1249,6 +1265,7 @@ class WardDashboardController extends Controller
                         : 'bg-yellow-100 text-yellow-700',
                 ];
             })->toArray();
+            $clinicalIndicatorOptions['isolation_type'] = array_merge($noneOption, $dbOptions);
         }
 
         // Vitals data mode settings (demo/real/off)
@@ -1850,6 +1867,8 @@ class WardDashboardController extends Controller
             'isolation_type' => 'nullable|string',
             'allergies' => 'nullable|array',
             'new_allergy' => 'nullable|string|max:100',
+            'hgt_enabled' => 'nullable|boolean',
+            'hgt_frequency' => 'nullable|string|in:bd,tds,qid,pid',
         ]);
 
         $patient = Patient::where('is_active', true)->findOrFail($request->patient_id);
@@ -1872,6 +1891,8 @@ class WardDashboardController extends Controller
             'fall_risk' => $request->fall_risk,
             'isolation_type' => $request->isolation_type,
             'allergies' => !empty($allergies) ? $allergies : null,
+            'hgt_enabled' => $request->boolean('hgt_enabled'),
+            'hgt_frequency' => $request->hgt_frequency,
         ]);
 
         Log::info('Patient clinical indicators updated', [
@@ -1881,6 +1902,8 @@ class WardDashboardController extends Controller
             'fall_risk' => $patient->fall_risk,
             'isolation_type' => $patient->isolation_type,
             'allergies' => $patient->allergies,
+            'hgt_enabled' => $patient->hgt_enabled,
+            'hgt_frequency' => $patient->hgt_frequency,
             'user_id' => Auth::id(),
         ]);
 
@@ -1889,6 +1912,55 @@ class WardDashboardController extends Controller
             'active_tab' => 'additional',
         ])
             ->with('success', 'Clinical indicators updated successfully.');
+    }
+
+    /**
+     * Save a new sugar (HGT) reading for a patient
+     */
+    public function saveSugarReading(Request $request)
+    {
+        $request->validate([
+            'patient_id' => 'required|exists:patients,id',
+            'value' => 'required|numeric|min:0|max:50',
+            'notes' => 'nullable|string|max:255',
+        ]);
+
+        $patient = Patient::findOrFail($request->patient_id);
+
+        $reading = \App\Models\SugarReading::create([
+            'patient_id' => $patient->id,
+            'value' => $request->value,
+            'frequency' => $patient->hgt_frequency,
+            'notes' => $request->notes,
+            'recorded_by' => Auth::id(),
+            'recorded_at' => now(),
+        ]);
+
+        Log::info('HGT reading recorded', [
+            'patient_id' => $patient->id,
+            'value' => $reading->value,
+            'frequency' => $reading->frequency,
+            'user_id' => Auth::id(),
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'HGT reading recorded successfully.',
+                'reading' => [
+                    'id' => $reading->id,
+                    'value' => $reading->value,
+                    'recorded_at' => $reading->recorded_at->format('M d H:i'),
+                    'status' => $reading->isLow() ? 'Low' : ($reading->isHigh() ? 'High' : 'Normal'),
+                    'status_color' => $reading->getStatusColor(),
+                ],
+            ]);
+        }
+
+        return redirect()->route('ward.patient-details', [
+            'patient_id' => $patient->id,
+            'active_tab' => 'additional',
+        ])->with('success', 'HGT reading recorded successfully.');
     }
 
     /**

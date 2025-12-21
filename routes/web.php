@@ -57,7 +57,7 @@ Route::middleware('auth')->group(function () {
     // Patient Additional Field Routes (inside Admin Management)
     Route::resource('diet-types', DietTypeController::class)->except(['show']);
     Route::post('diet-types/{diet_type}/toggle-active', [DietTypeController::class, 'toggleActive'])->name('diet-types.toggle-active');
-    
+
     Route::resource('isolation-types', IsolationTypeController::class)->except(['show', 'index']);
     Route::post('isolation-types/{isolation_type}/toggle-active', [IsolationTypeController::class, 'toggleActive'])->name('isolation-types.toggle-active');
 
@@ -101,6 +101,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/ward-dashboard/transfer-bed', [WardDashboardController::class, 'transferBed'])->name('ward.transfer-bed');
     Route::post('/ward-dashboard/discharge-patient', [WardDashboardController::class, 'dischargePatient'])->name('ward.discharge-patient');
     Route::post('/ward-dashboard/update-patient-clinical', [WardDashboardController::class, 'updatePatientClinical'])->name('ward.update-patient-clinical');
+    Route::post('/ward-dashboard/save-sugar-reading', [WardDashboardController::class, 'saveSugarReading'])->name('ward.save-sugar-reading');
     Route::post('/ward-dashboard/settings/clinical-options', [WardDashboardController::class, 'updateClinicalIndicatorOptions'])->name('ward.settings.clinical-options');
 
     // Vital Signs Routes
@@ -128,7 +129,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/vital-sign-integration/api-user/{apiUser}/regenerate-token', [VitalSignIntegrationController::class, 'regenerateToken'])->name('vital-sign-integration.api-user.regenerate-token');
     Route::get('/vital-sign-integration/logs', [VitalSignIntegrationController::class, 'getLogs'])->name('vital-sign-integration.logs');
     Route::post('/vital-sign-integration/logs/clear', [VitalSignIntegrationController::class, 'clearLogs'])->name('vital-sign-integration.logs.clear');
-    
+
     // Monitor Device Routes (for mp5sc listener)
     Route::post('/vital-sign-integration/device', [VitalSignIntegrationController::class, 'storeDevice'])->name('vital-sign-integration.device.store');
     Route::put('/vital-sign-integration/device/{device}', [VitalSignIntegrationController::class, 'updateDevice'])->name('vital-sign-integration.device.update');
@@ -213,4 +214,4 @@ Route::prefix('api/v1')->group(function () {
     Route::post('/monitor-devices/{device}/status', [VitalSignIntegrationController::class, 'apiUpdateDeviceStatus']);
 });
 
-require __DIR__.'/auth.php';
+require __DIR__ . '/auth.php';
