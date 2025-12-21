@@ -106,7 +106,7 @@
 </head>
 <body class="bg-gray-50">
     <div class="p-4" x-data='{ 
-        view: "list",
+        view: "ihh",
         chartInstance: null,
         renderChart() {
             if (this.chartInstance) {
@@ -191,6 +191,15 @@
             <!-- View Toggle -->
             <div class="inline-flex rounded-md shadow-sm border border-gray-200 bg-white overflow-hidden text-xs">
                 <button type="button"
+                        @click="view = 'ihh'"
+                        :class="view === 'ihh' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
+                        class="px-3 py-1 font-semibold flex items-center space-x-1 border-r border-gray-200">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                    </svg>
+                    <span>IHH Chart</span>
+                </button>
+                <button type="button"
                         @click="view = 'list'"
                         :class="view === 'list' ? 'bg-gray-100 text-gray-900' : 'bg-white text-gray-600 hover:bg-gray-50'"
                         class="px-3 py-1 font-semibold border-r border-gray-200">
@@ -199,20 +208,11 @@
                 <button type="button"
                         @click="view = 'graph'; $nextTick(() => renderChart())"
                         :class="view === 'graph' ? 'bg-rose-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
-                        class="px-3 py-1 font-semibold flex items-center space-x-1 border-r border-gray-200">
+                        class="px-3 py-1 font-semibold flex items-center space-x-1">
                     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 19h16M5 16l4-6 4 4 6-10"/>
                     </svg>
                     <span>Graph</span>
-                </button>
-                <button type="button"
-                        @click="view = 'ihh'"
-                        :class="view === 'ihh' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
-                        class="px-3 py-1 font-semibold flex items-center space-x-1">
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                    </svg>
-                    <span>IHH Chart</span>
                 </button>
             </div>
         </div>
@@ -436,7 +436,7 @@
                                         @foreach($chartVitals as $vital)
                                             <td class="{{ $range['class'] }}">
                                                 @if($vital->temperature && $vital->temperature >= $range['min'] && $vital->temperature <= $range['max'])
-                                                    <span class="ihh-marker"></span>
+                                                    <span class="ihh-marker"></span><span class="text-[8px] ml-0.5">{{ number_format($vital->temperature, 1) }}</span>
                                                 @endif
                                             </td>
                                         @endforeach
@@ -483,9 +483,9 @@
                                             @endphp
                                             <td class="{{ $range['class'] }}" style="position: relative;">
                                                 @if($hasSystolic)
-                                                    <span class="ihh-marker-systolic">▲</span>
+                                                    <span class="ihh-marker-systolic">▲</span><span class="text-[8px] ml-0.5">{{ $vital->systolic_bp }}</span>
                                                 @elseif($hasDiastolic)
-                                                    <span class="ihh-marker-diastolic">▼</span>
+                                                    <span class="ihh-marker-diastolic">▼</span><span class="text-[8px] ml-0.5">{{ $vital->diastolic_bp }}</span>
                                                 @elseif($isBetween)
                                                     <span style="display:inline-block;width:2px;height:16px;background:#000;"></span>
                                                 @endif
@@ -521,7 +521,7 @@
                                         @foreach($chartVitals as $vital)
                                             <td class="{{ $range['class'] }}">
                                                 @if($vital->pulse_rate && $vital->pulse_rate >= $range['min'] && $vital->pulse_rate <= $range['max'])
-                                                    <span class="ihh-marker"></span>
+                                                    <span class="ihh-marker"></span><span class="text-[8px] ml-0.5">{{ $vital->pulse_rate }}</span>
                                                 @endif
                                             </td>
                                         @endforeach
@@ -554,7 +554,7 @@
                                         @foreach($chartVitals as $vital)
                                             <td class="{{ $range['class'] }}">
                                                 @if($vital->respiratory_rate && $vital->respiratory_rate >= $range['min'] && $vital->respiratory_rate <= $range['max'])
-                                                    <span class="ihh-marker-x">×</span>
+                                                    <span class="ihh-marker-x">×</span><span class="text-[8px] ml-0.5">{{ $vital->respiratory_rate }}</span>
                                                 @endif
                                             </td>
                                         @endforeach
@@ -582,7 +582,7 @@
                                         @foreach($chartVitals as $vital)
                                             <td class="{{ $range['class'] }}">
                                                 @if($vital->spo2 && $vital->spo2 >= $range['min'] && $vital->spo2 <= $range['max'])
-                                                    <span class="ihh-marker"></span>
+                                                    <span class="ihh-marker"></span><span class="text-[8px] ml-0.5">{{ $vital->spo2 }}%</span>
                                                 @endif
                                             </td>
                                         @endforeach

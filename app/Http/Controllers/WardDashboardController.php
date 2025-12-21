@@ -30,16 +30,16 @@ class WardDashboardController extends Controller
     {
         // Get all wards
         $wards = Ward::where('is_active', true)->get();
-        
+
         // Get selected ward (default to first ward)
         $selectedWardId = $request->input('ward_id', $wards->first()->id ?? null);
         $selectedWard = Ward::find($selectedWardId);
-        
+
         if (!$selectedWard) {
             $selectedWard = $wards->first();
             $selectedWardId = $selectedWard ? $selectedWard->id : null;
         }
-        
+
         // If no ward exists, return empty view
         if (!$selectedWard || !$selectedWardId) {
             $defaultBedBoxConfig = [
@@ -88,10 +88,10 @@ class WardDashboardController extends Controller
                 'dashboardDisplay' => $defaultDashboardDisplay,
             ]);
         }
-        
+
         // Sync bed status with patient assignments
         $this->syncBedsWithPatients($selectedWardId);
-        
+
         // Get patients for the selected ward
         $wardPatients = Patient::where('ward_id', $selectedWardId)
             ->where('is_active', true)
@@ -103,88 +103,88 @@ class WardDashboardController extends Controller
             ->orderBy('scheduled_at', 'desc')
             ->get()
             ->groupBy('patient_id');
-        
+
         // Get all active staff
         $consultants = Consultant::where('is_active', true)->get();
         $nurses = Nurse::where('is_active', true)->get();
         $anaesthetists = Anaesthetist::where('is_active', true)->get();
-        
+
         // Get user settings early for EWS system configuration
         $userSettings = WardDashboardSetting::where('user_id', Auth::id())->first();
-        
+
         // Get clinical settings for EWS system
         $defaultClinicalSettings = ['ews_system' => 'ews_ihh'];
-        $clinicalSettings = $userSettings && is_array($userSettings->clinical_settings) 
+        $clinicalSettings = $userSettings && is_array($userSettings->clinical_settings)
             ? array_merge($defaultClinicalSettings, $userSettings->clinical_settings)
             : $defaultClinicalSettings;
         $ewsSystem = $clinicalSettings['ews_system'] ?? 'ews_ihh';
 
         // Generate bed data for the selected ward
         $beds = $this->generateBedData($selectedWard, $wardPatients, $consultants, $nurses, $movementsByPatient, $ewsSystem);
-        
+
         // Calculate statistics based on admitted patients only
         $admittedPatients = Patient::where('ward_id', $selectedWardId)
             ->where('is_active', true)
             ->where('status', 'admitted')
             ->get();
-        
+
         // Count unique staff assigned to admitted patients
         $uniqueConsultantIds = collect();
         $uniqueNurseIds = collect();
         $uniqueAnaesthetistIds = collect();
-        
+
         foreach ($admittedPatients as $patient) {
             // Count consultants from care providers (consulting role)
             $consultingDoctors = $patient->activeCareProviders()
                 ->where('role', \App\Models\PatientCareProvider::ROLE_CONSULTING)
                 ->get();
-            
+
             foreach ($consultingDoctors as $provider) {
                 if ($provider->consultant_id) {
                     $uniqueConsultantIds->push($provider->consultant_id);
                 }
             }
-            
+
             // Also count from old consultant_id field for backward compatibility
             if ($patient->consultant_id) {
                 $uniqueConsultantIds->push($patient->consultant_id);
             }
-            
+
             // Get consultants from bed_consultant pivot table
             $bed = Bed::where('ward_id', $selectedWardId)
                 ->where('patient_id', $patient->id)
                 ->first();
-            
+
             if ($bed) {
                 $bedConsultants = $bed->consultants()->pluck('consultants.id');
                 $uniqueConsultantIds = $uniqueConsultantIds->merge($bedConsultants);
             }
-            
+
             // Count nurses
             if ($patient->nurse_id) {
                 $uniqueNurseIds->push($patient->nurse_id);
             }
-            
+
             // Count anaesthetists from care providers (consulting role with anaesthetist link)
             $anaesthetistProviders = $patient->activeCareProviders()
                 ->whereNotNull('anaesthetist_id')
                 ->get();
-            
+
             foreach ($anaesthetistProviders as $provider) {
                 $uniqueAnaesthetistIds->push($provider->anaesthetist_id);
             }
-            
+
             // Also count from old anaesthetist_id field for backward compatibility
             if ($patient->anaesthetist_id) {
                 $uniqueAnaesthetistIds->push($patient->anaesthetist_id);
             }
         }
-        
+
         $consultantCount = $uniqueConsultantIds->unique()->count();
         $nurseCount = $uniqueNurseIds->unique()->count();
         $anaesthetistCount = $uniqueAnaesthetistIds->unique()->count();
         $patientCount = $admittedPatients->count();
-        
+
         // Calculate nurse:patient ratio
         $ratio = '0:0';
         if ($patientCount > 0) {
@@ -198,7 +198,7 @@ class WardDashboardController extends Controller
                 $ratio = "0:$patientCount";
             }
         }
-        
+
         // Get infusion statistics for this ward
         $activeInfusions = Infusion::inWard($selectedWardId)->active()->count();
         $infusionWarnings = Infusion::inWard($selectedWardId)->running()->withWarnings()->count();
@@ -217,12 +217,12 @@ class WardDashboardController extends Controller
             'infusion_warnings' => $infusionWarnings,
             'infusion_alarms' => $infusionAlarms,
         ];
-        
+
         // Prepare staff-patient groupings for modals
         $consultantPatients = $this->getConsultantPatients($selectedWardId);
         $nursePatients = $this->getNursePatients($selectedWardId);
         $anaesthetistPatients = $this->getAnaesthetistPatients($selectedWardId);
-        
+
         // Get bed box display settings
         $defaultBedBoxDisplay = [
             ['key' => 'patient_name', 'visible' => true, 'order' => 0],
@@ -242,32 +242,32 @@ class WardDashboardController extends Controller
             ['key' => 'isolation_type', 'visible' => true],
             ['key' => 'allergies', 'visible' => true],
         ];
-        
+
         // $userSettings already fetched earlier for EWS system
-        $bedBoxDisplay = $userSettings && is_array($userSettings->bed_box_display) 
-            ? $userSettings->bed_box_display 
+        $bedBoxDisplay = $userSettings && is_array($userSettings->bed_box_display)
+            ? $userSettings->bed_box_display
             : $defaultBedBoxDisplay;
-        $patientInfoDisplay = $userSettings && is_array($userSettings->patient_info_display) 
-            ? $userSettings->patient_info_display 
+        $patientInfoDisplay = $userSettings && is_array($userSettings->patient_info_display)
+            ? $userSettings->patient_info_display
             : $defaultPatientInfoDisplay;
-        
+
         // Dashboard display settings (patient name asterisk & fullscreen mode)
         $defaultDashboardDisplay = [
             'patient_name_mask' => 'full', // Options: full, first_only, last_only, initials, first_last_initial, all_asterisk
             'fullscreen_mode' => 'medium', // Options: small (8), medium (6), large (4)
             'fullscreen_text_size' => 'medium', // Options: small, medium, large
         ];
-        $dashboardDisplay = $userSettings && is_array($userSettings->dashboard_display) 
+        $dashboardDisplay = $userSettings && is_array($userSettings->dashboard_display)
             ? array_merge($defaultDashboardDisplay, $userSettings->dashboard_display)
             : $defaultDashboardDisplay;
-        
+
         // Bed box vitals mode (demo/real/off)
         $bedBoxVitalsMode = $userSettings ? ($userSettings->bed_box_vitals_mode ?? 'demo') : 'demo';
-        
+
         // Convert to keyed array for easy access in blade
         $bedBoxConfig = collect($bedBoxDisplay)->keyBy('key')->toArray();
         $patientInfoConfig = collect($patientInfoDisplay)->keyBy('key')->toArray();
-        
+
         // Debug logging
         Log::info('Ward Dashboard Data', [
             'ward_id' => $selectedWardId,
@@ -276,11 +276,11 @@ class WardDashboardController extends Controller
             'anaesthetist_count' => count($anaesthetistPatients),
             'consultants' => $consultantPatients,
         ]);
-        
+
         return view('wards.dashboard', compact(
-            'wards', 
-            'beds', 
-            'statistics', 
+            'wards',
+            'beds',
+            'statistics',
             'selectedWard',
             'consultantPatients',
             'nursePatients',
@@ -291,12 +291,12 @@ class WardDashboardController extends Controller
             'bedBoxVitalsMode'
         ));
     }
-    
+
     private function syncBedsWithPatients($wardId)
     {
         // Sync bed records in the Bed table with patient assignments
         $beds = Bed::where('ward_id', $wardId)->get();
-        
+
         foreach ($beds as $bed) {
             // Check if bed has a patient assigned through the patient table
             $patient = Patient::where('ward_id', $wardId)
@@ -304,7 +304,7 @@ class WardDashboardController extends Controller
                 ->where('is_active', true)
                 ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
                 ->first();
-            
+
             if ($patient) {
                 // Update bed status based on patient status
                 // pending_discharge is still considered occupied
@@ -324,7 +324,7 @@ class WardDashboardController extends Controller
             }
         }
     }
-    
+
     private function generateBedData($ward, $wardPatients, $consultants, $nurses, $movementsByPatient, $ewsSystem = 'ews_ihh')
     {
         $beds = [];
@@ -333,7 +333,7 @@ class WardDashboardController extends Controller
             ->where('is_active', true)
             ->orderBy('bed_number')
             ->get();
-        
+
         // If no beds are defined, fallback to capacity-based placeholders (legacy)
         if ($wardBeds->isEmpty() && $ward->capacity > 0) {
             for ($i = 1; $i <= $ward->capacity; $i++) {
@@ -343,7 +343,7 @@ class WardDashboardController extends Controller
                 ]));
             }
         }
-        
+
         // Create a mapping of bed numbers to patients
         $bedPatientMap = [];
         foreach ($wardPatients as $patient) {
@@ -377,7 +377,7 @@ class WardDashboardController extends Controller
                 ->where('shift', $currentShiftCode)
                 ->with('nurse')
                 ->get();
-            
+
             foreach ($assignments as $assignment) {
                 $nurseAssignments[$assignment->bed_id] = [
                     'nurse_id' => $assignment->nurse_id,
@@ -386,7 +386,7 @@ class WardDashboardController extends Controller
                 ];
             }
         }
-        
+
         // Each "section" groups 9 beds together (Section 1 = beds 1-9, Section 2 = 10-18, etc.)
         foreach ($wardBeds as $index => $wardBed) {
             $section = (int) floor($index / 9) + 1;
@@ -411,26 +411,26 @@ class WardDashboardController extends Controller
                     })
                     ->sortBy('scheduled_at')
                     ->first();
-                
+
                 // Calculate days and hours since admission
                 $admittedAt = $patient->admitted_at ?? $patient->booked_at ?? now();
                 $diff = now()->diff($admittedAt);
                 $days = $diff->days;
                 $hours = $diff->h;
-                
+
                 // Determine status - pending_discharge patients are still occupying bed
                 $status = $patient->status === 'prebook' ? 'reserved' : 'occupied';
-                
+
                 // Check if patient is pending discharge
                 $isPendingDischarge = $patient->status === 'pending_discharge' || $patient->pending_discharge_at !== null;
-                
+
                 // Get latest vital signs and calculate EWS
                 $latestVitals = VitalSign::where('patient_id', $patient->id)
                     ->orderBy('recorded_at', 'desc')
                     ->first();
-                
+
                 $ewsData = $this->calculateEWS($latestVitals, $ewsSystem);
-                
+
                 // Get nurse on duty from schedule assignment
                 $nurseOnDuty = $nurseAssignments[$wardBed->id] ?? null;
 
@@ -440,7 +440,7 @@ class WardDashboardController extends Controller
                 $attendingDoctor = $patient->activeCareProviders()
                     ->where('role', \App\Models\PatientCareProvider::ROLE_ATTENDING)
                     ->first();
-                $attendingDoctorName = $attendingDoctor ? $attendingDoctor->display_name : 
+                $attendingDoctorName = $attendingDoctor ? $attendingDoctor->display_name :
                     ($patient->consultant ? $patient->consultant->name : 'Not Assigned');
 
                 $beds[] = [
@@ -482,7 +482,7 @@ class WardDashboardController extends Controller
                     // Clinical indicators
                     'nursing_level' => $patient->nursing_level ?? 'none',
                     'diet_types' => $patient->diet_types ?? [],
-                    'diet_types_display' => $patient->diet_types 
+                    'diet_types_display' => $patient->diet_types
                         ? collect($patient->diet_types)->map(fn($dt) => DietType::getDisplayName($dt))->implode(', ')
                         : 'Regular diet',
                     'has_nbm' => $patient->diet_types && collect($patient->diet_types)->map(fn($dt) => strtoupper($dt))->intersect(['NPO', 'NBM', 'NPD'])->isNotEmpty(),
@@ -490,6 +490,13 @@ class WardDashboardController extends Controller
                     'isolation_type' => $patient->isolation_type ?? 'none',
                     'isolation_type_name' => $patient->isolation_type && $patient->isolation_type !== 'none' ? IsolationType::getDisplayName($patient->isolation_type) : 'None',
                     'allergies' => $patient->allergies ?? [],
+                    // Prebook notes from admission log
+                    'prebook_notes' => $patient->status === 'prebook'
+                        ? AdmissionLog::where('patient_id', $patient->id)
+                            ->where('action', 'prebook')
+                            ->orderBy('created_at', 'desc')
+                            ->value('notes')
+                        : null,
                 ];
             } else {
                 // Get nurse on duty from schedule assignment for empty beds too
@@ -537,10 +544,10 @@ class WardDashboardController extends Controller
                 ];
             }
         }
-        
+
         return $beds;
     }
-    
+
     public function admitPatient(Request $request)
     {
         $request->validate([
@@ -550,7 +557,7 @@ class WardDashboardController extends Controller
             'consultant_id' => 'nullable|exists:consultants,id',
             'anaesthetist_id' => 'nullable|exists:anaesthetists,id',
         ]);
-        
+
         try {
             // Check if bed is already occupied
             $existingPatient = Patient::where('ward_id', $request->ward_id)
@@ -558,7 +565,7 @@ class WardDashboardController extends Controller
                 ->where('is_active', true)
                 ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
                 ->first();
-                
+
             if ($existingPatient) {
                 Log::warning('Admission failed: Bed already occupied', [
                     'bed_number' => $request->bed_number,
@@ -569,14 +576,14 @@ class WardDashboardController extends Controller
                 ]);
                 return back()->with('error', 'This bed is already occupied!');
             }
-            
+
             $patient = Patient::findOrFail($request->patient_id);
             $consultant = $request->consultant_id ? Consultant::find($request->consultant_id) : null;
             $anaesthetist = $request->anaesthetist_id ? Anaesthetist::find($request->anaesthetist_id) : null;
             $ward = Ward::findOrFail($request->ward_id);
-            
+
             $admittedAt = now();
-            
+
             // Update patient record (nurse is assigned via ward schedule, not during admission)
             $patient->update([
                 'ward_id' => $request->ward_id,
@@ -586,7 +593,7 @@ class WardDashboardController extends Controller
                 'admitted_at' => $admittedAt,
                 'status' => 'admitted',
             ]);
-            
+
             // Update bed status in Bed table
             $bedRecord = Bed::where('ward_id', $request->ward_id)
                 ->where('bed_number', $request->bed_number)
@@ -598,7 +605,7 @@ class WardDashboardController extends Controller
                     'anaesthetist_id' => $request->anaesthetist_id,
                 ]);
             }
-            
+
             // Create admission log
             AdmissionLog::create([
                 'patient_id' => $patient->id,
@@ -614,7 +621,7 @@ class WardDashboardController extends Controller
                 'age' => $patient->age,
                 'admitted_at' => $admittedAt,
             ]);
-            
+
             Log::info('Patient admitted successfully', [
                 'patient_id' => $patient->id,
                 'patient_name' => $patient->name,
@@ -626,7 +633,7 @@ class WardDashboardController extends Controller
                 'admitted_at' => $admittedAt,
                 'user_id' => Auth::id(),
             ]);
-            
+
             return back()->with('success', 'Patient admitted successfully!');
         } catch (\Exception $e) {
             Log::error('Patient admission failed', [
@@ -636,11 +643,11 @@ class WardDashboardController extends Controller
                 'bed_number' => $request->bed_number,
                 'user_id' => Auth::id(),
             ]);
-            
+
             return back()->with('error', 'Failed to admit patient: ' . $e->getMessage());
         }
     }
-    
+
     public function prebookPatient(Request $request)
     {
         $request->validate([
@@ -654,7 +661,7 @@ class WardDashboardController extends Controller
             'notes' => 'nullable|string',
             'booked_at' => 'nullable|date',
         ]);
-        
+
         try {
             // Check if bed is already occupied or prebooked
             $existingPatient = Patient::where('ward_id', $request->ward_id)
@@ -662,7 +669,7 @@ class WardDashboardController extends Controller
                 ->where('is_active', true)
                 ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
                 ->first();
-                
+
             if ($existingPatient) {
                 Log::warning('Prebook failed: Bed already occupied', [
                     'bed_number' => $request->bed_number,
@@ -673,16 +680,16 @@ class WardDashboardController extends Controller
                 ]);
                 return back()->with('error', 'This bed is already occupied or prebooked!');
             }
-            
+
             $ward = Ward::findOrFail($request->ward_id);
             $consultant = $request->consultant_id ? Consultant::find($request->consultant_id) : null;
             $anaesthetist = $request->anaesthetist_id ? Anaesthetist::find($request->anaesthetist_id) : null;
             $bookedAt = $request->booked_at ? $request->booked_at : now();
-            
+
             // If patient_id is provided, update existing patient
             if ($request->filled('patient_id')) {
                 $patient = Patient::findOrFail($request->patient_id);
-                
+
                 // Update patient with optional fields (nurse is assigned via ward schedule)
                 $updateData = [
                     'ward_id' => $request->ward_id,
@@ -692,7 +699,7 @@ class WardDashboardController extends Controller
                     'booked_at' => $bookedAt,
                     'status' => 'prebook',
                 ];
-                
+
                 // Update patient's gender and age if provided
                 if ($request->filled('gender')) {
                     $updateData['gender'] = $request->gender;
@@ -700,7 +707,7 @@ class WardDashboardController extends Controller
                 if ($request->filled('age')) {
                     $updateData['age'] = $request->age;
                 }
-                
+
                 $patient->update($updateData);
             } else {
                 // Create a placeholder patient for the prebook
@@ -721,7 +728,7 @@ class WardDashboardController extends Controller
                     'is_active' => true,
                 ]);
             }
-            
+
             // Update bed status in Bed table
             $bedRecord = Bed::where('ward_id', $request->ward_id)
                 ->where('bed_number', $request->bed_number)
@@ -733,7 +740,7 @@ class WardDashboardController extends Controller
                     'anaesthetist_id' => $request->anaesthetist_id,
                 ]);
             }
-            
+
             // Create admission log for prebook
             AdmissionLog::create([
                 'patient_id' => $patient->id,
@@ -750,7 +757,7 @@ class WardDashboardController extends Controller
                 'notes' => $request->notes,
                 'booked_at' => $bookedAt,
             ]);
-            
+
             Log::info('Patient prebooked successfully', [
                 'patient_id' => $patient->id,
                 'patient_name' => $patient->name,
@@ -763,7 +770,7 @@ class WardDashboardController extends Controller
                 'notes' => $request->notes ?? 'None',
                 'user_id' => Auth::id(),
             ]);
-            
+
             return back()->with('success', 'Bed prebooked successfully!');
         } catch (\Exception $e) {
             Log::error('Patient prebook failed', [
@@ -773,16 +780,16 @@ class WardDashboardController extends Controller
                 'bed_number' => $request->bed_number,
                 'user_id' => Auth::id(),
             ]);
-            
+
             return back()->with('error', 'Failed to prebook patient: ' . $e->getMessage());
         }
     }
-    
+
     public function checkInPrebook(Request $request, $patientId)
     {
         try {
             $patient = Patient::findOrFail($patientId);
-            
+
             if ($patient->status !== 'prebook') {
                 Log::warning('Check-in failed: Patient not in prebook status', [
                     'patient_id' => $patientId,
@@ -791,17 +798,17 @@ class WardDashboardController extends Controller
                 ]);
                 return back()->with('error', 'Patient is not in prebook status!');
             }
-            
+
             $admittedAt = now();
             $consultant = $patient->consultant;
             $nurse = $patient->nurse;
             $ward = $patient->ward;
-            
+
             $patient->update([
                 'admitted_at' => $admittedAt,
                 'status' => 'admitted',
             ]);
-            
+
             // Update bed status in Bed table
             $bed = Bed::where('ward_id', $patient->ward_id)
                 ->where('bed_number', $patient->bed_number)
@@ -812,7 +819,7 @@ class WardDashboardController extends Controller
                     'patient_id' => $patient->id,
                 ]);
             }
-            
+
             // Create admission log for check-in
             AdmissionLog::create([
                 'patient_id' => $patient->id,
@@ -828,7 +835,7 @@ class WardDashboardController extends Controller
                 'age' => $patient->age,
                 'admitted_at' => $admittedAt,
             ]);
-            
+
             Log::info('Prebooked patient checked in successfully', [
                 'patient_id' => $patient->id,
                 'patient_name' => $patient->name,
@@ -839,7 +846,7 @@ class WardDashboardController extends Controller
                 'admitted_at' => $admittedAt,
                 'user_id' => Auth::id(),
             ]);
-            
+
             return back()->with('success', 'Patient checked in successfully!');
         } catch (\Exception $e) {
             Log::error('Check-in failed', [
@@ -847,16 +854,16 @@ class WardDashboardController extends Controller
                 'patient_id' => $patientId,
                 'user_id' => Auth::id(),
             ]);
-            
+
             return back()->with('error', 'Failed to check in patient: ' . $e->getMessage());
         }
     }
-    
+
     public function cancelPrebook(Request $request, $patientId)
     {
         try {
             $patient = Patient::findOrFail($patientId);
-            
+
             if ($patient->status !== 'prebook') {
                 Log::warning('Cancel prebook failed: Patient not in prebook status', [
                     'patient_id' => $patientId,
@@ -865,12 +872,12 @@ class WardDashboardController extends Controller
                 ]);
                 return back()->with('error', 'Patient is not in prebook status!');
             }
-            
+
             $wardId = $patient->ward_id;
             $bedNumber = $patient->bed_number;
             $patientName = $patient->name;
             $mrn = $patient->mrn;
-            
+
             // Update bed status in Bed table
             $bed = Bed::where('ward_id', $wardId)
                 ->where('bed_number', $bedNumber)
@@ -881,7 +888,7 @@ class WardDashboardController extends Controller
                     'patient_id' => null,
                 ]);
             }
-            
+
             // Clear patient's ward and bed assignment
             $patient->update([
                 'ward_id' => null,
@@ -891,7 +898,7 @@ class WardDashboardController extends Controller
                 'nurse_id' => null,
                 'anaesthetist_id' => null,
             ]);
-            
+
             // Create admission log for cancel prebook
             AdmissionLog::create([
                 'patient_id' => $patient->id,
@@ -902,7 +909,7 @@ class WardDashboardController extends Controller
                 'patient_name' => $patientName,
                 'mrn' => $mrn,
             ]);
-            
+
             Log::info('Prebook cancelled successfully', [
                 'patient_id' => $patient->id,
                 'patient_name' => $patientName,
@@ -911,7 +918,7 @@ class WardDashboardController extends Controller
                 'bed_number' => $bedNumber,
                 'user_id' => Auth::id(),
             ]);
-            
+
             return back()->with('success', 'Prebook cancelled successfully!');
         } catch (\Exception $e) {
             Log::error('Cancel prebook failed', [
@@ -919,11 +926,11 @@ class WardDashboardController extends Controller
                 'patient_id' => $patientId,
                 'user_id' => Auth::id(),
             ]);
-            
+
             return back()->with('error', 'Failed to cancel prebook: ' . $e->getMessage());
         }
     }
-    
+
     public function admissionLogs(Request $request)
     {
         $wardId = $request->input('ward_id');
@@ -932,41 +939,41 @@ class WardDashboardController extends Controller
         $search = trim((string) $request->input('search', ''));
         $fromDate = $request->input('from_date');
         $toDate = $request->input('to_date');
-        
+
         $query = AdmissionLog::with(['patient', 'ward', 'user'])
             ->orderBy('created_at', 'desc');
-        
+
         if ($wardId) {
             $query->where('ward_id', $wardId);
         }
-        
+
         if ($action) {
             $query->where('action', $action);
         }
-        
+
         if ($bedNumber !== '') {
             $query->where('bed_number', 'like', '%' . $bedNumber . '%');
         }
-        
+
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
                 $q->where('mrn', 'like', '%' . $search . '%')
                     ->orWhere('patient_name', 'like', '%' . $search . '%');
             });
         }
-        
+
         if ($fromDate) {
             $query->whereDate('created_at', '>=', $fromDate);
         }
-        
+
         if ($toDate) {
             $query->whereDate('created_at', '<=', $toDate);
         }
-        
+
         $logs = $query->paginate(50)->withQueryString();
         $wards = Ward::where('is_active', true)->get();
         $actions = AdmissionLog::select('action')->distinct()->pluck('action')->filter()->values();
-        
+
         return view('wards.admission-logs', [
             'logs' => $logs,
             'wards' => $wards,
@@ -995,7 +1002,7 @@ class WardDashboardController extends Controller
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
                 $q->where('mrn', 'like', '%' . $search . '%')
-                  ->orWhere('name', 'like', '%' . $search . '%');
+                    ->orWhere('name', 'like', '%' . $search . '%');
             });
         }
 
@@ -1021,18 +1028,18 @@ class WardDashboardController extends Controller
         $patient = null;
         if ($patientId) {
             $patient = Patient::with([
-                    'ward',
-                    'consultant',
-                    'nurse',
-                    'anaesthetist',
-                    'movements' => function ($query) {
-                        $query->orderBy('scheduled_at', 'desc');
-                    },
-                    'referrals' => function ($query) {
-                        $query->with(['consultant', 'anaesthetist'])
-                              ->orderBy('created_at', 'desc');
-                    },
-                ])
+                'ward',
+                'consultant',
+                'nurse',
+                'anaesthetist',
+                'movements' => function ($query) {
+                    $query->orderBy('scheduled_at', 'desc');
+                },
+                'referrals' => function ($query) {
+                    $query->with(['consultant', 'anaesthetist'])
+                        ->orderBy('created_at', 'desc');
+                },
+            ])
                 ->where('is_active', true)
                 ->find($patientId);
         }
@@ -1055,7 +1062,7 @@ class WardDashboardController extends Controller
 
         $patientDetailsTabs = $defaultTabs;
         $clinicalIndicatorOptions = $this->getDefaultClinicalIndicatorOptions();
-        
+
         // Allow iframe callers to explicitly restrict tabs via ?tabs=info,additional
         if ($request->filled('tabs')) {
             $requested = collect(explode(',', $request->input('tabs')))
@@ -1100,30 +1107,30 @@ class WardDashboardController extends Controller
                 $patientVitalsMode = $settings->bed_box_vitals_mode ?? 'demo';
             }
         }
-        
+
         // Load diet types and isolation types from database and merge into options
         $dbDietTypes = DietType::where('is_active', true)->orderBy('name')->get();
         $dbIsolationTypes = IsolationType::where('is_active', true)->orderBy('name')->get();
-        
+
         if ($dbDietTypes->isNotEmpty()) {
-            $clinicalIndicatorOptions['diet_type'] = $dbDietTypes->map(function($dt) {
+            $clinicalIndicatorOptions['diet_type'] = $dbDietTypes->map(function ($dt) {
                 return [
                     'value' => $dt->code,
                     'label' => $dt->name,
-                    'color' => in_array(strtoupper($dt->code), ['NPO', 'NBM', 'NPD']) 
-                        ? 'bg-red-100 text-red-700' 
+                    'color' => in_array(strtoupper($dt->code), ['NPO', 'NBM', 'NPD'])
+                        ? 'bg-red-100 text-red-700'
                         : 'bg-orange-100 text-orange-700',
                 ];
             })->toArray();
         }
-        
+
         if ($dbIsolationTypes->isNotEmpty()) {
-            $clinicalIndicatorOptions['isolation_type'] = $dbIsolationTypes->map(function($it) {
+            $clinicalIndicatorOptions['isolation_type'] = $dbIsolationTypes->map(function ($it) {
                 return [
                     'value' => $it->code,
                     'label' => $it->name,
-                    'color' => in_array(strtoupper($it->code), ['COVID', 'TB', 'AIR', 'AIRBORNE']) 
-                        ? 'bg-red-100 text-red-700' 
+                    'color' => in_array(strtoupper($it->code), ['COVID', 'TB', 'AIR', 'AIRBORNE'])
+                        ? 'bg-red-100 text-red-700'
                         : 'bg-yellow-100 text-yellow-700',
                 ];
             })->toArray();
@@ -1192,7 +1199,7 @@ class WardDashboardController extends Controller
 
         $bedBoxDisplay = $settings->bed_box_display ?? $defaultBedBoxDisplay;
         $patientInfoDisplay = $settings->patient_info_display ?? $defaultPatientInfoDisplay;
-        
+
         // Dashboard display settings (patient name masking & fullscreen mode)
         $defaultDashboardDisplay = [
             'patient_name_mask' => 'full',
@@ -1201,44 +1208,44 @@ class WardDashboardController extends Controller
         ];
         $dashboardDisplay = $settings->dashboard_display ?? $defaultDashboardDisplay;
         $dashboardDisplay = array_merge($defaultDashboardDisplay, $dashboardDisplay);
-        
+
         // Clinical settings (EWS system, etc.)
         $defaultClinicalSettings = [
             'ews_system' => 'news2',
         ];
         $clinicalSettings = $settings->clinical_settings ?? $defaultClinicalSettings;
         $clinicalSettings = array_merge($defaultClinicalSettings, is_array($clinicalSettings) ? $clinicalSettings : []);
-        
+
         // Get clinical indicator options (with defaults)
         $defaultClinicalOptions = $this->getDefaultClinicalIndicatorOptions();
         $clinicalIndicatorOptions = $settings->clinical_indicator_options ?? $defaultClinicalOptions;
-        
+
         // Merge with defaults to ensure all keys exist
         $clinicalIndicatorOptions = array_merge($defaultClinicalOptions, $clinicalIndicatorOptions);
-        
+
         // Load diet types and isolation types from database and merge into options
         $dbDietTypes = DietType::where('is_active', true)->orderBy('name')->get();
         $dbIsolationTypes = IsolationType::where('is_active', true)->orderBy('name')->get();
-        
+
         if ($dbDietTypes->isNotEmpty()) {
-            $clinicalIndicatorOptions['diet_type'] = $dbDietTypes->map(function($dt) {
+            $clinicalIndicatorOptions['diet_type'] = $dbDietTypes->map(function ($dt) {
                 return [
                     'value' => $dt->code,
                     'label' => $dt->name,
-                    'color' => in_array(strtoupper($dt->code), ['NPO', 'NBM', 'NPD']) 
-                        ? 'bg-red-100 text-red-700' 
+                    'color' => in_array(strtoupper($dt->code), ['NPO', 'NBM', 'NPD'])
+                        ? 'bg-red-100 text-red-700'
                         : 'bg-orange-100 text-orange-700',
                 ];
             })->toArray();
         }
-        
+
         if ($dbIsolationTypes->isNotEmpty()) {
-            $clinicalIndicatorOptions['isolation_type'] = $dbIsolationTypes->map(function($it) {
+            $clinicalIndicatorOptions['isolation_type'] = $dbIsolationTypes->map(function ($it) {
                 return [
                     'value' => $it->code,
                     'label' => $it->name,
-                    'color' => in_array(strtoupper($it->code), ['COVID', 'TB', 'AIR', 'AIRBORNE']) 
-                        ? 'bg-red-100 text-red-700' 
+                    'color' => in_array(strtoupper($it->code), ['COVID', 'TB', 'AIR', 'AIRBORNE'])
+                        ? 'bg-red-100 text-red-700'
                         : 'bg-yellow-100 text-yellow-700',
                 ];
             })->toArray();
@@ -1275,7 +1282,7 @@ class WardDashboardController extends Controller
             // Handle bed box display settings
             $bedBoxOrder = $request->input('bed_box_order');
             $bedBoxDisplay = json_decode($bedBoxOrder, true);
-            
+
             if (is_array($bedBoxDisplay)) {
                 $settings->bed_box_display = $bedBoxDisplay;
                 $settings->save();
@@ -1288,7 +1295,7 @@ class WardDashboardController extends Controller
             // Handle patient info display settings
             $patientInfoConfig = $request->input('patient_info_config');
             $patientInfoDisplay = json_decode($patientInfoConfig, true);
-            
+
             if (is_array($patientInfoDisplay)) {
                 $settings->patient_info_display = $patientInfoDisplay;
                 $settings->save();
@@ -1301,7 +1308,7 @@ class WardDashboardController extends Controller
             // Handle dashboard display settings (patient name mask & fullscreen mode)
             $dashboardConfig = $request->input('dashboard_display_config');
             $dashboardDisplay = json_decode($dashboardConfig, true);
-            
+
             if (is_array($dashboardDisplay)) {
                 $settings->dashboard_display = $dashboardDisplay;
                 $settings->save();
@@ -1314,7 +1321,7 @@ class WardDashboardController extends Controller
             // Handle clinical settings (EWS system, etc.)
             $clinicalConfig = $request->input('clinical_setting_config');
             $clinicalSettings = json_decode($clinicalConfig, true);
-            
+
             if (is_array($clinicalSettings)) {
                 $settings->clinical_settings = $clinicalSettings;
                 $settings->save();
@@ -1403,11 +1410,11 @@ class WardDashboardController extends Controller
             'location' => $movement->location,
             'scheduled_at' => $movement->scheduled_at,
         ]);
-        
+
         return redirect()->route('ward.patient-details', [
-                'patient_id' => $patient->id,
-                'active_tab' => 'movement',
-            ])
+            'patient_id' => $patient->id,
+            'active_tab' => 'movement',
+        ])
             ->with('success', 'Patient movement scheduled successfully.');
     }
 
@@ -1418,9 +1425,9 @@ class WardDashboardController extends Controller
     {
         if ($movement->status !== 'scheduled') {
             return redirect()->route('ward.patient-details', [
-                    'patient_id' => $movement->patient_id,
-                    'active_tab' => 'movement',
-                ])
+                'patient_id' => $movement->patient_id,
+                'active_tab' => 'movement',
+            ])
                 ->with('error', 'Only scheduled movements can be sent.');
         }
 
@@ -1434,11 +1441,11 @@ class WardDashboardController extends Controller
             'patient_id' => $movement->patient_id,
             'location' => $movement->location,
         ]);
-        
+
         return redirect()->route('ward.patient-details', [
-                'patient_id' => $movement->patient_id,
-                'active_tab' => 'movement',
-            ])
+            'patient_id' => $movement->patient_id,
+            'active_tab' => 'movement',
+        ])
             ->with('success', 'Patient marked as sent to ' . $movement->location . '.');
     }
 
@@ -1450,7 +1457,7 @@ class WardDashboardController extends Controller
         // Get patient name for notification
         $patient = $movement->patient;
         $patientName = $patient ? $patient->name : 'Patient';
-        
+
         if ($movement->status !== 'sent') {
             // Check if request came from dashboard
             if ($request->has('from_dashboard')) {
@@ -1458,9 +1465,9 @@ class WardDashboardController extends Controller
                     ->with('error', 'Only sent movements can be marked as returned.');
             }
             return redirect()->route('ward.patient-details', [
-                    'patient_id' => $movement->patient_id,
-                    'active_tab' => 'movement',
-                ])
+                'patient_id' => $movement->patient_id,
+                'active_tab' => 'movement',
+            ])
                 ->with('error', 'Only sent movements can be marked as returned.');
         }
 
@@ -1474,17 +1481,17 @@ class WardDashboardController extends Controller
             'patient_id' => $movement->patient_id,
             'location' => $movement->location,
         ]);
-        
+
         // Check if request came from dashboard - redirect back to dashboard with notification
         if ($request->has('from_dashboard')) {
             return redirect()->route('ward.dashboard', ['ward_id' => $request->input('ward_id')])
                 ->with('success', $patientName . ' has been marked as returned from ' . $movement->location . '.');
         }
-        
+
         return redirect()->route('ward.patient-details', [
-                'patient_id' => $movement->patient_id,
-                'active_tab' => 'movement',
-            ])
+            'patient_id' => $movement->patient_id,
+            'active_tab' => 'movement',
+        ])
             ->with('success', 'Patient marked as returned from ' . $movement->location . '.');
     }
 
@@ -1508,9 +1515,9 @@ class WardDashboardController extends Controller
         if ($request->referral_type === 'consultant') {
             if ($patient->consultant_id && (int) $request->consultant_id === (int) $patient->consultant_id) {
                 return redirect()->route('ward.patient-details', [
-                        'patient_id' => $patient->id,
-                        'active_tab' => 'referral',
-                    ])
+                    'patient_id' => $patient->id,
+                    'active_tab' => 'referral',
+                ])
                     ->with('error', 'Cannot create referral to the primary consultant assigned at admission.');
             }
 
@@ -1521,9 +1528,9 @@ class WardDashboardController extends Controller
 
             if ($existingConsultantReferral) {
                 return redirect()->route('ward.patient-details', [
-                        'patient_id' => $patient->id,
-                        'active_tab' => 'referral',
-                    ])
+                    'patient_id' => $patient->id,
+                    'active_tab' => 'referral',
+                ])
                     ->with('error', 'This consultant already has a referral for this patient.');
             }
         }
@@ -1537,9 +1544,9 @@ class WardDashboardController extends Controller
 
             if ($existingAnaesthetistReferral) {
                 return redirect()->route('ward.patient-details', [
-                        'patient_id' => $patient->id,
-                        'active_tab' => 'referral',
-                    ])
+                    'patient_id' => $patient->id,
+                    'active_tab' => 'referral',
+                ])
                     ->with('error', 'This anaesthetist already has a referral for this patient.');
             }
         }
@@ -1562,11 +1569,11 @@ class WardDashboardController extends Controller
             'consultant_id' => $referral->consultant_id,
             'anaesthetist_id' => $referral->anaesthetist_id,
         ]);
-        
+
         return redirect()->route('ward.patient-details', [
-                'patient_id' => $patient->id,
-                'active_tab' => 'referral',
-            ])
+            'patient_id' => $patient->id,
+            'active_tab' => 'referral',
+        ])
             ->with('success', 'Referral added successfully.');
     }
 
@@ -1586,9 +1593,9 @@ class WardDashboardController extends Controller
 
         if ($patient->status !== 'admitted') {
             return redirect()->route('ward.patient-details', [
-                    'patient_id' => $patient->id,
-                    'active_tab' => 'transfer',
-                ])
+                'patient_id' => $patient->id,
+                'active_tab' => 'transfer',
+            ])
                 ->with('error', 'Only admitted patients can be transferred.');
         }
 
@@ -1601,9 +1608,9 @@ class WardDashboardController extends Controller
 
         if ($existingPatient) {
             return redirect()->route('ward.patient-details', [
-                    'patient_id' => $patient->id,
-                    'active_tab' => 'transfer',
-                ])
+                'patient_id' => $patient->id,
+                'active_tab' => 'transfer',
+            ])
                 ->with('error', 'The target bed is already occupied or prebooked.');
         }
 
@@ -1614,9 +1621,9 @@ class WardDashboardController extends Controller
 
         if (!$newBed) {
             return redirect()->route('ward.patient-details', [
-                    'patient_id' => $patient->id,
-                    'active_tab' => 'transfer',
-                ])
+                'patient_id' => $patient->id,
+                'active_tab' => 'transfer',
+            ])
                 ->with('error', 'The selected bed does not exist in the chosen ward.');
         }
 
@@ -1682,9 +1689,9 @@ class WardDashboardController extends Controller
         ]);
 
         return redirect()->route('ward.patient-details', [
-                'patient_id' => $patient->id,
-                'active_tab' => 'transfer',
-            ])
+            'patient_id' => $patient->id,
+            'active_tab' => 'transfer',
+        ])
             ->with('success', 'Patient successfully transferred to ' . $targetWard->ward_name . ' bed ' . $request->bed_number . '.');
     }
 
@@ -1704,9 +1711,9 @@ class WardDashboardController extends Controller
 
         if ($patient->status !== 'admitted') {
             return redirect()->route('ward.patient-details', [
-                    'patient_id' => $patient->id,
-                    'active_tab' => 'discharge',
-                ])
+                'patient_id' => $patient->id,
+                'active_tab' => 'discharge',
+            ])
                 ->with('error', 'Only admitted patients can be discharged from the ward.');
         }
 
@@ -1774,12 +1781,12 @@ class WardDashboardController extends Controller
         ]);
 
         return redirect()->route('ward.patient-details', [
-                'patient_id' => $patient->id,
-                'active_tab' => 'discharge',
-            ])
+            'patient_id' => $patient->id,
+            'active_tab' => 'discharge',
+        ])
             ->with('success', 'Patient discharged from ward ' . ($ward ? $ward->ward_name : '') . '.');
     }
-    
+
     /**
      * Get default clinical indicator options
      */
@@ -1878,9 +1885,9 @@ class WardDashboardController extends Controller
         ]);
 
         return redirect()->route('ward.patient-details', [
-                'patient_id' => $patient->id,
-                'active_tab' => 'additional',
-            ])
+            'patient_id' => $patient->id,
+            'active_tab' => 'additional',
+        ])
             ->with('success', 'Clinical indicators updated successfully.');
     }
 
@@ -1916,7 +1923,7 @@ class WardDashboardController extends Controller
         }
         return $a;
     }
-    
+
     /**
      * Get patients grouped by consultant
      */
@@ -1930,25 +1937,25 @@ class WardDashboardController extends Controller
     private function getConsultantPatients($wardId)
     {
         $consultants = [];
-        
+
         // Consider both currently admitted and prebooked patients in this ward
         $patients = Patient::where('ward_id', $wardId)
             ->where('is_active', true)
             ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
             ->with(['consultant', 'activeCareProviders.consultant'])
             ->get();
-        
+
         Log::info('getConsultantPatients Debug', [
             'ward_id' => $wardId,
             'patient_count' => $patients->count(),
         ]);
-        
+
         // Helper function to add patient to consultant with role
-        $addPatientToConsultant = function($consultantId, $consultantName, $patient, $role) use (&$consultants) {
+        $addPatientToConsultant = function ($consultantId, $consultantName, $patient, $role) use (&$consultants) {
             if (!$consultantId || !$consultantName) {
                 return;
             }
-            
+
             if (!isset($consultants[$consultantId])) {
                 $consultants[$consultantId] = [
                     'id' => $consultantId,
@@ -1956,7 +1963,7 @@ class WardDashboardController extends Controller
                     'patients' => []
                 ];
             }
-            
+
             // Check if patient already added with this role
             $patientKey = $patient->id . '_' . $role;
             $patientExists = false;
@@ -1966,7 +1973,7 @@ class WardDashboardController extends Controller
                     break;
                 }
             }
-            
+
             if (!$patientExists) {
                 $consultants[$consultantId]['patients'][] = [
                     'id' => $patient->id,
@@ -1977,13 +1984,13 @@ class WardDashboardController extends Controller
                 ];
             }
         };
-        
+
         foreach ($patients as $patient) {
             // Add Attending Doctors (PV1-7) - Primary physician
             $attendingDoctors = $patient->activeCareProviders()
                 ->where('role', \App\Models\PatientCareProvider::ROLE_ATTENDING)
                 ->get();
-            
+
             foreach ($attendingDoctors as $provider) {
                 if ($provider->consultant_id && $provider->consultant) {
                     $addPatientToConsultant(
@@ -2003,12 +2010,12 @@ class WardDashboardController extends Controller
                     );
                 }
             }
-            
+
             // Add Referring Doctors (PV1-8)
             $referringDoctors = $patient->activeCareProviders()
                 ->where('role', \App\Models\PatientCareProvider::ROLE_REFERRING)
                 ->get();
-            
+
             foreach ($referringDoctors as $provider) {
                 if ($provider->consultant_id && $provider->consultant) {
                     $addPatientToConsultant(
@@ -2027,12 +2034,12 @@ class WardDashboardController extends Controller
                     );
                 }
             }
-            
+
             // Add Consulting Doctors (PV1-9)
             $consultingDoctors = $patient->activeCareProviders()
                 ->where('role', \App\Models\PatientCareProvider::ROLE_CONSULTING)
                 ->get();
-            
+
             foreach ($consultingDoctors as $provider) {
                 if ($provider->consultant_id && $provider->consultant) {
                     $addPatientToConsultant(
@@ -2051,7 +2058,7 @@ class WardDashboardController extends Controller
                     );
                 }
             }
-            
+
             // Add primary consultant (for backward compatibility) - treat as attending
             if ($patient->consultant_id && $patient->consultant) {
                 // Check if this patient already has this consultant as attending
@@ -2064,7 +2071,7 @@ class WardDashboardController extends Controller
                         }
                     }
                 }
-                
+
                 if (!$alreadyHasAttending) {
                     $addPatientToConsultant(
                         $patient->consultant_id,
@@ -2074,13 +2081,13 @@ class WardDashboardController extends Controller
                     );
                 }
             }
-            
+
             // Add consultants from bed_consultant pivot (treat as consulting)
             $bed = Bed::where('ward_id', $wardId)
                 ->where('patient_id', $patient->id)
                 ->with('consultants')
                 ->first();
-            
+
             if ($bed && $bed->consultants) {
                 foreach ($bed->consultants as $consultant) {
                     $addPatientToConsultant(
@@ -2092,17 +2099,17 @@ class WardDashboardController extends Controller
                 }
             }
         }
-        
+
         return array_values($consultants);
     }
-    
+
     /**
      * Get patients grouped by nurse
      */
     private function getNursePatients($wardId)
     {
         $nurses = [];
-        
+
         // Include both admitted and prebooked patients that have a nurse assigned
         $patients = Patient::where('ward_id', $wardId)
             ->where('is_active', true)
@@ -2110,12 +2117,12 @@ class WardDashboardController extends Controller
             ->whereNotNull('nurse_id')
             ->with('nurse')
             ->get();
-        
+
         foreach ($patients as $patient) {
             if ($patient->nurse_id && $patient->nurse) {
                 $nurseId = $patient->nurse_id;
                 $nurseName = $patient->nurse->name;
-                
+
                 if (!isset($nurses[$nurseId])) {
                     $nurses[$nurseId] = [
                         'id' => $nurseId,
@@ -2123,7 +2130,7 @@ class WardDashboardController extends Controller
                         'patients' => []
                     ];
                 }
-                
+
                 $nurses[$nurseId]['patients'][] = [
                     'id' => $patient->id,
                     'name' => $patient->name,
@@ -2132,10 +2139,10 @@ class WardDashboardController extends Controller
                 ];
             }
         }
-        
+
         return array_values($nurses);
     }
-    
+
     /**
      * Get patients grouped by anaesthetist
      */
@@ -2147,25 +2154,25 @@ class WardDashboardController extends Controller
     private function getAnaesthetistPatients($wardId)
     {
         $anaesthetists = [];
-        
+
         // Include both admitted and prebooked patients that have an anaesthetist assigned
         $patients = Patient::where('ward_id', $wardId)
             ->where('is_active', true)
             ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
             ->with(['anaesthetist', 'activeCareProviders.anaesthetist'])
             ->get();
-        
+
         foreach ($patients as $patient) {
             // Get anaesthetists from care providers (consulting or attending role with anaesthetist link)
             $anaesthetistProviders = $patient->activeCareProviders()
                 ->whereNotNull('anaesthetist_id')
                 ->get();
-            
+
             foreach ($anaesthetistProviders as $provider) {
                 if ($provider->anaesthetist) {
                     $anaesthetistId = $provider->anaesthetist_id;
                     $anaesthetistName = $provider->anaesthetist->name;
-                    
+
                     if (!isset($anaesthetists[$anaesthetistId])) {
                         $anaesthetists[$anaesthetistId] = [
                             'id' => $anaesthetistId,
@@ -2173,7 +2180,7 @@ class WardDashboardController extends Controller
                             'patients' => []
                         ];
                     }
-                    
+
                     // Check if patient already added to avoid duplicates
                     $patientExists = false;
                     foreach ($anaesthetists[$anaesthetistId]['patients'] as $p) {
@@ -2182,7 +2189,7 @@ class WardDashboardController extends Controller
                             break;
                         }
                     }
-                    
+
                     if (!$patientExists) {
                         $anaesthetists[$anaesthetistId]['patients'][] = [
                             'id' => $patient->id,
@@ -2193,12 +2200,12 @@ class WardDashboardController extends Controller
                     }
                 }
             }
-            
+
             // Also include from old anaesthetist_id field for backward compatibility
             if ($patient->anaesthetist_id && $patient->anaesthetist) {
                 $anaesthetistId = $patient->anaesthetist_id;
                 $anaesthetistName = $patient->anaesthetist->name;
-                
+
                 if (!isset($anaesthetists[$anaesthetistId])) {
                     $anaesthetists[$anaesthetistId] = [
                         'id' => $anaesthetistId,
@@ -2206,7 +2213,7 @@ class WardDashboardController extends Controller
                         'patients' => []
                     ];
                 }
-                
+
                 // Check if patient already added to avoid duplicates
                 $patientExists = false;
                 foreach ($anaesthetists[$anaesthetistId]['patients'] as $p) {
@@ -2215,7 +2222,7 @@ class WardDashboardController extends Controller
                         break;
                     }
                 }
-                
+
                 if (!$patientExists) {
                     $anaesthetists[$anaesthetistId]['patients'][] = [
                         'id' => $patient->id,
@@ -2226,7 +2233,7 @@ class WardDashboardController extends Controller
                 }
             }
         }
-        
+
         return array_values($anaesthetists);
     }
 
@@ -2344,51 +2351,76 @@ class WardDashboardController extends Controller
         // Respiratory Rate scoring (breaths per minute)
         if ($vitals->respiratory_rate !== null) {
             $rr = $vitals->respiratory_rate;
-            if ($rr <= 8) $score += 3;
-            elseif ($rr <= 11) $score += 1;
-            elseif ($rr <= 20) $score += 0;
-            elseif ($rr <= 24) $score += 2;
-            else $score += 3;
+            if ($rr <= 8)
+                $score += 3;
+            elseif ($rr <= 11)
+                $score += 1;
+            elseif ($rr <= 20)
+                $score += 0;
+            elseif ($rr <= 24)
+                $score += 2;
+            else
+                $score += 3;
         }
 
         // SpO2 scoring (oxygen saturation %)
         if ($vitals->spo2 !== null) {
             $spo2 = $vitals->spo2;
-            if ($spo2 <= 91) $score += 3;
-            elseif ($spo2 <= 93) $score += 2;
-            elseif ($spo2 <= 95) $score += 1;
-            else $score += 0;
+            if ($spo2 <= 91)
+                $score += 3;
+            elseif ($spo2 <= 93)
+                $score += 2;
+            elseif ($spo2 <= 95)
+                $score += 1;
+            else
+                $score += 0;
         }
 
         // Systolic Blood Pressure scoring (mmHg)
         if ($vitals->systolic_bp !== null) {
             $sbp = $vitals->systolic_bp;
-            if ($sbp <= 90) $score += 3;
-            elseif ($sbp <= 100) $score += 2;
-            elseif ($sbp <= 110) $score += 1;
-            elseif ($sbp <= 219) $score += 0;
-            else $score += 3;
+            if ($sbp <= 90)
+                $score += 3;
+            elseif ($sbp <= 100)
+                $score += 2;
+            elseif ($sbp <= 110)
+                $score += 1;
+            elseif ($sbp <= 219)
+                $score += 0;
+            else
+                $score += 3;
         }
 
         // Pulse Rate scoring (beats per minute)
         if ($vitals->pulse_rate !== null) {
             $hr = $vitals->pulse_rate;
-            if ($hr <= 40) $score += 3;
-            elseif ($hr <= 50) $score += 1;
-            elseif ($hr <= 90) $score += 0;
-            elseif ($hr <= 110) $score += 1;
-            elseif ($hr <= 130) $score += 2;
-            else $score += 3;
+            if ($hr <= 40)
+                $score += 3;
+            elseif ($hr <= 50)
+                $score += 1;
+            elseif ($hr <= 90)
+                $score += 0;
+            elseif ($hr <= 110)
+                $score += 1;
+            elseif ($hr <= 130)
+                $score += 2;
+            else
+                $score += 3;
         }
 
         // Temperature scoring (°C)
         if ($vitals->temperature !== null) {
             $temp = (float) $vitals->temperature;
-            if ($temp <= 35.0) $score += 3;
-            elseif ($temp <= 36.0) $score += 1;
-            elseif ($temp <= 38.0) $score += 0;
-            elseif ($temp <= 39.0) $score += 1;
-            else $score += 2;
+            if ($temp <= 35.0)
+                $score += 3;
+            elseif ($temp <= 36.0)
+                $score += 1;
+            elseif ($temp <= 38.0)
+                $score += 0;
+            elseif ($temp <= 39.0)
+                $score += 1;
+            else
+                $score += 2;
         }
 
         return [
@@ -2407,40 +2439,59 @@ class WardDashboardController extends Controller
         // Systolic Blood Pressure
         if ($vitals->systolic_bp !== null) {
             $sbp = $vitals->systolic_bp;
-            if ($sbp <= 70) $score += 3;
-            elseif ($sbp <= 80) $score += 2;
-            elseif ($sbp <= 100) $score += 1;
-            elseif ($sbp <= 199) $score += 0;
-            else $score += 2;
+            if ($sbp <= 70)
+                $score += 3;
+            elseif ($sbp <= 80)
+                $score += 2;
+            elseif ($sbp <= 100)
+                $score += 1;
+            elseif ($sbp <= 199)
+                $score += 0;
+            else
+                $score += 2;
         }
 
         // Heart Rate
         if ($vitals->pulse_rate !== null) {
             $hr = $vitals->pulse_rate;
-            if ($hr <= 40) $score += 2;
-            elseif ($hr <= 50) $score += 1;
-            elseif ($hr <= 100) $score += 0;
-            elseif ($hr <= 110) $score += 1;
-            elseif ($hr <= 129) $score += 2;
-            else $score += 3;
+            if ($hr <= 40)
+                $score += 2;
+            elseif ($hr <= 50)
+                $score += 1;
+            elseif ($hr <= 100)
+                $score += 0;
+            elseif ($hr <= 110)
+                $score += 1;
+            elseif ($hr <= 129)
+                $score += 2;
+            else
+                $score += 3;
         }
 
         // Respiratory Rate
         if ($vitals->respiratory_rate !== null) {
             $rr = $vitals->respiratory_rate;
-            if ($rr < 9) $score += 2;
-            elseif ($rr <= 14) $score += 0;
-            elseif ($rr <= 20) $score += 1;
-            elseif ($rr <= 29) $score += 2;
-            else $score += 3;
+            if ($rr < 9)
+                $score += 2;
+            elseif ($rr <= 14)
+                $score += 0;
+            elseif ($rr <= 20)
+                $score += 1;
+            elseif ($rr <= 29)
+                $score += 2;
+            else
+                $score += 3;
         }
 
         // Temperature
         if ($vitals->temperature !== null) {
             $temp = (float) $vitals->temperature;
-            if ($temp < 35) $score += 2;
-            elseif ($temp <= 38.4) $score += 0;
-            else $score += 2;
+            if ($temp < 35)
+                $score += 2;
+            elseif ($temp <= 38.4)
+                $score += 0;
+            else
+                $score += 2;
         }
 
         return [
@@ -2459,29 +2510,37 @@ class WardDashboardController extends Controller
         // Heart Rate (pediatric ranges)
         if ($vitals->pulse_rate !== null) {
             $hr = $vitals->pulse_rate;
-            if ($hr < 60 || $hr > 150) $score += 2;
-            elseif ($hr < 70 || $hr > 130) $score += 1;
+            if ($hr < 60 || $hr > 150)
+                $score += 2;
+            elseif ($hr < 70 || $hr > 130)
+                $score += 1;
         }
 
         // Respiratory Rate (pediatric ranges)
         if ($vitals->respiratory_rate !== null) {
             $rr = $vitals->respiratory_rate;
-            if ($rr < 10 || $rr > 40) $score += 2;
-            elseif ($rr < 15 || $rr > 30) $score += 1;
+            if ($rr < 10 || $rr > 40)
+                $score += 2;
+            elseif ($rr < 15 || $rr > 30)
+                $score += 1;
         }
 
         // SpO2
         if ($vitals->spo2 !== null) {
             $spo2 = $vitals->spo2;
-            if ($spo2 < 90) $score += 2;
-            elseif ($spo2 < 95) $score += 1;
+            if ($spo2 < 90)
+                $score += 2;
+            elseif ($spo2 < 95)
+                $score += 1;
         }
 
         // Temperature
         if ($vitals->temperature !== null) {
             $temp = (float) $vitals->temperature;
-            if ($temp < 36 || $temp > 39) $score += 2;
-            elseif ($temp < 36.5 || $temp > 38) $score += 1;
+            if ($temp < 36 || $temp > 39)
+                $score += 2;
+            elseif ($temp < 36.5 || $temp > 38)
+                $score += 1;
         }
 
         return [
