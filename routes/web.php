@@ -80,8 +80,12 @@ Route::middleware('auth')->group(function () {
     Route::post('beds/{bed}/deactivate', [BedController::class, 'deactivate'])->name('beds.deactivate');
 
     // Ward Schedule Routes
-    Route::get('/ward-schedule', [WardScheduleController::class, 'index'])->name('ward.schedule');
-    Route::post('/ward-schedule/assign', [WardScheduleController::class, 'assignNurses'])->name('ward.schedule.assign');
+    Route::get('/ward-schedule', [WardScheduleController::class, 'index'])
+        ->name('ward.schedule');
+    Route::get('/ward-schedule/individual', [WardScheduleController::class, 'individual'])
+        ->name('ward.schedule.individual');
+    Route::post('/ward-schedule/assign', [WardScheduleController::class, 'assignNurses'])
+        ->name('ward.schedule.assign');
     Route::get('/ward-schedule/patient-details', [WardScheduleController::class, 'patientDetailsIframe'])->name('ward.schedule.patient-details');
 
     // Shift Settings Routes

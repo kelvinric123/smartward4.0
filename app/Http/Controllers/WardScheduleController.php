@@ -15,6 +15,16 @@ class WardScheduleController extends Controller
 {
     public function index(Request $request)
     {
+        return $this->getScheduleData($request, 'wards.schedule', false);
+    }
+
+    public function individual(Request $request)
+    {
+        return $this->getScheduleData($request, 'wards.schedule', true);
+    }
+
+    private function getScheduleData(Request $request, string $view, bool $individualMode)
+    {
         $wards = Ward::where('is_active', true)
             ->orderBy('ward_name')
             ->get();
@@ -30,9 +40,10 @@ class WardScheduleController extends Controller
         }
 
         $selectedDate = $request->input('date', now()->toDateString());
+        $selectedNurseId = $individualMode ? $request->input('nurse_id') : null;
 
         $dateRange = collect(range(-2, 2))
-            ->map(fn (int $offset) => Carbon::parse($selectedDate)->addDays($offset));
+            ->map(fn(int $offset) => Carbon::parse($selectedDate)->addDays($offset));
 
         $beds = $selectedWardId
             ? Bed::where('ward_id', $selectedWardId)
@@ -50,15 +61,20 @@ class WardScheduleController extends Controller
         $assignments = collect();
 
         if ($selectedWardId) {
-            $assignments = WardScheduleAssignment::with('nurse')
+            $query = WardScheduleAssignment::with('nurse')
                 ->where('ward_id', $selectedWardId)
                 ->whereBetween('scheduled_date', [
                     $dateRange->first()->toDateString(),
                     $dateRange->last()->toDateString(),
-                ])
-                ->get()
-                ->keyBy(fn ($assignment) => $assignment->bed_id . '|' . $assignment->scheduled_date->toDateString() . '|' . $assignment->shift)
-                ->map(fn ($assignment) => [
+                ]);
+
+            if ($individualMode && $selectedNurseId) {
+                $query->where('nurse_id', $selectedNurseId);
+            }
+
+            $assignments = $query->get()
+                ->keyBy(fn($assignment) => $assignment->bed_id . '|' . $assignment->scheduled_date->toDateString() . '|' . $assignment->shift)
+                ->map(fn($assignment) => [
                     'id' => $assignment->id,
                     'bed_id' => $assignment->bed_id,
                     'shift' => $assignment->shift,
@@ -66,9 +82,15 @@ class WardScheduleController extends Controller
                     'nurse_id' => $assignment->nurse_id,
                     'nurse_name' => $assignment->nurse->name ?? null,
                 ]);
+
+            if ($individualMode && $selectedNurseId) {
+                // In individual mode, only show beds that have at least one assignment for this nurse
+                $assignedBedIds = $assignments->pluck('bed_id')->unique();
+                $beds = $beds->whereIn('id', $assignedBedIds);
+            }
         }
 
-        return view('wards.schedule', [
+        return view($view, [
             'wards' => $wards,
             'selectedWard' => $selectedWard,
             'selectedWardId' => $selectedWardId,
@@ -78,6 +100,8 @@ class WardScheduleController extends Controller
             'dateRange' => $dateRange,
             'nurses' => $nurses,
             'assignments' => $assignments->toArray(),
+            'individualMode' => $individualMode,
+            'selectedNurseId' => $selectedNurseId,
         ]);
     }
 
