@@ -22,6 +22,7 @@ class AdmissionLog extends Model
         'notes',
         'admitted_at',
         'booked_at',
+        'source', // 'manual' or 'adt'
     ];
 
     protected $casts = [

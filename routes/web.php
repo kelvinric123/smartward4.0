@@ -104,6 +104,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/ward-dashboard/save-sugar-reading', [WardDashboardController::class, 'saveSugarReading'])->name('ward.save-sugar-reading');
     Route::post('/ward-dashboard/settings/clinical-options', [WardDashboardController::class, 'updateClinicalIndicatorOptions'])->name('ward.settings.clinical-options');
 
+    // Ward Notification Routes
+    Route::get('/ward-dashboard/notifications', [WardDashboardController::class, 'getNotifications'])->name('ward.notifications');
+    Route::post('/ward-dashboard/notifications/{notification}/respond', [WardDashboardController::class, 'respondNotification'])->name('ward.notifications.respond');
+
     // Vital Signs Routes
     Route::get('/vital-signs', [VitalSignController::class, 'index'])->name('vital-signs.index');
     Route::post('/vital-signs', [VitalSignController::class, 'store'])->name('vital-signs.store');

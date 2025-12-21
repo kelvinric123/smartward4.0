@@ -20,6 +20,7 @@ use App\Models\DietType;
 use App\Models\IsolationType;
 use App\Models\PatientCareProvider;
 use App\Models\Infusion;
+use App\Models\WardNotification;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
@@ -277,6 +278,9 @@ class WardDashboardController extends Controller
             'consultants' => $consultantPatients,
         ]);
 
+        // Get pending notification count for this ward
+        $notificationCount = WardNotification::forWard($selectedWardId)->pending()->count();
+
         return view('wards.dashboard', compact(
             'wards',
             'beds',
@@ -288,7 +292,8 @@ class WardDashboardController extends Controller
             'bedBoxConfig',
             'patientInfoConfig',
             'dashboardDisplay',
-            'bedBoxVitalsMode'
+            'bedBoxVitalsMode',
+            'notificationCount'
         ));
     }
 
@@ -464,6 +469,11 @@ class WardDashboardController extends Controller
                     'hours' => $hours,
                     'ews' => $ewsData['score'],
                     'ews_has_vitals' => $ewsData['has_vitals'],
+                    'ews_severity' => $ewsData['has_vitals'] && $ewsData['score'] !== null
+                        ? WardNotification::getSeverityFromEws($ewsData['score'])
+                        : null,
+                    'ews_is_abnormal' => $ewsData['has_vitals'] && $ewsData['score'] !== null && $ewsData['score'] >= 3,
+                    'ews_bg_class' => $this->getEwsBgClass($ewsData['score'], $ewsData['has_vitals']),
                     'booked_datetime' => $patient->booked_at ? $patient->booked_at->format('Y-m-d H:i') : null,
                     'current_movement_id' => $currentMovement ? $currentMovement->id : null,
                     'current_movement_location' => $currentMovement ? $currentMovement->location : null,
@@ -505,6 +515,17 @@ class WardDashboardController extends Controller
                             ->value('notes')
                         : null,
                 ];
+
+                // Create or update EWS notification if abnormal
+                if ($ewsData['has_vitals'] && $ewsData['score'] !== null) {
+                    WardNotification::createOrUpdateEwsNotification(
+                        $ward->id,
+                        $patient->id,
+                        $bedNumber,
+                        $ewsData['score'],
+                        $patient->name
+                    );
+                }
             } else {
                 // Get nurse on duty from schedule assignment for empty beds too
                 $nurseOnDuty = $nurseAssignments[$wardBed->id] ?? null;
@@ -530,6 +551,9 @@ class WardDashboardController extends Controller
                     'hours' => null,
                     'ews' => null,
                     'ews_has_vitals' => false,
+                    'ews_severity' => null,
+                    'ews_is_abnormal' => false,
+                    'ews_bg_class' => null,
                     'booked_datetime' => null,
                     'current_movement_id' => null,
                     'current_movement_location' => null,
@@ -631,6 +655,7 @@ class WardDashboardController extends Controller
                 'gender' => $patient->gender,
                 'age' => $patient->age,
                 'admitted_at' => $admittedAt,
+                'source' => 'manual',
             ]);
 
             Log::info('Patient admitted successfully', [
@@ -767,6 +792,7 @@ class WardDashboardController extends Controller
                 'age' => $request->age ?? $patient->age,
                 'notes' => $request->notes,
                 'booked_at' => $bookedAt,
+                'source' => 'manual',
             ]);
 
             Log::info('Patient prebooked successfully', [
@@ -845,6 +871,7 @@ class WardDashboardController extends Controller
                 'gender' => $patient->gender,
                 'age' => $patient->age,
                 'admitted_at' => $admittedAt,
+                'source' => 'manual',
             ]);
 
             Log::info('Prebooked patient checked in successfully', [
@@ -919,6 +946,7 @@ class WardDashboardController extends Controller
                 'action' => 'cancel-prebook',
                 'patient_name' => $patientName,
                 'mrn' => $mrn,
+                'source' => 'manual',
             ]);
 
             Log::info('Prebook cancelled successfully', [
@@ -946,6 +974,7 @@ class WardDashboardController extends Controller
     {
         $wardId = $request->input('ward_id');
         $action = $request->input('action');
+        $source = $request->input('source');
         $bedNumber = trim((string) $request->input('bed_number', ''));
         $search = trim((string) $request->input('search', ''));
         $fromDate = $request->input('from_date');
@@ -960,6 +989,10 @@ class WardDashboardController extends Controller
 
         if ($action) {
             $query->where('action', $action);
+        }
+
+        if ($source) {
+            $query->where('source', $source);
         }
 
         if ($bedNumber !== '') {
@@ -984,12 +1017,15 @@ class WardDashboardController extends Controller
         $logs = $query->paginate(50)->withQueryString();
         $wards = Ward::where('is_active', true)->get();
         $actions = AdmissionLog::select('action')->distinct()->pluck('action')->filter()->values();
+        $sources = AdmissionLog::select('source')->distinct()->pluck('source')->filter()->values();
 
         return view('wards.admission-logs', [
             'logs' => $logs,
             'wards' => $wards,
             'wardId' => $wardId,
             'actions' => $actions,
+            'sources' => $sources,
+            'selectedSource' => $source,
         ]);
     }
 
@@ -1694,6 +1730,7 @@ class WardDashboardController extends Controller
             'gender' => $patient->gender,
             'age' => $patient->age,
             'notes' => $notes,
+            'source' => 'manual',
         ]);
 
         Log::info('Patient bed transferred', [
@@ -1786,6 +1823,7 @@ class WardDashboardController extends Controller
             'gender' => $patient->gender,
             'age' => $patient->age,
             'notes' => implode(' | ', $notesParts),
+            'source' => 'manual',
         ]);
 
         Log::info('Patient discharged from ward', [
@@ -1984,6 +2022,95 @@ class WardDashboardController extends Controller
     }
 
     /**
+     * Get ward notifications for the notification panel
+     */
+    public function getNotifications(Request $request)
+    {
+        $wardId = $request->query('ward_id');
+
+        if (!$wardId) {
+            return response()->json(['error' => 'Ward ID required'], 400);
+        }
+
+        $pendingNotifications = WardNotification::forWard($wardId)
+            ->pending()
+            ->with('patient:id,name,mrn')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($notification) {
+                return [
+                    'id' => $notification->id,
+                    'type' => $notification->type,
+                    'severity' => $notification->severity,
+                    'severity_label' => $notification->severity_label,
+                    'severity_bg_class' => $notification->severity_bg_class,
+                    'severity_border_class' => $notification->severity_border_class,
+                    'message' => $notification->message,
+                    'ews_score' => $notification->ews_score,
+                    'bed_number' => $notification->bed_number,
+                    'patient_name' => $notification->patient->name ?? 'Unknown',
+                    'patient_mrn' => $notification->patient->mrn ?? 'N/A',
+                    'created_at' => $notification->created_at->diffForHumans(),
+                    'created_at_full' => $notification->created_at->format('Y-m-d H:i:s'),
+                ];
+            });
+
+        $respondedNotifications = WardNotification::forWard($wardId)
+            ->responded()
+            ->with(['patient:id,name,mrn', 'responder:id,name'])
+            ->orderBy('responded_at', 'desc')
+            ->limit(20)
+            ->get()
+            ->map(function ($notification) {
+                return [
+                    'id' => $notification->id,
+                    'type' => $notification->type,
+                    'severity' => $notification->severity,
+                    'message' => $notification->message,
+                    'ews_score' => $notification->ews_score,
+                    'bed_number' => $notification->bed_number,
+                    'patient_name' => $notification->patient->name ?? 'Unknown',
+                    'responded_at' => $notification->responded_at->diffForHumans(),
+                    'responded_by' => $notification->responder->name ?? 'Unknown',
+                ];
+            });
+
+        return response()->json([
+            'pending' => $pendingNotifications,
+            'pending_count' => $pendingNotifications->count(),
+            'responded' => $respondedNotifications,
+        ]);
+    }
+
+    /**
+     * Mark a notification as responded
+     */
+    public function respondNotification(Request $request, WardNotification $notification)
+    {
+        if ($notification->status === WardNotification::STATUS_RESPONDED) {
+            return response()->json(['error' => 'Notification already responded'], 400);
+        }
+
+        $notification->update([
+            'status' => WardNotification::STATUS_RESPONDED,
+            'responded_at' => now(),
+            'responded_by' => Auth::id(),
+        ]);
+
+        Log::info('Notification responded', [
+            'notification_id' => $notification->id,
+            'type' => $notification->type,
+            'patient_id' => $notification->patient_id,
+            'responded_by' => Auth::id(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Notification marked as responded',
+        ]);
+    }
+
+    /**
      * Calculate Greatest Common Divisor (GCD) for ratio calculation
      */
     private function gcd($a, $b)
@@ -1994,6 +2121,25 @@ class WardDashboardController extends Controller
             $a = $temp;
         }
         return $a;
+    }
+
+    /**
+     * Get the background class for bed box based on EWS score
+     * Returns null for normal scores (<=2) to keep default gender-based coloring
+     */
+    private function getEwsBgClass(?int $score, bool $hasVitals): ?string
+    {
+        if (!$hasVitals || $score === null || $score <= 2) {
+            return null; // Normal - keep default pink/blue based on gender
+        }
+
+        if ($score >= 5) {
+            return 'ews-urgent'; // Red theme
+        } elseif ($score >= 3) {
+            return 'ews-warning'; // Yellow theme
+        }
+
+        return null;
     }
 
     /**
