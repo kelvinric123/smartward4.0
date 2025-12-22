@@ -79,8 +79,12 @@ class EkadService
 
     /**
      * Push patient info to E-Ink device
+     * 
+     * @param Patient $patient
+     * @param Bed $bed
+     * @param array $overrides Optional array to override patient data (e.g. ['bed_no' => '-', 'mrn' => '-'])
      */
-    public function pushPatientInfo(Patient $patient, Bed $bed): array
+    public function pushPatientInfo(Patient $patient, Bed $bed, array $overrides = []): array
     {
         // Get mapping for this bed
         $mapping = EkadBedMapping::getForBed($bed->id);
@@ -98,7 +102,9 @@ class EkadService
 
         // Get diet type(s)
         $dietType = '-';
-        if ($patient->diet_types) {
+        if (isset($overrides['diet_type'])) {
+            $dietType = $overrides['diet_type'];
+        } elseif ($patient->diet_types) {
             if (is_array($patient->diet_types)) {
                 $dietType = implode(', ', $patient->diet_types);
             } else {
@@ -106,31 +112,57 @@ class EkadService
             }
         }
 
-        // Get doctor info
+        // Get doctor info (Consultant)
         $doctor = '-';
-        if ($patient->consultant) {
-            $doctor = $patient->consultant->name ?? '-';
+        if (isset($overrides['doctor'])) {
+            $doctor = $overrides['doctor'];
+        } elseif ($patient->consultant) {
+            $doctor = $patient->consultant->name;
+        } else {
+            // Fallback to active attending provider
+            $attending = $patient->attendingDoctors()->first();
+            if ($attending) {
+                $doctor = $attending->display_name;
+            }
         }
 
         // Get nurse info
         $nurse = '-';
-        if ($patient->nurse) {
-            $nurse = $patient->nurse->name ?? '-';
+        if (isset($overrides['nurse'])) {
+            $nurse = $overrides['nurse'];
+        } elseif ($patient->nurse) {
+            $nurse = $patient->nurse->name;
         }
 
         // Get anaesthetist info
         $anaesthetist = '-';
-        if ($patient->anaesthetist) {
-            $anaesthetist = $patient->anaesthetist->name ?? '-';
+        if (isset($overrides['anaesthetist'])) {
+            $anaesthetist = $overrides['anaesthetist'];
+        } elseif ($patient->anaesthetist) {
+            $anaesthetist = $patient->anaesthetist->name;
+        } else {
+            // Check for anaesthetist referrals (latest active one)
+            $referral = $patient->referrals()
+                ->where('referral_type', 'anaesthetist')
+                ->where('status', 'active')
+                ->latest()
+                ->first();
+
+            if ($referral && $referral->anaesthetist) {
+                $anaesthetist = $referral->anaesthetist->name;
+            }
         }
 
-        // Get bed number from the patient's bed_number field (same as ward dashboard bed box)
-        $bedNo = $patient->bed_number ?? '-';
+        // Get bed number
+        $bedNo = $overrides['bed_no'] ?? $patient->bed_number ?? '-';
+
+        // Get MRN
+        $mrn = $overrides['mrn'] ?? $patient->mrn ?? '-';
 
         // Build data array in the exact order and format required by E-Ink API
         $data = [
             'bed no' => $bedNo,
-            'MRN' => $patient->mrn ?? '-',
+            'MRN' => $mrn,
             'patient_name' => $patientName,
             'diet_type' => $dietType,
             'doctor' => $doctor,

@@ -24,6 +24,7 @@ use App\Models\WardNotification;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use App\Services\EkadService;
 
 class WardDashboardController extends Controller
 {
@@ -1689,6 +1690,16 @@ class WardDashboardController extends Controller
             'anaesthetist_id' => $referral->anaesthetist_id,
         ]);
 
+        // EKad: Push update to reflect new anaesthetist/consultant
+        try {
+            if ($patient->isAdmitted() && $patient->bed) {
+                $ekadService = new EkadService();
+                $ekadService->pushPatientInfo($patient, $patient->bed);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EKad push on referral failed', ['error' => $e->getMessage()]);
+        }
+
         return redirect()->route('ward.patient-details', [
             'patient_id' => $patient->id,
             'active_tab' => 'referral',
@@ -1844,6 +1855,19 @@ class WardDashboardController extends Controller
         $consultant = $patient->consultant;
         $nurse = $patient->nurse;
         $ward = $patient->ward;
+
+        // EKad: Push clear screen before discharge
+        try {
+            // Get bed before it is unassigned
+            $bed = $patient->bed;
+            if ($bed) {
+                $ekadService = new EkadService();
+                $ekadService->pushPatientInfo($patient, $bed, ['bed_no' => '-', 'mrn' => '-']);
+                Log::info('EKad: Pushed clear screen for discharge', ['patient_id' => $patient->id, 'bed_id' => $bed->id]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EKad discharge push failed', ['error' => $e->getMessage()]);
+        }
 
         // Update patient record
         $patient->update([
