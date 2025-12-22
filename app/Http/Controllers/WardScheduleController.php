@@ -10,6 +10,7 @@ use App\Models\WardScheduleAssignment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 class WardScheduleController extends Controller
 {
@@ -228,5 +229,199 @@ class WardScheduleController extends Controller
             ],
         ];
     }
+
+    public function downloadTemplate(Request $request)
+    {
+        $request->validate([
+            'ward_id' => 'required|exists:wards,id',
+            'date' => 'required|date',
+        ]);
+
+        $wardId = $request->input('ward_id');
+        $date = Carbon::parse($request->input('date'));
+
+        $ward = Ward::find($wardId);
+        $beds = Bed::where('ward_id', $wardId)
+            ->where('is_active', true)
+            ->orderByRaw('CAST(bed_number AS UNSIGNED)')
+            ->get();
+
+        $nurses = Nurse::where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        $rows = [];
+        // Generate rows for the entire month of the selected date
+        $startDate = $date->copy()->startOfMonth();
+        $endDate = $date->copy()->endOfMonth();
+
+        for ($d = $startDate; $d->lte($endDate); $d->addDay()) {
+            foreach ($beds as $bed) {
+                foreach (['AM', 'PM', 'ON'] as $shift) {
+                    $rows[] = [
+                        'date' => $d->toDateString(),
+                        'bed' => $bed->bed_display_name ?? 'Bed ' . $bed->bed_number,
+                        'shift' => $shift,
+                    ];
+                }
+            }
+        }
+
+        $content = view('wards.exports.schedule-template', [
+            'rows' => $rows,
+            'nurses' => $nurses,
+        ])->render();
+
+        return response($content)
+            ->header('Content-Type', 'application/vnd.ms-excel')
+            ->header('Content-Disposition', 'attachment; filename="ward-schedule-template-' . $ward->ward_code . '-' . $date->format('Y-m') . '.xml"');
+    }
+
+    public function uploadRoster(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file', // Strict XML validation fails sometimes with .xml type depending on OS mime types
+        ]);
+
+        $file = $request->file('file');
+
+        // Basic check for content
+        $content = file_get_contents($file->getRealPath());
+        if (!str_contains($content, 'urn:schemas-microsoft-com:office:spreadsheet')) {
+            return back()->with('error', 'Invalid file format. Please use the downloaded XML template.');
+        }
+
+        try {
+            $xml = simplexml_load_string($content);
+            $namespaces = $xml->getNamespaces(true);
+            $ss = $namespaces['ss'] ?? 'urn:schemas-microsoft-com:office:spreadsheet';
+
+            // Find Roster worksheet
+            $rosterSheet = null;
+            foreach ($xml->Worksheet as $sheet) {
+                $attributes = $sheet->attributes($ss);
+                if ((string) $attributes['Name'] === 'Roster') {
+                    $rosterSheet = $sheet;
+                    break;
+                }
+            }
+
+            if (!$rosterSheet) {
+                return back()->with('error', 'Could not find "Roster" worksheet.');
+            }
+
+            $count = 0;
+            $errors = 0;
+
+            // Iterate rows (skip header row 1)
+            $rows = $rosterSheet->Table->Row;
+            $isHeader = true;
+
+            foreach ($rows as $row) {
+                if ($isHeader) {
+                    $isHeader = false;
+                    continue;
+                }
+
+                $cells = $row->Cell;
+                // Helper to get cell data by index (1-based in XML logic, but simplexml iteration is 0-based if sequential. 
+                // However valid XML Excel often skips empty cells, using ss:Index. We need to handle that carefully.)
+                // For simplicity, we assume the template structure is preserved and all cells have data or are sequential.
+                // A better approach is to map cells by specific logic.
+
+                // Let's rely on node iteration. We expect 4 columns: Date, Bed, Shift, Nurse.
+                // Date = 0, Bed = 1, Shift = 2, Nurse = 3 (if 0-indexed without gaps)
+
+                $dataValues = [];
+                $currentIndex = 1;
+
+                foreach ($cells as $cell) {
+                    $attrs = $cell->attributes($ss);
+                    if (isset($attrs['Index'])) {
+                        $currentIndex = (int) $attrs['Index'];
+                    }
+
+                    $data = (string) $cell->Data;
+                    $dataValues[$currentIndex] = $data;
+                    $currentIndex++;
+                }
+
+                $dateStr = $dataValues[1] ?? null;
+                $bedName = $dataValues[2] ?? null;
+                $shift = $dataValues[3] ?? null;
+                $nurseStr = $dataValues[4] ?? null;
+
+                if (!$dateStr || !$bedName || !$shift || !$nurseStr) {
+                    continue; // Skip incomplete lines
+                }
+
+                // Parse Nurse String "Name [ID]"
+                if (preg_match('/^.+ \[(\d+)\]$/', $nurseStr, $matches)) {
+                    $nurseId = $matches[1];
+                } else {
+                    $errors++;
+                    continue;
+                }
+
+                // Find Bed ID
+                // We assume 'Bed X' or display name is unique within ward.
+                // We need ward_id from the request.
+                $wardId = $request->input('ward_id'); // Ensure this is passed in the upload form
+
+                if (!$wardId) {
+                    // Try to guess from filename or assume it's lost? 
+                    // We must require ward_id in the upload form.
+                    return back()->with('error', 'Ward ID is missing.');
+                }
+
+                // Cache beds for performance
+                static $wardBeds = null;
+                if ($wardBeds === null) {
+                    $wardBeds = Bed::where('ward_id', $wardId)->get();
+                }
+
+                // Try to find the bed
+                // The template exports: $bed->bed_display_name ?? 'Bed ' . $bed->bed_number
+                $bed = $wardBeds->first(function ($b) use ($bedName) {
+                    return ($b->bed_display_name === $bedName) ||
+                        ('Bed ' . $b->bed_number === $bedName) ||
+                        ($b->bed_number === $bedName);
+                });
+
+                if (!$bed) {
+                    // Bed not found in this ward
+                    // Could check if bedName contains [ID] if we change template later
+                    $errors++;
+                    continue;
+                }
+
+                $scheduledDate = Carbon::parse($dateStr)->toDateString();
+
+                WardScheduleAssignment::updateOrCreate(
+                    [
+                        'ward_id' => $wardId,
+                        'bed_id' => $bed->id,
+                        'scheduled_date' => $scheduledDate,
+                        'shift' => $shift,
+                    ],
+                    [
+                        'nurse_id' => $nurseId,
+                    ]
+                );
+                $count++;
+            }
+
+            $message = "Successfully imported $count assignments.";
+            if ($errors > 0) {
+                $message .= " ($errors rows skipped due to invalid data)";
+            }
+
+            return back()->with('success', $message);
+
+        } catch (\Exception $e) {
+            return back()->with('error', 'Error parsing file: ' . $e->getMessage());
+        }
+    }
 }
+
 

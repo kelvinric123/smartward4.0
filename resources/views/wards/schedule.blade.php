@@ -35,6 +35,24 @@
                     </a>
                 @endif
 
+                <button type="button" onclick="openDownloadModal()"
+                    class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl font-semibold shadow-sm transition-all text-sm">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Template
+                </button>
+
+                <button type="button" onclick="openUploadModal()"
+                    class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl font-semibold shadow-sm transition-all text-sm">
+                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    Upload
+                </button>
+
                 <button type="button" onclick="openShiftSettings()"
                     class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-xl font-semibold shadow-sm transition-all text-sm">
                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -492,6 +510,82 @@
         </div>
     </div>
 
+    <!-- Download Template Modal -->
+    <div id="downloadModal" style="display: none;" class="fixed inset-0 z-50 overflow-y-auto">
+        <div class="fixed inset-0 bg-black/40" onclick="closeDownloadModal()"></div>
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">Download Roster Template</h3>
+                    <button type="button" class="text-gray-400 hover:text-gray-600"
+                        onclick="closeDownloadModal()">&times;</button>
+                </div>
+                <form action="{{ route('ward.schedule.download-template') }}" method="GET">
+                    <input type="hidden" name="ward_id" value="{{ $selectedWardId }}">
+                    <div class="space-y-4">
+                        <div>
+                            <label for="download_date" class="block text-sm font-medium text-gray-700">Select
+                                Month</label>
+                            <input type="date" name="date" id="download_date" value="{{ $selectedDate }}"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm">
+                            <p class="mt-1 text-xs text-gray-500">The template will be generated for the month of the
+                                selected date.</p>
+                        </div>
+                        <div class="flex justify-end gap-3">
+                            <button type="button"
+                                class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                                onclick="closeDownloadModal()">Cancel</button>
+                            <button type="submit"
+                                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Download
+                                XML</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Roster Modal -->
+    <div id="uploadModal" style="display: none;" class="fixed inset-0 z-50 overflow-y-auto">
+        <div class="fixed inset-0 bg-black/40" onclick="closeUploadModal()"></div>
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">Upload Roster</h3>
+                    <button type="button" class="text-gray-400 hover:text-gray-600"
+                        onclick="closeUploadModal()">&times;</button>
+                </div>
+                <form action="{{ route('ward.schedule.upload') }}" method="POST" enctype="multipart/form-data">
+                    @csrf
+                    <input type="hidden" name="ward_id" value="{{ $selectedWardId }}">
+                    <div class="space-y-4">
+                        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+                            <strong>Note:</strong> Please ensure you are uploading the XML file generated from the
+                            "Download Template" feature.
+                        </div>
+                        <div>
+                            <label for="file" class="block text-sm font-medium text-gray-700">Select XML File</label>
+                            <input type="file" name="file" id="file" accept=".xml" class="mt-1 block w-full text-sm text-gray-500
+                                file:mr-4 file:py-2 file:px-4
+                                file:rounded-full file:border-0
+                                file:text-sm file:font-semibold
+                                file:bg-blue-50 file:text-blue-700
+                                hover:file:bg-blue-100
+                            ">
+                        </div>
+                        <div class="flex justify-end gap-3">
+                            <button type="button"
+                                class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                                onclick="closeUploadModal()">Cancel</button>
+                            <button type="submit"
+                                class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Upload</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script>
         function openShiftSettings() {
             const modal = document.getElementById('shiftSettingsModal');
@@ -511,10 +605,38 @@
         }
 
         // Close modal on escape key
-        document.addEventListener('keydown',  function (e) {
+        document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') {
                 closeShiftSettings();
             }
-    });
+        });
+
+        function openDownloadModal() {
+            document.getElementById('downloadModal').style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeDownloadModal() {
+            document.getElementById('downloadModal').style.display = 'none';
+            document.body.style.overflow = '';
+        }
+
+        function openUploadModal() {
+            document.getElementById('uploadModal').style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeUploadModal() {
+            document.getElementById('uploadModal').style.display = 'none';
+            document.body.style.overflow = '';
+        }
+
+        // Close all modals on escape
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                closeDownloadModal();
+                closeUploadModal();
+            }
+        });
     </script>
 </x-app-layout>
