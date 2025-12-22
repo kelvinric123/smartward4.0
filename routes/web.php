@@ -17,6 +17,7 @@ use App\Http\Controllers\VitalSignIntegrationController;
 use App\Http\Controllers\InfusionIntegrationController;
 use App\Http\Controllers\AdtConfigurationController;
 use App\Http\Controllers\EcgController;
+use App\Http\Controllers\EkadController;
 use App\Http\Controllers\ShiftSettingController;
 use App\Http\Controllers\DietTypeController;
 use App\Http\Controllers\IsolationTypeController;
@@ -169,6 +170,13 @@ Route::middleware('auth')->group(function () {
     Route::get('/ecg/patient', [EcgController::class, 'patientEcg'])->name('ecg.patient');
     Route::get('/ecg/pdf', [EcgController::class, 'servePdf'])->name('ecg.pdf');
     Route::get('/ecg/list', [EcgController::class, 'listFiles'])->name('ecg.list');
+
+    // EKad Integration Routes (SEEKINK E-Ink)
+    Route::get('/ekad', [EkadController::class, 'index'])->name('ekad.index');
+    Route::post('/ekad/login', [EkadController::class, 'testLogin'])->name('ekad.login');
+    Route::get('/ekad/labels', [EkadController::class, 'getLabels'])->name('ekad.labels');
+    Route::post('/ekad/push', [EkadController::class, 'pushPatientInfo'])->name('ekad.push');
+    Route::post('/ekad/text-message', [EkadController::class, 'sendTextMessage'])->name('ekad.text-message');
 
     // ADT Integration Routes
     Route::get('/adt', [AdtConfigurationController::class, 'index'])->name('adt.index');

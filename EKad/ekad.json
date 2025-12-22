@@ -1,0 +1,157 @@
+{
+    "info": {
+        "name": "SEEKINK E-Ink Patient Info Integration",
+        "description": "Comprehensive collection for managing Patient Labels on SEEKINK Cloud Platform V1.5.",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "1. Authentication",
+            "item": [
+                {
+                    "name": "Login to Obtain Token",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"username\": \"{{username}}\",\n    \"password\": \"{{password}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/user/login"
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "var jsonData = pm.response.json();",
+                                    "if (jsonData.code === 200) {",
+                                    "    pm.collectionVariables.set(\"token\", jsonData.data);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "2. Label Management",
+            "item": [
+                {
+                    "name": "Query Label List",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/label/list?pageNum=1&pageSize=10",
+                            "query": [
+                                {
+                                    "key": "pageNum",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "pageSize",
+                                    "value": "10"
+                                }
+                            ]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "3. Data Push (Patient Info)",
+            "item": [
+                {
+                    "name": "Push Patient Name via Template",
+                    "description": "Sends 'Anti Gravity' or a Patient Name to a specific label using a pre-defined template ID.",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"id\": \"{{template_id}}\",\n    \"macList\": \"{{label_mac}}\",\n    \"data\": [\n        {\n            \"patient_name\": \"Anti Gravity\",\n            \"room_number\": \"Room 402\",\n            \"doctor\": \"Dr. Smith\"\n        }\n    ]\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/template/batchPaintingByJson"
+                        }
+                    }
+                },
+                {
+                    "name": "Emergency Text Message",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{token}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"macList\": [\"{{label_mac}}\"],\n    \"priority\": 1,\n    \"title\": \"Alert\",\n    \"content\": \"Patient in Room 402 needs assistance.\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/api/v1/label/sendTextMessage"
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "http://iot.seekink.com/cloud/prod-api",
+            "type": "string"
+        },
+        {
+            "key": "username",
+            "value": "admin",
+            "type": "string"
+        },
+        {
+            "key": "password",
+            "value": "password123",
+            "type": "string"
+        },
+        {
+            "key": "token",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "label_mac",
+            "value": "MAC_ADDRESS_HERE",
+            "type": "string"
+        },
+        {
+            "key": "template_id",
+            "value": "TEMPLATE_ID_HERE",
+            "type": "string"
+        }
+    ]
+}
