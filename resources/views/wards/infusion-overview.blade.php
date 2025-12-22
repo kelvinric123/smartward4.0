@@ -157,7 +157,7 @@
                             @endif
 
                             <!-- Stats Row -->
-                            <div class="grid grid-cols-3 gap-2 text-center">
+                            <div class="grid grid-cols-4 gap-2 text-center">
                                 <div class="bg-white/70 rounded p-1.5 border border-gray-100">
                                     <div class="text-xs text-gray-500">Rate</div>
                                     <div class="font-bold text-gray-800 text-sm">{{ $infusion->flow_rate ? number_format($infusion->flow_rate, 1) . ' ml/hr' : '--' }}</div>
@@ -165,21 +165,25 @@
                                 <div class="bg-white/70 rounded p-1.5 border border-gray-100 {{ $infusion->is_warning ? 'bg-amber-100 border-amber-300' : '' }}">
                                     <div class="text-xs {{ $infusion->is_warning ? 'text-amber-700' : 'text-gray-500' }}">Remaining</div>
                                     <div class="font-bold {{ $infusion->is_warning ? 'text-amber-700' : 'text-gray-800' }} text-sm">{{ $infusion->formatted_remaining_time }}</div>
+                                    @if($infusion->estimated_completion)
+                                        <div class="text-xs {{ $infusion->is_warning ? 'text-amber-600' : 'text-gray-400' }}">ETA {{ $infusion->estimated_completion->format('H:i') }}</div>
+                                    @endif
                                 </div>
                                 <div class="bg-white/70 rounded p-1.5 border border-gray-100">
-                                    <div class="text-xs text-gray-500">
-                                        @if($infusion->formatted_syringe)
-                                            Syringe
-                                        @else
-                                            Pump
+                                    <div class="text-xs text-gray-500">Syringe</div>
+                                    @if($infusion->syringe_size)
+                                        <div class="font-bold text-gray-800 text-sm">{{ number_format($infusion->syringe_size, 0) }}mL</div>
+                                        @if($infusion->syringe_actual_volume && $infusion->syringe_actual_volume != $infusion->syringe_size)
+                                            <div class="text-xs text-blue-600">{{ number_format($infusion->syringe_actual_volume, 1) }}mL actual</div>
                                         @endif
-                                    </div>
-                                    <div class="font-bold text-gray-800 text-xs truncate">
-                                        @if($infusion->formatted_syringe)
-                                            {{ $infusion->syringe_size }}ml
-                                        @else
-                                            {{ $infusion->infusionPump->device_id ?? 'N/A' }}
-                                        @endif
+                                    @else
+                                        <div class="font-bold text-gray-800 text-xs truncate">{{ $infusion->infusionPump->device_id ?? 'N/A' }}</div>
+                                    @endif
+                                </div>
+                                <div class="bg-white/70 rounded p-1.5 border border-gray-100">
+                                    <div class="text-xs text-gray-500">Brand</div>
+                                    <div class="font-bold text-gray-800 text-xs truncate" title="{{ $infusion->syringe_manufacturer ?? 'N/A' }}">
+                                        {{ $infusion->syringe_manufacturer ? \Illuminate\Support\Str::limit($infusion->syringe_manufacturer, 12) : '--' }}
                                     </div>
                                 </div>
                             </div>

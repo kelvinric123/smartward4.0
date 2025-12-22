@@ -30,6 +30,7 @@ class Infusion extends Model
         'status',
         'delivery_mode',
         'syringe_size',
+        'syringe_actual_volume',
         'syringe_manufacturer',
         'alarm_type',
         'alarm_message',
@@ -50,6 +51,7 @@ class Infusion extends Model
         'dose_rate' => 'decimal:4',
         'drug_concentration' => 'decimal:4',
         'syringe_size' => 'decimal:2',
+        'syringe_actual_volume' => 'decimal:2',
         'is_warning' => 'boolean',
         'started_at' => 'datetime',
         'completed_at' => 'datetime',
@@ -148,7 +150,7 @@ class Infusion extends Model
     public function updateWarningStatus(): void
     {
         $isWarning = $this->checkWarningStatus();
-        
+
         if ($this->is_warning !== $isWarning) {
             $this->update(['is_warning' => $isWarning]);
         }
@@ -171,7 +173,7 @@ class Infusion extends Model
      */
     public function getStatusColorAttribute(): string
     {
-        return match($this->status) {
+        return match ($this->status) {
             self::STATUS_RUNNING => 'green',
             self::STATUS_PAUSED => 'yellow',
             self::STATUS_COMPLETED => 'blue',
@@ -206,7 +208,7 @@ class Infusion extends Model
         }
 
         $unit = $this->drug_concentration_unit ?: 'mg/mL';
-        return number_format($this->drug_concentration, 2) . ' ' . $unit;
+        return number_format((float) $this->drug_concentration, 2) . ' ' . $unit;
     }
 
     /**
@@ -219,7 +221,7 @@ class Infusion extends Model
         }
 
         $unit = $this->dose_unit ?: 'units/hr';
-        return number_format($this->dose_rate, 2) . ' ' . $unit;
+        return number_format((float) $this->dose_rate, 2) . ' ' . $unit;
     }
 
     /**
@@ -231,10 +233,17 @@ class Infusion extends Model
             return null;
         }
 
-        $info = number_format($this->syringe_size, 0) . ' mL';
-        if ($this->syringe_manufacturer) {
-            $info .= ' (' . $this->syringe_manufacturer . ')';
+        $info = number_format((float) $this->syringe_size, 0) . ' mL';
+
+        // Show actual volume if different from syringe size
+        if ($this->syringe_actual_volume !== null && $this->syringe_actual_volume != $this->syringe_size) {
+            $info .= ' (' . number_format((float) $this->syringe_actual_volume, 1) . ' mL actual)';
         }
+
+        if ($this->syringe_manufacturer) {
+            $info = $this->syringe_manufacturer . ' - ' . $info;
+        }
+
         return $info;
     }
 
@@ -243,7 +252,7 @@ class Infusion extends Model
      */
     public function getDeliveryModeDisplayAttribute(): string
     {
-        return match($this->delivery_mode) {
+        return match ($this->delivery_mode) {
             'continuous' => 'Continuous',
             'bolus' => 'Bolus',
             'intermittent' => 'Intermittent',
@@ -258,7 +267,7 @@ class Infusion extends Model
      */
     public function getAlarmPriorityDisplayAttribute(): string
     {
-        return match($this->alarm_priority) {
+        return match ($this->alarm_priority) {
             'high' => 'High Priority',
             'medium' => 'Medium Priority',
             'low' => 'Low Priority',
@@ -272,7 +281,7 @@ class Infusion extends Model
      */
     public function getAlarmPriorityColorAttribute(): string
     {
-        return match($this->alarm_priority) {
+        return match ($this->alarm_priority) {
             'high' => 'red',
             'medium' => 'orange',
             'low' => 'yellow',

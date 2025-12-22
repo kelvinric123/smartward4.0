@@ -93,6 +93,7 @@ MDC_CODES = {
     # Time Data
     '157996': 'programmed_time',       # MDC_TIME_PD_PROG (seconds)
     '157916': 'remaining_time',        # MDC_TIME_PD_REMAIN (seconds)
+    '157997': 'remaining_time',        # MDC_TIME_PD_REMAIN_CONTAINER (seconds) - syringe remaining time
     
     # Drug/Medication
     '184514': 'drug_name',             # MDC_DRUG_NAME_LABEL
@@ -508,6 +509,10 @@ class DatabaseManager:
                         dose_rate = COALESCE(%s, dose_rate),
                         dose_unit = COALESCE(%s, dose_unit),
                         status = %s,
+                        delivery_mode = COALESCE(%s, delivery_mode),
+                        syringe_size = COALESCE(%s, syringe_size),
+                        syringe_actual_volume = COALESCE(%s, syringe_actual_volume),
+                        syringe_manufacturer = COALESCE(%s, syringe_manufacturer),
                         alarm_type = COALESCE(%s, alarm_type),
                         alarm_message = COALESCE(%s, alarm_message),
                         is_warning = %s,
@@ -523,6 +528,10 @@ class DatabaseManager:
                         infusion_data.get('dose_total'),
                         infusion_data.get('dose_unit', ''),
                         pump_status,
+                        infusion_data.get('delivery_mode', ''),
+                        infusion_data.get('syringe_size'),
+                        infusion_data.get('syringe_actual_vol'),
+                        infusion_data.get('syringe_manufacturer', ''),
                         infusion_data.get('alarm_type', ''),
                         infusion_data.get('alarm_message', ''),
                         is_warning,
@@ -549,9 +558,10 @@ class DatabaseManager:
                         patient_id, infusion_pump_id, medication_name, medication_code,
                         total_volume, infused_volume, remaining_volume, flow_rate,
                         dose_rate, dose_unit, remaining_minutes,
-                        status, alarm_type, alarm_message, is_warning,
+                        status, delivery_mode, syringe_size, syringe_actual_volume, syringe_manufacturer,
+                        alarm_type, alarm_message, is_warning,
                         started_at, last_updated_at, created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                     (
                         patient_id,
                         pump_id,
@@ -565,6 +575,10 @@ class DatabaseManager:
                         infusion_data.get('dose_unit', ''),
                         remaining_minutes,
                         pump_status,
+                        infusion_data.get('delivery_mode', ''),
+                        infusion_data.get('syringe_size'),
+                        infusion_data.get('syringe_actual_vol'),
+                        infusion_data.get('syringe_manufacturer', ''),
                         infusion_data.get('alarm_type', ''),
                         infusion_data.get('alarm_message', ''),
                         is_warning,
