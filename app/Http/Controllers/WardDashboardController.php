@@ -42,29 +42,12 @@ class WardDashboardController extends Controller
             $selectedWardId = $selectedWard ? $selectedWard->id : null;
         }
 
+        // Get user settings early
+        $userSettings = WardDashboardSetting::where('user_id', Auth::id())->first();
+        $settings = $this->resolveDashboardSettings($userSettings);
+
         // If no ward exists, return empty view
         if (!$selectedWard || !$selectedWardId) {
-            $defaultBedBoxConfig = [
-                'patient_name' => ['key' => 'patient_name', 'visible' => true, 'order' => 0],
-                'consultant' => ['key' => 'consultant', 'visible' => true, 'order' => 1],
-                'nurse' => ['key' => 'nurse', 'visible' => true, 'order' => 2],
-                'admitted_duration' => ['key' => 'admitted_duration', 'visible' => true, 'order' => 3],
-                'ews' => ['key' => 'ews', 'visible' => true, 'order' => 4],
-                'mrn' => ['key' => 'mrn', 'visible' => true, 'order' => 5],
-                'admit_button' => ['key' => 'admit_button', 'visible' => true, 'order' => 6],
-            ];
-            $defaultPatientInfoConfig = [
-                'nursing_level' => ['key' => 'nursing_level', 'visible' => true],
-                'diet_type' => ['key' => 'diet_type', 'visible' => true],
-                'fall_risk' => ['key' => 'fall_risk', 'visible' => true],
-                'isolation_type' => ['key' => 'isolation_type', 'visible' => true],
-                'allergies' => ['key' => 'allergies', 'visible' => true],
-            ];
-            $defaultDashboardDisplay = [
-                'patient_name_mask' => 'full',
-                'fullscreen_mode' => 'medium',
-                'fullscreen_text_size' => 'medium',
-            ];
             return view('wards.dashboard', [
                 'wards' => $wards,
                 'beds' => [],
@@ -85,9 +68,12 @@ class WardDashboardController extends Controller
                 'consultantPatients' => [],
                 'nursePatients' => [],
                 'anaesthetistPatients' => [],
-                'bedBoxConfig' => $defaultBedBoxConfig,
-                'patientInfoConfig' => $defaultPatientInfoConfig,
-                'dashboardDisplay' => $defaultDashboardDisplay,
+                'bedBoxConfig' => $settings['bedBoxConfig'],
+                'patientInfoConfig' => $settings['patientInfoConfig'],
+                'dashboardDisplay' => $settings['dashboardDisplay'],
+                'bedBoxVitalsMode' => $userSettings ? ($userSettings->bed_box_vitals_mode ?? 'demo') : 'demo',
+                'notificationCount' => 0,
+                'currentShift' => null,
             ]);
         }
 
@@ -100,19 +86,15 @@ class WardDashboardController extends Controller
             ->with(['consultant', 'nurse', 'anaesthetist', 'activeCareProviders.consultant', 'activeCareProviders.anaesthetist'])
             ->get();
 
-        // Load movements for these patients (for current location & upcoming schedules)
+        // Load movements
         $movementsByPatient = PatientMovement::whereIn('patient_id', $wardPatients->pluck('id'))
             ->orderBy('scheduled_at', 'desc')
             ->get()
             ->groupBy('patient_id');
 
-        // Get all active staff
+        // Get active staff buckets for fallback queries
         $consultants = Consultant::where('is_active', true)->get();
         $nurses = Nurse::where('is_active', true)->get();
-        $anaesthetists = Anaesthetist::where('is_active', true)->get();
-
-        // Get user settings early for EWS system configuration
-        $userSettings = WardDashboardSetting::where('user_id', Auth::id())->first();
 
         // Get clinical settings for EWS system
         $defaultClinicalSettings = ['ews_system' => 'ews_ihh'];
@@ -121,7 +103,7 @@ class WardDashboardController extends Controller
             : $defaultClinicalSettings;
         $ewsSystem = $clinicalSettings['ews_system'] ?? 'ews_ihh';
 
-        // Generate bed data for the selected ward
+        // Generate bed data
         $beds = $this->generateBedData($selectedWard, $wardPatients, $consultants, $nurses, $movementsByPatient, $ewsSystem);
 
         // Calculate statistics based on admitted patients only
@@ -130,159 +112,28 @@ class WardDashboardController extends Controller
             ->where('status', 'admitted')
             ->get();
 
-        // Count unique staff assigned to admitted patients
-        $uniqueConsultantIds = collect();
-        $uniqueNurseIds = collect();
-        $uniqueAnaesthetistIds = collect();
+        $statistics = $this->calculateWardStatistics($selectedWardId, $beds, $admittedPatients);
 
-        foreach ($admittedPatients as $patient) {
-            // Count consultants from care providers (consulting role)
-            // Exclude those that are actually anaesthetists (have anaesthetist_id)
-            $consultingDoctors = $patient->activeCareProviders()
-                ->where('role', \App\Models\PatientCareProvider::ROLE_CONSULTING)
-                ->whereNull('anaesthetist_id')
-                ->get();
-
-            foreach ($consultingDoctors as $provider) {
-                if ($provider->consultant_id) {
-                    $uniqueConsultantIds->push($provider->consultant_id);
-                }
-            }
-
-            // Also count from old consultant_id field for backward compatibility
-            if ($patient->consultant_id) {
-                $uniqueConsultantIds->push($patient->consultant_id);
-            }
-
-            // Get consultants from bed_consultant pivot table
-            $bed = Bed::where('ward_id', $selectedWardId)
-                ->where('patient_id', $patient->id)
-                ->first();
-
-            if ($bed) {
-                $bedConsultants = $bed->consultants()->pluck('consultants.id');
-                $uniqueConsultantIds = $uniqueConsultantIds->merge($bedConsultants);
-            }
-
-            // Count nurses
-            if ($patient->nurse_id) {
-                $uniqueNurseIds->push($patient->nurse_id);
-            }
-
-            // Count anaesthetists from care providers (consulting role with anaesthetist link)
-            $anaesthetistProviders = $patient->activeCareProviders()
-                ->whereNotNull('anaesthetist_id')
-                ->get();
-
-            foreach ($anaesthetistProviders as $provider) {
-                $uniqueAnaesthetistIds->push($provider->anaesthetist_id);
-            }
-
-            // Also count from old anaesthetist_id field for backward compatibility
-            if ($patient->anaesthetist_id) {
-                $uniqueAnaesthetistIds->push($patient->anaesthetist_id);
-            }
-        }
-
-        $consultantCount = $uniqueConsultantIds->unique()->count();
-        $nurseCount = $uniqueNurseIds->unique()->count();
-        $anaesthetistCount = $uniqueAnaesthetistIds->unique()->count();
-        $patientCount = $admittedPatients->count();
-
-        // Calculate nurse:patient ratio
-        $ratio = '0:0';
-        if ($patientCount > 0) {
-            if ($nurseCount > 0) {
-                // Calculate ratio as nurse:patient
-                $gcd = $this->gcd($nurseCount, $patientCount);
-                $ratioNurse = $nurseCount / $gcd;
-                $ratioPatient = $patientCount / $gcd;
-                $ratio = "$ratioNurse:$ratioPatient";
-            } else {
-                $ratio = "0:$patientCount";
-            }
-        }
-
-        // Get infusion statistics for this ward
-        $activeInfusions = Infusion::inWard($selectedWardId)->active()->count();
-        $infusionWarnings = Infusion::inWard($selectedWardId)->running()->withWarnings()->count();
-        $infusionAlarms = Infusion::inWard($selectedWardId)->alarming()->count();
-
-        $statistics = [
-            'available' => count(array_filter($beds, fn($bed) => $bed['status'] === 'available')),
-            'cleaning' => count(array_filter($beds, fn($bed) => $bed['status'] === 'cleaning')),
-            'patients' => $patientCount,
-            'consultants' => $consultantCount,
-            'anaesthetists' => $anaesthetistCount,
-            'nurses' => $nurseCount,
-            'ratio' => $ratio,
-            'occupancy' => round((count(array_filter($beds, fn($bed) => $bed['status'] === 'occupied')) / max(count($beds), 1)) * 100),
-            'infusions' => $activeInfusions,
-            'infusion_warnings' => $infusionWarnings,
-            'infusion_alarms' => $infusionAlarms,
-        ];
-
-        // Prepare staff-patient groupings for modals
+        // Preparations for view
         $consultantPatients = $this->getConsultantPatients($selectedWardId);
         $nursePatients = $this->getNursePatients($selectedWardId);
         $anaesthetistPatients = $this->getAnaesthetistPatients($selectedWardId);
 
-        // Get bed box display settings
-        $defaultBedBoxDisplay = [
-            ['key' => 'patient_name', 'visible' => true, 'order' => 0],
-            ['key' => 'consultant', 'visible' => true, 'order' => 1],
-            ['key' => 'nurse', 'visible' => true, 'order' => 2],
-            ['key' => 'admitted_duration', 'visible' => true, 'order' => 3],
-            ['key' => 'ews', 'visible' => true, 'order' => 4],
-            ['key' => 'mrn', 'visible' => true, 'order' => 5],
-            ['key' => 'admit_button', 'visible' => true, 'order' => 6],
-            ['key' => 'prebook_button', 'visible' => true, 'order' => 7],
-        ];
-
-        $defaultPatientInfoDisplay = [
-            ['key' => 'nursing_level', 'visible' => true],
-            ['key' => 'diet_type', 'visible' => true],
-            ['key' => 'fall_risk', 'visible' => true],
-            ['key' => 'isolation_type', 'visible' => true],
-            ['key' => 'allergies', 'visible' => true],
-        ];
-
-        // $userSettings already fetched earlier for EWS system
-        $bedBoxDisplay = $userSettings && is_array($userSettings->bed_box_display)
-            ? $userSettings->bed_box_display
-            : $defaultBedBoxDisplay;
-        $patientInfoDisplay = $userSettings && is_array($userSettings->patient_info_display)
-            ? $userSettings->patient_info_display
-            : $defaultPatientInfoDisplay;
-
-        // Dashboard display settings (patient name asterisk & fullscreen mode)
-        $defaultDashboardDisplay = [
-            'patient_name_mask' => 'full', // Options: full, first_only, last_only, initials, first_last_initial, all_asterisk
-            'fullscreen_mode' => 'medium', // Options: small (8), medium (6), large (4)
-            'fullscreen_text_size' => 'medium', // Options: small, medium, large
-        ];
-        $dashboardDisplay = $userSettings && is_array($userSettings->dashboard_display)
-            ? array_merge($defaultDashboardDisplay, $userSettings->dashboard_display)
-            : $defaultDashboardDisplay;
-
-        // Bed box vitals mode (demo/real/off)
         $bedBoxVitalsMode = $userSettings ? ($userSettings->bed_box_vitals_mode ?? 'demo') : 'demo';
+        $notificationCount = WardNotification::forWard($selectedWardId)->pending()->count();
 
-        // Convert to keyed array for easy access in blade
-        $bedBoxConfig = collect($bedBoxDisplay)->keyBy('key')->toArray();
-        $patientInfoConfig = collect($patientInfoDisplay)->keyBy('key')->toArray();
+        $currentShift = ShiftSetting::getCurrentShift($selectedWardId);
 
         // Debug logging
         Log::info('Ward Dashboard Data', [
             'ward_id' => $selectedWardId,
             'consultant_count' => count($consultantPatients),
             'nurse_count' => count($nursePatients),
-            'anaesthetist_count' => count($anaesthetistPatients),
-            'consultants' => $consultantPatients,
         ]);
 
-        // Get pending notification count for this ward
-        $notificationCount = WardNotification::forWard($selectedWardId)->pending()->count();
+        $bedBoxConfig = $settings['bedBoxConfig'];
+        $patientInfoConfig = $settings['patientInfoConfig'];
+        $dashboardDisplay = $settings['dashboardDisplay'];
 
         return view('wards.dashboard', compact(
             'wards',
@@ -292,11 +143,12 @@ class WardDashboardController extends Controller
             'consultantPatients',
             'nursePatients',
             'anaesthetistPatients',
-            'bedBoxConfig',
+            'bedBoxConfig', // using compact with variables directly from settings array doesn't work, so we need to extract them or pass array
             'patientInfoConfig',
             'dashboardDisplay',
             'bedBoxVitalsMode',
-            'notificationCount'
+            'notificationCount',
+            'currentShift'
         ));
     }
 
@@ -446,7 +298,7 @@ class WardDashboardController extends Controller
                 // The attending doctor is the main doctor that will visit the patient
                 // Falls back to old consultant field for backward compatibility
                 $attendingDoctor = $patient->activeCareProviders()
-                    ->where('role', \App\Models\PatientCareProvider::ROLE_ATTENDING)
+                    ->where('role', PatientCareProvider::ROLE_ATTENDING)
                     ->first();
                 $attendingDoctorName = $attendingDoctor ? $attendingDoctor->display_name :
                     ($patient->consultant ? $patient->consultant->name : 'Not Assigned');
@@ -1098,163 +950,21 @@ class WardDashboardController extends Controller
         $anaesthetists = Anaesthetist::where('is_active', true)->orderBy('name')->get();
         $wards = Ward::where('is_active', true)->orderBy('ward_name')->get();
 
-        // Load per-user settings for which tabs are visible in Patient Details
-        $defaultTabs = [
-            'info' => true,
-            'additional' => true,
-            'vitals' => true,
-            'movement' => true,
-            'careprovider' => true,
-            'infusion' => true,
-            'transfer' => true,
-            'discharge' => true,
-        ];
+        // Helper methods to reduce complexity
+        $patientDetailsTabs = $this->resolvePatientDetailsTabs($request, $activeTab);
 
-        $patientDetailsTabs = $defaultTabs;
-        $clinicalIndicatorOptions = $this->getDefaultClinicalIndicatorOptions();
+        $initialOptions = $this->getDefaultClinicalIndicatorOptions();
+        $clinicalIndicatorOptions = $this->getEnrichedClinicalIndicatorOptions($initialOptions);
 
-        // Allow iframe callers to explicitly restrict tabs via ?tabs=info,additional
-        if ($request->filled('tabs')) {
-            $requested = collect(explode(',', $request->input('tabs')))
-                ->map(fn($tab) => trim($tab))
-                ->filter()
-                ->unique()
-                ->values();
-
-            // start with all tabs false, then enable allowed requested keys that exist in defaults
-            $patientDetailsTabs = collect($defaultTabs)
-                ->map(fn() => false)
-                ->toArray();
-
-            foreach ($requested as $tab) {
-                if (array_key_exists($tab, $defaultTabs)) {
-                    $patientDetailsTabs[$tab] = true;
-                }
-            }
-
-            // ensure active tab falls back to the first available tab
-            if (!$patientDetailsTabs[$activeTab] ?? false) {
-                $firstEnabled = collect($patientDetailsTabs)
-                    ->filter()
-                    ->keys()
-                    ->first();
-                $activeTab = $firstEnabled ?? $activeTab;
-            }
-        }
-
-        $patientVitalsMode = 'demo'; // default - follows bed box vitals mode
-
+        $patientVitalsMode = 'demo';
         if (Auth::check()) {
             $settings = WardDashboardSetting::where('user_id', Auth::id())->first();
             if ($settings) {
-                if (is_array($settings->patient_details_tabs)) {
-                    $patientDetailsTabs = array_merge($patientDetailsTabs, $settings->patient_details_tabs);
-                }
-                if (is_array($settings->clinical_indicator_options)) {
-                    $clinicalIndicatorOptions = array_merge($clinicalIndicatorOptions, $settings->clinical_indicator_options);
-                }
-                // Get patient vitals mode from bed box vitals mode setting
                 $patientVitalsMode = $settings->bed_box_vitals_mode ?? 'demo';
             }
         }
 
-        // Load diet types and isolation types from database and merge into options
-        $dbDietTypes = DietType::where('is_active', true)->orderBy('name')->get();
-        $dbIsolationTypes = IsolationType::where('is_active', true)->orderBy('name')->get();
-
-        if ($dbDietTypes->isNotEmpty()) {
-            $clinicalIndicatorOptions['diet_type'] = $dbDietTypes->map(function ($dt) {
-                return [
-                    'value' => $dt->code,
-                    'label' => $dt->name,
-                    'color' => in_array(strtoupper($dt->code), ['NPO', 'NBM', 'NPD'])
-                        ? 'bg-red-100 text-red-700'
-                        : 'bg-orange-100 text-orange-700',
-                ];
-            })->toArray();
-        }
-
-        if ($dbIsolationTypes->isNotEmpty()) {
-            // Prepend "None" option to ensure proper default value
-            $noneOption = [['value' => 'none', 'label' => 'No Isolation Precaution', 'color' => 'bg-gray-100 text-gray-600']];
-            $dbOptions = $dbIsolationTypes->map(function ($it) {
-                return [
-                    'value' => $it->code,
-                    'label' => $it->name,
-                    'color' => in_array(strtoupper($it->code), ['COVID', 'TB', 'AIR', 'AIRBORNE'])
-                        ? 'bg-red-100 text-red-700'
-                        : 'bg-yellow-100 text-yellow-700',
-                ];
-            })->toArray();
-            $clinicalIndicatorOptions['isolation_type'] = array_merge($noneOption, $dbOptions);
-        }
-
-        // Calculate display names for Patient Info tab (matching dashboard Bed Box logic)
-        $consultantName = 'Not Assigned';
-        $nurseName = 'Not Assigned';
-        $anaesthetistName = 'Not Assigned';
-
-        if ($patient) {
-            // Consultant: Check active care providers (attending) -> fallback to patient->consultant
-            $attendingDoctor = $patient->activeCareProviders()
-                ->where('role', \App\Models\PatientCareProvider::ROLE_ATTENDING)
-                ->first();
-            $consultantName = $attendingDoctor ? $attendingDoctor->display_name :
-                ($patient->consultant ? $patient->consultant->name : 'Not Assigned');
-
-            // Anaesthetist: Check patient->anaesthetist (primary) OR active care providers (matching dashboard stats)
-            // The dashboard counts unique anaesthetists from both sources.
-            // Priority:
-            // 1. Direct assignment ($patient->anaesthetist)
-            // 2. Active Care Provider with anaesthetist_id
-
-            if ($patient->anaesthetist) {
-                $anaesthetistName = $patient->anaesthetist->name;
-            } else {
-                // Check for care provider with anaesthetist_id
-                $anaesthetistProvider = $patient->activeCareProviders()
-                    ->whereNotNull('anaesthetist_id')
-                    ->first();
-
-                if ($anaesthetistProvider && $anaesthetistProvider->anaesthetist) {
-                    $anaesthetistName = $anaesthetistProvider->anaesthetist->name;
-                }
-            }
-
-            // Nurse: Check WardScheduleAssignment for "Nurse on Duty" (matching dashboard logic)
-            // Use current shift and patient's bed ID
-            // Only check shift if patient has a ward_id (not discharged)
-            $currentShift = null;
-            $currentShiftCode = null;
-
-            if ($patient->ward_id) {
-                $currentShift = \App\Models\ShiftSetting::getCurrentShift($patient->ward_id);
-                $currentShiftCode = $currentShift ? $currentShift->shift_code : null;
-            }
-
-            if ($currentShiftCode && $patient->bed_number && $patient->ward_id) {
-                // We need the bed_id. Look up the bed by ward_id and bed_number.
-                $bed = \App\Models\Bed::where('ward_id', $patient->ward_id)
-                    ->where('bed_number', $patient->bed_number)
-                    ->first();
-
-                if ($bed) {
-                    $assignment = \App\Models\WardScheduleAssignment::where('bed_id', $bed->id)
-                        ->where('scheduled_date', now()->toDateString())
-                        ->where('shift', $currentShiftCode)
-                        ->with('nurse')
-                        ->first();
-
-                    if ($assignment && $assignment->nurse) {
-                        $nurseName = $assignment->nurse->name;
-                    }
-                }
-            } else {
-                // Fallback to assigned nurse if no shift/schedule logic applies?
-                // The dashboard shows "No nurse assigned" if not found in schedule.
-                // We'll stick to 'Not Assigned' as default which matches the requirement "display Not Assigned".
-            }
-        }
+        $displayNames = $this->getPatientDisplayNames($patient);
 
         return view('wards.patient-details', [
             'patient' => $patient,
@@ -1265,9 +975,9 @@ class WardDashboardController extends Controller
             'patientDetailsTabs' => $patientDetailsTabs,
             'clinicalIndicatorOptions' => $clinicalIndicatorOptions,
             'patientVitalsMode' => $patientVitalsMode,
-            'consultantName' => $consultantName,
-            'nurseName' => $nurseName,
-            'anaesthetistName' => $anaesthetistName,
+            'consultantName' => $displayNames['consultant'],
+            'nurseName' => $displayNames['nurse'],
+            'anaesthetistName' => $displayNames['anaesthetist'],
         ]);
     }
 
@@ -2054,7 +1764,7 @@ class WardDashboardController extends Controller
         try {
             if ($patient->isAdmitted() && $patient->bed) {
                 // Import class or use full path
-                $ekadService = new \App\Services\EkadService();
+                $ekadService = new EkadService();
                 $ekadService->pushPatientInfo($patient, $patient->bed);
                 Log::info('EKad: Manual push trigger for clinical update', ['patient_id' => $patient->id]);
             }
@@ -2323,7 +2033,7 @@ class WardDashboardController extends Controller
         foreach ($patients as $patient) {
             // Add Attending Doctors (PV1-7) - Primary physician
             $attendingDoctors = $patient->activeCareProviders()
-                ->where('role', \App\Models\PatientCareProvider::ROLE_ATTENDING)
+                ->where('role', PatientCareProvider::ROLE_ATTENDING)
                 ->whereNull('anaesthetist_id')
                 ->get();
 
@@ -2349,7 +2059,7 @@ class WardDashboardController extends Controller
 
             // Add Referring Doctors (PV1-8)
             $referringDoctors = $patient->activeCareProviders()
-                ->where('role', \App\Models\PatientCareProvider::ROLE_REFERRING)
+                ->where('role', PatientCareProvider::ROLE_REFERRING)
                 ->whereNull('anaesthetist_id')
                 ->get();
 
@@ -2374,7 +2084,7 @@ class WardDashboardController extends Controller
 
             // Add Consulting Doctors (PV1-9)
             $consultingDoctors = $patient->activeCareProviders()
-                ->where('role', \App\Models\PatientCareProvider::ROLE_CONSULTING)
+                ->where('role', PatientCareProvider::ROLE_CONSULTING)
                 ->whereNull('anaesthetist_id')
                 ->get();
 
@@ -2448,35 +2158,67 @@ class WardDashboardController extends Controller
     {
         $nurses = [];
 
-        // Include both admitted and prebooked patients that have a nurse assigned
-        $patients = Patient::where('ward_id', $wardId)
-            ->where('is_active', true)
-            ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
-            ->whereNotNull('nurse_id')
-            ->with('nurse')
+        // Get current shift to determine which schedule to look at
+        $currentShift = ShiftSetting::getCurrentShift($wardId);
+
+        // If for some reason no shift is active (unlikely with defaults), return empty
+        if (!$currentShift) {
+            return [];
+        }
+
+        // Fetch assignments for this ward, today, and current shift
+        // We need the nurse and the bed (and patient in that bed)
+        $assignments = WardScheduleAssignment::where('ward_id', $wardId)
+            ->where('scheduled_date', now()->toDateString())
+            ->where('shift', $currentShift->shift_code)
+            ->with(['nurse', 'bed.patient'])
             ->get();
 
-        foreach ($patients as $patient) {
-            if ($patient->nurse_id && $patient->nurse) {
-                $nurseId = $patient->nurse_id;
-                $nurseName = $patient->nurse->name;
+        foreach ($assignments as $assignment) {
+            // Skip if nurse is missing (shouldn't happen with valid FKs)
+            if (!$assignment->nurse) {
+                continue;
+            }
 
-                if (!isset($nurses[$nurseId])) {
-                    $nurses[$nurseId] = [
-                        'id' => $nurseId,
-                        'name' => $nurseName,
-                        'patients' => []
-                    ];
+            $nurseId = $assignment->nurse_id;
+            $nurseName = $assignment->nurse->name;
+
+            if (!isset($nurses[$nurseId])) {
+                $nurses[$nurseId] = [
+                    'id' => $nurseId,
+                    'name' => $nurseName,
+                    'patients' => []
+                ];
+            }
+
+            $bed = $assignment->bed;
+            if ($bed) {
+                // Determine patient details
+                $patientName = 'Empty Bed';
+                $mrn = '-';
+                $patientId = null;
+
+                // Check if bed has a patient assigned (via syncBedsWithPatients logic)
+                // Note: bed->patient relationship relies on patient_id FK in beds table
+                if ($bed->patient && $bed->patient->is_active) {
+                    $patientName = $bed->patient->name;
+                    $mrn = $bed->patient->mrn;
+                    $patientId = $bed->patient->id;
                 }
 
                 $nurses[$nurseId]['patients'][] = [
-                    'id' => $patient->id,
-                    'name' => $patient->name,
-                    'mrn' => $patient->mrn,
-                    'bed_number' => $patient->bed_number,
+                    'id' => $patientId,
+                    'name' => $patientName,
+                    'mrn' => $mrn,
+                    'bed_number' => $bed->bed_number,
                 ];
             }
         }
+
+        // Sort nurses by name for consistency
+        usort($nurses, function ($a, $b) {
+            return strcmp($a['name'], $b['name']);
+        });
 
         return array_values($nurses);
     }
@@ -2884,6 +2626,316 @@ class WardDashboardController extends Controller
         return [
             'score' => $score,
             'has_vitals' => true,
+        ];
+    }
+
+    private function resolvePatientDetailsTabs(Request $request, &$activeTab)
+    {
+        $defaultTabs = [
+            'info' => true,
+            'additional' => true,
+            'vitals' => true,
+            'movement' => true,
+            'careprovider' => true,
+            'infusion' => true,
+            'transfer' => true,
+            'discharge' => true,
+        ];
+
+        $patientDetailsTabs = $defaultTabs;
+
+        // Allow iframe callers to explicitly restrict tabs via ?tabs=info,additional
+        if ($request->filled('tabs')) {
+            $requested = collect(explode(',', $request->input('tabs')))
+                ->map(fn($tab) => trim($tab))
+                ->filter()
+                ->unique()
+                ->values();
+
+            // start with all tabs false, then enable allowed requested keys that exist in defaults
+            $patientDetailsTabs = collect($defaultTabs)
+                ->map(fn() => false)
+                ->toArray();
+
+            foreach ($requested as $tab) {
+                if (array_key_exists($tab, $defaultTabs)) {
+                    $patientDetailsTabs[$tab] = true;
+                }
+            }
+
+            // ensure active tab falls back to the first available tab
+            if (!$patientDetailsTabs[$activeTab] ?? false) {
+                $firstEnabled = collect($patientDetailsTabs)
+                    ->filter()
+                    ->keys()
+                    ->first();
+                $activeTab = $firstEnabled ?? $activeTab;
+            }
+        }
+
+        if (Auth::check()) {
+            $settings = WardDashboardSetting::where('user_id', Auth::id())->first();
+            if ($settings && is_array($settings->patient_details_tabs)) {
+                $patientDetailsTabs = array_merge($patientDetailsTabs, $settings->patient_details_tabs);
+            }
+        }
+
+        return $patientDetailsTabs;
+    }
+
+    private function getEnrichedClinicalIndicatorOptions($options)
+    {
+        if (Auth::check()) {
+            $settings = WardDashboardSetting::where('user_id', Auth::id())->first();
+            if ($settings && is_array($settings->clinical_indicator_options)) {
+                $options = array_merge($options, $settings->clinical_indicator_options);
+            }
+        }
+
+        // Load diet types and isolation types from database and merge into options
+        $dbDietTypes = DietType::where('is_active', true)->orderBy('name')->get();
+        $dbIsolationTypes = IsolationType::where('is_active', true)->orderBy('name')->get();
+
+        if ($dbDietTypes->isNotEmpty()) {
+            $options['diet_type'] = $dbDietTypes->map(function ($dt) {
+                return [
+                    'value' => $dt->code,
+                    'label' => $dt->name,
+                    'color' => in_array(strtoupper($dt->code), ['NPO', 'NBM', 'NPD'])
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-orange-100 text-orange-700',
+                ];
+            })->toArray();
+        }
+
+        if ($dbIsolationTypes->isNotEmpty()) {
+            // Prepend "None" option to ensure proper default value
+            $noneOption = [['value' => 'none', 'label' => 'No Isolation Precaution', 'color' => 'bg-gray-100 text-gray-600']];
+            $dbOptions = $dbIsolationTypes->map(function ($it) {
+                return [
+                    'value' => $it->code,
+                    'label' => $it->name,
+                    'color' => in_array(strtoupper($it->code), ['COVID', 'TB', 'AIR', 'AIRBORNE'])
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-yellow-100 text-yellow-700',
+                ];
+            })->toArray();
+            $options['isolation_type'] = array_merge($noneOption, $dbOptions);
+        }
+
+        return $options;
+    }
+
+    private function getPatientDisplayNames($patient)
+    {
+        $names = [
+            'consultant' => 'Not Assigned',
+            'nurse' => 'Not Assigned',
+            'anaesthetist' => 'Not Assigned',
+        ];
+
+        if (!$patient) {
+            return $names;
+        }
+
+        // Consultant
+        $attendingDoctor = $patient->activeCareProviders()
+            ->where('role', PatientCareProvider::ROLE_ATTENDING)
+            ->first();
+        $names['consultant'] = $attendingDoctor ? $attendingDoctor->display_name :
+            ($patient->consultant ? $patient->consultant->name : 'Not Assigned');
+
+        // Anaesthetist
+        if ($patient->anaesthetist) {
+            $names['anaesthetist'] = $patient->anaesthetist->name;
+        } else {
+            $anaesthetistProvider = $patient->activeCareProviders()
+                ->whereNotNull('anaesthetist_id')
+                ->first();
+
+            if ($anaesthetistProvider && $anaesthetistProvider->anaesthetist) {
+                $names['anaesthetist'] = $anaesthetistProvider->anaesthetist->name;
+            }
+        }
+
+        // Nurse
+        $currentShift = null;
+        $currentShiftCode = null;
+
+        if ($patient->ward_id) {
+            $currentShift = ShiftSetting::getCurrentShift($patient->ward_id);
+            $currentShiftCode = $currentShift ? $currentShift->shift_code : null;
+        }
+
+        if ($currentShiftCode && $patient->bed_number && $patient->ward_id) {
+            $bed = Bed::where('ward_id', $patient->ward_id)
+                ->where('bed_number', $patient->bed_number)
+                ->first();
+
+            if ($bed) {
+                $assignment = WardScheduleAssignment::where('bed_id', $bed->id)
+                    ->where('scheduled_date', now()->toDateString())
+                    ->where('shift', $currentShiftCode)
+                    ->with('nurse')
+                    ->first();
+
+                if ($assignment && $assignment->nurse) {
+                    $names['nurse'] = $assignment->nurse->name;
+                }
+            }
+        }
+
+        return $names;
+    }
+    private function calculateWardStatistics($wardId, $beds, $admittedPatients)
+    {
+        // Count unique staff assigned to admitted patients
+        $uniqueConsultantIds = collect();
+        $uniqueNurseIds = collect();
+        $uniqueAnaesthetistIds = collect();
+
+        foreach ($admittedPatients as $patient) {
+            // Count consultants from care providers (consulting role)
+            // Exclude those that are actually anaesthetists (have anaesthetist_id)
+            $consultingDoctors = $patient->activeCareProviders()
+                ->where('role', PatientCareProvider::ROLE_CONSULTING)
+                ->whereNull('anaesthetist_id')
+                ->get();
+
+            foreach ($consultingDoctors as $provider) {
+                if ($provider->consultant_id) {
+                    $uniqueConsultantIds->push($provider->consultant_id);
+                }
+            }
+
+            // Also count from old consultant_id field for backward compatibility
+            if ($patient->consultant_id) {
+                $uniqueConsultantIds->push($patient->consultant_id);
+            }
+
+            // Get consultants from bed_consultant pivot table
+            $bed = Bed::where('ward_id', $wardId)
+                ->where('patient_id', $patient->id)
+                ->first();
+
+            if ($bed) {
+                $bedConsultants = $bed->consultants()->pluck('consultants.id');
+                $uniqueConsultantIds = $uniqueConsultantIds->merge($bedConsultants);
+            }
+
+            // Count nurses
+            if ($patient->nurse_id) {
+                $uniqueNurseIds->push($patient->nurse_id);
+            }
+
+            // Count anaesthetists from care providers (consulting role with anaesthetist link)
+            $anaesthetistProviders = $patient->activeCareProviders()
+                ->whereNotNull('anaesthetist_id')
+                ->get();
+
+            foreach ($anaesthetistProviders as $provider) {
+                $uniqueAnaesthetistIds->push($provider->anaesthetist_id);
+            }
+
+            // Also count from old anaesthetist_id field for backward compatibility
+            if ($patient->anaesthetist_id) {
+                $uniqueAnaesthetistIds->push($patient->anaesthetist_id);
+            }
+        }
+
+        $consultantCount = $uniqueConsultantIds->unique()->count();
+        $anaesthetistCount = $uniqueAnaesthetistIds->unique()->count();
+        $patientCount = $admittedPatients->count();
+
+        // Calculate nurse count based on schedule for current shift
+        $nurseCount = 0;
+        if ($wardId) {
+            $currentShift = ShiftSetting::getCurrentShift($wardId);
+            if ($currentShift) {
+                $nurseCount = WardScheduleAssignment::where('ward_id', $wardId)
+                    ->where('scheduled_date', now()->toDateString())
+                    ->where('shift', $currentShift->shift_code)
+                    ->distinct('nurse_id')
+                    ->count('nurse_id');
+            }
+        }
+
+        // Calculate nurse:patient ratio
+        $ratio = '0:0';
+        if ($patientCount > 0) {
+            if ($nurseCount > 0) {
+                $gcd = $this->gcd($nurseCount, $patientCount);
+                $ratioNurse = $nurseCount / $gcd;
+                $ratioPatient = $patientCount / $gcd;
+                $ratio = "$ratioNurse:$ratioPatient";
+            } else {
+                $ratio = "0:$patientCount";
+            }
+        }
+
+        // Get infusion statistics
+        $activeInfusions = Infusion::inWard($wardId)->active()->count();
+        $infusionWarnings = Infusion::inWard($wardId)->running()->withWarnings()->count();
+        $infusionAlarms = Infusion::inWard($wardId)->alarming()->count();
+
+        return [
+            'available' => count(array_filter($beds, fn($bed) => $bed['status'] === 'available')),
+            'cleaning' => count(array_filter($beds, fn($bed) => $bed['status'] === 'cleaning')),
+            'patients' => $patientCount,
+            'consultants' => $consultantCount,
+            'anaesthetists' => $anaesthetistCount,
+            'nurses' => $nurseCount,
+            'ratio' => $ratio,
+            'occupancy' => round((count(array_filter($beds, fn($bed) => $bed['status'] === 'occupied')) / max(count($beds), 1)) * 100),
+            'infusions' => $activeInfusions,
+            'infusion_warnings' => $infusionWarnings,
+            'infusion_alarms' => $infusionAlarms,
+        ];
+    }
+
+    private function resolveDashboardSettings($userSettings)
+    {
+        $defaultBedBoxDisplay = [
+            ['key' => 'patient_name', 'visible' => true, 'order' => 0],
+            ['key' => 'consultant', 'visible' => true, 'order' => 1],
+            ['key' => 'nurse', 'visible' => true, 'order' => 2],
+            ['key' => 'admitted_duration', 'visible' => true, 'order' => 3],
+            ['key' => 'ews', 'visible' => true, 'order' => 4],
+            ['key' => 'mrn', 'visible' => true, 'order' => 5],
+            ['key' => 'admit_button', 'visible' => true, 'order' => 6],
+            ['key' => 'prebook_button', 'visible' => true, 'order' => 7],
+        ];
+
+        $defaultPatientInfoDisplay = [
+            ['key' => 'nursing_level', 'visible' => true],
+            ['key' => 'diet_type', 'visible' => true],
+            ['key' => 'fall_risk', 'visible' => true],
+            ['key' => 'isolation_type', 'visible' => true],
+            ['key' => 'allergies', 'visible' => true],
+        ];
+
+        $defaultDashboardDisplay = [
+            'patient_name_mask' => 'full',
+            'fullscreen_mode' => 'medium',
+            'fullscreen_text_size' => 'medium',
+        ];
+
+        $bedBoxDisplay = $userSettings && is_array($userSettings->bed_box_display)
+            ? $userSettings->bed_box_display
+            : $defaultBedBoxDisplay;
+
+        $patientInfoDisplay = $userSettings && is_array($userSettings->patient_info_display)
+            ? $userSettings->patient_info_display
+            : $defaultPatientInfoDisplay;
+
+        $dashboardDisplay = $userSettings && is_array($userSettings->dashboard_display)
+            ? array_merge($defaultDashboardDisplay, $userSettings->dashboard_display)
+            : $defaultDashboardDisplay;
+
+        return [
+            'bedBoxConfig' => collect($bedBoxDisplay)->keyBy('key')->toArray(),
+            'patientInfoConfig' => collect($patientInfoDisplay)->keyBy('key')->toArray(),
+            'dashboardDisplay' => $dashboardDisplay
         ];
     }
 }

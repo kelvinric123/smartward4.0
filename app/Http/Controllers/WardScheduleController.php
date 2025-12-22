@@ -73,12 +73,12 @@ class WardScheduleController extends Controller
             }
 
             $assignments = $query->get()
-                ->keyBy(fn($assignment) => $assignment->bed_id . '|' . $assignment->scheduled_date->toDateString() . '|' . $assignment->shift)
+                ->keyBy(fn($assignment) => $assignment->bed_id . '|' . $assignment->scheduled_date->format('Y-m-d') . '|' . $assignment->shift)
                 ->map(fn($assignment) => [
                     'id' => $assignment->id,
                     'bed_id' => $assignment->bed_id,
                     'shift' => $assignment->shift,
-                    'date' => $assignment->scheduled_date->toDateString(),
+                    'date' => $assignment->scheduled_date->format('Y-m-d'),
                     'nurse_id' => $assignment->nurse_id,
                     'nurse_name' => $assignment->nurse->name ?? null,
                 ]);

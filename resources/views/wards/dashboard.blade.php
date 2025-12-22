@@ -1,4 +1,11 @@
 <x-app-layout>
+    @php
+        // Ensure variables are defined for IDE static analysis and robustness
+        /** @var array $bedBoxConfig */
+        /** @var array $patientInfoConfig */
+        $bedBoxConfig = $bedBoxConfig ?? [];
+        $patientInfoConfig = $patientInfoConfig ?? [];
+    @endphp
     <style>
         @keyframes pulse-subtle {
 
@@ -2905,6 +2912,10 @@
                         <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
                             <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
                                 Nurses & Their Patients
+                                @if(isset($currentShift))
+                                    <span class="text-sm font-normal text-gray-500">({{ $currentShift->shift_name }}
+                                        Shift)</span>
+                                @endif
                             </h3>
                             <div class="mt-4 max-h-[600px] overflow-y-auto">
                                 @if(isset($nursePatients) && count($nursePatients) > 0)
@@ -3456,12 +3467,12 @@
 
                 async fetchNotifications() {
                     if (!this.wardId) return;
-                    
+
                     this.loading = true;
                     try {
                         const response = await fetch(`/ward-dashboard/notifications?ward_id=${this.wardId}`);
                         const data = await response.json();
-                        
+
                         this.pending = data.pending || [];
                         this.responded = data.responded || [];
                         this.pendingCount = data.pending_count || 0;
@@ -3482,7 +3493,7 @@
                                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                             },
                         });
-                        
+
                         if (response.ok) {
                             // Move notification from pending to responded
                             const notification = this.pending.find(n => n.id === notificationId);

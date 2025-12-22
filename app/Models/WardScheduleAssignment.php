@@ -5,6 +5,19 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * @property int $id
+ * @property int $ward_id
+ * @property int $bed_id
+ * @property int $nurse_id
+ * @property \Illuminate\Support\Carbon $scheduled_date
+ * @property string $shift
+ * @property \Illuminate\Support\Carbon|null $created_at
+ * @property \Illuminate\Support\Carbon|null $updated_at
+ * @property-read \App\Models\Ward $ward
+ * @property-read \App\Models\Bed $bed
+ * @property-read \App\Models\Nurse $nurse
+ */
 class WardScheduleAssignment extends Model
 {
     use HasFactory;
