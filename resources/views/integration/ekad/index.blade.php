@@ -287,21 +287,27 @@
                         </div>
                     </div>
 
-                    <!-- Patient Information -->
+                    <!-- Patient Information (order matches E-Ink API: bed no, MRN, patient_name, diet_type, doctor, nurse, anaesthetist) -->
                     <div class="mb-6">
                         <h4 class="text-sm font-semibold text-gray-700 mb-3">Patient Information</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Bed No</label>
+                                <input type="text" x-model="bedNo"
+                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+                                    placeholder="600">
+                            </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">MRN</label>
                                 <input type="text" x-model="mrn"
                                     class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 font-mono"
-                                    placeholder="123456789">
+                                    placeholder="2400123456">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Patient Name *</label>
                                 <input type="text" x-model="patientName"
                                     class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
-                                    placeholder="Anti Gravity">
+                                    placeholder="SIM HUI XIN">
                             </div>
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Diet Type</label>
@@ -540,6 +546,7 @@
                 newMac: '',
                 mrn: '',
                 patientName: '',
+                bedNo: '',
                 dietType: 'Regular Diet',
                 doctor: '',
                 nurse: '',
@@ -727,6 +734,7 @@
                                 mac_list: this.macList,
                                 mrn: this.mrn,
                                 patient_name: this.patientName,
+                                bed_no: this.bedNo,
                                 diet_type: this.dietType,
                                 doctor: this.doctor,
                                 nurse: this.nurse,

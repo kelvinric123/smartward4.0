@@ -124,8 +124,13 @@ class EkadService
             $anaesthetist = $patient->anaesthetist->name ?? '-';
         }
 
+        // Get bed number from the patient's bed_number field (same as ward dashboard bed box)
+        $bedNo = $patient->bed_number ?? '-';
+
+        // Build data array in the exact order and format required by E-Ink API
         $data = [
-            'mrn' => $patient->mrn ?? '-',
+            'bed no' => $bedNo,
+            'MRN' => $patient->mrn ?? '-',
             'patient_name' => $patientName,
             'diet_type' => $dietType,
             'doctor' => $doctor,

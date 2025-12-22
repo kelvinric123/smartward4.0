@@ -214,6 +214,7 @@ class EkadController extends Controller
             'mac_list.*' => 'required|string',
             'mrn' => 'nullable|string',
             'patient_name' => 'required|string',
+            'bed_no' => 'nullable|string',
             'diet_type' => 'nullable|string',
             'doctor' => 'nullable|string',
             'nurse' => 'nullable|string',
@@ -236,7 +237,8 @@ class EkadController extends Controller
                 'macList' => array_map(fn($mac) => EkadBedMapping::formatMac($mac), $validated['mac_list']),
                 'data' => [
                     [
-                        'mrn' => $validated['mrn'] ?? '-',
+                        'bed no' => $validated['bed_no'] ?? '-',
+                        'MRN' => $validated['mrn'] ?? '-',
                         'patient_name' => $patientName,
                         'diet_type' => $validated['diet_type'] ?? '-',
                         'doctor' => $validated['doctor'] ?? '-',

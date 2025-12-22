@@ -93,7 +93,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n    \"id\": \"{{template_id}}\",\n    \"macList\": \"{{label_mac}}\",\n    \"data\": [\n        {\n            \"patient_name\": \"Anti Gravity\",\n            \"room_number\": \"Room 402\",\n            \"doctor\": \"Dr. Smith\"\n        }\n    ]\n}"
+                            "raw": "{\n    \"id\": \"{{template_id}}\",\n    \"macList\": [\"{{label_mac}}\"],\n    \"data\": [\n        {\n            \"bed no\": \"600\",\n            \"MRN\": \"2400123456\",\n            \"patient_name\": \"SIM HUI XIN\",\n            \"diet_type\": \"BANANA ONLY\",\n            \"doctor\": \"DATO DR ABDUL FAHMI BIN ABDUL KARIM\",\n            \"nurse\": \"Fatimah binti Hassan\",\n            \"anaesthetist\": \"Dr Ong\"\n        }\n    ]\n}"
                         },
                         "url": {
                             "raw": "{{base_url}}/api/v1/template/batchPaintingByJson"
