@@ -305,4 +305,52 @@ class EkadController extends Controller
             'style' => $validated['style'],
         ]);
     }
+
+    /**
+     * Get EKad activity logs from Laravel log file
+     */
+    public function getActivityLogs()
+    {
+        $logs = [];
+        $logPath = storage_path('logs/laravel.log');
+
+        if (file_exists($logPath)) {
+            // Read last 100 lines of log file
+            $lines = [];
+            $fp = fopen($logPath, 'r');
+            if ($fp) {
+                // Get file size and seek near the end
+                fseek($fp, -50000, SEEK_END); // Read last ~50KB
+                fgets($fp); // Skip partial line
+
+                while (!feof($fp)) {
+                    $lines[] = fgets($fp);
+                }
+                fclose($fp);
+            }
+
+            // Filter for EKad related logs
+            foreach ($lines as $line) {
+                if (strpos($line, 'EKad') !== false) {
+                    // Parse the log line
+                    if (preg_match('/\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\].*?\.(DEBUG|INFO|WARNING|ERROR):\s*(.+)/', $line, $matches)) {
+                        $logs[] = [
+                            'time' => $matches[1],
+                            'level' => $matches[2],
+                            'message' => trim($matches[3]),
+                        ];
+                    }
+                }
+            }
+
+            // Get last 20 logs, most recent first
+            $logs = array_slice(array_reverse($logs), 0, 20);
+        }
+
+        return response()->json([
+            'success' => true,
+            'logs' => $logs,
+        ]);
+    }
 }
+
