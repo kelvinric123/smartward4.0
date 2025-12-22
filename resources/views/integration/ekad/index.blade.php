@@ -142,7 +142,7 @@
                                         class="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                     <option value="">Select Ward</option>
                                     @foreach($wards as $ward)
-                                        <option value="{{ $ward->id }}">{{ $ward->name }}</option>
+                                        <option value="{{ $ward->id }}">{{ $ward->ward_name }}</option>
                                     @endforeach
                                 </select>
                             </div>
@@ -190,7 +190,7 @@
                             <tbody class="bg-white divide-y divide-gray-200">
                                 <template x-for="mapping in bedMappings" :key="mapping.id">
                                     <tr>
-                                        <td class="px-4 py-3 text-sm text-gray-900" x-text="mapping.bed?.ward?.name || '-'"></td>
+                                        <td class="px-4 py-3 text-sm text-gray-900" x-text="mapping.bed?.ward?.ward_name || '-'"></td>
                                         <td class="px-4 py-3 text-sm text-gray-900" x-text="mapping.bed?.bed_display_name || mapping.bed?.bed_number || '-'"></td>
                                         <td class="px-4 py-3 text-sm font-mono text-gray-900" x-text="mapping.mac_address"></td>
                                         <td class="px-4 py-3">
