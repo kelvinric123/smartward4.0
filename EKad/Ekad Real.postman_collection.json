@@ -1,0 +1,97 @@
+{
+	"info": {
+		"_postman_id": "4cfc14a8-d9ee-4593-ba71-fabc0c271d9a",
+		"name": "SmartCard real",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "18599246",
+		"_collection_link": "https://qmed22.postman.co/workspace/origin~62e0d388-969a-47de-a88e-7d138639a9af/collection/18599246-4cfc14a8-d9ee-4593-ba71-fabc0c271d9a?action=share&source=collection_link&creator=18599246"
+	},
+	"item": [
+		{
+			"name": "Login",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n\"username\":\"moe\",\r\n\"password\":\"moe123456\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://iot.seekink.com/cloud/prod-api/api/v1/user/login",
+					"protocol": "http",
+					"host": [
+						"iot",
+						"seekink",
+						"com"
+					],
+					"path": [
+						"cloud",
+						"prod-api",
+						"api",
+						"v1",
+						"user",
+						"login"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get List",
+			"request": {
+				"method": "GET",
+				"header": []
+			},
+			"response": []
+		},
+		{
+			"name": "Update Card",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "eyJhbGciOiJIUzUxMiJ9.eyJsb2dpbl91c2VyX2tleSI6IjU0MjA4NTYyLTU2MDktNGVlMy05MGRiLWMxOWJhNzc3OWY0OCJ9.D0HBKAezXIvD1lNXviQOa1ej2QVN70my780oCrAazyEKVponVsg_cWQoMaFk4l3j5-hXGPZ4hHALTKplbZFIgA",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"id\": \"2000477842757914624\",\r\n    \"macList\": [\"D43D393CC02C\"],\r\n    \"data\": [\r\n        {\r\n            \"bed no\": \"600\",\r\n            \"MRN\": \"2400123456\",\r\n            \"patient_name\": \"SIM HUI XIN\",\r\n            \"diet_type\": \"BANANA ONLY\",\r\n            \"doctor\": \"DATO DR ABDUL FAHMI BIN ABDUL KARIM\",\r\n            \"nurse\": \"Fatimah binti Hassan\",\r\n            \"anaesthetist\": \"-\",\r\n            \"MRN\":\"123\"\r\n        }\r\n    ]\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://iot.seekink.com/cloud/prod-api/api/v1/template/batchPaintingByJson",
+					"protocol": "http",
+					"host": [
+						"iot",
+						"seekink",
+						"com"
+					],
+					"path": [
+						"cloud",
+						"prod-api",
+						"api",
+						"v1",
+						"template",
+						"batchPaintingByJson"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

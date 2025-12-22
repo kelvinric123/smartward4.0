@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\EkadConfiguration;
 use App\Models\EkadBedMapping;
+use App\Models\EkadResponseLog;
 use App\Models\Patient;
 use App\Models\Bed;
 use Illuminate\Support\Facades\Http;
@@ -78,6 +79,17 @@ class EkadService
     }
 
     /**
+     * Normalize empty values to "-" to prevent EKAD from using cached data
+     */
+    protected function normalizeValue($value): string
+    {
+        if (is_null($value) || $value === '' || (is_string($value) && trim($value) === '')) {
+            return '-';
+        }
+        return (string) $value;
+    }
+
+    /**
      * Push patient info to E-Ink device
      * 
      * @param Patient $patient
@@ -96,9 +108,15 @@ class EkadService
         }
 
         // Build patient data
-        $patientName = $this->config->mask_patient_name
-            ? $this->config->maskPatientName($patient->name)
-            : $patient->name;
+        // Check for patient_name override first (e.g., 'vacant' for discharge)
+        if (isset($overrides['patient_name'])) {
+            $patientName = $overrides['patient_name'];
+        } else {
+            $patientName = $this->config->mask_patient_name
+                ? $this->config->maskPatientName($patient->name)
+                : $patient->name;
+        }
+        $patientName = $this->normalizeValue($patientName);
 
         // Get diet type(s)
         $dietType = '-';
@@ -111,6 +129,7 @@ class EkadService
                 $dietType = $patient->diet_types;
             }
         }
+        $dietType = $this->normalizeValue($dietType);
 
         // Get doctor info (Consultant)
         $doctor = '-';
@@ -125,6 +144,7 @@ class EkadService
                 $doctor = $attending->display_name;
             }
         }
+        $doctor = $this->normalizeValue($doctor);
 
         // Get nurse info
         $nurse = '-';
@@ -133,6 +153,7 @@ class EkadService
         } elseif ($patient->nurse) {
             $nurse = $patient->nurse->name;
         }
+        $nurse = $this->normalizeValue($nurse);
 
         // Get anaesthetist info
         $anaesthetist = '-';
@@ -152,14 +173,18 @@ class EkadService
                 $anaesthetist = $referral->anaesthetist->name;
             }
         }
+        $anaesthetist = $this->normalizeValue($anaesthetist);
 
         // Get bed number
         $bedNo = $overrides['bed_no'] ?? $patient->bed_number ?? '-';
+        $bedNo = $this->normalizeValue($bedNo);
 
         // Get MRN
         $mrn = $overrides['mrn'] ?? $patient->mrn ?? '-';
+        $mrn = $this->normalizeValue($mrn);
 
         // Build data array in the exact order and format required by E-Ink API
+        // Order matches the "Update Card" payload from Ekad Real.postman_collection.json
         $data = [
             'bed no' => $bedNo,
             'MRN' => $mrn,
@@ -170,29 +195,33 @@ class EkadService
             'anaesthetist' => $anaesthetist,
         ];
 
-        return $this->pushToBed($mapping->mac_address, $data);
+        return $this->pushToBed($mapping->mac_address, $data, $bed->id, $patient->id, 'observer');
     }
+
 
     /**
      * Push data to a specific MAC address
      */
-    public function pushToBed(string $mac, array $data): array
+    public function pushToBed(string $mac, array $data, ?int $bedId = null, ?int $patientId = null, string $triggeredBy = 'observer'): array
     {
         $token = $this->getToken();
         if (!$token) {
+            // Log failed authentication to database
+            $this->logResponse($mac, null, null, null, false, 'Failed to obtain authentication token', $bedId, $patientId, $triggeredBy);
+
             return [
                 'success' => false,
                 'message' => 'Failed to obtain authentication token',
             ];
         }
 
-        try {
-            $payload = [
-                'id' => $this->config->template_id,
-                'macList' => [EkadBedMapping::formatMac($mac)],
-                'data' => [$data],
-            ];
+        $payload = [
+            'id' => $this->config->template_id,
+            'macList' => [EkadBedMapping::formatMac($mac)],
+            'data' => [$data],
+        ];
 
+        try {
             $response = Http::timeout(30)
                 ->withHeaders([
                     'Authorization' => 'Bearer ' . $token,
@@ -201,12 +230,16 @@ class EkadService
                 ->post("{$this->config->base_url}/api/v1/template/batchPaintingByJson", $payload);
 
             $result = $response->json();
+            $responseCode = $response->status();
 
             if ($response->successful() && isset($result['code']) && $result['code'] === 200) {
                 Log::info('EKad: Push successful', [
                     'mac' => $mac,
                     'patient_name' => $data['patient_name'] ?? 'unknown',
                 ]);
+
+                // Log successful response to database
+                $this->logResponse($mac, $payload, $result, $responseCode, true, null, $bedId, $patientId, $triggeredBy);
 
                 return [
                     'success' => true,
@@ -221,22 +254,63 @@ class EkadService
                 Log::info('EKad: Token expired, refreshing...');
                 $this->config->clearToken();
 
-                // Retry once with fresh token
-                return $this->pushToBed($mac, $data);
+                // Retry once with fresh token (don't log this attempt, the retry will log)
+                return $this->pushToBed($mac, $data, $bedId, $patientId, $triggeredBy);
             }
 
             Log::warning('EKad: Push failed', ['response' => $result]);
+
+            // Log failed response to database
+            $errorMessage = $result['msg'] ?? 'Push failed';
+            $this->logResponse($mac, $payload, $result, $responseCode, false, $errorMessage, $bedId, $patientId, $triggeredBy);
+
             return [
                 'success' => false,
-                'message' => $result['msg'] ?? 'Push failed',
+                'message' => $errorMessage,
                 'payload' => $payload,
             ];
         } catch (\Exception $e) {
             Log::error('EKad: Push error', ['error' => $e->getMessage()]);
+
+            // Log exception to database
+            $this->logResponse($mac, $payload, null, null, false, 'Connection failed: ' . $e->getMessage(), $bedId, $patientId, $triggeredBy);
+
             return [
                 'success' => false,
                 'message' => 'Connection failed: ' . $e->getMessage(),
             ];
+        }
+    }
+
+    /**
+     * Log API request/response to database
+     */
+    protected function logResponse(
+        string $mac,
+        ?array $requestPayload,
+        ?array $responsePayload,
+        ?int $responseCode,
+        bool $success,
+        ?string $errorMessage,
+        ?int $bedId = null,
+        ?int $patientId = null,
+        string $triggeredBy = 'observer'
+    ): void {
+        try {
+            EkadResponseLog::create([
+                'bed_id' => $bedId,
+                'patient_id' => $patientId,
+                'mac_address' => $mac,
+                'request_payload' => $requestPayload,
+                'response_payload' => $responsePayload,
+                'response_code' => $responseCode,
+                'success' => $success,
+                'error_message' => $errorMessage,
+                'triggered_by' => $triggeredBy,
+            ]);
+        } catch (\Exception $e) {
+            // Don't let logging failures break the main flow
+            Log::error('EKad: Failed to log response to database', ['error' => $e->getMessage()]);
         }
     }
 

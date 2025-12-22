@@ -1856,14 +1856,23 @@ class WardDashboardController extends Controller
         $nurse = $patient->nurse;
         $ward = $patient->ward;
 
-        // EKad: Push clear screen before discharge
+        // EKad: Push discharge screen with vacant/discharged values
         try {
             // Get bed before it is unassigned
             $bed = $patient->bed;
             if ($bed) {
                 $ekadService = new EkadService();
-                $ekadService->pushPatientInfo($patient, $bed, ['bed_no' => '-', 'mrn' => '-']);
-                Log::info('EKad: Pushed clear screen for discharge', ['patient_id' => $patient->id, 'bed_id' => $bed->id]);
+                // Push discharge payload: vacant patient, discharged MRN, clear other fields
+                $ekadService->pushPatientInfo($patient, $bed, [
+                    'patient_name' => 'vacant',
+                    'mrn' => 'discharged',
+                    'doctor' => '-',
+                    'nurse' => '-',
+                    'anaesthetist' => '-',
+                    'diet_type' => '-',
+                    // Keep actual bed number
+                ]);
+                Log::info('EKad: Pushed discharge screen', ['patient_id' => $patient->id, 'bed_id' => $bed->id]);
             }
         } catch (\Exception $e) {
             Log::warning('EKad discharge push failed', ['error' => $e->getMessage()]);

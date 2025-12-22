@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\EkadConfiguration;
 use App\Models\EkadBedMapping;
+use App\Models\EkadResponseLog;
 use App\Models\Bed;
 use App\Models\Ward;
 use App\Services\EkadService;
@@ -348,6 +349,48 @@ class EkadController extends Controller
             // Get last 20 logs, most recent first
             $logs = array_slice(array_reverse($logs), 0, 20);
         }
+
+        return response()->json([
+            'success' => true,
+            'logs' => $logs,
+        ]);
+    }
+
+    /**
+     * Get EKAD API response logs from database
+     */
+    public function getResponseLogs(Request $request)
+    {
+        $query = EkadResponseLog::with(['bed', 'patient'])
+            ->orderBy('created_at', 'desc');
+
+        // Apply filters
+        if ($request->has('success')) {
+            $query->where('success', $request->boolean('success'));
+        }
+
+        if ($request->has('bed_id')) {
+            $query->where('bed_id', $request->input('bed_id'));
+        }
+
+        if ($request->has('patient_id')) {
+            $query->where('patient_id', $request->input('patient_id'));
+        }
+
+        if ($request->has('triggered_by')) {
+            $query->where('triggered_by', $request->input('triggered_by'));
+        }
+
+        if ($request->has('start_date') && $request->has('end_date')) {
+            $query->whereBetween('created_at', [
+                $request->input('start_date'),
+                $request->input('end_date')
+            ]);
+        }
+
+        // Paginate results
+        $perPage = $request->input('per_page', 50);
+        $logs = $query->paginate($perPage);
 
         return response()->json([
             'success' => true,

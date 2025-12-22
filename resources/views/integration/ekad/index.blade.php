@@ -515,6 +515,163 @@
                     </div>
                 </div>
             </div>
+
+            <!-- API Response Logs (Database-stored) -->
+            <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-blue-100">
+                <div class="p-6 border-b border-blue-100 bg-gradient-to-r from-blue-50 to-sky-50">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="p-3 bg-blue-600 rounded-xl mr-4">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-800">API Response Logs</h3>
+                                <p class="text-sm text-gray-500">Database-stored API requests and responses (all
+                                    sources)</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <select x-model="apiLogsFilter" @change="loadApiResponseLogs()"
+                                class="text-sm rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500">
+                                <option value="">All</option>
+                                <option value="success">Success Only</option>
+                                <option value="failed">Failed Only</option>
+                            </select>
+                            <button @click="loadApiResponseLogs()" :disabled="loadingApiLogs"
+                                class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-medium rounded-lg transition-colors">
+                                <svg x-show="!loadingApiLogs" class="w-4 h-4 mr-1" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                <svg x-show="loadingApiLogs" class="w-4 h-4 mr-1 animate-spin" fill="none"
+                                    viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                        stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor"
+                                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                </svg>
+                                <span x-text="loadingApiLogs ? 'Loading...' : 'Refresh'"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div x-show="apiResponseLogs.length === 0 && !loadingApiLogs"
+                        class="text-center text-gray-500 py-8">
+                        <p>No API response logs yet.</p>
+                        <p class="text-xs mt-2">Logs are automatically created when patient/bed data changes trigger
+                            EKAD API calls.</p>
+                    </div>
+                    <div x-show="loadingApiLogs && apiResponseLogs.length === 0" class="text-center text-gray-500 py-8">
+                        <svg class="w-8 h-8 mx-auto animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                        </svg>
+                        <p class="mt-2">Loading logs...</p>
+                    </div>
+                    <div x-show="apiResponseLogs.length > 0" class="space-y-3 max-h-96 overflow-y-auto">
+                        <template x-for="(log, index) in apiResponseLogs" :key="log.id">
+                            <div :class="log.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'"
+                                class="border rounded-lg p-4">
+                                <div class="flex items-start justify-between mb-2">
+                                    <div class="flex-1">
+                                        <div class="flex items-center space-x-2 mb-1">
+                                            <span
+                                                :class="log.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                                                class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold">
+                                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor"
+                                                    viewBox="0 0 24 24">
+                                                    <path x-show="log.success" stroke-linecap="round"
+                                                        stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                                    <path x-show="!log.success" stroke-linecap="round"
+                                                        stroke-linejoin="round" stroke-width="2"
+                                                        d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                                <span x-text="log.success ? 'SUCCESS' : 'FAILED'"></span>
+                                            </span>
+                                            <span class="text-xs text-gray-500"
+                                                x-text="new Date(log.created_at).toLocaleString()"></span>
+                                            <span
+                                                class="inline-flex items-center px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs">
+                                                <span x-text="log.triggered_by"></span>
+                                            </span>
+                                        </div>
+                                        <div class="text-sm text-gray-700 space-y-1">
+                                            <div class="flex items-center space-x-2">
+                                                <span class="font-medium">MAC:</span>
+                                                <span class="font-mono text-xs" x-text="log.mac_address || '-'"></span>
+                                            </div>
+                                            <div x-show="log.bed" class="flex items-center space-x-2">
+                                                <span class="font-medium">Bed:</span>
+                                                <span class="text-xs" x-text="log.bed?.bed_number || '-'"></span>
+                                            </div>
+                                            <div x-show="log.patient" class="flex items-center space-x-2">
+                                                <span class="font-medium">Patient:</span>
+                                                <span class="text-xs" x-text="log.patient?.name || '-'"></span>
+                                            </div>
+                                            <div x-show="log.response_code" class="flex items-center space-x-2">
+                                                <span class="font-medium">HTTP Code:</span>
+                                                <span class="text-xs font-mono" x-text="log.response_code"></span>
+                                            </div>
+                                            <div x-show="log.error_message" class="flex items-start space-x-2">
+                                                <span class="font-medium text-red-600">Error:</span>
+                                                <span class="text-xs text-red-700" x-text="log.error_message"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button @click="log.expanded = !log.expanded"
+                                        class="ml-4 text-blue-600 hover:text-blue-800 text-xs font-medium">
+                                        <span x-text="log.expanded ? 'Hide Details' : 'View Details'"></span>
+                                    </button>
+                                </div>
+                                <div x-show="log.expanded" x-transition class="mt-3 space-y-2">
+                                    <div x-show="log.request_payload">
+                                        <p class="text-xs font-semibold text-gray-700 mb-1">Request Payload:</p>
+                                        <pre class="text-xs text-gray-600 bg-white/70 rounded p-2 overflow-x-auto"
+                                            x-text="JSON.stringify(log.request_payload, null, 2)"></pre>
+                                    </div>
+                                    <div x-show="log.response_payload">
+                                        <p class="text-xs font-semibold text-gray-700 mb-1">Response Payload:</p>
+                                        <pre class="text-xs text-gray-600 bg-white/70 rounded p-2 overflow-x-auto"
+                                            x-text="JSON.stringify(log.response_payload, null, 2)"></pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    <!-- Pagination -->
+                    <div x-show="apiLogsPagination.last_page > 1"
+                        class="mt-4 flex items-center justify-between border-t border-gray-200 pt-4">
+                        <div class="text-sm text-gray-500">
+                            Showing <span x-text="apiLogsPagination.from || 0"></span> to <span
+                                x-text="apiLogsPagination.to || 0"></span> of <span
+                                x-text="apiLogsPagination.total || 0"></span> logs
+                        </div>
+                        <div class="flex space-x-2">
+                            <button @click="loadApiResponseLogs(apiLogsPagination.current_page - 1)"
+                                :disabled="apiLogsPagination.current_page <= 1"
+                                class="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                                Previous
+                            </button>
+                            <span class="px-3 py-1 text-sm text-gray-700">
+                                Page <span x-text="apiLogsPagination.current_page"></span> of <span
+                                    x-text="apiLogsPagination.last_page"></span>
+                            </span>
+                            <button @click="loadApiResponseLogs(apiLogsPagination.current_page + 1)"
+                                :disabled="apiLogsPagination.current_page >= apiLogsPagination.last_page"
+                                class="px-3 py-1 text-sm bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -559,6 +716,23 @@
                 // Activity Logs (server-side)
                 activityLogs: [],
                 loadingLogs: false,
+
+                // API Response Logs (database-stored)
+                apiResponseLogs: [],
+                loadingApiLogs: false,
+                apiLogsFilter: '',
+                apiLogsPagination: {
+                    current_page: 1,
+                    last_page: 1,
+                    from: 0,
+                    to: 0,
+                    total: 0
+                },
+
+                init() {
+                    // Load API response logs on page load
+                    this.loadApiResponseLogs();
+                },
 
                 addLog(action, success, message, data = null) {
                     const now = new Date();
@@ -774,6 +948,49 @@
                         this.addLog('ACTIVITY LOGS', false, 'Request failed: ' + error.message);
                     }
                     this.loadingLogs = false;
+                },
+
+                async loadApiResponseLogs(page = 1) {
+                    this.loadingApiLogs = true;
+                    try {
+                        let url = '{{ route("ekad.response-logs") }}?page=' + page + '&per_page=20';
+                        
+                        // Add filter if selected
+                        if (this.apiLogsFilter === 'success') {
+                            url += '&success=1';
+                        } else if (this.apiLogsFilter === 'failed') {
+                            url += '&success=0';
+                        }
+
+                        const response = await fetch(url, {
+                            method: 'GET',
+                            headers: {
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            }
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            // Add expanded property to each log for toggling details
+                            this.apiResponseLogs = data.logs.data.map(log => ({
+                                ...log,
+                                expanded: false
+                            }));
+                            
+                            // Update pagination info
+                            this.apiLogsPagination = {
+                                current_page: data.logs.current_page,
+                                last_page: data.logs.last_page,
+                                from: data.logs.from,
+                                to: data.logs.to,
+                                total: data.logs.total
+                            };
+                        } else {
+                            this.addLog('API LOGS', false, 'Failed to load API response logs');
+                        }
+                    } catch (error) {
+                        this.addLog('API LOGS', false, 'Request failed: ' + error.message);
+                    }
+                    this.loadingApiLogs = false;
                 }
             }
         }

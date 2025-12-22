@@ -183,6 +183,8 @@ Route::middleware('auth')->group(function () {
     Route::delete('/ekad/bed-mappings/{mapping}', [EkadController::class, 'destroyBedMapping'])->name('ekad.bed-mappings.destroy');
     Route::post('/ekad/preview-masking', [EkadController::class, 'previewMasking'])->name('ekad.preview-masking');
     Route::get('/ekad/activity-logs', [EkadController::class, 'getActivityLogs'])->name('ekad.activity-logs');
+    Route::get('/ekad/response-logs', [EkadController::class, 'getResponseLogs'])->name('ekad.response-logs');
+
 
     // ADT Integration Routes
     Route::get('/adt', [AdtConfigurationController::class, 'index'])->name('adt.index');
