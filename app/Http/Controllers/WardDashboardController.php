@@ -1223,10 +1223,16 @@ class WardDashboardController extends Controller
 
             // Nurse: Check WardScheduleAssignment for "Nurse on Duty" (matching dashboard logic)
             // Use current shift and patient's bed ID
-            $currentShift = \App\Models\ShiftSetting::getCurrentShift($patient->ward_id);
-            $currentShiftCode = $currentShift ? $currentShift->shift_code : null;
+            // Only check shift if patient has a ward_id (not discharged)
+            $currentShift = null;
+            $currentShiftCode = null;
 
-            if ($currentShiftCode && $patient->bed_number) {
+            if ($patient->ward_id) {
+                $currentShift = \App\Models\ShiftSetting::getCurrentShift($patient->ward_id);
+                $currentShiftCode = $currentShift ? $currentShift->shift_code : null;
+            }
+
+            if ($currentShiftCode && $patient->bed_number && $patient->ward_id) {
                 // We need the bed_id. Look up the bed by ward_id and bed_number.
                 $bed = \App\Models\Bed::where('ward_id', $patient->ward_id)
                     ->where('bed_number', $patient->bed_number)
