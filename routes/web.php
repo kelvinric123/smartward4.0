@@ -174,9 +174,14 @@ Route::middleware('auth')->group(function () {
     // EKad Integration Routes (SEEKINK E-Ink)
     Route::get('/ekad', [EkadController::class, 'index'])->name('ekad.index');
     Route::post('/ekad/login', [EkadController::class, 'testLogin'])->name('ekad.login');
-    Route::get('/ekad/labels', [EkadController::class, 'getLabels'])->name('ekad.labels');
     Route::post('/ekad/push', [EkadController::class, 'pushPatientInfo'])->name('ekad.push');
-    Route::post('/ekad/text-message', [EkadController::class, 'sendTextMessage'])->name('ekad.text-message');
+    Route::get('/ekad/configuration', [EkadController::class, 'getConfiguration'])->name('ekad.configuration');
+    Route::post('/ekad/configuration', [EkadController::class, 'saveConfiguration'])->name('ekad.configuration.save');
+    Route::get('/ekad/bed-mappings', [EkadController::class, 'getBedMappings'])->name('ekad.bed-mappings');
+    Route::post('/ekad/bed-mappings', [EkadController::class, 'storeBedMapping'])->name('ekad.bed-mappings.store');
+    Route::put('/ekad/bed-mappings/{mapping}', [EkadController::class, 'updateBedMapping'])->name('ekad.bed-mappings.update');
+    Route::delete('/ekad/bed-mappings/{mapping}', [EkadController::class, 'destroyBedMapping'])->name('ekad.bed-mappings.destroy');
+    Route::post('/ekad/preview-masking', [EkadController::class, 'previewMasking'])->name('ekad.preview-masking');
 
     // ADT Integration Routes
     Route::get('/adt', [AdtConfigurationController::class, 'index'])->name('adt.index');

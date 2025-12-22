@@ -5,279 +5,210 @@
                 <h2 class="font-bold text-2xl text-gray-800 leading-tight">
                     {{ __('EKad Integration') }}
                 </h2>
-                <p class="text-sm text-gray-500 mt-1">SEEKINK E-Ink device management - push patient info to cloud and
-                    sync to local displays</p>
+                <p class="text-sm text-gray-500 mt-1">SEEKINK E-Ink device management - push patient info to E-Ink displays</p>
             </div>
-            <button onclick="document.getElementById('ekadInfoModal').classList.remove('hidden')"
-                class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                How It Works
-            </button>
+            <div class="flex items-center space-x-2">
+                <span x-data="{ tokenValid: {{ ($config->exists && $config->isTokenValid()) ? 'true' : 'false' }} }" 
+                      :class="tokenValid ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'"
+                      class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium">
+                    <span class="w-2 h-2 rounded-full mr-2" :class="tokenValid ? 'bg-green-500' : 'bg-yellow-500'"></span>
+                    <span x-text="tokenValid ? 'Token Active' : 'Not Authenticated'"></span>
+                </span>
+            </div>
         </div>
     </x-slot>
 
-    <!-- Info Modal -->
-    <div id="ekadInfoModal" class="hidden fixed inset-0 z-50 overflow-y-auto">
-        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
-            <div class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity"
-                onclick="document.getElementById('ekadInfoModal').classList.add('hidden')"></div>
-
-            <div
-                class="relative inline-block w-full max-w-3xl p-8 my-8 text-left align-middle transition-all transform bg-gradient-to-br from-slate-900 to-slate-800 shadow-2xl rounded-3xl border border-slate-700">
-                <div class="flex justify-between items-center mb-6">
-                    <div class="flex items-center">
-                        <div class="p-3 bg-gradient-to-br from-teal-500 to-cyan-600 rounded-xl mr-4">
-                            <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                            </svg>
-                        </div>
-                        <h3 class="text-2xl font-bold text-white">SEEKINK E-Ink Integration</h3>
-                    </div>
-                    <button onclick="document.getElementById('ekadInfoModal').classList.add('hidden')"
-                        class="text-gray-400 hover:text-white transition-colors">
-                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
-
-                <div class="space-y-6">
-                    <!-- Flow Diagram -->
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                        <div class="text-center p-4 bg-slate-700/50 rounded-xl border border-slate-600">
-                            <div
-                                class="w-16 h-16 mx-auto mb-3 bg-teal-500/20 rounded-full flex items-center justify-center">
-                                <svg class="w-8 h-8 text-teal-400" fill="none" stroke="currentColor"
-                                    viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                                </svg>
-                            </div>
-                            <p class="text-sm font-semibold text-teal-300">1. Authenticate</p>
-                            <p class="text-xs text-gray-400 mt-1">Login to SEEKINK Cloud</p>
-                        </div>
-                        <div class="text-center p-4 bg-slate-700/50 rounded-xl border border-slate-600">
-                            <div
-                                class="w-16 h-16 mx-auto mb-3 bg-cyan-500/20 rounded-full flex items-center justify-center">
-                                <svg class="w-8 h-8 text-cyan-400" fill="none" stroke="currentColor"
-                                    viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                                </svg>
-                            </div>
-                            <p class="text-sm font-semibold text-cyan-300">2. Select Label</p>
-                            <p class="text-xs text-gray-400 mt-1">Choose E-Ink device by MAC</p>
-                        </div>
-                        <div class="text-center p-4 bg-slate-700/50 rounded-xl border border-slate-600">
-                            <div
-                                class="w-16 h-16 mx-auto mb-3 bg-green-500/20 rounded-full flex items-center justify-center">
-                                <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor"
-                                    viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                                </svg>
-                            </div>
-                            <p class="text-sm font-semibold text-green-300">3. Push Data</p>
-                            <p class="text-xs text-gray-400 mt-1">Send patient info to display</p>
-                        </div>
-                    </div>
-
-                    <div class="bg-slate-700/30 rounded-xl p-4 border border-slate-600">
-                        <h4 class="text-lg font-bold text-white mb-3">Features</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                            <div class="flex items-start">
-                                <span
-                                    class="w-6 h-6 bg-teal-600 text-white text-xs font-bold rounded-full flex items-center justify-center mr-2 mt-0.5">✓</span>
-                                <span class="text-gray-300">Push patient name, room, and doctor info to E-Ink
-                                    displays</span>
-                            </div>
-                            <div class="flex items-start">
-                                <span
-                                    class="w-6 h-6 bg-teal-600 text-white text-xs font-bold rounded-full flex items-center justify-center mr-2 mt-0.5">✓</span>
-                                <span class="text-gray-300">Send emergency text messages</span>
-                            </div>
-                            <div class="flex items-start">
-                                <span
-                                    class="w-6 h-6 bg-teal-600 text-white text-xs font-bold rounded-full flex items-center justify-center mr-2 mt-0.5">✓</span>
-                                <span class="text-gray-300">Query available labels/devices</span>
-                            </div>
-                            <div class="flex items-start">
-                                <span
-                                    class="w-6 h-6 bg-teal-600 text-white text-xs font-bold rounded-full flex items-center justify-center mr-2 mt-0.5">✓</span>
-                                <span class="text-gray-300">Low-power E-Ink technology</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mt-6 flex justify-end">
-                    <button onclick="document.getElementById('ekadInfoModal').classList.add('hidden')"
-                        class="px-6 py-2.5 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 text-white font-semibold rounded-lg transition-all">
-                        Got it!
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <div class="py-8" x-data="ekadManager()">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-
-            <!-- Connection Settings -->
+            
+            <!-- Configuration Settings -->
             <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-teal-100">
                 <div class="p-6 border-b border-teal-100 bg-gradient-to-r from-teal-50 to-cyan-50">
-                    <div class="flex items-center">
-                        <div class="p-3 bg-teal-600 rounded-xl mr-4">
-                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                        </div>
-                        <div>
-                            <h3 class="text-lg font-bold text-gray-800">Connection Settings</h3>
-                            <p class="text-sm text-gray-500">Configure SEEKINK Cloud API credentials</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="p-6">
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div class="md:col-span-2">
-                            <label class="block text-sm font-medium text-gray-700 mb-1">API Base URL</label>
-                            <input type="text" x-model="baseUrl"
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 font-mono text-sm"
-                                placeholder="http://iot.seekink.com/cloud/prod-api">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
-                            <input type="text" x-model="username"
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
-                                placeholder="moe">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                            <input type="password" x-model="password"
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500"
-                                placeholder="••••••••">
-                        </div>
-                    </div>
-                    <div class="mt-4 flex items-center justify-between">
-                        <div x-show="token" class="flex items-center text-green-600">
-                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <span class="text-sm font-medium">Authenticated</span>
-                            <span class="ml-2 text-xs text-gray-500 font-mono truncate max-w-xs"
-                                x-text="'Token: ' + token.substring(0, 20) + '...'"></span>
-                        </div>
-                        <div x-show="!token" class="text-sm text-gray-500">Not authenticated</div>
-                        <button @click="testLogin()" :disabled="loggingIn"
-                            class="inline-flex items-center px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:bg-teal-400 text-white font-medium rounded-lg transition-colors">
-                            <svg x-show="!loggingIn" class="w-4 h-4 mr-2" fill="none" stroke="currentColor"
-                                viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                            </svg>
-                            <svg x-show="loggingIn" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                                    stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor"
-                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                            </svg>
-                            <span x-text="loggingIn ? 'Connecting...' : 'Test Login'"></span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Label Management -->
-            <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-cyan-100">
-                <div class="p-6 border-b border-cyan-100 bg-gradient-to-r from-cyan-50 to-blue-50">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center">
-                            <div class="p-3 bg-cyan-600 rounded-xl mr-4">
+                            <div class="p-3 bg-teal-600 rounded-xl mr-4">
                                 <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                                 </svg>
                             </div>
                             <div>
-                                <h3 class="text-lg font-bold text-gray-800">Label Management</h3>
-                                <p class="text-sm text-gray-500">Query and select available E-Ink devices</p>
+                                <h3 class="text-lg font-bold text-gray-800">Configuration & Login</h3>
+                                <p class="text-sm text-gray-500">SEEKINK API credentials and settings</p>
                             </div>
                         </div>
-                        <button @click="queryLabels()" :disabled="!token || queryingLabels"
-                            class="inline-flex items-center px-4 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-400 text-white font-medium rounded-lg transition-colors">
-                            <svg x-show="!queryingLabels" class="w-4 h-4 mr-2" fill="none" stroke="currentColor"
-                                viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                            </svg>
-                            <svg x-show="queryingLabels" class="w-4 h-4 mr-2 animate-spin" fill="none"
-                                viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                                    stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor"
-                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                            </svg>
-                            Query Labels
-                        </button>
+                        <div class="flex items-center space-x-2">
+                            <span x-show="token" class="inline-flex items-center text-green-600 text-sm">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                                Authenticated
+                            </span>
+                        </div>
                     </div>
                 </div>
                 <div class="p-6">
-                    <div x-show="labels.length > 0">
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead>
-                                    <tr class="bg-gray-50">
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">MAC
-                                            Address</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Name
-                                        </th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Status
-                                        </th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Action
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody class="bg-white divide-y divide-gray-100">
-                                    <template x-for="label in labels" :key="label.mac || label.id">
-                                        <tr class="hover:bg-gray-50 transition-colors">
-                                            <td class="px-4 py-3 font-mono text-sm" x-text="label.mac"></td>
-                                            <td class="px-4 py-3 text-sm" x-text="label.name || '-'"></td>
-                                            <td class="px-4 py-3">
-                                                <span
-                                                    :class="label.online ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'"
-                                                    class="px-2 py-1 rounded text-xs font-medium"
-                                                    x-text="label.online ? 'Online' : 'Offline'"></span>
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <button @click="selectedMac = label.mac"
-                                                    class="text-cyan-600 hover:text-cyan-800 text-sm font-medium">
-                                                    Select
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    </template>
-                                </tbody>
-                            </table>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">API Base URL</label>
+                            <input type="text" x-model="baseUrl" 
+                                   class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 font-mono text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                            <input type="text" x-model="username" 
+                                   class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                            <input type="password" x-model="password" 
+                                   class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Template ID</label>
+                            <input type="text" x-model="templateId" 
+                                   class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 font-mono text-sm">
                         </div>
                     </div>
-                    <div x-show="labels.length === 0" class="text-center py-8">
-                        <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor"
-                            viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                        </svg>
-                        <p class="text-gray-500">No labels found. Click "Query Labels" to fetch available devices.</p>
-                        <p class="text-sm text-gray-400 mt-1">You can also enter a MAC address manually below.</p>
+                    
+                    <!-- Privacy & Auto-push Settings -->
+                    <div class="flex flex-wrap items-center gap-6 mt-4 p-4 bg-gray-50 rounded-xl">
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" x-model="autoPushEnabled" class="form-checkbox h-5 w-5 text-teal-600 rounded">
+                            <span class="ml-2 text-sm text-gray-700">Auto-push on admission</span>
+                        </label>
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" x-model="maskPatientName" class="form-checkbox h-5 w-5 text-teal-600 rounded">
+                            <span class="ml-2 text-sm text-gray-700">Mask patient name</span>
+                        </label>
+                        <div x-show="maskPatientName" x-transition class="flex items-center">
+                            <label class="text-sm text-gray-700 mr-2">Style:</label>
+                            <select x-model="maskStyle" class="rounded-lg border-gray-300 text-sm focus:border-teal-500 focus:ring-teal-500">
+                                <option value="partial">Partial (A*** G******)</option>
+                                <option value="full">Full (**********)</option>
+                                <option value="initials">Initials (A.G.)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 flex items-center justify-between">
+                        <button @click="saveConfiguration()" 
+                                :disabled="savingConfig"
+                                class="inline-flex items-center px-4 py-2 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-400 text-white font-medium rounded-lg transition-colors">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+                            </svg>
+                            <span x-text="savingConfig ? 'Saving...' : 'Save Config'"></span>
+                        </button>
+                        <button @click="testLogin()" 
+                                :disabled="loggingIn"
+                                class="inline-flex items-center px-4 py-2 bg-teal-600 hover:bg-teal-700 disabled:bg-teal-400 text-white font-medium rounded-lg transition-colors">
+                            <svg x-show="!loggingIn" class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                            </svg>
+                            <svg x-show="loggingIn" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                            <span x-text="loggingIn ? 'Connecting...' : 'Login & Get Token'"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bed Mapping -->
+            <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-indigo-100">
+                <div class="p-6 border-b border-indigo-100 bg-gradient-to-r from-indigo-50 to-violet-50">
+                    <div class="flex items-center">
+                        <div class="p-3 bg-indigo-600 rounded-xl mr-4">
+                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-bold text-gray-800">Bed Mapping</h3>
+                            <p class="text-sm text-gray-500">Map beds to E-Ink device MAC addresses</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <!-- Add New Mapping -->
+                    <div class="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                        <h4 class="text-sm font-semibold text-gray-700 mb-3">Add New Mapping</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Ward</label>
+                                <select x-model="selectedWardId" @change="selectedBedId = ''" 
+                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                    <option value="">Select Ward</option>
+                                    @foreach($wards as $ward)
+                                        <option value="{{ $ward->id }}">{{ $ward->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Bed</label>
+                                <select x-model="selectedBedId" 
+                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                    <option value="">Select Bed</option>
+                                    <template x-for="bed in getBedsForWard(selectedWardId)" :key="bed.id">
+                                        <option :value="bed.id" x-text="bed.bed_display_name || bed.bed_number"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">MAC Address</label>
+                                <input type="text" x-model="newMacAddress" 
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 font-mono text-sm"
+                                       placeholder="D43D393CC02C">
+                            </div>
+                            <div class="flex items-end">
+                                <button @click="addBedMapping()" 
+                                        :disabled="!selectedBedId || !newMacAddress || addingMapping"
+                                        class="w-full inline-flex items-center justify-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-medium rounded-lg transition-colors">
+                                    <svg x-show="!addingMapping" class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                    <span x-text="addingMapping ? 'Adding...' : 'Add Mapping'"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Existing Mappings Table -->
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ward</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bed</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">MAC Address</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200">
+                                <template x-for="mapping in bedMappings" :key="mapping.id">
+                                    <tr>
+                                        <td class="px-4 py-3 text-sm text-gray-900" x-text="mapping.bed?.ward?.name || '-'"></td>
+                                        <td class="px-4 py-3 text-sm text-gray-900" x-text="mapping.bed?.bed_display_name || mapping.bed?.bed_number || '-'"></td>
+                                        <td class="px-4 py-3 text-sm font-mono text-gray-900" x-text="mapping.mac_address"></td>
+                                        <td class="px-4 py-3">
+                                            <span :class="mapping.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'" 
+                                                  class="inline-flex px-2 py-1 text-xs font-medium rounded-full"
+                                                  x-text="mapping.is_active ? 'Active' : 'Inactive'"></span>
+                                        </td>
+                                        <td class="px-4 py-3 text-right">
+                                            <button @click="deleteBedMapping(mapping.id)" 
+                                                    class="text-red-600 hover:text-red-800 text-sm font-medium">Delete</button>
+                                        </td>
+                                    </tr>
+                                </template>
+                                <tr x-show="bedMappings.length === 0">
+                                    <td colspan="5" class="px-4 py-8 text-center text-gray-500">No bed mappings configured yet.</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -288,63 +219,112 @@
                     <div class="flex items-center">
                         <div class="p-3 bg-green-600 rounded-xl mr-4">
                             <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                             </svg>
                         </div>
                         <div>
-                            <h3 class="text-lg font-bold text-gray-800">Push Patient Info</h3>
+                            <h3 class="text-lg font-bold text-gray-800">Manual Push Patient Info</h3>
                             <p class="text-sm text-gray-500">Send patient information to E-Ink display via template</p>
                         </div>
                     </div>
                 </div>
                 <div class="p-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">MAC Address *</label>
-                            <input type="text" x-model="selectedMac"
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 font-mono text-sm"
-                                placeholder="D4:3D:39:3C:C0:2C">
+                    <!-- Device Settings -->
+                    <div class="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                        <h4 class="text-sm font-semibold text-gray-700 mb-3">Device MAC Address</h4>
+                        <div class="flex gap-2">
+                            <input type="text" x-model="newMac" 
+                                   class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 font-mono text-sm"
+                                   placeholder="D43D393CC02C (without colons)"
+                                   @keyup.enter="addMac()">
+                            <button @click="addMac()" 
+                                    class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors">
+                                Add
+                            </button>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Template ID *</label>
-                            <input type="text" x-model="templateId"
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 font-mono text-sm"
-                                placeholder="Enter template ID">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Patient Name *</label>
-                            <input type="text" x-model="patientName"
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
-                                placeholder="Anti Gravity">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Room Number</label>
-                            <input type="text" x-model="roomNumber"
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
-                                placeholder="Room 402">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Doctor</label>
-                            <input type="text" x-model="doctor"
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
-                                placeholder="Dr. Smith">
+                        <div x-show="macList.length > 0" class="mt-3">
+                            <label class="block text-xs font-medium text-gray-500 mb-2">Target Devices:</label>
+                            <div class="flex flex-wrap gap-2">
+                                <template x-for="(mac, index) in macList" :key="index">
+                                    <span class="inline-flex items-center px-3 py-1 bg-green-100 text-green-800 text-sm font-mono rounded-full">
+                                        <span x-text="mac"></span>
+                                        <button @click="removeMac(index)" class="ml-2 text-green-600 hover:text-green-800">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                            </svg>
+                                        </button>
+                                    </span>
+                                </template>
+                            </div>
                         </div>
                     </div>
-                    <div class="mt-4 flex justify-end">
-                        <button @click="pushPatientInfo()"
-                            :disabled="!token || !selectedMac || !templateId || !patientName || pushingInfo"
-                            class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 disabled:from-gray-400 disabled:to-gray-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all">
-                            <svg x-show="!pushingInfo" class="w-5 h-5 mr-2" fill="none" stroke="currentColor"
-                                viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+
+                    <!-- Patient Information -->
+                    <div class="mb-6">
+                        <h4 class="text-sm font-semibold text-gray-700 mb-3">Patient Information</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">MRN</label>
+                                <input type="text" x-model="mrn" 
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 font-mono"
+                                       placeholder="123456789">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Patient Name *</label>
+                                <input type="text" x-model="patientName" 
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+                                       placeholder="Anti Gravity">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Diet Type</label>
+                                <input type="text" x-model="dietType" 
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+                                       placeholder="Regular Diet">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Doctor</label>
+                                <input type="text" x-model="doctor" 
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+                                       placeholder="Dr. John Doe">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Nurse</label>
+                                <input type="text" x-model="nurse" 
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+                                       placeholder="Nurse Jane">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Anaesthetist</label>
+                                <input type="text" x-model="anaesthetist" 
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+                                       placeholder="-">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Masking Preview -->
+                    <div x-show="maskPatientName && patientName" x-transition class="mb-6 p-4 bg-yellow-50 rounded-xl border border-yellow-200">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm font-medium text-yellow-800">Privacy Masking Preview:</p>
+                                <p class="text-lg font-bold text-yellow-900 mt-1" x-text="getMaskedName(patientName)"></p>
+                            </div>
+                            <span class="inline-flex items-center px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded">
+                                <span x-text="maskStyle"></span> mode
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end">
+                        <button @click="pushPatientInfo()" 
+                                :disabled="!token || macList.length === 0 || !patientName || pushingInfo"
+                                class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 disabled:from-gray-400 disabled:to-gray-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all">
+                            <svg x-show="!pushingInfo" class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                             </svg>
                             <svg x-show="pushingInfo" class="w-5 h-5 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                                    stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor"
-                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
                             </svg>
                             <span x-text="pushingInfo ? 'Pushing...' : 'Push Patient Info'"></span>
                         </button>
@@ -352,84 +332,14 @@
                 </div>
             </div>
 
-            <!-- Send Text Message -->
-            <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-orange-100">
-                <div class="p-6 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50">
-                    <div class="flex items-center">
-                        <div class="p-3 bg-orange-600 rounded-xl mr-4">
-                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                            </svg>
-                        </div>
-                        <div>
-                            <h3 class="text-lg font-bold text-gray-800">Emergency Text Message</h3>
-                            <p class="text-sm text-gray-500">Send urgent text message to E-Ink display</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="p-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">MAC Address *</label>
-                            <input type="text" x-model="msgMac"
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 font-mono text-sm"
-                                placeholder="D4:3D:39:3C:C0:2C">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                            <select x-model="msgPriority"
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500">
-                                <option value="1">1 - High</option>
-                                <option value="2">2 - Medium</option>
-                                <option value="3">3 - Normal</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-                            <input type="text" x-model="msgTitle"
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                                placeholder="Alert">
-                        </div>
-                        <div class="lg:col-span-1">
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Content *</label>
-                            <input type="text" x-model="msgContent"
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
-                                placeholder="Patient needs assistance">
-                        </div>
-                    </div>
-                    <div class="mt-4 flex justify-end">
-                        <button @click="sendTextMessage()"
-                            :disabled="!token || !msgMac || !msgTitle || !msgContent || sendingMessage"
-                            class="inline-flex items-center px-6 py-3 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 disabled:from-gray-400 disabled:to-gray-500 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all">
-                            <svg x-show="!sendingMessage" class="w-5 h-5 mr-2" fill="none" stroke="currentColor"
-                                viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                            </svg>
-                            <svg x-show="sendingMessage" class="w-5 h-5 mr-2 animate-spin" fill="none"
-                                viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
-                                    stroke-width="4"></circle>
-                                <path class="opacity-75" fill="currentColor"
-                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                            </svg>
-                            <span x-text="sendingMessage ? 'Sending...' : 'Send Message'"></span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
             <!-- Response Log -->
-            <div x-show="responseLog.length > 0" x-transition
-                class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-gray-200">
+            <div x-show="responseLog.length > 0" x-transition class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-gray-200">
                 <div class="p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-slate-50">
                     <div class="flex items-center justify-between">
                         <div class="flex items-center">
                             <div class="p-3 bg-gray-600 rounded-xl mr-4">
                                 <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                 </svg>
                             </div>
                             <div>
@@ -437,25 +347,19 @@
                                 <p class="text-sm text-gray-500">API responses and debug information</p>
                             </div>
                         </div>
-                        <button @click="responseLog = []" class="text-sm text-gray-500 hover:text-gray-700">Clear
-                            Log</button>
+                        <button @click="responseLog = []" class="text-sm text-gray-500 hover:text-gray-700">Clear Log</button>
                     </div>
                 </div>
                 <div class="p-6 max-h-96 overflow-y-auto">
                     <div class="space-y-3">
                         <template x-for="(log, index) in responseLog" :key="index">
-                            <div :class="log.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'"
-                                class="border rounded-lg p-4">
+                            <div :class="log.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'" class="border rounded-lg p-4">
                                 <div class="flex items-center justify-between mb-2">
                                     <span class="text-xs font-medium text-gray-500" x-text="log.time"></span>
-                                    <span :class="log.success ? 'text-green-600' : 'text-red-600'"
-                                        class="text-xs font-bold" x-text="log.action"></span>
+                                    <span :class="log.success ? 'text-green-600' : 'text-red-600'" class="text-xs font-bold" x-text="log.action"></span>
                                 </div>
-                                <p :class="log.success ? 'text-green-700' : 'text-red-700'" class="text-sm font-medium"
-                                    x-text="log.message"></p>
-                                <pre x-show="log.data"
-                                    class="mt-2 text-xs text-gray-600 bg-white/50 rounded p-2 overflow-x-auto"
-                                    x-text="JSON.stringify(log.data, null, 2)"></pre>
+                                <p :class="log.success ? 'text-green-700' : 'text-red-700'" class="text-sm font-medium" x-text="log.message"></p>
+                                <pre x-show="log.data" class="mt-2 text-xs text-gray-600 bg-white/50 rounded p-2 overflow-x-auto" x-text="JSON.stringify(log.data, null, 2)"></pre>
                             </div>
                         </template>
                     </div>
@@ -467,31 +371,36 @@
     <script>
         function ekadManager() {
             return {
-                // Connection
-                baseUrl: @json($config['base_url']),
-                username: @json($config['username']),
-                password: @json($config['password']),
-                token: '',
+                // Configuration
+                baseUrl: @json($config->base_url ?? 'http://iot.seekink.com/cloud/prod-api'),
+                username: @json($config->username ?? ''),
+                password: @json($config->password ?? ''),
+                templateId: @json($config->template_id ?? ''),
+                token: @json($config->bearer_token ?? ''),
+                autoPushEnabled: @json($config->auto_push_enabled ?? false),
+                maskPatientName: @json($config->mask_patient_name ?? false),
+                maskStyle: @json($config->mask_style ?? 'partial'),
                 loggingIn: false,
+                savingConfig: false,
 
-                // Labels
-                labels: [],
-                queryingLabels: false,
+                // Bed Mapping
+                wards: @json($wards),
+                bedMappings: @json($bedMappings),
+                selectedWardId: '',
+                selectedBedId: '',
+                newMacAddress: '',
+                addingMapping: false,
 
                 // Push Patient Info
-                selectedMac: @json($config['test_mac']),
-                templateId: '',
+                macList: [],
+                newMac: '',
+                mrn: '',
                 patientName: '',
-                roomNumber: '',
+                dietType: 'Regular Diet',
                 doctor: '',
+                nurse: '',
+                anaesthetist: '-',
                 pushingInfo: false,
-
-                // Text Message
-                msgMac: @json($config['test_mac']),
-                msgPriority: '1',
-                msgTitle: 'Alert',
-                msgContent: '',
-                sendingMessage: false,
 
                 // Response Log
                 responseLog: [],
@@ -505,10 +414,73 @@
                         message: message,
                         data: data
                     });
-                    // Keep only last 20 logs
                     if (this.responseLog.length > 20) {
                         this.responseLog.pop();
                     }
+                },
+
+                getBedsForWard(wardId) {
+                    if (!wardId) return [];
+                    const ward = this.wards.find(w => w.id == wardId);
+                    return ward ? ward.beds : [];
+                },
+
+                getMaskedName(name) {
+                    if (!name || !this.maskPatientName) return name;
+                    const parts = name.split(' ');
+                    switch (this.maskStyle) {
+                        case 'partial':
+                            return parts.map(p => p.length > 1 ? p[0] + '*'.repeat(p.length - 1) : p).join(' ');
+                        case 'full':
+                            return '*'.repeat(name.length);
+                        case 'initials':
+                            return parts.map(p => p[0].toUpperCase() + '.').join('');
+                        default:
+                            return name;
+                    }
+                },
+
+                addMac() {
+                    if (this.newMac && !this.macList.includes(this.newMac)) {
+                        const cleanMac = this.newMac.replace(/:/g, '').toUpperCase();
+                        this.macList.push(cleanMac);
+                        this.newMac = '';
+                    }
+                },
+
+                removeMac(index) {
+                    this.macList.splice(index, 1);
+                },
+
+                async saveConfiguration() {
+                    this.savingConfig = true;
+                    try {
+                        const response = await fetch('{{ route("ekad.configuration.save") }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            },
+                            body: JSON.stringify({
+                                base_url: this.baseUrl,
+                                username: this.username,
+                                password: this.password,
+                                template_id: this.templateId,
+                                auto_push_enabled: this.autoPushEnabled,
+                                mask_patient_name: this.maskPatientName,
+                                mask_style: this.maskStyle
+                            })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            this.addLog('SAVE CONFIG', true, data.message);
+                        } else {
+                            this.addLog('SAVE CONFIG', false, data.message, data);
+                        }
+                    } catch (error) {
+                        this.addLog('SAVE CONFIG', false, 'Request failed: ' + error.message);
+                    }
+                    this.savingConfig = false;
                 },
 
                 async testLogin() {
@@ -540,26 +512,55 @@
                     this.loggingIn = false;
                 },
 
-                async queryLabels() {
-                    this.queryingLabels = true;
+                async addBedMapping() {
+                    this.addingMapping = true;
                     try {
-                        const response = await fetch('{{ route("ekad.labels") }}?token=' + encodeURIComponent(this.token) + '&base_url=' + encodeURIComponent(this.baseUrl), {
-                            method: 'GET',
+                        const response = await fetch('{{ route("ekad.bed-mappings.store") }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            },
+                            body: JSON.stringify({
+                                bed_id: this.selectedBedId,
+                                mac_address: this.newMacAddress
+                            })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            this.bedMappings.unshift(data.mapping);
+                            this.selectedWardId = '';
+                            this.selectedBedId = '';
+                            this.newMacAddress = '';
+                            this.addLog('ADD MAPPING', true, data.message);
+                        } else {
+                            this.addLog('ADD MAPPING', false, data.message, data);
+                        }
+                    } catch (error) {
+                        this.addLog('ADD MAPPING', false, 'Request failed: ' + error.message);
+                    }
+                    this.addingMapping = false;
+                },
+
+                async deleteBedMapping(id) {
+                    if (!confirm('Are you sure you want to delete this mapping?')) return;
+                    try {
+                        const response = await fetch(`/ekad/bed-mappings/${id}`, {
+                            method: 'DELETE',
                             headers: {
                                 'X-CSRF-TOKEN': '{{ csrf_token() }}'
                             }
                         });
                         const data = await response.json();
                         if (data.success) {
-                            this.labels = data.data || [];
-                            this.addLog('QUERY LABELS', true, data.message + ' (' + this.labels.length + ' found)');
+                            this.bedMappings = this.bedMappings.filter(m => m.id !== id);
+                            this.addLog('DELETE MAPPING', true, data.message);
                         } else {
-                            this.addLog('QUERY LABELS', false, data.message, data);
+                            this.addLog('DELETE MAPPING', false, data.message, data);
                         }
                     } catch (error) {
-                        this.addLog('QUERY LABELS', false, 'Request failed: ' + error.message);
+                        this.addLog('DELETE MAPPING', false, 'Request failed: ' + error.message);
                     }
-                    this.queryingLabels = false;
                 },
 
                 async pushPatientInfo() {
@@ -575,15 +576,19 @@
                                 token: this.token,
                                 base_url: this.baseUrl,
                                 template_id: this.templateId,
-                                mac_list: this.selectedMac,
+                                mac_list: this.macList,
+                                mrn: this.mrn,
                                 patient_name: this.patientName,
-                                room_number: this.roomNumber,
-                                doctor: this.doctor
+                                diet_type: this.dietType,
+                                doctor: this.doctor,
+                                nurse: this.nurse,
+                                anaesthetist: this.anaesthetist,
+                                apply_masking: this.maskPatientName
                             })
                         });
                         const data = await response.json();
                         if (data.success) {
-                            this.addLog('PUSH INFO', true, data.message, data.data);
+                            this.addLog('PUSH INFO', true, data.message, data.payload);
                         } else {
                             this.addLog('PUSH INFO', false, data.message, data);
                         }
@@ -591,36 +596,6 @@
                         this.addLog('PUSH INFO', false, 'Request failed: ' + error.message);
                     }
                     this.pushingInfo = false;
-                },
-
-                async sendTextMessage() {
-                    this.sendingMessage = true;
-                    try {
-                        const response = await fetch('{{ route("ekad.text-message") }}', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                            },
-                            body: JSON.stringify({
-                                token: this.token,
-                                base_url: this.baseUrl,
-                                mac_list: [this.msgMac],
-                                priority: parseInt(this.msgPriority),
-                                title: this.msgTitle,
-                                content: this.msgContent
-                            })
-                        });
-                        const data = await response.json();
-                        if (data.success) {
-                            this.addLog('TEXT MESSAGE', true, data.message, data.data);
-                        } else {
-                            this.addLog('TEXT MESSAGE', false, data.message, data);
-                        }
-                    } catch (error) {
-                        this.addLog('TEXT MESSAGE', false, 'Request failed: ' + error.message);
-                    }
-                    this.sendingMessage = false;
                 }
             }
         }
