@@ -136,8 +136,10 @@ class WardDashboardController extends Controller
 
         foreach ($admittedPatients as $patient) {
             // Count consultants from care providers (consulting role)
+            // Exclude those that are actually anaesthetists (have anaesthetist_id)
             $consultingDoctors = $patient->activeCareProviders()
                 ->where('role', \App\Models\PatientCareProvider::ROLE_CONSULTING)
+                ->whereNull('anaesthetist_id')
                 ->get();
 
             foreach ($consultingDoctors as $provider) {
@@ -1186,6 +1188,67 @@ class WardDashboardController extends Controller
             $clinicalIndicatorOptions['isolation_type'] = array_merge($noneOption, $dbOptions);
         }
 
+        // Calculate display names for Patient Info tab (matching dashboard Bed Box logic)
+        $consultantName = 'Not Assigned';
+        $nurseName = 'Not Assigned';
+        $anaesthetistName = 'Not Assigned';
+
+        if ($patient) {
+            // Consultant: Check active care providers (attending) -> fallback to patient->consultant
+            $attendingDoctor = $patient->activeCareProviders()
+                ->where('role', \App\Models\PatientCareProvider::ROLE_ATTENDING)
+                ->first();
+            $consultantName = $attendingDoctor ? $attendingDoctor->display_name :
+                ($patient->consultant ? $patient->consultant->name : 'Not Assigned');
+
+            // Anaesthetist: Check patient->anaesthetist (primary) OR active care providers (matching dashboard stats)
+            // The dashboard counts unique anaesthetists from both sources.
+            // Priority:
+            // 1. Direct assignment ($patient->anaesthetist)
+            // 2. Active Care Provider with anaesthetist_id
+
+            if ($patient->anaesthetist) {
+                $anaesthetistName = $patient->anaesthetist->name;
+            } else {
+                // Check for care provider with anaesthetist_id
+                $anaesthetistProvider = $patient->activeCareProviders()
+                    ->whereNotNull('anaesthetist_id')
+                    ->first();
+
+                if ($anaesthetistProvider && $anaesthetistProvider->anaesthetist) {
+                    $anaesthetistName = $anaesthetistProvider->anaesthetist->name;
+                }
+            }
+
+            // Nurse: Check WardScheduleAssignment for "Nurse on Duty" (matching dashboard logic)
+            // Use current shift and patient's bed ID
+            $currentShift = \App\Models\ShiftSetting::getCurrentShift($patient->ward_id);
+            $currentShiftCode = $currentShift ? $currentShift->shift_code : null;
+
+            if ($currentShiftCode && $patient->bed_number) {
+                // We need the bed_id. Look up the bed by ward_id and bed_number.
+                $bed = \App\Models\Bed::where('ward_id', $patient->ward_id)
+                    ->where('bed_number', $patient->bed_number)
+                    ->first();
+
+                if ($bed) {
+                    $assignment = \App\Models\WardScheduleAssignment::where('bed_id', $bed->id)
+                        ->where('scheduled_date', now()->toDateString())
+                        ->where('shift', $currentShiftCode)
+                        ->with('nurse')
+                        ->first();
+
+                    if ($assignment && $assignment->nurse) {
+                        $nurseName = $assignment->nurse->name;
+                    }
+                }
+            } else {
+                // Fallback to assigned nurse if no shift/schedule logic applies?
+                // The dashboard shows "No nurse assigned" if not found in schedule.
+                // We'll stick to 'Not Assigned' as default which matches the requirement "display Not Assigned".
+            }
+        }
+
         return view('wards.patient-details', [
             'patient' => $patient,
             'consultants' => $consultants,
@@ -1195,6 +1258,9 @@ class WardDashboardController extends Controller
             'patientDetailsTabs' => $patientDetailsTabs,
             'clinicalIndicatorOptions' => $clinicalIndicatorOptions,
             'patientVitalsMode' => $patientVitalsMode,
+            'consultantName' => $consultantName,
+            'nurseName' => $nurseName,
+            'anaesthetistName' => $anaesthetistName,
         ]);
     }
 
@@ -2207,6 +2273,7 @@ class WardDashboardController extends Controller
             // Add Attending Doctors (PV1-7) - Primary physician
             $attendingDoctors = $patient->activeCareProviders()
                 ->where('role', \App\Models\PatientCareProvider::ROLE_ATTENDING)
+                ->whereNull('anaesthetist_id')
                 ->get();
 
             foreach ($attendingDoctors as $provider) {
@@ -2232,6 +2299,7 @@ class WardDashboardController extends Controller
             // Add Referring Doctors (PV1-8)
             $referringDoctors = $patient->activeCareProviders()
                 ->where('role', \App\Models\PatientCareProvider::ROLE_REFERRING)
+                ->whereNull('anaesthetist_id')
                 ->get();
 
             foreach ($referringDoctors as $provider) {
@@ -2256,6 +2324,7 @@ class WardDashboardController extends Controller
             // Add Consulting Doctors (PV1-9)
             $consultingDoctors = $patient->activeCareProviders()
                 ->where('role', \App\Models\PatientCareProvider::ROLE_CONSULTING)
+                ->whereNull('anaesthetist_id')
                 ->get();
 
             foreach ($consultingDoctors as $provider) {

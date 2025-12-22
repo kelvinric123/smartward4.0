@@ -280,15 +280,15 @@
                         </div>
                         <div>
                             <div class="text-gray-500">Consultant</div>
-                            <div class="font-medium text-gray-900">{{ $patient->consultant->name ?? 'Not Assigned' }}</div>
+                            <div class="font-medium text-gray-900">{{ $consultantName }}</div>
                         </div>
                         <div>
                             <div class="text-gray-500">Nurse</div>
-                            <div class="font-medium text-gray-900">{{ $patient->nurse->name ?? 'Not Assigned' }}</div>
+                            <div class="font-medium text-gray-900">{{ $nurseName }}</div>
                         </div>
                         <div>
                             <div class="text-gray-500">Anaesthetist</div>
-                            <div class="font-medium text-gray-900">{{ $patient->anaesthetist->name ?? 'Not Assigned' }}</div>
+                            <div class="font-medium text-gray-900">{{ $anaesthetistName }}</div>
                         </div>
                         <div>
                             <div class="text-gray-500">Status</div>
