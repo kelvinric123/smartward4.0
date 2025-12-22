@@ -19,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+use App\Services\EkadService;
 
 class AdtApiController extends Controller
 {
@@ -368,6 +369,9 @@ class AdtApiController extends Controller
 
             Log::info("ADT A01 Admit - SUCCESS", ['actions' => $actions]);
 
+            // Trigger EKad update
+            $this->triggerEkadUpdate($patient);
+
             return [
                 'success' => true,
                 'message' => $isNewPatient ? 'Patient created and admitted' : 'Patient updated and admitted',
@@ -627,6 +631,9 @@ class AdtApiController extends Controller
                 'actions' => $actions,
             ]);
 
+            // Trigger EKad update
+            $this->triggerEkadUpdate($patient);
+
             return [
                 'success' => true,
                 'message' => 'Patient transferred successfully',
@@ -696,6 +703,15 @@ class AdtApiController extends Controller
             // Release bed
             $bed = Bed::where('patient_id', $patient->id)->first();
             if ($bed) {
+                // EKad: Push clear screen before discharge
+                try {
+                    $ekadService = new EkadService();
+                    $ekadService->pushPatientInfo($patient, $bed, ['bed_no' => '-', 'mrn' => '-']);
+                    Log::info("ADT - EKad clear screen triggered for discharge");
+                } catch (\Exception $e) {
+                    Log::warning("ADT - EKad discharge push failed: " . $e->getMessage());
+                }
+
                 $bed->update([
                     'patient_id' => null,
                     'status' => 'available',
@@ -836,6 +852,11 @@ class AdtApiController extends Controller
             ]);
 
             DB::commit();
+
+            DB::commit();
+
+            // Trigger EKad update
+            $this->triggerEkadUpdate($patient);
 
             return [
                 'success' => true,
@@ -1012,6 +1033,11 @@ class AdtApiController extends Controller
             DB::commit();
 
             Log::info("ADT A13 Cancel Discharge - SUCCESS", ['actions' => $actions]);
+
+            Log::info("ADT A13 Cancel Discharge - SUCCESS", ['actions' => $actions]);
+
+            // Trigger EKad update
+            $this->triggerEkadUpdate($patient);
 
             return [
                 'success' => true,
