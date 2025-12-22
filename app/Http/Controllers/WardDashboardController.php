@@ -2035,6 +2035,18 @@ class WardDashboardController extends Controller
             'user_id' => Auth::id(),
         ]);
 
+        // EKad: Explicitly push update for clinical changes (Observer might race or fail)
+        try {
+            if ($patient->isAdmitted() && $patient->bed) {
+                // Import class or use full path
+                $ekadService = new \App\Services\EkadService();
+                $ekadService->pushPatientInfo($patient, $patient->bed);
+                Log::info('EKad: Manual push trigger for clinical update', ['patient_id' => $patient->id]);
+            }
+        } catch (\Exception $e) {
+            Log::warning('EKad clinical update push failed', ['error' => $e->getMessage()]);
+        }
+
         return redirect()->route('ward.patient-details', [
             'patient_id' => $patient->id,
             'active_tab' => 'additional',
