@@ -12,127 +12,91 @@ class BedObserver
 {
     /**
      * Handle the Bed "updated" event.
-     * Triggered when patient is admitted, transferred, or discharged from a bed
      */
     public function updated(Bed $bed): void
     {
-        // Check if patient_id changed (admission, transfer, or discharge)
-        if ($bed->wasChanged('patient_id')) {
-            Log::info('EKad BedObserver: Bed patient_id changed', [
+        // Check if relevant fields changed
+        $relevantChanges = $bed->wasChanged([
+            'patient_id',
+            'status',
+        ]);
+
+        if ($relevantChanges) {
+            Log::info('EKad BedObserver: Bed updated', [
                 'bed_id' => $bed->id,
                 'bed_number' => $bed->bed_number,
-                'old_patient_id' => $bed->getOriginal('patient_id'),
-                'new_patient_id' => $bed->patient_id,
+                'changes' => $bed->getChanges(),
             ]);
-
-            $this->handleBedChange($bed);
+            $this->handleBedChange($bed, 'updated');
         }
     }
 
     /**
-     * Handle bed change and push to E-Ink if applicable
+     * Handle bed changes and push to E-Ink if applicable
      */
-    protected function handleBedChange(Bed $bed): void
+    protected function handleBedChange(Bed $bed, string $event): void
     {
         try {
             // Get EKad configuration
             $config = EkadConfiguration::getActive();
-            if (!$config) {
-                Log::debug('EKad BedObserver: No active configuration found');
-                return;
-            }
-
-            if (!$config->is_active) {
-                Log::debug('EKad BedObserver: Configuration is not active');
-                return;
-            }
-
-            if (!$config->auto_push_enabled) {
-                Log::debug('EKad BedObserver: Auto-push is disabled');
+            if (!$config || !$config->is_active || !$config->auto_push_enabled) {
                 return;
             }
 
             // Check if bed has E-Ink mapping
             $mapping = EkadBedMapping::getForBed($bed->id);
             if (!$mapping) {
-                Log::debug('EKad BedObserver: No E-Ink mapping for bed', [
-                    'bed_id' => $bed->id,
-                    'bed_number' => $bed->bed_number,
-                ]);
                 return;
             }
 
-            // Check if patient is assigned (admission/transfer IN)
-            if ($bed->patient_id) {
-                // Load the patient
-                $patient = $bed->patient;
-                if (!$patient) {
-                    Log::warning('EKad BedObserver: Patient not found', [
-                        'bed_id' => $bed->id,
-                        'patient_id' => $bed->patient_id,
-                    ]);
-                    return;
-                }
+            // If patient_id was cleared (Discharge/Transfer out), push clear screen
+            // We check the 'patient_id' attribute explicitly. 
+            // If it's currently null, it means the bed is now empty.
+            if (!$bed->patient_id) {
 
-                Log::info('EKad BedObserver: Pushing patient info to E-Ink (admission/transfer)', [
-                    'bed_id' => $bed->id,
-                    'bed_number' => $bed->bed_number,
-                    'patient_id' => $patient->id,
-                    'patient_name' => $patient->name,
-                    'mac' => $mapping->mac_address,
-                ]);
+                // We might want to push a "Clear" or "Available" status.
+                // The EkadService pushPatientInfo usually requires a Patient object.
+                // For a cleared bed, we might need a specific "clear" method or pass dummy/placeholder data.
+                // However, the AdtApiController and WardDashboardController are ALREADY pushing the clear screen 
+                // explicitly *before* the bed is updated to null.
+                // So this Observer might race or start redundant pushes.
 
-                $service = new EkadService($config);
-                $result = $service->pushPatientInfo($patient, $bed);
+                // If the controller already pushed "Clear", this might be redundant but safe if it pushes "-" placeholders.
+                // But pushPatientInfo requires a Patient object. If patient_id is null, we don't have a patient unique to this bed anymore.
 
-                if ($result['success']) {
-                    Log::info('EKad BedObserver: Auto-push successful', [
-                        'bed_id' => $bed->id,
-                        'patient_name' => $patient->name,
-                        'mac' => $mapping->mac_address,
-                    ]);
-                } else {
-                    Log::warning('EKad BedObserver: Auto-push failed', [
-                        'bed_id' => $bed->id,
-                        'error' => $result['message'],
-                    ]);
-                }
-            } else {
-                // Patient was removed (discharge/transfer OUT)
-                Log::info('EKad BedObserver: Bed is now vacant (discharge/transfer out)', [
-                    'bed_id' => $bed->id,
-                    'bed_number' => $bed->bed_number,
-                    'mac' => $mapping->mac_address,
-                ]);
+                // Strategy: Only trigger if there IS a patient (Admit/Transfer In).
+                // For Discharge (Clean), the Controllers handle it explicitly because they still have the Patient context.
+                // OR: We can try to retrieve the *previous* patient if we wanted to verify, but that's complex.
 
-                // Push "vacant" info to E-Ink
-                $service = new EkadService($config);
-                $result = $service->pushToBed($mapping->mac_address, [
-                    'mrn' => '-',
-                    'patient_name' => 'VACANT',
-                    'diet_type' => '-',
-                    'doctor' => '-',
-                    'nurse' => '-',
-                    'anaesthetist' => '-',
-                ]);
-
-                if ($result['success']) {
-                    Log::info('EKad BedObserver: Vacant push successful', [
-                        'bed_id' => $bed->id,
-                        'mac' => $mapping->mac_address,
-                    ]);
-                } else {
-                    Log::warning('EKad BedObserver: Vacant push failed', [
-                        'bed_id' => $bed->id,
-                        'error' => $result['message'],
-                    ]);
-                }
+                // Let's log it for now. If we want to support "Available" screens, we'd need a specific payload not tied to a Patient model.
+                Log::info('EKad BedObserver: Bed emptied. Skipping automatic push (handled by Controller discharge logic).');
+                return;
             }
-        } catch (\Exception $e) {
-            Log::error('EKad BedObserver: Error', [
-                'bed_id' => $bed->id,
-                'error' => $e->getMessage(),
+
+            // If there is a patient, push their info
+            $patient = $bed->patient;
+            if (!$patient) {
+                Log::warning('EKad BedObserver: Bed has patient_id but relationship returned null', ['patient_id' => $bed->patient_id]);
+                return;
+            }
+
+            Log::info('EKad BedObserver: Pushing patient info to E-Ink', [
+                'patient_id' => $patient->id,
+                'bed_number' => $bed->bed_number,
+                'mac' => $mapping->mac_address,
             ]);
+
+            $service = new EkadService($config);
+            $result = $service->pushPatientInfo($patient, $bed);
+
+            if ($result['success']) {
+                Log::info('EKad BedObserver: Auto-push successful');
+            } else {
+                Log::warning('EKad BedObserver: Auto-push failed', ['error' => $result['message']]);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('EKad BedObserver: Auto-push error', ['error' => $e->getMessage()]);
         }
     }
 }
