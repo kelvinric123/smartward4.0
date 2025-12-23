@@ -11,6 +11,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use App\Services\EkadService;
+use Illuminate\Support\Facades\Log;
 
 class WardScheduleController extends Controller
 {
@@ -156,6 +158,37 @@ class WardScheduleController extends Controller
                     'nurse_id' => $nurseId,
                 ]
             );
+
+            // Trigger Ekad update if assignment is for today and bed has patient
+            try {
+                if ($scheduledDate === now()->toDateString()) {
+                    // Re-fetch bed to get active patient
+                    $bed = Bed::with([
+                        'patient' => function ($q) {
+                            $q->where('is_active', true)
+                                ->whereIn('status', ['admitted', 'prebook', 'pending_discharge']);
+                        }
+                    ])->find($assignment['bed_id']);
+
+                    if ($bed && $bed->patient) {
+                        $nurse = Nurse::find($nurseId);
+                        if ($nurse) {
+                            $ekadService = new EkadService();
+                            // Push with nurse override and "Update Information" event
+                            $ekadService->pushPatientInfo($bed->patient, $bed, [
+                                'nurse' => $nurse->name
+                            ], 'Update Information');
+                            Log::info('EKad: Pushed nurse assignment update', [
+                                'bed_id' => $bed->id,
+                                'patient' => $bed->patient->name ?? 'Unknown',
+                                'nurse' => $nurse->name
+                            ]);
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                Log::warning('EKad Nurse update push failed', ['error' => $e->getMessage()]);
+            }
         }
 
         return redirect()->route('ward.schedule', [

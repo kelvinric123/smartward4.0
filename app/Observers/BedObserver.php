@@ -87,7 +87,7 @@ class BedObserver
             ]);
 
             $service = new EkadService($config);
-            $result = $service->pushPatientInfo($patient, $bed);
+            $result = $service->pushPatientInfo($patient, $bed, [], 'Observer Update');
 
             if ($result['success']) {
                 Log::info('EKad BedObserver: Auto-push successful');

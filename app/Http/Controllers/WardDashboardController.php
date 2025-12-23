@@ -525,6 +525,14 @@ class WardDashboardController extends Controller
                 'user_id' => Auth::id(),
             ]);
 
+            // Explicitly push to EKad for Admission logging
+            try {
+                $ekadService = new EkadService();
+                $ekadService->pushPatientInfo($patient, $bedRecord, [], 'Admission');
+            } catch (\Exception $e) {
+                Log::warning('EKad Admission push failed', ['error' => $e->getMessage()]);
+            }
+
             return back()->with('success', 'Patient admitted successfully!');
         } catch (\Exception $e) {
             Log::error('Patient admission failed', [
@@ -1410,7 +1418,7 @@ class WardDashboardController extends Controller
         try {
             if ($patient->isAdmitted() && $patient->bed) {
                 $ekadService = new EkadService();
-                $ekadService->pushPatientInfo($patient, $patient->bed);
+                $ekadService->pushPatientInfo($patient, $patient->bed, [], 'Update Information');
             }
         } catch (\Exception $e) {
             Log::warning('EKad push on referral failed', ['error' => $e->getMessage()]);
@@ -1578,7 +1586,7 @@ class WardDashboardController extends Controller
             $bed = $patient->bed;
             if ($bed) {
                 $ekadService = new EkadService();
-                // Push discharge payload: vacant patient, discharged MRN, clear other fields
+                // Push discharge discharge payload: vacant patient, discharged MRN, clear other fields
                 $ekadService->pushPatientInfo($patient, $bed, [
                     'patient_name' => 'vacant',
                     'mrn' => 'discharged',
@@ -1587,7 +1595,7 @@ class WardDashboardController extends Controller
                     'anaesthetist' => '-',
                     'diet_type' => '-',
                     // Keep actual bed number
-                ]);
+                ], 'Discharge');
                 Log::info('EKad: Pushed discharge screen', ['patient_id' => $patient->id, 'bed_id' => $bed->id]);
             }
         } catch (\Exception $e) {
@@ -1765,7 +1773,7 @@ class WardDashboardController extends Controller
             if ($patient->isAdmitted() && $patient->bed) {
                 // Import class or use full path
                 $ekadService = new EkadService();
-                $ekadService->pushPatientInfo($patient, $patient->bed);
+                $ekadService->pushPatientInfo($patient, $patient->bed, [], 'Update Information');
                 Log::info('EKad: Manual push trigger for clinical update', ['patient_id' => $patient->id]);
             }
         } catch (\Exception $e) {

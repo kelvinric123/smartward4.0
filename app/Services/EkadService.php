@@ -95,8 +95,9 @@ class EkadService
      * @param Patient $patient
      * @param Bed $bed
      * @param array $overrides Optional array to override patient data (e.g. ['bed_no' => '-', 'mrn' => '-'])
+     * @param string $eventType Description of the event (e.g., 'Admission', 'Discharge')
      */
-    public function pushPatientInfo(Patient $patient, Bed $bed, array $overrides = []): array
+    public function pushPatientInfo(Patient $patient, Bed $bed, array $overrides = [], string $eventType = 'observer'): array
     {
         // Get mapping for this bed
         $mapping = EkadBedMapping::getForBed($bed->id);
@@ -195,19 +196,19 @@ class EkadService
             'anaesthetist' => $anaesthetist,
         ];
 
-        return $this->pushToBed($mapping->mac_address, $data, $bed->id, $patient->id, 'observer');
+        return $this->pushToBed($mapping->mac_address, $data, $bed->id, $patient->id, $eventType);
     }
 
 
     /**
      * Push data to a specific MAC address
      */
-    public function pushToBed(string $mac, array $data, ?int $bedId = null, ?int $patientId = null, string $triggeredBy = 'observer'): array
+    public function pushToBed(string $mac, array $data, ?int $bedId = null, ?int $patientId = null, string $eventType = 'observer'): array
     {
         $token = $this->getToken();
         if (!$token) {
             // Log failed authentication to database
-            $this->logResponse($mac, null, null, null, false, 'Failed to obtain authentication token', $bedId, $patientId, $triggeredBy);
+            $this->logResponse($mac, null, null, null, false, 'Failed to obtain authentication token', $bedId, $patientId, $eventType);
 
             return [
                 'success' => false,
@@ -239,7 +240,7 @@ class EkadService
                 ]);
 
                 // Log successful response to database
-                $this->logResponse($mac, $payload, $result, $responseCode, true, null, $bedId, $patientId, $triggeredBy);
+                $this->logResponse($mac, $payload, $result, $responseCode, true, null, $bedId, $patientId, $eventType);
 
                 return [
                     'success' => true,
@@ -255,14 +256,14 @@ class EkadService
                 $this->config->clearToken();
 
                 // Retry once with fresh token (don't log this attempt, the retry will log)
-                return $this->pushToBed($mac, $data, $bedId, $patientId, $triggeredBy);
+                return $this->pushToBed($mac, $data, $bedId, $patientId, $eventType);
             }
 
             Log::warning('EKad: Push failed', ['response' => $result]);
 
             // Log failed response to database
             $errorMessage = $result['msg'] ?? 'Push failed';
-            $this->logResponse($mac, $payload, $result, $responseCode, false, $errorMessage, $bedId, $patientId, $triggeredBy);
+            $this->logResponse($mac, $payload, $result, $responseCode, false, $errorMessage, $bedId, $patientId, $eventType);
 
             return [
                 'success' => false,
@@ -273,7 +274,7 @@ class EkadService
             Log::error('EKad: Push error', ['error' => $e->getMessage()]);
 
             // Log exception to database
-            $this->logResponse($mac, $payload, null, null, false, 'Connection failed: ' . $e->getMessage(), $bedId, $patientId, $triggeredBy);
+            $this->logResponse($mac, $payload, null, null, false, 'Connection failed: ' . $e->getMessage(), $bedId, $patientId, $eventType);
 
             return [
                 'success' => false,
@@ -317,7 +318,7 @@ class EkadService
     /**
      * Push patient to their assigned bed
      */
-    public function pushPatientToBed(Patient $patient): array
+    public function pushPatientToBed(Patient $patient, string $eventType = 'observer'): array
     {
         $bed = $patient->bed;
         if (!$bed) {
@@ -327,7 +328,7 @@ class EkadService
             ];
         }
 
-        return $this->pushPatientInfo($patient, $bed);
+        return $this->pushPatientInfo($patient, $bed, [], $eventType);
     }
 
     /**
