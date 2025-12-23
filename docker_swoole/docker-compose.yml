@@ -7,8 +7,8 @@ services:
   # LDAP Sync Service Container
   ldap:
     build:
-      context: ..
-      dockerfile: ldap/Dockerfile
+      context: ../ldap
+      dockerfile: Dockerfile
     container_name: smartward4-ldap
     restart: unless-stopped
     ports:
