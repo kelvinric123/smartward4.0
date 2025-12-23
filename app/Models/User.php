@@ -13,6 +13,25 @@ class User extends Authenticatable
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
 
+    // Roles
+    public const ROLE_SUPERADMIN = 'superadmin';
+    public const ROLE_HOSPITAL_ADMIN = 'hospital_admin';
+    public const ROLE_NURSE_HEAD = 'nurse_head';
+    public const ROLE_WARD_DASHBOARD = 'ward_dashboard';
+    public const ROLE_IT_ADMIN = 'it_admin';
+
+    public static function getRoles(): array
+    {
+        return [
+            self::ROLE_SUPERADMIN => 'Superadmin',
+            self::ROLE_HOSPITAL_ADMIN => 'Hospital Admin',
+            self::ROLE_NURSE_HEAD => 'Nurse Head',
+            self::ROLE_WARD_DASHBOARD => 'Ward Dashboard Login',
+            self::ROLE_IT_ADMIN => 'IT Admin',
+        ];
+    }
+
+
     /**
      * The attributes that are mass assignable.
      *
@@ -70,4 +89,29 @@ class User extends Authenticatable
     {
         return $this->is_ldap_user ?? false;
     }
+
+    /**
+     * Check if user has specific role.
+     */
+    public function hasRole(string $role): bool
+    {
+        return $this->role === $role;
+    }
+
+    /**
+     * Check if user has any of the given roles.
+     */
+    public function hasAnyRole(array $roles): bool
+    {
+        return in_array($this->role, $roles);
+    }
+
+    /**
+     * Check if user is Superadmin.
+     */
+    public function isSuperadmin(): bool
+    {
+        return $this->role === self::ROLE_SUPERADMIN;
+    }
+
 }

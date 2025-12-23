@@ -65,6 +65,9 @@ Route::middleware('auth')->group(function () {
     Route::post('nurses-bulk-upload/preview', [NurseController::class, 'bulkUploadPreview'])->name('nurses.bulk-upload.preview');
     Route::post('nurses-bulk-upload/confirm', [NurseController::class, 'bulkUploadConfirm'])->name('nurses.bulk-upload.confirm');
 
+    Route::resource('users', \App\Http\Controllers\UsersController::class)->except(['show']);
+
+
     // Patient Additional Field Routes (inside Admin Management)
     Route::resource('diet-types', DietTypeController::class)->except(['show']);
     Route::post('diet-types/{diet_type}/toggle-active', [DietTypeController::class, 'toggleActive'])->name('diet-types.toggle-active');
