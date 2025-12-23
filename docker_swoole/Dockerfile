@@ -228,7 +228,8 @@ RUN rm -f /app/.env /app/docker.env
 
 # Remove dev dependencies (Faker etc.) for production - no longer needed after seeding
 # Use composer update to ensure latest compatible versions
-RUN composer update --no-dev --optimize-autoloader --no-interaction --prefer-dist
+RUN git config --global --add safe.directory '*' \
+    && composer update --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
 # Reset permissions after migrations
 RUN chown -R www:www /app \
