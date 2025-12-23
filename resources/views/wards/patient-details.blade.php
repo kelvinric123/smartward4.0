@@ -126,6 +126,27 @@
         $attendingDoctors = $patient ? $patient->activeCareProviders()->where('role', PatientCareProvider::ROLE_ATTENDING)->get() : collect();
         $referringDoctors = $patient ? $patient->activeCareProviders()->where('role', PatientCareProvider::ROLE_REFERRING)->get() : collect();
         $consultingDoctors = $patient ? $patient->activeCareProviders()->where('role', PatientCareProvider::ROLE_CONSULTING)->get() : collect();
+
+        // Pre-calculate IHH vitals data for the chart (avoid inline closures in @json)
+        $ihhVitalsData = [];
+        if (($patientVitalsMode ?? 'demo') === 'real' && $patient) {
+            $ihhVitalsData = \App\Models\VitalSign::where('patient_id', $patient->id)
+                ->orderBy('recorded_at', 'desc')
+                ->limit(100)
+                ->get()
+                ->map(function ($v) {
+                    return [
+                        'recorded_at' => $v->recorded_at->toISOString(),
+                        'temperature' => $v->temperature,
+                        'systolic_bp' => $v->systolic_bp,
+                        'diastolic_bp' => $v->diastolic_bp,
+                        'pulse_rate' => $v->pulse_rate,
+                        'respiratory_rate' => $v->respiratory_rate,
+                        'spo2' => $v->spo2,
+                    ];
+                })
+                ->toArray();
+        }
     @endphp
     <div class="p-4" x-data='@json([
         "activeTab" => $activeTab ?? "info",
@@ -261,6 +282,10 @@
                         <div>
                             <div class="text-gray-500">MRN</div>
                             <div class="font-medium text-gray-900">{{ $patient->mrn }}</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-500">RN</div>
+                            <div class="font-medium text-gray-900">{{ $patient->rn ?? '-' }}</div>
                         </div>
                         <div>
                             <div class="text-gray-500">Gender</div>
@@ -666,7 +691,7 @@
 
                                 {{-- Isolation with virus icon --}}
                                 @php 
-                                                                    $hasIsolation = $patient->isolation_type && $patient->isolation_type !== 'none';
+                                                                                                                                    $hasIsolation = $patient->isolation_type && $patient->isolation_type !== 'none';
                                     $criticalIsolations = ['covid', 'tb', 'airborne', 'COVID', 'TB', 'AIR'];
                                     $isCritical = $hasIsolation && (in_array($patient->isolation_type, $criticalIsolations) || in_array(strtoupper($patient->isolation_type), $criticalIsolations));
                                 @endphp
@@ -1056,7 +1081,7 @@
                         <template x-if="view === 'ihh'">
                             <div class="mt-2" x-data="{
                                 ihhDate: new Date().toISOString().split('T')[0],
-                                allVitals: @json($vitalsMode === 'real' ? \App\Models\VitalSign::where('patient_id', $patient->id ?? 0)->orderBy('recorded_at', 'desc')->limit(100)->get()->map(function($v) { return ['recorded_at' => $v->recorded_at->toISOString(), 'temperature' => $v->temperature, 'systolic_bp' => $v->systolic_bp, 'diastolic_bp' => $v->diastolic_bp, 'pulse_rate' => $v->pulse_rate, 'respiratory_rate' => $v->respiratory_rate, 'spo2' => $v->spo2]; }) : []),
+                                allVitals: @json($ihhVitalsData),
                                 get filteredVitals() {
                                     const dateStart = new Date(this.ihhDate + 'T00:00:00');
                                     const dateEnd = new Date(this.ihhDate + 'T23:59:59');
@@ -1484,12 +1509,12 @@
                             function selectQuickLocation(location, type, btn) {
                                 document.getElementById('movement_location').value = location;
                                 document.getElementById('movement_location_type').value = type;
-                                
+
                                 // Remove active state from all quick location buttons
                                 document.querySelectorAll('.quick-loc-btn').forEach(b => {
                                     b.classList.remove('ring-2', 'ring-offset-2', 'ring-blue-500');
                                 });
-                                
+
                                 // Add active state to clicked button
                                 btn.classList.add('ring-2', 'ring-offset-2', 'ring-blue-500');
                             }
@@ -1497,15 +1522,15 @@
                             function selectTime(time, btn) {
                                 document.getElementById('movement_time').value = time;
                                 document.getElementById('selected_time_display').textContent = time;
-                                
+
                                 // Remove active state from all time buttons
                                 document.querySelectorAll('.time-slot-btn').forEach(b => {
                                     b.classList.remove('bg-blue-600', 'bg-orange-500', 'bg-indigo-600', 'text-white', 'border-blue-600', 'border-orange-500', 'border-indigo-600');
                                 });
-                                
+
                                 // Add active state to clicked button
                                 btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
-                                
+
                                 // Update hidden scheduled_at field
                                 updateScheduledAt();
                             }
