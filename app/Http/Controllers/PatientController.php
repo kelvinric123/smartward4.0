@@ -10,10 +10,23 @@ class PatientController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(Request $request)
     {
-        $patients = Patient::latest()->paginate(15);
-        return view('patients.index', compact('patients'));
+        $search = trim((string) $request->input('search', ''));
+
+        $query = Patient::latest();
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', '%' . $search . '%')
+                    ->orWhere('mrn', 'like', '%' . $search . '%')
+                    ->orWhere('rn', 'like', '%' . $search . '%');
+            });
+        }
+
+        $patients = $query->paginate(15)->withQueryString();
+
+        return view('patients.index', compact('patients', 'search'));
     }
 
     /**

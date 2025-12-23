@@ -371,17 +371,86 @@
 
             <!-- IHH Chart View (Modified Clinical Chart / Early Warning Score) -->
             <div x-show="view === 'ihh'" x-cloak>
-                @if($vitalSigns->count() > 0)
-                    @php
-                        $chartVitals = $vitalSigns->take(12)->reverse()->values();
-                    @endphp
+                <!-- Date Navigation for IHH Chart -->
+                <div class="flex items-center justify-between mb-3 bg-gray-50 rounded-lg p-2 border border-gray-200">
+                    <form method="GET" action="{{ route('vital-signs.patient') }}" class="flex items-center space-x-2">
+                        <input type="hidden" name="patient_id" value="{{ $patient->id }}">
+                        @if($selectedAdmissionId)
+                            <input type="hidden" name="admission_id" value="{{ $selectedAdmissionId }}">
+                        @endif
+                        <input type="hidden" name="date" value="{{ $selectedDate->copy()->subDay()->format('Y-m-d') }}">
+                        <button type="submit" 
+                                @if(!$hasPreviousDay) disabled @endif
+                                class="px-3 py-1.5 rounded-md text-sm font-medium transition-all {{ $hasPreviousDay ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 shadow-sm' : 'bg-gray-100 text-gray-400 cursor-not-allowed' }}">
+                            <svg class="w-4 h-4 inline -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                            </svg>
+                            Previous
+                        </button>
+                    </form>
+
+                    <div class="text-center">
+                        <div class="text-lg font-bold text-gray-800">{{ $selectedDate->format('d M Y') }}</div>
+                        <div class="text-xs text-gray-500">
+                            @if($selectedDate->isToday())
+                                <span class="text-blue-600 font-semibold">Today</span>
+                            @elseif($selectedDate->isYesterday())
+                                Yesterday
+                            @else
+                                {{ $selectedDate->diffForHumans() }}
+                            @endif
+                        </div>
+                    </div>
+
+                    <div class="flex items-center space-x-2">
+                        @if(!$selectedDate->isToday())
+                            <form method="GET" action="{{ route('vital-signs.patient') }}">
+                                <input type="hidden" name="patient_id" value="{{ $patient->id }}">
+                                @if($selectedAdmissionId)
+                                    <input type="hidden" name="admission_id" value="{{ $selectedAdmissionId }}">
+                                @endif
+                                <button type="submit" 
+                                        class="px-3 py-1.5 rounded-md text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-all">
+                                    Today
+                                </button>
+                            </form>
+                        @endif
+
+                        <form method="GET" action="{{ route('vital-signs.patient') }}">
+                            <input type="hidden" name="patient_id" value="{{ $patient->id }}">
+                            @if($selectedAdmissionId)
+                                <input type="hidden" name="admission_id" value="{{ $selectedAdmissionId }}">
+                            @endif
+                            <input type="hidden" name="date" value="{{ $selectedDate->copy()->addDay()->format('Y-m-d') }}">
+                            <button type="submit" 
+                                    @if(!$hasNextDay || $selectedDate->isToday()) disabled @endif
+                                    class="px-3 py-1.5 rounded-md text-sm font-medium transition-all {{ ($hasNextDay && !$selectedDate->isToday()) ? 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 shadow-sm' : 'bg-gray-100 text-gray-400 cursor-not-allowed' }}">
+                                Next
+                                <svg class="w-4 h-4 inline -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                </svg>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                @php
+                    // Filter vitals for the selected date only
+                    $dayStart = $selectedDate->copy()->startOfDay();
+                    $dayEnd = $selectedDate->copy()->endOfDay();
+                    $chartVitals = $vitalSigns->filter(function($vital) use ($dayStart, $dayEnd) {
+                        return $vital->recorded_at >= $dayStart && $vital->recorded_at <= $dayEnd;
+                    })->sortBy('recorded_at')->values();
+                @endphp
+
+                @if($chartVitals->count() > 0)
                     <div class="overflow-x-auto border border-gray-300 rounded-lg bg-white">
                         <!-- Chart Header -->
                         <div class="bg-gradient-to-r from-blue-700 to-blue-800 text-white p-3">
                             <div class="flex items-center justify-between">
                                 <div>
                                     <h3 class="font-bold text-sm">MODIFIED CLINICAL CHART - EARLY WARNING SCORE (EWS)</h3>
-                                    <p class="text-xs text-blue-200 mt-1">{{ $patient->name ?? 'Patient' }} | MRN: {{ $patient->mrn ?? '-' }}</p>
+                                    <p class="text-xs text-blue-200 mt-1">{{ $patient->name ?? 'Patient' }} | MRN: {{ $patient->mrn ?? '-' }} | {{ $selectedDate->format('d M Y') }}</p>
                                 </div>
                                 <div class="text-right text-xs">
                                     <div class="flex items-center space-x-3">
@@ -694,8 +763,16 @@
                         <svg class="w-12 h-12 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                         </svg>
-                        <p class="text-gray-500 font-medium">No vital signs data</p>
-                        <p class="text-xs text-gray-400 mt-1">At least 1 reading is required to display the IHH chart</p>
+                        <p class="text-gray-500 font-medium">No vital signs on {{ $selectedDate->format('d M Y') }}</p>
+                        <p class="text-xs text-gray-400 mt-1">
+                            @if($hasPreviousDay)
+                                Use the Previous button to see earlier recordings
+                            @elseif($vitalSigns->count() > 0)
+                                This patient has {{ $vitalSigns->count() }} recordings on other days
+                            @else
+                                No vital signs have been recorded for this patient yet
+                            @endif
+                        </p>
                     </div>
                 @endif
             </div>

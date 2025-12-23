@@ -272,7 +272,7 @@ class AdtApiController extends Controller
             }
 
             // Update patient information from PID
-            $this->updatePatientFromPid($patient, $pid);
+            $this->updatePatientFromPid($patient, $pid, $pv1);
 
             // Update clinical indicators from allergies and custom segments
             $this->updatePatientClinicalIndicators($patient, $allergies, $custom, $pv1);
@@ -535,13 +535,13 @@ class AdtApiController extends Controller
                 Log::info("ADT A02 Transfer - Patient not found, creating new patient", ['mrn' => $mrn]);
                 $patient = new Patient();
                 $patient->mrn = $mrn;
-                $this->updatePatientFromPid($patient, $pid);
+                $this->updatePatientFromPid($patient, $pid, $pv1);
                 $patient->status = Patient::STATUS_ADMITTED;
                 $patient->admitted_at = now();
                 $actions[] = 'patient_created_on_transfer';
             } else {
                 // Update existing patient info
-                $this->updatePatientFromPid($patient, $pid);
+                $this->updatePatientFromPid($patient, $pid, $pv1);
                 $actions[] = 'patient_updated';
             }
 
@@ -840,7 +840,7 @@ class AdtApiController extends Controller
             $actions[] = 'patient_updated';
 
             // Update patient information (demographics/clinical/visit) but do NOT change admission/bed
-            $this->updatePatientFromPid($patient, $pid);
+            $this->updatePatientFromPid($patient, $pid, $pv1);
             $this->updatePatientClinicalIndicators($patient, $allergies, $custom, $pv1);
             $this->updatePatientVisitInfo($patient, $pv1, $pv2);
 
@@ -1225,8 +1225,11 @@ class AdtApiController extends Controller
 
     /**
      * Update patient information from PID segment
+     * @param Patient $patient The patient model to update
+     * @param array $pid Parsed PID segment data
+     * @param array $pv1 Parsed PV1 segment data (for visit_number/RN)
      */
-    protected function updatePatientFromPid(Patient $patient, array $pid): void
+    protected function updatePatientFromPid(Patient $patient, array $pid, array $pv1 = []): void
     {
         // Name
         if (!empty($pid['name'])) {
@@ -1243,8 +1246,11 @@ class AdtApiController extends Controller
             Log::info("ADT - Generated default ic_passport for patient: {$patient->ic_passport}");
         }
 
-        // Generate RN if not exists
-        if (empty($patient->rn)) {
+        // Set RN from PV1 visit_number (PV1-19) if available, otherwise generate
+        if (!empty($pv1['visit_number'])) {
+            $patient->rn = $pv1['visit_number'];
+        } elseif (empty($patient->rn)) {
+            // Fallback to auto-generated RN only if visit_number not provided
             $patient->rn = 'RN-' . strtoupper(substr(md5($patient->mrn . time()), 0, 8));
         }
 

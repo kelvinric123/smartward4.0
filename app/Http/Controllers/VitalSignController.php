@@ -34,7 +34,7 @@ class VitalSignController extends Controller
         if ($search !== '') {
             $query->whereHas('patient', function ($q) use ($search) {
                 $q->where('name', 'like', '%' . $search . '%')
-                  ->orWhere('mrn', 'like', '%' . $search . '%');
+                    ->orWhere('mrn', 'like', '%' . $search . '%');
             });
         }
 
@@ -88,7 +88,7 @@ class VitalSignController extends Controller
         ]);
 
         $patient = Patient::findOrFail($request->patient_id);
-        
+
         // Determine admission ID
         $admissionId = $patient->getCurrentAdmissionId();
         if (!$admissionId) {
@@ -106,7 +106,7 @@ class VitalSignController extends Controller
             $request->spo2,
             $request->respiratory_rate,
         ])->filter(fn($v) => $v !== null)->count();
-        
+
         if ($filledCount >= 5) {
             $readingType = 'full';
         }
@@ -145,25 +145,46 @@ class VitalSignController extends Controller
     {
         $patientId = $request->input('patient_id');
         $admissionId = $request->input('admission_id');
+        $dateParam = $request->input('date'); // Date for IHH chart pagination (Y-m-d format)
 
         $patient = null;
         $vitalSigns = collect();
         $admissions = [];
+        $selectedDate = $dateParam ? \Carbon\Carbon::parse($dateParam)->startOfDay() : now()->startOfDay();
+        $hasPreviousDay = false;
+        $hasNextDay = false;
 
         if ($patientId) {
             $patient = Patient::with(['ward', 'consultant'])->find($patientId);
-            
+
             if ($patient) {
                 $admissions = $this->getPatientAdmissions($patientId);
-                
-                $query = VitalSign::where('patient_id', $patientId)
-                    ->orderBy('recorded_at', 'desc');
 
+                // Base query for date-filtered vitals (for IHH chart)
+                $dateQuery = VitalSign::where('patient_id', $patientId);
                 if ($admissionId) {
-                    $query->where('admission_id', $admissionId);
+                    $dateQuery->where('admission_id', $admissionId);
                 }
 
-                $vitalSigns = $query->take(50)->get();
+                // Check if there are vitals before the selected date
+                $hasPreviousDay = (clone $dateQuery)
+                    ->where('recorded_at', '<', $selectedDate)
+                    ->exists();
+
+                // Check if there are vitals after the selected date (but not in the future)
+                $tomorrow = $selectedDate->copy()->addDay();
+                $hasNextDay = $selectedDate->lt(now()->startOfDay()) && (clone $dateQuery)
+                    ->where('recorded_at', '>=', $tomorrow)
+                    ->where('recorded_at', '<=', now())
+                    ->exists();
+
+                // Get all vitals (for list/graph views) - ordered desc
+                $allVitalsQuery = VitalSign::where('patient_id', $patientId)
+                    ->orderBy('recorded_at', 'desc');
+                if ($admissionId) {
+                    $allVitalsQuery->where('admission_id', $admissionId);
+                }
+                $vitalSigns = $allVitalsQuery->take(50)->get();
             }
         }
 
@@ -172,6 +193,9 @@ class VitalSignController extends Controller
             'vitalSigns' => $vitalSigns,
             'admissions' => $admissions,
             'selectedAdmissionId' => $admissionId,
+            'selectedDate' => $selectedDate,
+            'hasPreviousDay' => $hasPreviousDay,
+            'hasNextDay' => $hasNextDay,
         ]);
     }
 
@@ -195,7 +219,7 @@ class VitalSignController extends Controller
             ->get(['id', 'action', 'admitted_at', 'created_at', 'ward_id', 'bed_number']);
 
         $admissions = [];
-        
+
         foreach ($admissionLogs as $log) {
             $admissionId = 'ADM-' . $patientId . '-' . ($log->admitted_at ?? $log->created_at)->format('YmdHis');
             $admissions[$admissionId] = [
@@ -218,9 +242,12 @@ class VitalSignController extends Controller
 
         // Sort by date descending
         uasort($admissions, function ($a, $b) {
-            if (!$a['date'] && !$b['date']) return 0;
-            if (!$a['date']) return 1;
-            if (!$b['date']) return -1;
+            if (!$a['date'] && !$b['date'])
+                return 0;
+            if (!$a['date'])
+                return 1;
+            if (!$b['date'])
+                return -1;
             return $b['date']->timestamp - $a['date']->timestamp;
         });
 
@@ -233,7 +260,7 @@ class VitalSignController extends Controller
     public function latestVitals(Request $request)
     {
         $patientId = $request->input('patient_id');
-        
+
         if (!$patientId) {
             return response()->json(['error' => 'Patient ID required'], 400);
         }
