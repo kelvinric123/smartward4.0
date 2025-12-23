@@ -15,6 +15,15 @@ services:
       - "5000:5000"
     environment:
       PYTHONUNBUFFERED: "1"
+      DB_HOST: "${DB_HOST:-smartward}" # Service name of the app container which has mysql? No, mysql is in smartward container?
+      # Wait, check docker-compose structure. smartward container has mysql?
+      # "smartward" service (Dockerfile) installs mariaDB. 
+      # "smartward" service has alias "smartward4".
+      # So DB_HOST should be "smartward4".
+      DB_HOST: "smartward4" 
+      DB_PORT: "3306"
+      DB_DATABASE: "${DB_DATABASE:-smartward}"
+      DB_PASSWORD: "${DB_PASSWORD:-smartward_secret}"
     deploy:
       resources:
         limits:

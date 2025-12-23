@@ -58,12 +58,60 @@ def fetch_ldap_data():
             # Example: Print specific fields (handle if they are missing)
             name = user_data.get('cn', ['Unknown'])[0]
             account = user_data.get('sAMAccountName', ['Unknown'])[0]
+            email = user_data.get('mail', [f'{account}@ldap.local'])[0]
             print(f"User: {name} | Account: {account}")
+
+            # Database Update Logic
+            try:
+                # Basic connection - in production use env vars
+                import mysql.connector
+                import os
+                
+                db = mysql.connector.connect(
+                    host=os.environ.get('DB_HOST', 'smartward-db'), # Using service name if in same network
+                    port=int(os.environ.get('DB_PORT', 3306)),
+                    user="root", # Ideally use a specific user
+                    password=os.environ.get('DB_PASSWORD', 'smartward_secret'), 
+                    database=os.environ.get('DB_DATABASE', 'smartward')
+                )
+                cursor = db.cursor()
+                
+                # Check if user exists
+                cursor.execute("SELECT id FROM users WHERE email = %s OR name = %s", (email, account))
+                result = cursor.fetchone()
+                
+                if result:
+                    # Update
+                    print(f"Updating user: {account}")
+                    sql = """
+                        UPDATE users 
+                        SET name = %s, is_ldap_user = 1, ldap_synced_at = NOW()
+                        WHERE id = %s
+                    """
+                    cursor.execute(sql, (name, result[0]))
+                else:
+                    # Insert
+                    print(f"Creating user: {account}")
+                    # Default role: 'user'
+                    sql = """
+                        INSERT INTO users (name, email, password, role, is_ldap_user, ldap_synced_at, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, 1, NOW(), NOW(), NOW())
+                    """
+                    # Use a dummy password for LDAP users as they auth via LDAP
+                    dummy_pass = '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' # "password"
+                    cursor.execute(sql, (name, email, dummy_pass, 'user'))
+                
+                db.commit()
+                cursor.close()
+                db.close()
+                
+            except Exception as db_err:
+                print(f"Database error for {account}: {db_err}")
 
     except Exception as e:
         print(f"An error occurred: {e}")
 
-    finally:
+    finally:    
         # Always close the connection
         if 'conn' in locals() and conn.bound:
             conn.unbind()

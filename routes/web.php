@@ -127,6 +127,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/vital-signs/patient', [VitalSignController::class, 'patientVitals'])->name('vital-signs.patient');
     Route::get('/vital-signs/latest', [VitalSignController::class, 'latestVitals'])->name('vital-signs.latest');
 
+    // LDAP Login Routes
+    Route::get('/login/ldap', [LdapConfigurationController::class, 'showLdapLogin'])->name('login.ldap');
+    Route::post('/login/ldap', [LdapConfigurationController::class, 'ldapLogin'])->name('login.ldap.submit');
+
     // LDAP Integration Routes
     Route::get('/ldap', [LdapConfigurationController::class, 'index'])->name('ldap.index');
     Route::post('/ldap/manual-sync', [LdapConfigurationController::class, 'manualSync'])->name('ldap.manual-sync');
