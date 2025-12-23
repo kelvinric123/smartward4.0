@@ -129,14 +129,6 @@ Route::middleware('auth')->group(function () {
 
     // LDAP Integration Routes
     Route::get('/ldap', [LdapConfigurationController::class, 'index'])->name('ldap.index');
-    Route::post('/ldap', [LdapConfigurationController::class, 'store'])->name('ldap.store');
-    Route::put('/ldap/{ldapConfiguration}', [LdapConfigurationController::class, 'update'])->name('ldap.update');
-    Route::delete('/ldap/{ldapConfiguration}', [LdapConfigurationController::class, 'destroy'])->name('ldap.destroy');
-    Route::post('/ldap/test', [LdapConfigurationController::class, 'testConnection'])->name('ldap.test');
-    Route::post('/ldap/{ldapConfiguration}/sync', [LdapConfigurationController::class, 'syncUsers'])->name('ldap.sync');
-    Route::post('/ldap/{ldapConfiguration}/role-mapping', [LdapConfigurationController::class, 'storeRoleMapping'])->name('ldap.role-mapping.store');
-    Route::delete('/ldap/role-mapping/{roleMapping}', [LdapConfigurationController::class, 'destroyRoleMapping'])->name('ldap.role-mapping.destroy');
-    Route::get('/ldap/{ldapConfiguration}/groups', [LdapConfigurationController::class, 'fetchGroups'])->name('ldap.groups');
 
     // Vital Sign Integration Routes
     Route::get('/vital-sign-integration', [VitalSignIntegrationController::class, 'index'])->name('vital-sign-integration.index');

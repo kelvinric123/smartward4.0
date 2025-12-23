@@ -4,6 +4,29 @@
 # =============================================================================
 
 services:
+  # LDAP Sync Service Container
+  ldap:
+    build:
+      context: ..
+      dockerfile: ldap/Dockerfile
+    container_name: smartward4-ldap
+    restart: unless-stopped
+    environment:
+      PYTHONUNBUFFERED: "1"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "128M"
+        reservations:
+          cpus: "0.1"
+          memory: "32M"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   smartward:
     build:
       context: ..

@@ -7,6 +7,8 @@ use App\Models\EkadBedMapping;
 use App\Models\EkadResponseLog;
 use App\Models\Patient;
 use App\Models\Bed;
+use App\Models\ShiftSetting;
+use App\Models\WardScheduleAssignment;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -153,6 +155,28 @@ class EkadService
             $nurse = $overrides['nurse'];
         } elseif ($patient->nurse) {
             $nurse = $patient->nurse->name;
+        } else {
+            // Fallback to Ward Schedule (Roster) for today
+            try {
+                $wardId = $patient->ward_id;
+                $currentShift = ShiftSetting::getCurrentShift($wardId);
+
+                if ($currentShift) {
+                    $assignment = WardScheduleAssignment::where('ward_id', $wardId)
+                        ->where('bed_id', $bed->id)
+                        ->where('scheduled_date', now()->toDateString())
+                        ->where('shift', $currentShift->shift_code)
+                        ->with('nurse')
+                        ->first();
+
+                    if ($assignment && $assignment->nurse) {
+                        $nurse = $assignment->nurse->name;
+                    }
+                }
+            } catch (\Exception $e) {
+                // Ignore roster errors safely
+                Log::warning('EkadService: Failed to fetch roster nurse', ['error' => $e->getMessage()]);
+            }
         }
         $nurse = $this->normalizeValue($nurse);
 
