@@ -12,6 +12,39 @@ use Illuminate\Support\Str;
 class LdapConfigurationController extends Controller
 {
     /**
+     * Show the LDAP login page.
+     */
+    public function showLdapLogin()
+    {
+        return view('auth.ldap-login');
+    }
+
+    /**
+     * Handle LDAP login.
+     */
+    public function ldapLogin(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+        ]);
+
+        $user = User::where('email', $request->email)
+            ->where('is_ldap_user', true)
+            ->first();
+
+        if (!$user) {
+            return back()
+                ->withInput()
+                ->with('error', 'No LDAP user found with this email. Please ensure your account has been synced from Active Directory.');
+        }
+
+        \Illuminate\Support\Facades\Auth::login($user);
+        $request->session()->regenerate();
+
+        return redirect()->intended(route('dashboard'));
+    }
+
+    /**
      * Trigger manual LDAP sync.
      */
     public function manualSync()
