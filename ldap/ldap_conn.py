@@ -68,16 +68,47 @@ def fetch_ldap_data():
         if 'conn' in locals() and conn.bound:
             conn.unbind()
 
-if __name__ == "__main__":
-    import time
-    import sys
 
-    print("Starting LDAP Sync Service...", flush=True)
+from flask import Flask, jsonify
+import schedule
+import time
+import threading
+
+app = Flask(__name__)
+
+# ... existing code ...
+
+@app.route('/sync', methods=['POST'])
+def manual_sync():
+    """Endpoint to trigger manual synchronization."""
+    print("Manual sync triggered via HTTP request.")
+    try:
+        fetch_ldap_data()
+        return jsonify({"status": "success", "message": "LDAP sync completed successfully."}), 200
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+def run_scheduler():
+    """Runs the scheduler in a separate thread."""
+    print("Scheduler started. Waiting for 06:00...")
+    schedule.every().day.at("06:00").do(fetch_ldap_data)
     
     while True:
-        print("\n--- Starting Sync Cycle ---", flush=True)
-        fetch_ldap_data()
-        print("--- Cycle Finished ---\n", flush=True)
-        
-        # Sleep for 60 seconds (or configurable interval)
-        time.sleep(60)
+        schedule.run_pending()
+        time.sleep(1)
+
+if __name__ == "__main__":
+    import sys
+    
+    # Start scheduler in a background thread
+    scheduler_thread = threading.Thread(target=run_scheduler)
+    scheduler_thread.daemon = True
+    scheduler_thread.start()
+    
+    # Run initial sync on startup
+    print("Running initial sync on startup...")
+    fetch_ldap_data()
+
+    # Start Flask app
+    print("Starting Flask server on port 5000...", flush=True)
+    app.run(host='0.0.0.0', port=5000)

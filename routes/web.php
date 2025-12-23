@@ -129,6 +129,7 @@ Route::middleware('auth')->group(function () {
 
     // LDAP Integration Routes
     Route::get('/ldap', [LdapConfigurationController::class, 'index'])->name('ldap.index');
+    Route::post('/ldap/manual-sync', [LdapConfigurationController::class, 'manualSync'])->name('ldap.manual-sync');
 
     // Vital Sign Integration Routes
     Route::get('/vital-sign-integration', [VitalSignIntegrationController::class, 'index'])->name('vital-sign-integration.index');

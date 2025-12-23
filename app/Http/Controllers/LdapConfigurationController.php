@@ -12,6 +12,24 @@ use Illuminate\Support\Str;
 class LdapConfigurationController extends Controller
 {
     /**
+     * Trigger manual LDAP sync.
+     */
+    public function manualSync()
+    {
+        try {
+            $response = \Illuminate\Support\Facades\Http::post('http://smartward4-ldap:5000/sync');
+
+            if ($response->successful()) {
+                return redirect()->back()->with('success', 'LDAP sync triggered successfully.');
+            } else {
+                return redirect()->back()->with('error', 'Failed to trigger sync: ' . $response->body());
+            }
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Connection failed: ' . $e->getMessage());
+        }
+    }
+
+    /**
      * Display the LDAP integration page.
      */
     public function index()
@@ -20,7 +38,7 @@ class LdapConfigurationController extends Controller
         $availableRoles = LdapRoleMapping::getAvailableRoles();
         $ldapUsers = User::where('is_ldap_user', true)->with('ldapConfiguration')->latest()->get();
         $ldapExtensionLoaded = extension_loaded('ldap');
-        
+
         return view('integration.ldap.index', compact('configurations', 'availableRoles', 'ldapUsers', 'ldapExtensionLoaded'));
     }
 
@@ -118,7 +136,7 @@ class LdapConfigurationController extends Controller
     public function testConnection(Request $request)
     {
         $configId = $request->input('config_id');
-        
+
         if ($configId) {
             $config = LdapConfiguration::findOrFail($configId);
         } else {
@@ -131,7 +149,7 @@ class LdapConfigurationController extends Controller
 
         try {
             $result = $this->connectToLdap($config);
-            
+
             if ($result['success']) {
                 return response()->json([
                     'success' => true,
@@ -159,17 +177,17 @@ class LdapConfigurationController extends Controller
     {
         try {
             $result = $this->connectToLdap($ldapConfiguration);
-            
+
             if (!$result['success']) {
                 return redirect()->route('ldap.index')->with('error', 'Failed to connect to LDAP: ' . $result['message']);
             }
 
             $ldapConn = $result['connection'];
-            
+
             // Search for users
             $filter = $ldapConfiguration->filter_string ?: '(objectCategory=Person)';
             $search = @ldap_search($ldapConn, $ldapConfiguration->base_dn, $filter);
-            
+
             if (!$search) {
                 $error = ldap_error($ldapConn);
                 ldap_close($ldapConn);
@@ -183,7 +201,7 @@ class LdapConfigurationController extends Controller
 
             for ($i = 0; $i < $entries['count']; $i++) {
                 $entry = $entries[$i];
-                
+
                 try {
                     $result = $this->syncUserFromEntry($entry, $ldapConfiguration);
                     if ($result === 'created') {
@@ -255,10 +273,10 @@ class LdapConfigurationController extends Controller
 
         // Build connection string
         $connectionString = $config->getConnectionString();
-        
+
         // Connect to LDAP server
         $ldapConn = @ldap_connect($connectionString);
-        
+
         if (!$ldapConn) {
             return [
                 'success' => false,
@@ -280,7 +298,7 @@ class LdapConfigurationController extends Controller
 
         // Bind to LDAP
         $bind = @ldap_bind($ldapConn, $config->bind_dn, $config->bind_password);
-        
+
         if (!$bind) {
             $error = ldap_error($ldapConn);
             $errno = ldap_errno($ldapConn);
@@ -314,7 +332,7 @@ class LdapConfigurationController extends Controller
         $email = $entry[$emailAttr][0] ?? null;
         $name = $entry[$nameAttr][0] ?? $username;
         $dn = $entry['dn'] ?? null;
-        
+
         // Try to get objectGUID
         $guid = null;
         if (isset($entry['objectguid'][0])) {
@@ -386,8 +404,10 @@ class LdapConfigurationController extends Controller
         if (is_array($memberOf)) {
             foreach ($roleMappings as $mapping) {
                 for ($i = 0; $i < ($memberOf['count'] ?? 0); $i++) {
-                    if (stripos($memberOf[$i], $mapping->ldap_group_dn) !== false ||
-                        stripos($mapping->ldap_group_dn, $memberOf[$i]) !== false) {
+                    if (
+                        stripos($memberOf[$i], $mapping->ldap_group_dn) !== false ||
+                        stripos($mapping->ldap_group_dn, $memberOf[$i]) !== false
+                    ) {
                         $role = $mapping->local_role;
                         break 2;
                     }
@@ -409,7 +429,7 @@ class LdapConfigurationController extends Controller
         $hex3 = substr($hex, 14, 2) . substr($hex, 12, 2);
         $hex4 = substr($hex, 16, 4);
         $hex5 = substr($hex, 20, 12);
-        
+
         return strtoupper($hex1 . '-' . $hex2 . '-' . $hex3 . '-' . $hex4 . '-' . $hex5);
     }
 
@@ -420,7 +440,7 @@ class LdapConfigurationController extends Controller
     {
         try {
             $result = $this->connectToLdap($ldapConfiguration);
-            
+
             if (!$result['success']) {
                 return response()->json([
                     'success' => false,
@@ -429,11 +449,11 @@ class LdapConfigurationController extends Controller
             }
 
             $ldapConn = $result['connection'];
-            
+
             // Search for groups
             $filter = '(objectClass=group)';
             $search = @ldap_search($ldapConn, $ldapConfiguration->base_dn, $filter, ['cn', 'distinguishedName']);
-            
+
             if (!$search) {
                 ldap_close($ldapConn);
                 return response()->json([

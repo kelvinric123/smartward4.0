@@ -11,6 +11,8 @@ services:
       dockerfile: ldap/Dockerfile
     container_name: smartward4-ldap
     restart: unless-stopped
+    ports:
+      - "5000:5000"
     environment:
       PYTHONUNBUFFERED: "1"
     deploy:
