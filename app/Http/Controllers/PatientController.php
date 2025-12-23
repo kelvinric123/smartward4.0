@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Patient;
 use Illuminate\Http\Request;
+use App\Services\EkadService;
+use Illuminate\Support\Facades\Log;
 
 class PatientController extends Controller
 {
@@ -89,6 +91,18 @@ class PatientController extends Controller
         ]);
 
         $patient->update($validated);
+
+        // EKad: Explicitly push update since PatientObserver logic is disabled
+        if ($patient->isAdmitted() && $patient->bed) {
+            try {
+                $ekadService = new EkadService();
+                if ($ekadService->isAutoPushEnabled()) {
+                    $ekadService->pushPatientInfo($patient, $patient->bed, [], 'Info Update');
+                }
+            } catch (\Exception $e) {
+                Log::warning('EKad Info Update Failed', ['error' => $e->getMessage()]);
+            }
+        }
 
         return redirect()->route('patients.index')->with('success', 'Patient updated successfully.');
     }

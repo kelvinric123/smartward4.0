@@ -134,6 +134,8 @@ class WardScheduleController extends Controller
         $nurseId = $validated['nurse_id'];
         $assignments = $validated['assignments'];
 
+        $bedsToUpdate = [];
+
         foreach ($assignments as $assignment) {
             $bedBelongsToWard = Bed::where('ward_id', $wardId)
                 ->where('id', $assignment['bed_id'])
@@ -159,31 +161,32 @@ class WardScheduleController extends Controller
                 ]
             );
 
-            // Trigger Ekad update if assignment is for today and bed has patient
-            try {
-                if ($scheduledDate === now()->toDateString()) {
-                    // Re-fetch bed to get active patient
-                    $bed = Bed::with([
-                        'patient' => function ($q) {
-                            $q->where('is_active', true)
-                                ->whereIn('status', ['admitted', 'prebook', 'pending_discharge']);
-                        }
-                    ])->find($assignment['bed_id']);
+            // Collect bed IDs for EKAD update if assignment is for today
+            if ($scheduledDate === now()->toDateString()) {
+                $bedsToUpdate[$assignment['bed_id']] = true;
+            }
+        }
 
-                    if ($bed && $bed->patient) {
-                        $nurse = Nurse::find($nurseId);
-                        if ($nurse) {
-                            $ekadService = new EkadService();
-                            // Push with nurse override and "Update Information" event
-                            $ekadService->pushPatientInfo($bed->patient, $bed, [
-                                'nurse' => $nurse->name
-                            ], 'Update Information');
-                            Log::info('EKad: Pushed nurse assignment update', [
-                                'bed_id' => $bed->id,
-                                'patient' => $bed->patient->name ?? 'Unknown',
-                                'nurse' => $nurse->name
-                            ]);
-                        }
+        // Trigger Ekad updates for affected beds (once per bed)
+        if (!empty($bedsToUpdate)) {
+            try {
+                $ekadService = new EkadService();
+                $bedIds = array_keys($bedsToUpdate);
+                $beds = Bed::with([
+                    'patient' => function ($q) {
+                        $q->where('is_active', true)
+                            ->whereIn('status', ['admitted', 'prebook', 'pending_discharge']);
+                    }
+                ])->whereIn('id', $bedIds)->get();
+
+                foreach ($beds as $bed) {
+                    if ($bed->patient) {
+                        // Push without override so EkadService calculates the correct nurse for the current time
+                        $ekadService->pushPatientInfo($bed->patient, $bed, [], 'Update Information');
+                        Log::info('EKad: Pushed nurse assignment update', [
+                            'bed_id' => $bed->id,
+                            'patient' => $bed->patient->name,
+                        ]);
                     }
                 }
             } catch (\Exception $e) {

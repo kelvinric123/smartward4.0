@@ -422,7 +422,7 @@
     </style>
     <x-slot name="header">
         <div class="flex items-center justify-between" x-data="{ 
-            customFullscreen: localStorage.getItem('wardDashboardFullscreen') === 'true',
+            customFullscreen: localStorage.getItem('wardDashboardFullscreen') === 'true' @if(auth()->check() && auth()->user()->hasRole('ward_dashboard')) || true @endif,
             init() {
                 // Dispatch initial state on load if fullscreen is saved
                 if (this.customFullscreen) {

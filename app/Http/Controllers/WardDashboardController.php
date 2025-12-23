@@ -526,12 +526,15 @@ class WardDashboardController extends Controller
             ]);
 
             // Explicitly push to EKad for Admission logging
+            /*
             try {
                 $ekadService = new EkadService();
+                // Handled by BedObserver
                 $ekadService->pushPatientInfo($patient, $bedRecord, [], 'Admission');
             } catch (\Exception $e) {
                 Log::warning('EKad Admission push failed', ['error' => $e->getMessage()]);
             }
+            */
 
             return back()->with('success', 'Patient admitted successfully!');
         } catch (\Exception $e) {
@@ -1581,6 +1584,8 @@ class WardDashboardController extends Controller
         $ward = $patient->ward;
 
         // EKad: Push discharge screen with vacant/discharged values
+        // EKad: Explicit Push DISABLED (Handled by BedObserver -> pushVacant)
+        /*
         try {
             // Get bed before it is unassigned
             $bed = $patient->bed;
@@ -1601,6 +1606,7 @@ class WardDashboardController extends Controller
         } catch (\Exception $e) {
             Log::warning('EKad discharge push failed', ['error' => $e->getMessage()]);
         }
+        */
 
         // Update patient record
         $patient->update([

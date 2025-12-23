@@ -369,8 +369,8 @@ class AdtApiController extends Controller
 
             Log::info("ADT A01 Admit - SUCCESS", ['actions' => $actions]);
 
-            // Trigger EKad update
-            $this->triggerEkadUpdate($patient);
+            // Trigger EKad update handled by BedObserver
+            // $this->triggerEkadUpdate($patient);
 
             return [
                 'success' => true,
@@ -631,8 +631,8 @@ class AdtApiController extends Controller
                 'actions' => $actions,
             ]);
 
-            // Trigger EKad update
-            $this->triggerEkadUpdate($patient);
+            // Trigger EKad update handled by BedObserver
+            // $this->triggerEkadUpdate($patient);
 
             return [
                 'success' => true,
@@ -703,7 +703,8 @@ class AdtApiController extends Controller
             // Release bed
             $bed = Bed::where('patient_id', $patient->id)->first();
             if ($bed) {
-                // EKad: Push discharge screen with vacant/discharged values
+                // EKad: Discharge push handled by BedObserver (patient_id -> null)
+                /*
                 try {
                     $ekadService = new EkadService();
                     // Push discharge payload: vacant patient, discharged MRN, clear other fields
@@ -720,6 +721,7 @@ class AdtApiController extends Controller
                 } catch (\Exception $e) {
                     Log::warning("ADT - EKad discharge push failed: " . $e->getMessage());
                 }
+                */
 
                 $bed->update([
                     'patient_id' => null,
@@ -1385,7 +1387,14 @@ class AdtApiController extends Controller
             $dietCodes = [];
 
             // Split by comma if multiple diets
-            $dietParts = strpos($dietRaw, ',') !== false ? explode(',', $dietRaw) : [$dietRaw];
+            // Split by tilde (HL7 standard) or comma (legacy) if multiple diets
+            if (strpos($dietRaw, '~') !== false) {
+                $dietParts = explode('~', $dietRaw);
+            } elseif (strpos($dietRaw, ',') !== false) {
+                $dietParts = explode(',', $dietRaw);
+            } else {
+                $dietParts = [$dietRaw];
+            }
 
             foreach ($dietParts as $dietPart) {
                 $dietPart = trim($dietPart);
@@ -1876,34 +1885,12 @@ class AdtApiController extends Controller
     /**
      * Trigger EKAD update for a patient if they have a bed assigned
      */
+    /*
     protected function triggerEkadUpdate(Patient $patient): void
     {
-        try {
-            // Only push to EKAD if patient is admitted and has a bed
-            if ($patient->status === Patient::STATUS_ADMITTED && $patient->bed) {
-                $ekadService = new EkadService();
-                if ($ekadService->isAutoPushEnabled()) {
-                    $result = $ekadService->pushPatientInfo($patient, $patient->bed);
-                    if ($result['success']) {
-                        Log::info('ADT - EKAD auto-push successful', [
-                            'patient_id' => $patient->id,
-                            'bed_id' => $patient->bed->id,
-                        ]);
-                    } else {
-                        Log::warning('ADT - EKAD auto-push failed', [
-                            'patient_id' => $patient->id,
-                            'error' => $result['message'] ?? 'Unknown error',
-                        ]);
-                    }
-                }
-            }
-        } catch (\Exception $e) {
-            Log::error('ADT - EKAD trigger error', [
-                'patient_id' => $patient->id,
-                'error' => $e->getMessage(),
-            ]);
-        }
+        // DISABLED: Handled by BedObserver
     }
+    */
 }
 
 

@@ -362,4 +362,30 @@ class EkadService
     {
         return $this->config->is_active && $this->config->auto_push_enabled;
     }
+    /**
+     * Push vacant status to bed (Discharge)
+     */
+    public function pushVacant(Bed $bed, string $eventType = 'discharge'): array
+    {
+        // Get mapping for this bed
+        $mapping = EkadBedMapping::getForBed($bed->id);
+        if (!$mapping) {
+            return [
+                'success' => false,
+                'message' => 'No E-Ink device mapped to this bed',
+            ];
+        }
+
+        $data = [
+            'bed no' => $bed->bed_number,
+            'MRN' => 'Vacant',
+            'patient_name' => '-',
+            'diet_type' => '-',
+            'doctor' => '-',
+            'nurse' => '-',
+            'anaesthetist' => '-',
+        ];
+
+        return $this->pushToBed($mapping->mac_address, $data, $bed->id, null, $eventType);
+    }
 }

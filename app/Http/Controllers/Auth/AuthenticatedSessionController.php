@@ -28,6 +28,10 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        if ($request->user()->hasRole(\App\Models\User::ROLE_WARD_DASHBOARD)) {
+            return redirect()->route('ward.dashboard');
+        }
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 
