@@ -222,17 +222,30 @@ class EkadService
         if (isset($overrides['anaesthetist'])) {
             $anaesthetist = $overrides['anaesthetist'];
         } elseif ($patient->anaesthetist) {
+            // Direct anaesthetist relationship (legacy)
             $anaesthetist = $patient->anaesthetist->name;
         } else {
-            // Check for anaesthetist referrals (latest active one)
-            $referral = $patient->referrals()
-                ->where('referral_type', 'anaesthetist')
-                ->where('status', 'active')
-                ->latest()
+            // Check care providers for referring/consulting doctors who are anaesthetists
+            $anaesthetistProvider = $patient->careProviders()
+                ->active()
+                ->whereIn('role', ['referring', 'consulting'])
+                ->whereNotNull('anaesthetist_id')
+                ->with('anaesthetist')
                 ->first();
 
-            if ($referral && $referral->anaesthetist) {
-                $anaesthetist = $referral->anaesthetist->name;
+            if ($anaesthetistProvider && $anaesthetistProvider->anaesthetist) {
+                $anaesthetist = $anaesthetistProvider->anaesthetist->name;
+            } else {
+                // Fallback: Check for anaesthetist referrals (latest active one)
+                $referral = $patient->referrals()
+                    ->where('referral_type', 'anaesthetist')
+                    ->where('status', 'active')
+                    ->latest()
+                    ->first();
+
+                if ($referral && $referral->anaesthetist) {
+                    $anaesthetist = $referral->anaesthetist->name;
+                }
             }
         }
         $anaesthetist = $this->normalizeValue($anaesthetist);

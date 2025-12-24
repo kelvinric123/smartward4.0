@@ -866,6 +866,28 @@
                             </nav>
                         </div>
 
+                        <!-- Deprecation Warning for Diet Type and Isolation -->
+                        <div x-show="activeOptionsTab === 'diet_type' || activeOptionsTab === 'isolation_type'"
+                            class="mb-3 p-3 bg-yellow-50 rounded-lg border-2 border-yellow-400">
+                            <div class="flex items-start">
+                                <svg class="w-5 h-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" fill="none"
+                                    stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                <div class="text-sm text-yellow-800">
+                                    <strong>⚠️ DEPRECATED:</strong> This configuration method is deprecated and may
+                                    cause double updates.
+                                    Please use the <a href="/diet-types"
+                                        class="underline font-semibold hover:text-yellow-900">/diet-types</a> page to
+                                    manage
+                                    <span
+                                        x-text="activeOptionsTab === 'diet_type' ? 'Diet Types' : 'Isolation Types'"></span>
+                                    instead.
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Options List for each type -->
                         <div class="bg-gray-50 rounded-lg p-3 border border-gray-200 max-h-64 overflow-y-auto">
                             <template x-for="(option, index) in clinicalOptions[activeOptionsTab]"
@@ -877,8 +899,9 @@
                                         <span class="text-xs text-gray-500" x-text="option.value"></span>
                                     </div>
                                     <button type="button" @click="removeOption(activeOptionsTab, index)"
-                                        class="text-red-500 hover:text-red-700 p-1" :disabled="option.value === 'none'"
-                                        :class="option.value === 'none' ? 'opacity-30 cursor-not-allowed' : ''">
+                                        class="text-red-500 hover:text-red-700 p-1"
+                                        :disabled="option.value === 'none'|| activeOptionsTab === 'diet_type' || activeOptionsTab === 'isolation_type'"
+                                        :class="option.value === 'none' || activeOptionsTab === 'diet_type' || activeOptionsTab === 'isolation_type' ? 'opacity-30 cursor-not-allowed' : ''">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -889,7 +912,8 @@
                         </div>
 
                         <!-- Add New Option -->
-                        <div class="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <div class="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
+                            x-show="activeOptionsTab !== 'diet_type' && activeOptionsTab !== 'isolation_type'">
                             <h5 class="text-xs font-semibold text-gray-600 mb-2">Add New Option</h5>
                             <div class="grid grid-cols-2 gap-2">
                                 <input type="text" x-model="newOption.value" placeholder="Value (e.g., low_sodium)"
@@ -924,6 +948,7 @@
 
                         <div class="pt-4 flex justify-between items-center">
                             <button type="button" @click="resetClinicalOptions()"
+                                x-show="activeOptionsTab !== 'diet_type' && activeOptionsTab !== 'isolation_type'"
                                 class="inline-flex items-center px-3 py-2 text-gray-600 text-xs font-medium hover:text-gray-800">
                                 <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -932,6 +957,7 @@
                                 Reset Options
                             </button>
                             <button type="submit"
+                                x-show="activeOptionsTab !== 'diet_type' && activeOptionsTab !== 'isolation_type'"
                                 class="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md shadow-sm hover:bg-blue-700">
                                 Save Options
                             </button>
