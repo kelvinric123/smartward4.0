@@ -86,6 +86,49 @@ class UsersController extends Controller
         return redirect()->route('users.index')->with('success', 'User updated successfully.');
     }
 
+    public function updateRole(Request $request, User $user)
+    {
+        $request->validate([
+            'role' => ['required', Rule::in(array_keys(User::getRoles()))],
+        ]);
+
+        // Prevent superadmin role manipulation
+        if ($request->role === User::ROLE_SUPERADMIN && !$user->isSuperadmin()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot promote to Superadmin manually.'
+            ], 403);
+        }
+
+        if ($user->isSuperadmin() && $request->role !== User::ROLE_SUPERADMIN) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot demote Superadmin.'
+            ], 403);
+        }
+
+        // Prevent changing your own role
+        if ($user->id === auth()->id()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot change your own role.'
+            ], 403);
+        }
+
+        $oldRole = User::getRoles()[$user->role] ?? $user->role;
+        $user->role = $request->role;
+        $user->save();
+
+        $newRole = User::getRoles()[$user->role] ?? $user->role;
+
+        return response()->json([
+            'success' => true,
+            'message' => "Role changed from {$oldRole} to {$newRole}",
+            'role' => $user->role,
+            'role_display' => $newRole
+        ]);
+    }
+
     public function destroy(User $user)
     {
         if ($user->isSuperadmin()) {

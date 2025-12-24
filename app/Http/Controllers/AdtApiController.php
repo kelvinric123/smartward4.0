@@ -560,7 +560,7 @@ class AdtApiController extends Controller
             }
 
             // Find and assign new bed
-            [$newBed, $unmappedWardCode, $unmappedBedCode] = $this->findAndAssignBed($patient, $pv1, $configuration);
+            $newBed = $this->findAndAssignBed($patient, $pv1, $configuration);
             if ($newBed) {
                 $patient->ward_id = $newBed->ward_id;
                 $patient->bed_number = $newBed->bed_number;
@@ -576,10 +576,12 @@ class AdtApiController extends Controller
                 $actions[] = "transferred_to_bed_{$newBed->bed_number}";
                 Log::info("ADT A02 Transfer - Assigned new bed: {$newBed->bed_number} in {$newBed->ward->ward_name}");
             } else {
-                Log::warning("ADT A02 Transfer - No bed found", [
-                    'unmapped_ward' => $unmappedWardCode,
-                    'unmapped_bed' => $unmappedBedCode,
+                Log::warning("ADT A02 Transfer - No bed found despite earlier validation", [
+                    'adt_ward_code' => $adtWardCode,
+                    'adt_bed_code' => $adtBedCode,
                 ]);
+                // This shouldn't happen since we validated earlier, but handle gracefully
+                throw new \Exception("Bed assignment failed: destination bed '{$adtBedCode}' could not be assigned");
             }
 
             $patient->save();
@@ -597,30 +599,32 @@ class AdtApiController extends Controller
                     'adt_bed_code' => $adtBedCode,
                     'old_ward' => $oldWardName,
                     'old_bed' => $oldBedNumber,
-                    'assigned_ward' => $newBed?->ward?->ward_name,
-                    'assigned_bed' => $newBed?->bed_number,
+                    'assigned_ward' => $newBed->ward->ward_name,
+                    'assigned_bed' => $newBed->bed_number,
                     'care_providers' => $careProviders,
                 ]),
                 'patient_id_ref' => $patient->id,
-                'bed_id_ref' => $newBed?->id,
+                'bed_id_ref' => $newBed->id,
             ]);
 
-            // Create admission log entry for ADT transfer
-            AdmissionLog::create([
-                'patient_id' => $patient->id,
-                'ward_id' => $newBed?->ward_id,
-                'user_id' => null, // No user for ADT-triggered events
-                'bed_number' => $newBed?->bed_number ?? $adtBedCode,
-                'action' => 'transfer',
-                'patient_name' => $patient->name,
-                'mrn' => $patient->mrn,
-                'consultant_name' => null,
-                'nurse_name' => null,
-                'gender' => $patient->gender,
-                'age' => $patient->age,
-                'notes' => 'ADT A02: Transfer from ' . ($oldWardName ? ($oldWardName . '/' . $oldBedNumber) : 'unknown'),
-                'source' => 'adt',
-            ]);
+            // Create admission log entry for ADT transfer (only if bed was successfully assigned)
+            if ($newBed && $newBed->ward_id) {
+                AdmissionLog::create([
+                    'patient_id' => $patient->id,
+                    'ward_id' => $newBed->ward_id,
+                    'user_id' => null, // No user for ADT-triggered events
+                    'bed_number' => $newBed->bed_number,
+                    'action' => 'transfer',
+                    'patient_name' => $patient->name,
+                    'mrn' => $patient->mrn,
+                    'consultant_name' => null,
+                    'nurse_name' => null,
+                    'gender' => $patient->gender,
+                    'age' => $patient->age,
+                    'notes' => 'ADT A02: Transfer from ' . ($oldWardName ? ($oldWardName . '/' . $oldBedNumber) : 'unknown'),
+                    'source' => 'adt',
+                ]);
+            }
 
             DB::commit();
 

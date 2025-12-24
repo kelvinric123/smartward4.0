@@ -66,6 +66,7 @@ Route::middleware('auth')->group(function () {
     Route::post('nurses-bulk-upload/confirm', [NurseController::class, 'bulkUploadConfirm'])->name('nurses.bulk-upload.confirm');
 
     Route::resource('users', \App\Http\Controllers\UsersController::class)->except(['show']);
+    Route::post('users/{user}/update-role', [\App\Http\Controllers\UsersController::class, 'updateRole'])->name('users.update-role');
 
 
     // Patient Additional Field Routes (inside Admin Management)
