@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Models\Bed;
+use App\Models\Patient;
 use App\Models\EkadConfiguration;
 use App\Models\EkadBedMapping;
 use App\Services\EkadService;
@@ -51,8 +52,7 @@ class BedObserver
 
             $service = new EkadService($config);
 
-            // Case 1: Bed is now Empty (Discharge)
-            // We check if patient_id is null.
+            // Case 1: Bed is now Empty (No patient_id)
             if (!$bed->patient_id) {
                 Log::info('EKad BedObserver: Bed emptied. Pushing Vacant status.', [
                     'bed_number' => $bed->bed_number,
@@ -61,17 +61,32 @@ class BedObserver
 
                 $result = $service->pushVacant($bed, 'Bed Vacated');
             }
-            // Case 2: Bed is Occupied (Admit / Transfer In)
+            // Case 2: Bed has patient_id
             else {
                 $patient = $bed->patient;
                 if ($patient) {
-                    Log::info('EKad BedObserver: Bed occupied/updated. Pushing Patient info.', [
-                        'patient_id' => $patient->id,
-                        'bed_number' => $bed->bed_number,
-                        'mac' => $mapping->mac_address,
-                    ]);
+                    // Check if patient is discharged or pending discharge
+                    // Show as vacant on EKAD even though patient record still exists
+                    if (in_array($patient->status, [Patient::STATUS_DISCHARGED, Patient::STATUS_PENDING_DISCHARGE])) {
+                        Log::info('EKad BedObserver: Patient discharged/pending discharge. Pushing Vacant status.', [
+                            'patient_id' => $patient->id,
+                            'patient_status' => $patient->status,
+                            'bed_number' => $bed->bed_number,
+                            'mac' => $mapping->mac_address,
+                        ]);
 
-                    $result = $service->pushPatientInfo($patient, $bed, [], 'Bed Updated');
+                        $result = $service->pushVacant($bed, 'Patient Discharged');
+                    } else {
+                        // Active patient (admitted or prebook)
+                        Log::info('EKad BedObserver: Bed occupied/updated. Pushing Patient info.', [
+                            'patient_id' => $patient->id,
+                            'patient_status' => $patient->status,
+                            'bed_number' => $bed->bed_number,
+                            'mac' => $mapping->mac_address,
+                        ]);
+
+                        $result = $service->pushPatientInfo($patient, $bed, [], 'Bed Updated');
+                    }
                 } else {
                     Log::warning('EKad BedObserver: Bed has patient_id but relation failed to load', ['patient_id' => $bed->patient_id]);
                     return;

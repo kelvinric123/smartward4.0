@@ -159,6 +159,13 @@ class EkadService
                 ? $this->config->maskPatientName($patient->name)
                 : $patient->name;
         }
+
+        // Handle prebook patients - show "-" for patient name (will check status later)
+        // MRN will be handled separately below
+        if ($patient->status === 'prebook') {
+            $patientName = '-';
+        }
+
         $patientName = $this->normalizeValue($patientName);
 
         // Get diet type(s) - convert codes to names for display
@@ -264,6 +271,12 @@ class EkadService
 
         // Get MRN
         $mrn = $overrides['mrn'] ?? $patient->mrn ?? '-';
+
+        // Handle prebook patients - show "PREBOOK" for MRN
+        if ($patient->status === 'prebook') {
+            $mrn = 'PREBOOK';
+        }
+
         $mrn = $this->normalizeValue($mrn);
 
         // Build data array in the exact order and format required by E-Ink API
