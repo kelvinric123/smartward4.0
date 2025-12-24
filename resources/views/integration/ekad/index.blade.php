@@ -10,6 +10,7 @@
             </div>
             <div class="flex items-center space-x-2">
                 <span x-data="{ tokenValid: {{ ($config->exists && $config->isTokenValid()) ? 'true' : 'false' }} }"
+                    @ekad-token-update.window="tokenValid = $event.detail.valid"
                     :class="tokenValid ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'"
                     class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium">
                     <span class="w-2 h-2 rounded-full mr-2"
@@ -831,12 +832,15 @@
                         if (data.success) {
                             this.token = data.token;
                             this.addLog('LOGIN', true, data.message);
+                            window.dispatchEvent(new CustomEvent('ekad-token-update', { detail: { valid: true } }));
                         } else {
                             this.token = '';
                             this.addLog('LOGIN', false, data.message, data);
+                            window.dispatchEvent(new CustomEvent('ekad-token-update', { detail: { valid: false } }));
                         }
                     } catch (error) {
                         this.addLog('LOGIN', false, 'Request failed: ' + error.message);
+                        window.dispatchEvent(new CustomEvent('ekad-token-update', { detail: { valid: false } }));
                     }
                     this.loggingIn = false;
                 },
@@ -954,7 +958,7 @@
                     this.loadingApiLogs = true;
                     try {
                         let url = '{{ route("ekad.response-logs") }}?page=' + page + '&per_page=20';
-                        
+
                         // Add filter if selected
                         if (this.apiLogsFilter === 'success') {
                             url += '&success=1';
@@ -975,7 +979,7 @@
                                 ...log,
                                 expanded: false
                             }));
-                            
+
                             // Update pagination info
                             this.apiLogsPagination = {
                                 current_page: data.logs.current_page,
