@@ -26,22 +26,97 @@
                         </div>
                     @endif
 
+                    <!-- Search and Filter Form -->
+                    <form method="GET" action="{{ route('users.index') }}" class="mb-6">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <!-- Search Input -->
+                            <div>
+                                <label for="search" class="block text-sm font-medium text-gray-700 mb-1">Search</label>
+                                <input type="text" 
+                                    name="search" 
+                                    id="search"
+                                    value="{{ request('search') }}"
+                                    placeholder="Search by name or email..."
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+
+                            <!-- Role Filter -->
+                            <div>
+                                <label for="role_filter" class="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                                <select name="role_filter" 
+                                    id="role_filter"
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                                    <option value="">All Roles</option>
+                                    @foreach(App\Models\User::getRoles() as $roleKey => $roleName)
+                                        <option value="{{ $roleKey }}" {{ request('role_filter') == $roleKey ? 'selected' : '' }}>
+                                            {{ $roleName }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <!-- Filter Buttons -->
+                            <div class="flex items-end gap-2">
+                                <button type="submit" 
+                                    class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    Apply Filters
+                                </button>
+                                <a href="{{ route('users.index') }}" 
+                                    class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500">
+                                    Clear
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Hidden inputs to preserve sort parameters -->
+                        @if(request('sort'))
+                            <input type="hidden" name="sort" value="{{ request('sort') }}">
+                        @endif
+                        @if(request('direction'))
+                            <input type="hidden" name="direction" value="{{ request('direction') }}">
+                        @endif
+                    </form>
+
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50">
                                 <tr>
-                                    <th
-                                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Name</th>
-                                    <th
-                                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Email</th>
-                                    <th
-                                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Role</th>
-                                    <th
-                                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Actions</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <a href="{{ route('users.index', array_merge(request()->all(), ['sort' => 'name', 'direction' => request('sort') == 'name' && request('direction') == 'asc' ? 'desc' : 'asc'])) }}" 
+                                            class="flex items-center hover:text-gray-700">
+                                            Name
+                                            @if(request('sort') == 'name')
+                                                <span class="ml-1">
+                                                    {!! request('direction') == 'asc' ? '↑' : '↓' !!}
+                                                </span>
+                                            @endif
+                                        </a>
+                                    </th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <a href="{{ route('users.index', array_merge(request()->all(), ['sort' => 'email', 'direction' => request('sort') == 'email' && request('direction') == 'asc' ? 'desc' : 'asc'])) }}" 
+                                            class="flex items-center hover:text-gray-700">
+                                            Email
+                                            @if(request('sort') == 'email')
+                                                <span class="ml-1">
+                                                    {!! request('direction') == 'asc' ? '↑' : '↓' !!}
+                                                </span>
+                                            @endif
+                                        </a>
+                                    </th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        <a href="{{ route('users.index', array_merge(request()->all(), ['sort' => 'role', 'direction' => request('sort') == 'role' && request('direction') == 'asc' ? 'desc' : 'asc'])) }}" 
+                                            class="flex items-center hover:text-gray-700">
+                                            Role
+                                            @if(request('sort') == 'role')
+                                                <span class="ml-1">
+                                                    {!! request('direction') == 'asc' ? '↑' : '↓' !!}
+                                                </span>
+                                            @endif
+                                        </a>
+                                    </th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                        Actions
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-200">

@@ -1420,6 +1420,9 @@ class AdtApiController extends Controller
                         'BF' => 'BF',
                         'VEG' => 'VEGD',
                         'SD' => 'SD',
+                        // Map full diet names to their codes
+                        'LOW FIBER DIET' => 'LFIBD',
+                        'LOW FAT DIET' => 'LFD',
                     ];
 
                     $dietCodes[] = $dietMap[$dietCode] ?? $dietCode;
