@@ -76,7 +76,7 @@ class EkadController extends Controller
         $config = EkadConfiguration::getActive();
 
         if ($config) {
-            $config->update($validated);
+            $config->update(array_merge($validated, ['is_active' => true]));
         } else {
             $config = EkadConfiguration::create(array_merge($validated, ['is_active' => true]));
         }
@@ -116,6 +116,7 @@ class EkadController extends Controller
                 'base_url' => $baseUrl,
                 'username' => $validated['username'],
                 'password' => $validated['password'],
+                'is_active' => true,  // Ensure config is active
             ]);
         }
 

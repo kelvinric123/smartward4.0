@@ -18,7 +18,24 @@ class EkadService
 
     public function __construct(?EkadConfiguration $config = null)
     {
-        $this->config = $config ?? EkadConfiguration::getActive() ?? new EkadConfiguration();
+        if ($config) {
+            $this->config = $config;
+        } else {
+            $activeConfig = EkadConfiguration::getActive();
+            if (!$activeConfig) {
+                Log::warning('EKad: No active configuration found in database');
+                // Create a blank config but log the issue
+                $this->config = new EkadConfiguration();
+            } else {
+                $this->config = $activeConfig;
+                Log::debug('EKad: Loaded active config', [
+                    'has_username' => !empty($activeConfig->username),
+                    'has_password' => !empty($activeConfig->password),
+                    'has_token' => !empty($activeConfig->bearer_token),
+                    'token_valid' => $activeConfig->isTokenValid(),
+                ]);
+            }
+        }
     }
 
     /**
@@ -70,11 +87,31 @@ class EkadService
      */
     public function getToken(): ?string
     {
+        // Check if we have credentials before attempting login
+        if (empty($this->config->username) || empty($this->config->password)) {
+            Log::error('EKad: Cannot authenticate - missing credentials', [
+                'has_username' => !empty($this->config->username),
+                'has_password' => !empty($this->config->password),
+                'config_id' => $this->config->id ?? null,
+            ]);
+            return null;
+        }
+
         if (!$this->config->isTokenValid()) {
+            Log::info('EKad: Token invalid or expired, attempting auto-login', [
+                'has_token' => !empty($this->config->bearer_token),
+                'expires_at' => $this->config->token_expires_at?->toIso8601String(),
+            ]);
+
             $result = $this->login();
             if (!$result['success']) {
+                Log::error('EKad: Auto-login failed', [
+                    'message' => $result['message'] ?? 'Unknown error',
+                ]);
                 return null;
             }
+
+            Log::info('EKad: Auto-login successful');
         }
 
         return $this->config->bearer_token;
