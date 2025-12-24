@@ -120,13 +120,15 @@ class EkadService
 
     /**
      * Normalize empty values to "-" to prevent EKAD from using cached data
+     * All values are converted to uppercase for consistent display
      */
     protected function normalizeValue($value): string
     {
         if (is_null($value) || $value === '' || (is_string($value) && trim($value) === '')) {
             return '-';
         }
-        return (string) $value;
+        // Convert to uppercase for EKAD display
+        return mb_strtoupper((string) $value);
     }
 
     /**
