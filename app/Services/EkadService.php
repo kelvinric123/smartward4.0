@@ -9,6 +9,7 @@ use App\Models\Patient;
 use App\Models\Bed;
 use App\Models\ShiftSetting;
 use App\Models\WardScheduleAssignment;
+use App\Models\DietType;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -158,15 +159,20 @@ class EkadService
         }
         $patientName = $this->normalizeValue($patientName);
 
-        // Get diet type(s)
+        // Get diet type(s) - convert codes to names for display
         $dietType = '-';
         if (isset($overrides['diet_type'])) {
             $dietType = $overrides['diet_type'];
         } elseif ($patient->diet_types) {
             if (is_array($patient->diet_types)) {
-                $dietType = implode(', ', $patient->diet_types);
+                // Convert each diet code to its display name
+                $dietNames = array_map(function ($code) {
+                    return DietType::getDisplayName($code);
+                }, $patient->diet_types);
+                $dietType = implode(', ', $dietNames);
             } else {
-                $dietType = $patient->diet_types;
+                // Single diet type (legacy string format)
+                $dietType = DietType::getDisplayName((string) $patient->diet_types);
             }
         }
         $dietType = $this->normalizeValue($dietType);
