@@ -15,11 +15,11 @@ class EcgController extends Controller
     public function index(): View
     {
         $ecgFiles = $this->getAllEcgFilesWithPatients();
-        
+
         // Calculate stats
         $ecgXmlFiles = array_filter($ecgFiles, fn($f) => ($f['type'] ?? '') === 'ecg_xml');
         $standalonePdfs = array_filter($ecgFiles, fn($f) => ($f['type'] ?? '') === 'standalone_pdf');
-        
+
         $stats = [
             'total_files' => count($ecgFiles),
             'ecg_xml_files' => count($ecgXmlFiles),
@@ -28,71 +28,92 @@ class EcgController extends Controller
             'unmatched_patients' => count(array_filter($ecgXmlFiles, fn($f) => $f['patient'] === null)),
             'with_pdf' => count(array_filter($ecgFiles, fn($f) => $f['has_pdf'])),
         ];
-        
+
         return view('integration.ecg.index', [
             'ecgFiles' => $ecgFiles,
             'stats' => $stats,
         ]);
     }
-    
+
     /**
      * Get all ECG files with patient matching information
+     * Matches ECG PatientID against both MRN and RN fields
      */
     private function getAllEcgFilesWithPatients(): array
     {
         $ecgStorePath = base_path('ecg/store');
         $allFiles = [];
         $processedPdfs = []; // Track PDFs that are linked to XML files
-        
+
         if (!is_dir($ecgStorePath)) {
             return [];
         }
-        
+
         $files = scandir($ecgStorePath);
-        
-        // Get all patients for MRN matching
-        $patients = Patient::where('is_active', true)
-            ->whereNotNull('mrn')
-            ->get()
-            ->keyBy(function($patient) {
-                return trim($patient->mrn);
-            });
-        
+
+        // Get all patients and create dual lookup by MRN and RN
+        $patientsByMrn = [];
+        $patientsByRn = [];
+
+        $activePatients = Patient::where('is_active', true)->get();
+
+        foreach ($activePatients as $patient) {
+            // Index by MRN if available
+            if (!empty($patient->mrn)) {
+                $patientsByMrn[trim($patient->mrn)] = $patient;
+            }
+            // Index by RN if available
+            if (!empty($patient->rn)) {
+                $patientsByRn[trim($patient->rn)] = $patient;
+            }
+        }
+
         // First pass: Process XML files (ECG data with patient info)
         foreach ($files as $file) {
             if ($file === '.' || $file === '..') {
                 continue;
             }
-            
+
             if (!preg_match('/\.xml$/i', $file)) {
                 continue;
             }
-            
+
             $xmlPath = $ecgStorePath . '/' . $file;
             $ecgPatientId = $this->getEcgPatientId($xmlPath);
-            
+
             if ($ecgPatientId !== null) {
                 $baseName = pathinfo($file, PATHINFO_FILENAME);
                 $pdfFile = $baseName . '_extracted.pdf';
                 $pdfPath = $ecgStorePath . '/' . $pdfFile;
-                
+
                 // Track this extracted PDF
                 if (file_exists($pdfPath)) {
                     $processedPdfs[$pdfFile] = true;
                 }
-                
-                // Try to find matching patient
+
+                // Try to find matching patient by MRN or RN
                 $patient = null;
-                $trimmedMrn = trim($ecgPatientId);
-                if (isset($patients[$trimmedMrn])) {
-                    $p = $patients[$trimmedMrn];
+                $trimmedId = trim($ecgPatientId);
+                $matchedPatient = null;
+
+                // First try to match by MRN
+                if (isset($patientsByMrn[$trimmedId])) {
+                    $matchedPatient = $patientsByMrn[$trimmedId];
+                }
+                // If not found by MRN, try to match by RN
+                elseif (isset($patientsByRn[$trimmedId])) {
+                    $matchedPatient = $patientsByRn[$trimmedId];
+                }
+
+                // If patient found, prepare patient info
+                if ($matchedPatient) {
                     $patient = [
-                        'id' => $p->id,
-                        'name' => $p->patient_name,
-                        'mrn' => $p->mrn,
+                        'id' => $matchedPatient->id,
+                        'name' => $matchedPatient->patient_name,
+                        'mrn' => $matchedPatient->mrn,
                     ];
                 }
-                
+
                 $allFiles[] = [
                     'xml_file' => $file,
                     'pdf_file' => file_exists($pdfPath) ? $pdfFile : null,
@@ -104,25 +125,25 @@ class EcgController extends Controller
                 ];
             }
         }
-        
+
         // Second pass: Process standalone PDF files (not extracted from XML)
         foreach ($files as $file) {
             if ($file === '.' || $file === '..') {
                 continue;
             }
-            
+
             // Only process PDF files
             if (!preg_match('/\.pdf$/i', $file)) {
                 continue;
             }
-            
+
             // Skip PDFs that are already linked to XML files
             if (isset($processedPdfs[$file])) {
                 continue;
             }
-            
+
             $pdfPath = $ecgStorePath . '/' . $file;
-            
+
             $allFiles[] = [
                 'xml_file' => null,
                 'pdf_file' => $file,
@@ -133,12 +154,12 @@ class EcgController extends Controller
                 'type' => 'standalone_pdf',
             ];
         }
-        
+
         // Sort by timestamp descending (newest first)
-        usort($allFiles, function($a, $b) {
+        usort($allFiles, function ($a, $b) {
             return strtotime($b['timestamp'] ?? '1970-01-01') - strtotime($a['timestamp'] ?? '1970-01-01');
         });
-        
+
         return $allFiles;
     }
 
@@ -154,11 +175,11 @@ class EcgController extends Controller
 
         if ($patientId) {
             $patient = Patient::where('is_active', true)->find($patientId);
-            
-            if ($patient && $patient->mrn) {
-                // Search for ECG files matching this patient's MRN
-                $ecgFiles = $this->findEcgFilesForPatient($patient->mrn);
-                
+
+            if ($patient) {
+                // Search for ECG files matching this patient's MRN or RN
+                $ecgFiles = $this->findEcgFilesForPatient($patient->mrn, $patient->rn);
+
                 // Get the latest ECG file
                 if (!empty($ecgFiles)) {
                     $latestEcg = $ecgFiles[0]; // Files are already sorted by date desc
@@ -179,22 +200,22 @@ class EcgController extends Controller
     public function servePdf(Request $request)
     {
         $filename = $request->input('file');
-        
+
         if (!$filename) {
             abort(404, 'No file specified');
         }
-        
+
         // Sanitize filename to prevent directory traversal
         $filename = basename($filename);
-        
+
         // Look for the file in the ECG store directory
         $ecgStorePath = base_path('ecg/store');
         $filePath = $ecgStorePath . '/' . $filename;
-        
+
         if (!file_exists($filePath)) {
             abort(404, 'ECG file not found');
         }
-        
+
         // Return the PDF file
         return response()->file($filePath, [
             'Content-Type' => 'application/pdf',
@@ -203,57 +224,67 @@ class EcgController extends Controller
     }
 
     /**
-     * Find ECG files for a patient by MRN only
-     * Matches ECG XML files where <PatientID> equals the patient's MRN
+     * Find ECG files for a patient by MRN or RN
+     * Matches ECG XML files where <PatientID> equals the patient's MRN or RN
      */
-    private function findEcgFilesForPatient(string $mrn): array
+    private function findEcgFilesForPatient(?string $mrn, ?string $rn = null): array
     {
         $ecgStorePath = base_path('ecg/store');
         $ecgFiles = [];
-        
-        // Clean the MRN for comparison (trim whitespace)
-        $mrn = trim($mrn);
-        
-        if (empty($mrn)) {
-            Log::warning('ECG search: Empty MRN provided');
+
+        // Clean the identifiers for comparison (trim whitespace)
+        $mrn = $mrn ? trim($mrn) : null;
+        $rn = $rn ? trim($rn) : null;
+
+        if (empty($mrn) && empty($rn)) {
+            Log::warning('ECG search: Empty MRN and RN provided');
             return [];
         }
-        
+
         if (!is_dir($ecgStorePath)) {
             Log::warning('ECG store directory not found', ['path' => $ecgStorePath]);
             return [];
         }
-        
+
         // Scan the ECG store directory for XML files
         $files = scandir($ecgStorePath);
-        
+
         foreach ($files as $file) {
             if ($file === '.' || $file === '..') {
                 continue;
             }
-            
+
             // Only process XML files
             if (!preg_match('/\.xml$/i', $file)) {
                 continue;
             }
-            
+
             $xmlPath = $ecgStorePath . '/' . $file;
-            
-            // Parse XML to get PatientID (which is the MRN)
+
+            // Parse XML to get PatientID (which could be MRN or RN)
             $ecgPatientId = $this->getEcgPatientId($xmlPath);
-            
-            // Match ONLY by MRN (PatientID in ECG XML = MRN in our system)
-            if ($ecgPatientId !== null && trim($ecgPatientId) === $mrn) {
+
+            // Match by MRN or RN (PatientID in ECG XML can be either)
+            $isMatch = false;
+            if ($ecgPatientId !== null) {
+                $trimmedEcgId = trim($ecgPatientId);
+                // Check if ECG PatientID matches MRN or RN
+                if (($mrn && $trimmedEcgId === $mrn) || ($rn && $trimmedEcgId === $rn)) {
+                    $isMatch = true;
+                }
+            }
+
+            if ($isMatch) {
                 // Check if there's an extracted PDF for this XML
                 $baseName = pathinfo($file, PATHINFO_FILENAME);
                 $pdfFile = $baseName . '_extracted.pdf';
                 $pdfPath = $ecgStorePath . '/' . $pdfFile;
-                
+
                 $hasPdf = file_exists($pdfPath);
-                
+
                 // Get timestamp from filename
                 $timestamp = $this->getTimestampFromFilename($file, $xmlPath);
-                
+
                 $ecgFiles[] = [
                     'xml_file' => $file,
                     'pdf_file' => $hasPdf ? $pdfFile : null,
@@ -262,41 +293,43 @@ class EcgController extends Controller
                     'timestamp' => $timestamp,
                     'recorded_at' => $timestamp,
                 ];
-                
+
                 Log::debug('ECG file matched', [
                     'file' => $file,
                     'ecg_patient_id' => $ecgPatientId,
                     'patient_mrn' => $mrn,
+                    'patient_rn' => $rn,
                 ]);
             }
         }
-        
+
         // Sort by timestamp descending (newest first)
-        usort($ecgFiles, function($a, $b) {
+        usort($ecgFiles, function ($a, $b) {
             return strtotime($b['timestamp'] ?? '1970-01-01') - strtotime($a['timestamp'] ?? '1970-01-01');
         });
-        
+
         Log::info('ECG search completed', [
             'mrn' => $mrn,
+            'rn' => $rn,
             'files_found' => count($ecgFiles),
         ]);
-        
+
         return $ecgFiles;
     }
-    
+
     /**
-     * Get PatientID (MRN) from ECG XML file
-     * This is the ONLY field used for matching
+     * Get PatientID (MRN or RN) from ECG XML file
+     * This field is used for matching against patient MRN or RN
      */
     private function getEcgPatientId(string $xmlPath): ?string
     {
         try {
             $data = file_get_contents($xmlPath);
-            
+
             if (empty($data)) {
                 return null;
             }
-            
+
             // Decode XML content (handle UTF-16 encoding)
             if (substr($data, 0, 2) === "\xff\xfe") {
                 $xmlContent = mb_convert_encoding($data, 'UTF-8', 'UTF-16LE');
@@ -305,32 +338,32 @@ class EcgController extends Controller
             } else {
                 $xmlContent = $data;
             }
-            
+
             // Parse XML
             libxml_use_internal_errors(true);
             $xml = simplexml_load_string($xmlContent);
-            
+
             if ($xml === false) {
                 return null;
             }
-            
-            // Return PatientID (this is the MRN in the ECG)
+
+            // Return PatientID (this can be MRN or RN in the ECG)
             $patientId = (string) ($xml->PatientID ?? '');
-            
+
             return !empty($patientId) ? trim($patientId) : null;
-            
+
         } catch (\Exception $e) {
             return null;
         }
     }
-    
+
     /**
      * Get timestamp from filename or file modification time
      */
     private function getTimestampFromFilename(string $filename, string $xmlPath): string
     {
         $baseName = pathinfo($filename, PATHINFO_FILENAME);
-        
+
         // Try to extract timestamp from filename (format: ecg_upload_YYYYMMDD_HHMMSS)
         if (preg_match('/(\d{8}_\d{6})/', $baseName, $matches)) {
             $dateStr = $matches[1];
@@ -339,7 +372,7 @@ class EcgController extends Controller
                 return $timestamp->format('Y-m-d H:i:s');
             }
         }
-        
+
         // Fallback to file modification time
         return date('Y-m-d H:i:s', filemtime($xmlPath));
     }
@@ -352,30 +385,30 @@ class EcgController extends Controller
     {
         $ecgStorePath = base_path('ecg/store');
         $allFiles = [];
-        
+
         if (!is_dir($ecgStorePath)) {
             return response()->json(['error' => 'ECG store directory not found'], 404);
         }
-        
+
         $files = scandir($ecgStorePath);
-        
+
         foreach ($files as $file) {
             if ($file === '.' || $file === '..') {
                 continue;
             }
-            
+
             if (!preg_match('/\.xml$/i', $file)) {
                 continue;
             }
-            
+
             $xmlPath = $ecgStorePath . '/' . $file;
             $ecgPatientId = $this->getEcgPatientId($xmlPath);
-            
+
             if ($ecgPatientId !== null) {
                 $baseName = pathinfo($file, PATHINFO_FILENAME);
                 $pdfFile = $baseName . '_extracted.pdf';
                 $pdfPath = $ecgStorePath . '/' . $pdfFile;
-                
+
                 $allFiles[] = [
                     'xml_file' => $file,
                     'pdf_file' => file_exists($pdfPath) ? $pdfFile : null,
@@ -385,7 +418,7 @@ class EcgController extends Controller
                 ];
             }
         }
-        
+
         return response()->json($allFiles);
     }
 }
