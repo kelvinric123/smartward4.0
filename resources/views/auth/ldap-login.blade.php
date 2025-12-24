@@ -11,7 +11,7 @@
                 </svg>
             </div>
             <h2 class="text-2xl font-bold text-gray-800">LDAP User Login</h2>
-            <p class="text-sm text-gray-500 mt-1">Enter your email to sign in (No password required)</p>
+            <p class="text-sm text-gray-500 mt-1">Sign in with your Active Directory credentials</p>
         </div>
 
         @if (session('error'))
@@ -47,6 +47,24 @@
                 <x-input-error :messages="$errors->get('email')" class="mt-2" />
             </div>
 
+            <!-- Password Input -->
+            <div>
+                <x-input-label for="password" :value="__('Password')" class="text-gray-700 font-medium" />
+                <div class="relative mt-2">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                    </div>
+                    <x-text-input id="password"
+                        class="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                        type="password" name="password" required autocomplete="current-password"
+                        placeholder="Enter your network password" />
+                </div>
+                <x-input-error :messages="$errors->get('password')" class="mt-2" />
+            </div>
+
             <!-- Info Box -->
             <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
                 <div class="flex">
@@ -58,7 +76,8 @@
                     </div>
                     <div class="ml-3">
                         <p class="text-sm text-emerald-700">
-                            LDAP users are pre-authorized through Active Directory. No password is required for login.
+                            Your credentials will be verified against Active Directory. Use your network username and
+                            password.
                         </p>
                     </div>
                 </div>

@@ -2,3 +2,4 @@ ldap3
 flask
 schedule
 mysql-connector-python
+requests

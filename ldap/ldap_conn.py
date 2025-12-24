@@ -117,7 +117,91 @@ def fetch_ldap_data():
             conn.unbind()
 
 
-from flask import Flask, jsonify
+def authenticate_ldap_user(username, password):
+    """
+    Authenticate a user against LDAP by attempting to bind with their credentials.
+    
+    Args:
+        username: The username (sAMAccountName) to authenticate
+        password: The user's password
+        
+    Returns:
+        dict: {'success': bool, 'message': str, 'user_data': dict (optional)}
+    """
+    try:
+        # 1. Configure TLS
+        print(f"Attempting to authenticate user: {username}")
+        tls_configuration = Tls(validate=ssl.CERT_NONE, version=ssl.PROTOCOL_TLSv1_2)
+        
+        # 2. Create server connection
+        server = Server(LDAP_SERVER_HOST, port=LDAP_PORT, use_ssl=True, tls=tls_configuration)
+        
+        # 3. First, bind with service account to search for the user's DN
+        print("Binding with service account to search for user...")
+        conn = Connection(server, user=LDAP_USER_DN, password=LDAP_PASSWORD, auto_bind=True)
+        
+        # 4. Search for the user to get their full DN
+        search_filter = f"(&(objectCategory=Person)(sAMAccountName={username}))"
+        conn.search(
+            search_base=SEARCH_BASE,
+            search_filter=search_filter,
+            search_scope=SUBTREE,
+            attributes=['cn', 'mail', 'sAMAccountName', 'distinguishedName']
+        )
+        
+        if not conn.entries:
+            print(f"User {username} not found in LDAP")
+            conn.unbind()
+            return {
+                'success': False,
+                'message': 'User not found in Active Directory'
+            }
+        
+        # Get the user's DN and other attributes
+        user_entry = conn.entries[0]
+        user_dn = user_entry.distinguishedName.value if hasattr(user_entry.distinguishedName, 'value') else str(user_entry.distinguishedName)
+        user_data = user_entry.entry_attributes_as_dict
+        
+        print(f"Found user DN: {user_dn}")
+        conn.unbind()
+        
+        # 5. Now attempt to bind with the user's credentials
+        print(f"Attempting to bind as user: {user_dn}")
+        user_conn = Connection(server, user=user_dn, password=password, auto_bind=True)
+        
+        # If we get here, the bind was successful
+        print(f"Authentication successful for user: {username}")
+        user_conn.unbind()
+        
+        return {
+            'success': True,
+            'message': 'Authentication successful',
+            'user_data': {
+                'username': user_data.get('sAMAccountName', [username])[0],
+                'email': user_data.get('mail', [f'{username}@ldap.local'])[0],
+                'name': user_data.get('cn', ['Unknown'])[0],
+                'dn': user_dn
+            }
+        }
+        
+    except Exception as e:
+        error_msg = str(e)
+        print(f"Authentication failed for {username}: {error_msg}")
+        
+        # Check if it's an invalid credentials error
+        if 'invalidCredentials' in error_msg or '49' in error_msg:
+            return {
+                'success': False,
+                'message': 'Invalid username or password'
+            }
+        else:
+            return {
+                'success': False,
+                'message': f'Authentication error: {error_msg}'
+            }
+
+
+from flask import Flask, jsonify, request
 import schedule
 import time
 import threading
@@ -125,6 +209,33 @@ import threading
 app = Flask(__name__)
 
 # ... existing code ...
+
+@app.route('/authenticate', methods=['POST'])
+def authenticate():
+    """Endpoint to authenticate a user against LDAP."""
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        
+        if not username or not password:
+            return jsonify({
+                'success': False,
+                'message': 'Username and password are required'
+            }), 400
+        
+        # Call authentication function
+        result = authenticate_ldap_user(username, password)
+        
+        status_code = 200 if result['success'] else 401
+        return jsonify(result), status_code
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'Server error: {str(e)}'
+        }), 500
+
 
 @app.route('/sync', methods=['POST'])
 def manual_sync():

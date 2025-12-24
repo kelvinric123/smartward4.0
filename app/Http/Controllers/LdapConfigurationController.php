@@ -26,22 +26,59 @@ class LdapConfigurationController extends Controller
     {
         $request->validate([
             'email' => 'required|email',
+            'password' => 'required|string',
         ]);
 
-        $user = User::where('email', $request->email)
-            ->where('is_ldap_user', true)
-            ->first();
+        // Extract username from email (part before @)
+        $email = $request->email;
+        $username = strstr($email, '@', true) ?: $email;
 
-        if (!$user) {
+        try {
+            // Call LDAP authentication service
+            $response = \Illuminate\Support\Facades\Http::timeout(10)->post('http://smartward4-ldap:5000/authenticate', [
+                'username' => $username,
+                'password' => $request->password,
+            ]);
+
+            $result = $response->json();
+
+            if ($response->successful() && isset($result['success']) && $result['success']) {
+                // Authentication successful, find or create the user
+                $userData = $result['user_data'] ?? [];
+                $userEmail = $userData['email'] ?? $email;
+
+                $user = User::where('email', $userEmail)
+                    ->where('is_ldap_user', true)
+                    ->first();
+
+                if (!$user) {
+                    return back()
+                        ->withInput()
+                        ->with('error', 'LDAP authentication successful, but user not found in database. Please contact administrator to sync LDAP users.');
+                }
+
+                // Log in the user
+                \Illuminate\Support\Facades\Auth::login($user);
+                $request->session()->regenerate();
+
+                return redirect()->intended(route('dashboard'));
+            } else {
+                // Authentication failed
+                $errorMessage = $result['message'] ?? 'Invalid credentials';
+                return back()
+                    ->withInput($request->only('email'))
+                    ->with('error', $errorMessage);
+            }
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
             return back()
-                ->withInput()
-                ->with('error', 'No LDAP user found with this email. Please ensure your account has been synced from Active Directory.');
+                ->withInput($request->only('email'))
+                ->with('error', 'Cannot connect to LDAP service. Please ensure the LDAP service is running.');
+        } catch (\Exception $e) {
+            \Log::error('LDAP authentication error: ' . $e->getMessage());
+            return back()
+                ->withInput($request->only('email'))
+                ->with('error', 'Authentication error: ' . $e->getMessage());
         }
-
-        \Illuminate\Support\Facades\Auth::login($user);
-        $request->session()->regenerate();
-
-        return redirect()->intended(route('dashboard'));
     }
 
     /**

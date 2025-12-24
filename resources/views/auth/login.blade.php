@@ -56,7 +56,7 @@
                     <div class="ml-5">
                         <h3 class="text-lg font-bold text-gray-800 group-hover:text-emerald-600 transition-colors">LDAP
                             User Login</h3>
-                        <p class="text-sm text-gray-500 mt-1">Select your user account (No password required)</p>
+                        <p class="text-sm text-gray-500 mt-1">Sign in with your Active Directory credentials</p>
                     </div>
                     <div class="ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
                         <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
