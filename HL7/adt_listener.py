@@ -576,7 +576,15 @@ class HL7Parser:
         visit_number = self._get_field(pv1, 19) or self._get_field(pv1, 15)
         
         # PV1-38: Diet Type - Some HIS put it at PV1-36
-        diet_type = self._get_field(pv1, 38) or self._get_field(pv1, 36)
+        # Format: CODES^FULL_NAMES (e.g., "VEGD, WFD^VEGETARIAN DIET, WARFARIN DIET")
+        # We only want the codes part (before ^), not the full names
+        diet_type_raw = self._get_field(pv1, 38) or self._get_field(pv1, 36)
+        diet_type = ''
+        if diet_type_raw and '^' in diet_type_raw:
+            # Extract only the codes part (before ^)
+            diet_type = diet_type_raw.split('^')[0].strip()
+        else:
+            diet_type = diet_type_raw
         
         # PV1-40: Bed Status (may contain bed info like ^^B2)
         # Some HIS systems put bed at PV1-38 instead of PV1-40

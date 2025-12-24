@@ -1412,6 +1412,7 @@ class AdtApiController extends Controller
                 } else {
                     // Fallback to hardcoded map for backwards compatibility
                     $dietMap = [
+                        // Standard code mappings
                         'NPO' => 'NPO',
                         'NBM' => 'NBM',
                         'DMD' => 'DMD',
@@ -1420,9 +1421,27 @@ class AdtApiController extends Controller
                         'BF' => 'BF',
                         'VEG' => 'VEGD',
                         'SD' => 'SD',
-                        // Map full diet names to their codes
+
+                        // Full diet name mappings (defense-in-depth for edge cases)
+                        // Format: "FULL NAME" => "CODE"
+                        'VEGETARIAN DIET' => 'VEGD',
+                        'WARFARIN DIET' => 'WFD',
                         'LOW FIBER DIET' => 'LFIBD',
                         'LOW FAT DIET' => 'LFD',
+                        'DIABETIC DIET' => 'DMD',
+                        'NIL BY MOUTH' => 'NBM',
+                        'REGULAR DIET' => 'RD',
+                        'SOFT DIET' => 'SD',
+                        'BLAND DIET' => 'BLAND',
+                        'CLEAR LIQUID DIET' => 'CLQD',
+                        'FULL LIQUID DIET' => 'FLD',
+                        'HIGH FIBER DIET' => 'HFIBD',
+                        'LOW CALORIE DIET' => 'LCD',
+                        'LOW CHOLESTEROL DIET' => 'LCHD',
+                        'LOW SALT DIET' => 'LSD',
+                        'MECHANICAL SOFT DIET' => 'MSD',
+                        'BREASTFEEDING' => 'BF',
+                        'BLENDED DIET' => 'BDD',
                     ];
 
                     $dietCodes[] = $dietMap[$dietCode] ?? $dietCode;
