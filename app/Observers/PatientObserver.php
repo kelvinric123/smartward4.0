@@ -12,58 +12,46 @@ class PatientObserver
 {
     /**
      * Handle the Patient "created" event.
-     * DISABLED - BedObserver handles all EKAD updates via bed occupancy changes
      */
     public function created(Patient $patient): void
     {
-        // Log::info('EKad Observer: Patient created', ['patient_id' => $patient->id, 'name' => $patient->name]);
-        // $this->handlePatientChange($patient, 'created');
+        Log::info('EKad Observer: Patient created', ['patient_id' => $patient->id, 'name' => $patient->name]);
+        $this->handlePatientChange($patient, 'created');
     }
 
     /**
      * Handle the Patient "updated" event.
-     * DISABLED - BedObserver handles all EKAD updates via bed occupancy changes
      */
     public function updated(Patient $patient): void
     {
         // Check if relevant fields changed
-        // $relevantChanges = $patient->wasChanged([
-        //     'name',
-        //     'status',
-        //     'bed_number',
-        //     'ward_id',
-        //     'consultant_id',
-        //     'nurse_id',
-        //     'anaesthetist_id',
-        //     'diet_types',
-        //     'mrn',
-        // ]);
+        $relevantChanges = $patient->wasChanged([
+            'name',
+            'status',
+            'bed_number',
+            'ward_id',
+            'consultant_id',
+            'nurse_id',
+            'anaesthetist_id',
+            'diet_types',
+            'mrn',
+        ]);
 
-        // if ($relevantChanges) {
-        //     Log::info('EKad Observer: Patient updated with relevant changes', [
-        //         'patient_id' => $patient->id,
-        //         'name' => $patient->name,
-        //         'changes' => $patient->getChanges(),
-        //     ]);
-        //     $this->handlePatientChange($patient, 'updated');
-        // }
+        if ($relevantChanges) {
+            Log::info('EKad Observer: Patient updated with relevant changes', [
+                'patient_id' => $patient->id,
+                'name' => $patient->name,
+                'changes' => $patient->getChanges(),
+            ]);
+            $this->handlePatientChange($patient, 'updated');
+        }
     }
 
     /**
      * Handle patient changes and push to E-Ink if applicable
-     * DISABLED - BedObserver handles all EKAD updates via bed occupancy changes
-     * This prevents duplicate triggers and race conditions
      */
     protected function handlePatientChange(Patient $patient, string $event): void
     {
-        // DISABLED: All EKAD updates are handled by BedObserver
-        // BedObserver watches bed.patient_id changes and triggers appropriate updates
-        // This eliminates duplicate triggers when:
-        // - Admitting to a prebooked bed (prebook patient status change + new patient assignment)
-        // - Transferring patients between beds
-        // - Any other bed occupancy changes
-
-        /* 
         try {
             // Only push EKAD updates for active patients (admitted or prebooked)
             // This prevents duplicate updates when a prebook patient is cancelled during new admission
@@ -123,6 +111,5 @@ class PatientObserver
                 'patient_id' => $patient->id ?? null,
             ]);
         }
-        */
     }
 }
