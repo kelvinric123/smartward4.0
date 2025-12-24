@@ -24,49 +24,70 @@ The system must generate the following JSON structure for the SEEKINK API.
 }
 ```
 
-## 2. Trigger Strategy
-We are cleaning up the architecture to be more reliable and explicit.
+## 2. Trigger Strategy (REFINED)
+We use the **Observer Pattern** exclusively. ADT Controller triggers are DISABLED to prevent race conditions and duplicate pushes.
 
 ### A. Core Architecture Changes
-1.  **Remove ADT Listener Triggers**: The `adt_listener.py` and `AdtApiController` will **STOP** calling `EkadService`. They will only update the Database.
-2.  **Remove PatientObserver**: As per instruction, we will **NOT** use `PatientObserver` to detect changes. It is too broad and "magic".
+1.  **Remove ADT Controller Triggers**: The `AdtApiController` will **NEVER** call `EkadService`. It only updates the Database. EKad updates are handled by Observers.
+2.  **Enable Observer-Based Triggers**: We use multiple observers to watch specific model changes that affect the "Bed Box" display.
 
-### B. The "Bed Box" Trigger Strategy
-Data displayed on the "Bed Box" (MRN, Name, Doctor, Nurse, Diet) is the source of truth. Updates should be triggered **explicitly** from the points where this "Bed Box Info" is modified.
+### B. The "Bed Box" Observer Strategy
+Data displayed on the "Bed Box" (MRN, Name, Doctor, Nurse, Diet) is the source of truth. Updates are triggered by **Model Observers** watching relevant field changes.
 
-#### 1. Bed Occupancy (Admit/Discharge) -> `BedObserver`
+#### 1. Bed Occupancy (Admit/Discharge) → `BedObserver` ✅
 The `Bed` model is the container. Changes to its occupancy state are the primary trigger.
-*   **Action**: Update `BedObserver.php`.
+*   **File**: `app/Observers/BedObserver.php`
+*   **Status**: **ACTIVE** - Already implemented
 *   **Trigger**: Watch for `patient_id` changes on the `Bed` model.
-    *   `patient_id` becomes `NULL` -> **Push "Vacant" Payload**.
-    *   `patient_id` becomes `VALUE` -> **Push "Patient" Payload**.
+    *   `patient_id` becomes `NULL` → **Push "Vacant" Payload**
+    *   `patient_id` becomes `VALUE` → **Push "Patient" Payload**
 
-#### 2. Patient Info Changes (Diet, Doctor, Name) -> Controller Triggers
-Since we removed `PatientObserver`, we must identify the Controllers handling "Bed Box" edits and fire the trigger explicitly after a successful save.
-*   **Target**: `WardDashboardController` (or wherever Patient Details are edited).
-*   **Logic**:
-    ```php
-    // In Controller update method
-    $patient->update($validatedData);
-    
-    // Explicit Trigger "From the Bed Box"
-    if ($patient->bed) {
-         EkadService::pushPatientInfo($patient, $patient->bed);
-    }
-    ```
-*   **Benefit**: We only trigger when the user *intentionally* updates the Bed Box info, avoiding ghost triggers from background processes.
+#### 2. Patient Info Changes (Diet, Name, etc.) → `PatientObserver` 🔄
+Watch for changes to patient fields that display on the Bed Box.
+*   **File**: `app/Observers/PatientObserver.php`
+*   **Status**: **NEEDS RE-ENABLE** - Currently disabled (line 55)
+*   **Fields to Watch**:
+    *   `diet_types` - Patient can have multiple diets (located in Patient Details modal → Patient Additional Info → Diet Types)
+    *   `name` - Patient name
+    *   `mrn` - Medical Record Number
+*   **Logic**: When any watched field changes, trigger EKAD push if patient has an assigned bed
+
+#### 3. Care Provider Changes (Anaesthetist) → `PatientCareProviderObserver` 🆕
+Watch for care provider assignments/updates to detect anaesthetist changes.
+*   **File**: `app/Observers/PatientCareProviderObserver.php` **[TO BE CREATED]**
+*   **Status**: **NEW** - Needs to be created
+*   **Trigger**: When a care provider is created/updated/deleted:
+    *   Check if the provider is a **Referring Doctor** or **Consulting Doctor**
+    *   Check if the linked consultant/anaesthetist is marked as an anaesthetist (as defined in `/anaesthetists` page)
+    *   If yes, trigger EKAD update for the patient
+*   **Note**: The anaesthetist field in EKAD should be populated from care providers where the role is "referring" or "consulting" AND the linked doctor is an anaesthetist
 
 ## 3. Implementation Plan
-1.  **Refactor `BedObserver.php`**:
-    *   Handle `patient_id` -> `null` (Discharge) by pushing strict "Vacant" payload.
-    *   Handle `patient_id` -> `int` (Admit) by pushing normal payload.
-2.  **Modify Controllers**:
-    *   Identify `update` methods for Patient details.
-    *   Insert `EkadService::pushPatientInfo` calls.
-3.  **Cleanup**:
-    *   Delete `PatientObserver` EKAD logic.
-    *   Delete `AdtApiController` triggers.
+1.  **BedObserver** ✅:
+    *   Already implemented and active
+    *   Handles admit/discharge (patient_id changes)
+    
+2.  **Re-enable PatientObserver** 🔄:
+    *   Uncomment/re-enable the EKAD logic in `PatientObserver.php`
+    *   Ensure it watches: `diet_types`, `name`, `mrn`
+    *   Only trigger if patient has an assigned bed
+    
+3.  **Create PatientCareProviderObserver** 🆕:
+    *   Create new file: `app/Observers/PatientCareProviderObserver.php`
+    *   Watch for created/updated/deleted events
+    *   Check if provider is referring/consulting doctor AND is an anaesthetist
+    *   Trigger EKAD update for the patient
+    
+4.  **Remove ADT Triggers** 🗑️:
+    *   Remove `triggerEkadUpdate()` calls from `AdtApiController.php` (lines 874, 1055)
+    *   Let observers handle all EKAD pushes
+    
+5.  **Register New Observer**:
+    *   Update `app/Providers/EventServiceProvider.php` to register `PatientCareProviderObserver`
 
 ## 4. Reliability Improvements
-*   **Single Responsibility**: `BedObserver` handles existence. Controllers handle content.
-*   **No Race Conditions**: By removing the ADT Listener trigger and relying on the DB/Observer, we let the data settle first.
+*   **Single Responsibility**: Each observer watches its own model changes
+*   **No Duplicate Triggers**: ADT updates trigger observers naturally through model changes
+*   **Explicit Field Watching**: Only trigger on fields that actually display on the Bed Box
+*   **No Race Conditions**: Database changes happen first, then observers trigger EKAD
+

@@ -4,7 +4,11 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 use App\Models\Bed;
+use App\Models\Patient;
+use App\Models\PatientCareProvider;
 use App\Observers\BedObserver;
+use App\Observers\PatientObserver;
+use App\Observers\PatientCareProviderObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -21,8 +25,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Register observers
-        // BedObserver: triggers EKad push when patient_id changes (admit/transfer/discharge)
+        // Register observers for EKAD E-Ink display updates
+        // BedObserver: Triggers EKad push when patient_id changes (admit/transfer/discharge)
         Bed::observe(BedObserver::class);
+
+        // PatientObserver: Triggers EKad push when patient info changes (diet, name, etc.)
+        Patient::observe(PatientObserver::class);
+
+        // PatientCareProviderObserver: Triggers EKad push when care providers change (anaesthetist updates)
+        PatientCareProvider::observe(PatientCareProviderObserver::class);
     }
 }

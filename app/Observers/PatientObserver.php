@@ -52,31 +52,54 @@ class PatientObserver
      */
     protected function handlePatientChange(Patient $patient, string $event): void
     {
-        // DISABLED: EKAD logic moved to BedObserver and Controllers (Field Triggers)
-        // This prevents duplicate pushes and race conditions.
-        /*
         try {
-            // Check if patient is admitted
-            if (!$patient->isAdmitted()) {
-                Log::debug('EKad Observer: Patient not admitted, skipping', [
+            // Check if patient is admitted and has a bed
+            if (!$patient->bed) {
+                Log::debug('EKad PatientObserver: Patient has no bed assignment, skipping', [
                     'patient_id' => $patient->id,
-                    'status' => $patient->status,
+                    'mrn' => $patient->mrn,
                 ]);
                 return;
             }
 
-            // ... (rest of the logic commented out) ...
-
             // Get EKad configuration
             $config = EkadConfiguration::getActive();
-            if (!$config) {
-                return; 
+            if (!$config || !$config->is_active || !$config->auto_push_enabled) {
+                Log::debug('EKad PatientObserver: Auto-push not enabled, skipping');
+                return;
             }
-            // ...
+
+            // Check if bed has E-Ink mapping
+            $mapping = EkadBedMapping::getForBed($patient->bed->id);
+            if (!$mapping) {
+                Log::debug('EKad PatientObserver: No E-Ink mapping for bed, skipping', [
+                    'bed_id' => $patient->bed->id,
+                ]);
+                return;
+            }
+
+            $service = new EkadService($config);
+
+            Log::info('EKad PatientObserver: Pushing patient info update', [
+                'patient_id' => $patient->id,
+                'bed_number' => $patient->bed->bed_number,
+                'event' => $event,
+                'changes' => $patient->getChanges(),
+            ]);
+
+            $result = $service->pushPatientInfo($patient, $patient->bed, [], "Patient Info Updated ({$event})");
+
+            if ($result['success']) {
+                Log::info('EKad PatientObserver: Auto-push successful');
+            } else {
+                Log::warning('EKad PatientObserver: Auto-push failed', ['error' => $result['message'] ?? 'Unknown error']);
+            }
+
         } catch (\Exception $e) {
-            // ...
+            Log::error('EKad PatientObserver: Auto-push error', [
+                'error' => $e->getMessage(),
+                'patient_id' => $patient->id ?? null,
+            ]);
         }
-        */
-        return;
     }
 }

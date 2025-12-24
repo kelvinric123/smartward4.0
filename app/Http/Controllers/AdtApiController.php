@@ -868,10 +868,7 @@ class AdtApiController extends Controller
 
             DB::commit();
 
-            DB::commit();
-
-            // Trigger EKad update
-            $this->triggerEkadUpdate($patient);
+            // EKad update handled by PatientObserver (watches diet_types, name, etc.)
 
             return [
                 'success' => true,
@@ -1049,10 +1046,7 @@ class AdtApiController extends Controller
 
             Log::info("ADT A13 Cancel Discharge - SUCCESS", ['actions' => $actions]);
 
-            Log::info("ADT A13 Cancel Discharge - SUCCESS", ['actions' => $actions]);
-
-            // Trigger EKad update
-            $this->triggerEkadUpdate($patient);
+            // EKad update handled by BedObserver (patient re-assigned to bed)
 
             return [
                 'success' => true,
