@@ -391,6 +391,7 @@
                                 <thead>
                                     <tr class="bg-gray-50">
                                         <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Device ID</th>
+                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Asset No</th>
                                         <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Name</th>
                                         <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Type</th>
                                         <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Location</th>
@@ -404,6 +405,7 @@
                                     @foreach($pumps as $pump)
                                         <tr class="hover:bg-gray-50 transition-colors">
                                             <td class="px-4 py-3 text-sm font-mono text-gray-800">{{ $pump->device_id }}</td>
+                                            <td class="px-4 py-3 text-sm text-gray-700">{{ $pump->asset_no ?? '-' }}</td>
                                             <td class="px-4 py-3 text-sm text-gray-700">{{ $pump->device_name ?? '-' }}</td>
                                             <td class="px-4 py-3 text-sm text-gray-600">{{ $pump->device_type ?? 'Unknown' }}</td>
                                             <td class="px-4 py-3 text-sm text-gray-600">{{ $pump->location ?? '-' }}</td>
@@ -573,6 +575,13 @@
                                 <input type="text" name="device_id" x-model="pumpFormData.device_id" required
                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
                                        placeholder="e.g., PUMP-001">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Asset No</label>
+                                <input type="text" name="asset_no" x-model="pumpFormData.asset_no"
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
+                                       placeholder="e.g., AST-001">
                             </div>
 
                             <div>
@@ -748,6 +757,7 @@
                 selectedLog: null,
                 pumpFormData: {
                     device_id: '',
+                    asset_no: '',
                     device_name: '',
                     device_type: '',
                     location: '',
@@ -764,6 +774,7 @@
                 resetPumpForm() {
                     this.pumpFormData = {
                         device_id: '',
+                        asset_no: '',
                         device_name: '',
                         device_type: '',
                         location: '',
@@ -777,6 +788,7 @@
                     this.editingPump = pump;
                     this.pumpFormData = {
                         device_id: pump.device_id,
+                        asset_no: pump.asset_no || '',
                         device_name: pump.device_name || '',
                         device_type: pump.device_type || '',
                         location: pump.location || '',

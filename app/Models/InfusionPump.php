@@ -13,6 +13,7 @@ class InfusionPump extends Model
 
     protected $fillable = [
         'device_id',
+        'asset_no',
         'device_name',
         'device_type',
         'device_uuid',

@@ -38,8 +38,8 @@ class InfusionIntegrationController extends Controller
 
         // Check if listener is running (by checking recent logs)
         $lastLog = BbraunHl7Log::latest()->first();
-        $listenerStatus = $lastLog && $lastLog->created_at->diffInMinutes(now()) < 5 
-            ? 'active' 
+        $listenerStatus = $lastLog && $lastLog->created_at->diffInMinutes(now()) < 5
+            ? 'active'
             : 'inactive';
 
         $stats = [
@@ -63,6 +63,7 @@ class InfusionIntegrationController extends Controller
     {
         $validated = $request->validate([
             'device_id' => 'required|string|max:255|unique:infusion_pumps,device_id',
+            'asset_no' => 'nullable|string|max:255',
             'device_name' => 'nullable|string|max:255',
             'device_type' => 'nullable|string|max:255',
             'location' => 'nullable|string|max:255',
@@ -84,6 +85,7 @@ class InfusionIntegrationController extends Controller
     {
         $validated = $request->validate([
             'device_id' => 'required|string|max:255|unique:infusion_pumps,device_id,' . $pump->id,
+            'asset_no' => 'nullable|string|max:255',
             'device_name' => 'nullable|string|max:255',
             'device_type' => 'nullable|string|max:255',
             'location' => 'nullable|string|max:255',
@@ -116,6 +118,7 @@ class InfusionIntegrationController extends Controller
     public function wardOverview(Request $request): View
     {
         $wardId = $request->get('ward_id');
+        $tab = $request->get('tab', 'infusions'); // infusions, devices
         $filter = $request->get('filter', 'active'); // active, completed, all, warnings
 
         $query = Infusion::with(['patient', 'infusionPump']);
@@ -150,7 +153,18 @@ class InfusionIntegrationController extends Controller
             'alarms' => Infusion::when($wardId, fn($q) => $q->inWard($wardId))->alarming()->count(),
         ];
 
-        return view('wards.infusion-overview', compact('infusions', 'stats', 'filter', 'wardId'));
+        // Get all pumps with patient binding information for devices tab
+        $pumpsQuery = InfusionPump::with(['patient', 'ward'])
+            ->orderByRaw('patient_id IS NULL')  // Show linked pumps first
+            ->orderBy('device_id');
+
+        if ($wardId) {
+            $pumpsQuery->where('ward_id', $wardId);
+        }
+
+        $pumps = $pumpsQuery->get();
+
+        return view('wards.infusion-overview', compact('infusions', 'stats', 'filter', 'wardId', 'tab', 'pumps'));
     }
 
     /**
@@ -161,7 +175,7 @@ class InfusionIntegrationController extends Controller
         $patientId = $request->get('patient_id');
         $patient = Patient::find($patientId);
 
-        $infusions = $patient 
+        $infusions = $patient
             ? Infusion::with('infusionPump')
                 ->where('patient_id', $patientId)
                 ->latest('last_updated_at')
@@ -183,7 +197,7 @@ class InfusionIntegrationController extends Controller
         $patient = Patient::find($patientId);
 
         // Get pumps linked to this patient
-        $linkedPumps = $patient 
+        $linkedPumps = $patient
             ? InfusionPump::with('ward')
                 ->where('patient_id', $patientId)
                 ->get()
@@ -208,7 +222,7 @@ class InfusionIntegrationController extends Controller
         ]);
 
         $pump = InfusionPump::findOrFail($validated['pump_id']);
-        
+
         // Unlink from any existing patient first
         if ($pump->patient_id && $pump->patient_id != $validated['patient_id']) {
             $pump->unlinkFromPatient();
@@ -238,7 +252,7 @@ class InfusionIntegrationController extends Controller
 
         // Find or create the pump by device ID
         $pump = InfusionPump::where('device_id', $validated['device_id'])->first();
-        
+
         if (!$pump) {
             // Auto-register the pump
             $patient = Patient::find($validated['patient_id']);
@@ -249,7 +263,7 @@ class InfusionIntegrationController extends Controller
                 'is_active' => true,
             ]);
         }
-        
+
         // Unlink from any existing patient first
         if ($pump->patient_id && $pump->patient_id != $validated['patient_id']) {
             $pump->unlinkFromPatient();
@@ -332,10 +346,13 @@ class InfusionIntegrationController extends Controller
             ],
         ];
 
-        $this->logApiRequest($apiUser, '/api/infusion/login', 'POST', 
-            ['username' => $request->username], 
-            $responseData, 
-            200, 
+        $this->logApiRequest(
+            $apiUser,
+            '/api/infusion/login',
+            'POST',
+            ['username' => $request->username],
+            $responseData,
+            200,
             $startTime
         );
 
@@ -351,7 +368,7 @@ class InfusionIntegrationController extends Controller
         $startTime = microtime(true);
 
         $apiUser = $this->validateBearerToken($request);
-        
+
         if (!$apiUser) {
             return response()->json([
                 'success' => false,
@@ -385,10 +402,13 @@ class InfusionIntegrationController extends Controller
                 'errors' => $validator->errors(),
             ];
 
-            $this->logApiRequest($apiUser, '/api/infusion/status', 'POST', 
-                $request->all(), 
-                $responseData, 
-                422, 
+            $this->logApiRequest(
+                $apiUser,
+                '/api/infusion/status',
+                'POST',
+                $request->all(),
+                $responseData,
+                422,
                 $startTime,
                 'ORU'
             );
@@ -405,10 +425,13 @@ class InfusionIntegrationController extends Controller
                 'message' => 'Patient not found',
             ];
 
-            $this->logApiRequest($apiUser, '/api/infusion/status', 'POST', 
-                $request->all(), 
-                $responseData, 
-                404, 
+            $this->logApiRequest(
+                $apiUser,
+                '/api/infusion/status',
+                'POST',
+                $request->all(),
+                $responseData,
+                404,
                 $startTime,
                 'ORU'
             );
@@ -450,14 +473,14 @@ class InfusionIntegrationController extends Controller
 
         // Calculate warning status
         $warningThreshold = 15; // minutes
-        $infusionData['is_warning'] = ($request->status === 'running' && 
-                                       $request->remaining_minutes !== null && 
-                                       $request->remaining_minutes <= $warningThreshold);
+        $infusionData['is_warning'] = ($request->status === 'running' &&
+            $request->remaining_minutes !== null &&
+            $request->remaining_minutes <= $warningThreshold);
 
         if ($infusion) {
             // Update existing infusion
             $infusion->update($infusionData);
-            
+
             if ($request->status === 'running' && !$infusion->started_at) {
                 $infusion->update(['started_at' => now()]);
             }
@@ -483,10 +506,13 @@ class InfusionIntegrationController extends Controller
             ],
         ];
 
-        $this->logApiRequest($apiUser, '/api/infusion/status', 'POST', 
-            $request->all(), 
-            $responseData, 
-            200, 
+        $this->logApiRequest(
+            $apiUser,
+            '/api/infusion/status',
+            'POST',
+            $request->all(),
+            $responseData,
+            200,
             $startTime,
             'ORU'
         );
@@ -502,7 +528,7 @@ class InfusionIntegrationController extends Controller
         $startTime = microtime(true);
 
         $apiUser = $this->validateBearerToken($request);
-        
+
         if (!$apiUser) {
             return response()->json([
                 'success' => false,
@@ -525,10 +551,13 @@ class InfusionIntegrationController extends Controller
                 'errors' => $validator->errors(),
             ];
 
-            $this->logApiRequest($apiUser, '/api/infusion/batch-status', 'POST', 
-                $request->all(), 
-                $responseData, 
-                422, 
+            $this->logApiRequest(
+                $apiUser,
+                '/api/infusion/batch-status',
+                'POST',
+                $request->all(),
+                $responseData,
+                422,
                 $startTime,
                 'ORU'
             );
@@ -582,9 +611,9 @@ class InfusionIntegrationController extends Controller
             ];
 
             $warningThreshold = 15;
-            $infusionData['is_warning'] = ($data['status'] === 'running' && 
-                                           isset($data['remaining_minutes']) && 
-                                           $data['remaining_minutes'] <= $warningThreshold);
+            $infusionData['is_warning'] = ($data['status'] === 'running' &&
+                isset($data['remaining_minutes']) &&
+                $data['remaining_minutes'] <= $warningThreshold);
 
             if ($infusion) {
                 $infusion->update($infusionData);
@@ -614,10 +643,13 @@ class InfusionIntegrationController extends Controller
             ],
         ];
 
-        $this->logApiRequest($apiUser, '/api/infusion/batch-status', 'POST', 
-            $request->all(), 
-            $responseData, 
-            200, 
+        $this->logApiRequest(
+            $apiUser,
+            '/api/infusion/batch-status',
+            'POST',
+            $request->all(),
+            $responseData,
+            200,
             $startTime,
             'ORU'
         );
@@ -633,7 +665,7 @@ class InfusionIntegrationController extends Controller
         $startTime = microtime(true);
 
         $apiUser = $this->validateBearerToken($request);
-        
+
         if (!$apiUser) {
             return response()->json([
                 'success' => false,
@@ -648,10 +680,13 @@ class InfusionIntegrationController extends Controller
             'message' => 'Logged out successfully',
         ];
 
-        $this->logApiRequest($apiUser, '/api/infusion/logout', 'POST', 
-            [], 
-            $responseData, 
-            200, 
+        $this->logApiRequest(
+            $apiUser,
+            '/api/infusion/logout',
+            'POST',
+            [],
+            $responseData,
+            200,
             $startTime
         );
 
@@ -664,13 +699,13 @@ class InfusionIntegrationController extends Controller
     private function validateBearerToken(Request $request): ?InfusionApiUser
     {
         $authHeader = $request->header('Authorization');
-        
+
         if (!$authHeader || !Str::startsWith($authHeader, 'Bearer ')) {
             return null;
         }
 
         $token = Str::after($authHeader, 'Bearer ');
-        
+
         return InfusionApiUser::findByToken($token);
     }
 
@@ -678,11 +713,11 @@ class InfusionIntegrationController extends Controller
      * Log API request.
      */
     private function logApiRequest(
-        InfusionApiUser $apiUser, 
-        string $endpoint, 
-        string $method, 
-        array $requestData, 
-        array $responseData, 
+        InfusionApiUser $apiUser,
+        string $endpoint,
+        string $method,
+        array $requestData,
+        array $responseData,
         int $statusCode,
         float $startTime,
         ?string $hl7MessageType = null
