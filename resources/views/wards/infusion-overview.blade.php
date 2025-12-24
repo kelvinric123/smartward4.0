@@ -360,9 +360,11 @@
                                                         </svg>
                                                     </div>
                                                     <div>
-                                                        <div class="text-sm font-bold text-gray-900">{{ $pump->device_id }}</div>
-                                                        @if($pump->device_name && $pump->device_name !== $pump->device_id)
-                                                            <div class="text-xs text-gray-500">{{ $pump->device_name }}</div>
+                                                        @if($pump->device_name)
+                                                            <div class="text-sm font-bold text-gray-900">{{ $pump->device_name }}</div>
+                                                            <div class="text-xs text-gray-500">{{ $pump->device_id }}</div>
+                                                        @else
+                                                            <div class="text-sm font-bold text-gray-900">{{ $pump->device_id }}</div>
                                                         @endif
                                                     </div>
                                                 </div>

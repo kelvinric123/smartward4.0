@@ -605,8 +605,6 @@ class AdtApiController extends Controller
                 'bed_id_ref' => $newBed?->id,
             ]);
 
-            DB::commit();
-
             // Create admission log entry for ADT transfer
             AdmissionLog::create([
                 'patient_id' => $patient->id,
@@ -623,6 +621,8 @@ class AdtApiController extends Controller
                 'notes' => 'ADT A02: Transfer from ' . ($oldWardName ? ($oldWardName . '/' . $oldBedNumber) : 'unknown'),
                 'source' => 'adt',
             ]);
+
+            DB::commit();
 
             Log::info("ADT A02 Transfer - SUCCESS", [
                 'patient_id' => $patient->id,
