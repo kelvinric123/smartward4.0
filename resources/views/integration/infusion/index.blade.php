@@ -624,7 +624,7 @@
 
                             <div x-show="showEditPumpModal">
                                 <label class="flex items-center">
-                                    <input type="checkbox" name="is_active" x-model="pumpFormData.is_active"
+                                    <input type="checkbox" name="is_active" value="1" x-model="pumpFormData.is_active"
                                            class="rounded border-gray-300 text-purple-600 shadow-sm focus:ring-purple-500">
                                     <span class="ml-2 text-sm text-gray-700">Active</span>
                                 </label>

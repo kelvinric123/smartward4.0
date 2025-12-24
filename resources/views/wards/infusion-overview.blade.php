@@ -22,7 +22,9 @@
             animation: blink-alarm 1s steps(1) infinite;
         }
     </style>
-    <meta http-equiv="refresh" content="30">
+    @if($tab === 'infusions')
+        <meta http-equiv="refresh" content="30">
+    @endif
     <meta name="csrf-token" content="{{ csrf_token() }}">
 </head>
 <body class="bg-gray-50">
@@ -41,9 +43,11 @@
                         <p class="text-xs text-gray-500">Real-time infusion pump monitoring</p>
                     </div>
                 </div>
-                <div class="text-xs text-gray-400">
-                    Auto-refreshes every 30s
-                </div>
+                @if($tab === 'infusions')
+                    <div class="text-xs text-gray-400">
+                        Auto-refreshes every 30s
+                    </div>
+                @endif
             </div>
             
             <!-- Tab Navigation -->
