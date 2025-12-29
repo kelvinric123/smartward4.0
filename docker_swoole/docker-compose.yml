@@ -311,6 +311,51 @@ services:
         max-file: "5"
         tag: "smartward4-bbraun"
 
+  # Seekink E-Ink Display Admin System Container
+  seekink:
+    image: q546877436/seekink-ubuntu:1.0.2
+    pull_policy: always  # Auto-pull if not available or check for updates
+    container_name: smartward4-seekink
+    restart: unless-stopped
+    ports:
+      # Java Port (Web Admin Interface) - Using 8088 since 8080 is used by ECG
+      - "${SEEKINK_JAVA_PORT:-8088}:8080"
+      # TCP Port (Device Communication)
+      - "${SEEKINK_TCP_PORT:-8003}:8003"
+      # MQTT Port (Optional - for base stations supporting MQTT)
+      - "${SEEKINK_MQTT_PORT:-1883}:1883"
+    environment:
+      # Server IP - Replace with your public/external IP address
+      # Required for image updates to work correctly
+      SERVER_IP: "${SEEKINK_SERVER_IP:-192.168.0.1}"
+      # Host Port - The external Java port (must match the mapped port)
+      HOST_PORT: "${SEEKINK_HOST_PORT:-8088}"
+      # MQTT Enable - Set to 'true' only if base station supports MQTT
+      MQTT_ENABLE: "${SEEKINK_MQTT_ENABLE:-false}"
+    volumes:
+      # Persist Seekink data and configurations
+      - seekink_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: "${SEEKINK_CPU_LIMIT:-2}"
+          memory: "${SEEKINK_MEMORY_LIMIT:-1G}"
+        reservations:
+          cpus: "0.5"
+          memory: "256M"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        tag: "smartward4-seekink"
+
 volumes:
   smartward_mysql:
     driver: local
@@ -333,6 +378,8 @@ volumes:
   mp5sc_logs:
     driver: local
   bbraun_logs:
+    driver: local
+  seekink_data:
     driver: local
 
 networks:

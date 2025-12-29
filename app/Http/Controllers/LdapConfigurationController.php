@@ -25,13 +25,24 @@ class LdapConfigurationController extends Controller
     public function ldapLogin(Request $request)
     {
         $request->validate([
-            'email' => 'required|email',
+            'identifier' => 'required|string',
             'password' => 'required|string',
         ]);
 
-        // Extract username from email (part before @)
-        $email = $request->email;
-        $username = strstr($email, '@', true) ?: $email;
+        // Handle both username and email input
+        // If identifier contains @, it's an email - extract username from it
+        // Otherwise, treat the identifier as a username directly
+        $identifier = $request->identifier;
+
+        if (str_contains($identifier, '@')) {
+            // It's an email address, extract username (part before @)
+            $username = strstr($identifier, '@', true);
+            $email = $identifier;
+        } else {
+            // It's a username, use it directly
+            $username = $identifier;
+            $email = null; // Will be retrieved from LDAP response
+        }
 
         try {
             // Call LDAP authentication service
@@ -43,13 +54,34 @@ class LdapConfigurationController extends Controller
             $result = $response->json();
 
             if ($response->successful() && isset($result['success']) && $result['success']) {
-                // Authentication successful, find or create the user
+                // Authentication successful, find the user
                 $userData = $result['user_data'] ?? [];
-                $userEmail = $userData['email'] ?? $email;
+                $ldapEmail = $userData['email'] ?? null;
 
-                $user = User::where('email', $userEmail)
-                    ->where('is_ldap_user', true)
-                    ->first();
+                // Try to find the user in the database
+                $user = null;
+
+                if ($email) {
+                    // User logged in with email - search by exact email
+                    $user = User::where('email', $email)
+                        ->where('is_ldap_user', true)
+                        ->first();
+                }
+
+                if (!$user && $ldapEmail) {
+                    // Try with email from LDAP response
+                    $user = User::where('email', $ldapEmail)
+                        ->where('is_ldap_user', true)
+                        ->first();
+                }
+
+                if (!$user) {
+                    // User logged in with username only - search by username pattern in email
+                    // Find users whose email starts with username@
+                    $user = User::where('email', 'LIKE', $username . '@%')
+                        ->where('is_ldap_user', true)
+                        ->first();
+                }
 
                 if (!$user) {
                     return back()
@@ -66,17 +98,17 @@ class LdapConfigurationController extends Controller
                 // Authentication failed
                 $errorMessage = $result['message'] ?? 'Invalid credentials';
                 return back()
-                    ->withInput($request->only('email'))
+                    ->withInput($request->only('identifier'))
                     ->with('error', $errorMessage);
             }
         } catch (\Illuminate\Http\Client\ConnectionException $e) {
             return back()
-                ->withInput($request->only('email'))
+                ->withInput($request->only('identifier'))
                 ->with('error', 'Cannot connect to LDAP service. Please ensure the LDAP service is running.');
         } catch (\Exception $e) {
             \Log::error('LDAP authentication error: ' . $e->getMessage());
             return back()
-                ->withInput($request->only('email'))
+                ->withInput($request->only('identifier'))
                 ->with('error', 'Authentication error: ' . $e->getMessage());
         }
     }

@@ -25,6 +25,7 @@ class DatabaseSeeder extends Seeder
 
         // Seed Admin Management data
         $this->call([
+            SuperAdminSeeder::class,
             AdminManagementSeeder::class,
             DietTypeSeeder::class,        // Patient Additional Fields - Diet Types
             IsolationTypeSeeder::class,   // Patient Additional Fields - Isolation Types
@@ -33,7 +34,7 @@ class DatabaseSeeder extends Seeder
             PatientSeeder::class,
             SpecialtySeeder::class,
             ConsultantSeeder::class,
-            AnaesthetistSeeder::class,            
+            AnaesthetistSeeder::class,
         ]);
     }
 }

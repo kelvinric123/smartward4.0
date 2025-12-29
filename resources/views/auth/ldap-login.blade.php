@@ -29,22 +29,23 @@
         <form method="POST" action="{{ route('login.ldap.submit') }}" class="space-y-5">
             @csrf
 
-            <!-- Email Input -->
+            <!-- Username or Email Input -->
             <div>
-                <x-input-label for="email" :value="__('Email Address')" class="text-gray-700 font-medium" />
+                <x-input-label for="identifier" :value="__('Username or Email Address')"
+                    class="text-gray-700 font-medium" />
                 <div class="relative mt-2">
                     <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
                     </div>
-                    <x-text-input id="email"
+                    <x-text-input id="identifier"
                         class="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-                        type="email" name="email" :value="old('email')" required autofocus autocomplete="email"
-                        placeholder="Enter your LDAP email address" />
+                        type="text" name="identifier" :value="old('identifier')" required autofocus
+                        autocomplete="username" placeholder="Enter username (e.g. abc) or email (e.g. abc@qmed.asia)" />
                 </div>
-                <x-input-error :messages="$errors->get('email')" class="mt-2" />
+                <x-input-error :messages="$errors->get('identifier')" class="mt-2" />
             </div>
 
             <!-- Password Input -->
@@ -76,8 +77,9 @@
                     </div>
                     <div class="ml-3">
                         <p class="text-sm text-emerald-700">
-                            Your credentials will be verified against Active Directory. Use your network username and
-                            password.
+                            Your credentials will be verified against Active Directory. Use your network username (e.g.
+                            abc) or email address (e.g. abc@qmed.asia)
+                            and password.
                         </p>
                     </div>
                 </div>
