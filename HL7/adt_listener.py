@@ -752,16 +752,48 @@ class HL7Parser:
                 continue
             
             allergy_type_code = self._get_field(al1, 2)
-            severity_code = self._get_field(al1, 4)
+            
+            # AL1-3: Allergen Code^Description (e.g. FD00051^CUCUMBER)
+            allergen_raw = self._get_field(al1, 3)
+            allergen_parts = allergen_raw.split('^')
+            allergen_code = allergen_parts[0] if allergen_parts else ''
+            # Use description (2nd part) if available, otherwise code
+            allergen_desc = allergen_parts[1] if len(allergen_parts) > 1 else allergen_code
+            
+            # AL1-4: In this system, it contains Status^Description (e.g. Resolved^ or Active^info)
+            # Standard HL7 uses this for Severity, but we prioritize local usage
+            status_field_raw = self._get_field(al1, 4)
+            status_parts = status_field_raw.split('^')
+            status_val = status_parts[0] if status_parts else ''
+            
+            # Check if it's a standard severity code
+            severity_code = ''
+            severity = ''
+            status = 'Active' # Default status
+            
+            if status_val in severity_map:
+                # It's a severity code
+                severity_code = status_val
+                severity = severity_map[status_val]
+            else:
+                # It's likely a status (Resolved/Active)
+                # Normalize status casing
+                if status_val.lower() == 'resolved':
+                    status = 'Resolved'
+                elif status_val.lower() == 'active':
+                    status = 'Active'
+                else:
+                    status = status_val # Keep original if unknown
             
             allergies.append({
                 'set_id': self._get_field(al1, 1),
                 'type_code': allergy_type_code,
                 'type': allergy_type_map.get(allergy_type_code, allergy_type_code),
-                'allergen_code': self._get_field(al1, 3),
-                'allergen': self._get_field(al1, 3),
+                'allergen_code': allergen_code,
+                'allergen': allergen_desc,
                 'severity_code': severity_code,
-                'severity': severity_map.get(severity_code, severity_code),
+                'severity': severity,
+                'status': status,
                 'reaction': self._get_field(al1, 5) if len(al1) > 5 else '',
             })
         
@@ -770,7 +802,8 @@ class HL7Parser:
     def _parse_custom_segments(self, segments: dict) -> dict:
         """Parse custom Z-segments"""
         custom = {
-            'fall_risk': False,
+            'fall_risk': None,  # Will be '0' or '1' if present
+
             'fall_risk_description': '',
             'isolation_type': '',
             'isolation_description': '',
@@ -794,11 +827,21 @@ class HL7Parser:
                 custom['isolation_type'] = self._get_field(zit, 1)
                 custom['isolation_description'] = self._get_field(zit, 2)
 
-        # Parse RMI (Isolation Precautions) - e.g., RMI|0|||CI^Contact Isolation
+        # Parse RMI (Isolation Precautions & Fall Risk) - e.g., RMI|0|||CI^Contact Isolation
         rmi = segments.get('RMI', [])
         if rmi:
             # Handle single RMI segment
             if isinstance(rmi, list) and rmi and isinstance(rmi[0], str):
+                # RMI-1: Risk Management Incident Code / Fall Risk Indicator in this context
+                # "0" or "1" as per user requirement
+                fall_risk_val = self._get_field(rmi, 1)
+                if fall_risk_val in ['0', '1']:
+                    # Store as string '0' or '1' to pass directly to Laravel
+                    # Or boolean if backend expects boolean, but user asked for "express in 0 or 1"
+                    # Let's send '1' if True/1, '0' if False/0
+                    custom['fall_risk'] = fall_risk_val
+                
+                # RMI-4: Isolation Type
                 isolation_field = self._get_field(rmi, 4)
                 if isolation_field:
                     parts = isolation_field.split('^')
@@ -807,13 +850,13 @@ class HL7Parser:
                     custom['isolation_type'] = code or custom.get('isolation_type', '')
                     custom['isolation_description'] = desc or custom.get('isolation_description', '')
         
-        # Parse ZFR (Fall Risk Flag)
+        # Parse ZFR (Fall Risk Flag) - Keep as fallback or secondary source if needed
         zfr = segments.get('ZFR', [])
         if zfr:
             if isinstance(zfr, list) and zfr and isinstance(zfr[0], str):
                 zfr_value = self._get_field(zfr, 1)
                 if zfr_value == '1' or zfr_value.upper() == 'Y':
-                    custom['fall_risk'] = True
+                    custom['fall_risk'] = '1'
         
         return custom
     

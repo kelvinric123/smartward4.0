@@ -704,39 +704,74 @@ class AdtApiController extends Controller
                 ];
             }
 
-            // Release bed
+            // Release bed or activate pending prebook
             $bed = Bed::where('patient_id', $patient->id)->first();
-            if ($bed) {
-                // EKad: Discharge push handled by BedObserver (patient_id -> null)
-                /*
-                try {
-                    $ekadService = new EkadService();
-                    // Push discharge payload: vacant patient, discharged MRN, clear other fields
-                    $ekadService->pushPatientInfo($patient, $bed, [
-                        'patient_name' => 'vacant',
-                        'mrn' => 'discharged',
-                        'doctor' => '-',
-                        'nurse' => '-',
-                        'anaesthetist' => '-',
-                        'diet_type' => '-',
-                        // Keep actual bed number
-                    ]);
-                    Log::info("ADT - EKad discharge screen triggered");
-                } catch (\Exception $e) {
-                    Log::warning("ADT - EKad discharge push failed: " . $e->getMessage());
-                }
-                */
+            $pendingPrebookActivated = false;
 
-                $bed->update([
-                    'patient_id' => null,
-                    'status' => 'available',
-                ]);
+            if ($bed) {
+                $dischargeWardId = $bed->ward_id;
+                $dischargeBedNumber = $bed->bed_number;
+
+                // Check for pending prebook (prebook_pending) waiting for this bed
+                $pendingPrebook = Patient::where('ward_id', $dischargeWardId)
+                    ->where('target_bed_number', $dischargeBedNumber)
+                    ->where('is_active', true)
+                    ->where('status', 'prebook_pending')
+                    ->first();
+
+                if ($pendingPrebook) {
+                    // Activate the pending prebook - assign the bed and change status to prebook
+                    $pendingPrebook->update([
+                        'bed_number' => $dischargeBedNumber,
+                        'target_bed_number' => null,
+                        'status' => 'prebook',
+                    ]);
+
+                    // Update bed to reserved status with the prebook patient
+                    $bed->update([
+                        'patient_id' => $pendingPrebook->id,
+                        'status' => 'reserved',
+                    ]);
+
+                    $actions[] = 'pending_prebook_activated';
+                    $pendingPrebookActivated = true;
+
+                    // Log the prebook activation
+                    AdmissionLog::create([
+                        'patient_id' => $pendingPrebook->id,
+                        'ward_id' => $dischargeWardId,
+                        'user_id' => null,
+                        'bed_number' => $dischargeBedNumber,
+                        'action' => 'prebook-activated',
+                        'patient_name' => $pendingPrebook->name,
+                        'mrn' => $pendingPrebook->mrn,
+                        'notes' => 'ADT A03: Prebook activated after discharge of ' . $patient->name,
+                        'source' => 'adt',
+                    ]);
+
+                    Log::info("ADT A03 - Pending prebook activated after discharge", [
+                        'discharged_patient_id' => $patient->id,
+                        'prebook_patient_id' => $pendingPrebook->id,
+                        'ward_id' => $dischargeWardId,
+                        'bed_number' => $dischargeBedNumber,
+                    ]);
+                } else {
+                    // No pending prebook - release bed normally
+                    $bed->update([
+                        'patient_id' => null,
+                        'status' => 'available',
+                    ]);
+                }
                 $actions[] = 'bed_released';
             }
 
-            // Store ward/bed info before clearing
-            $dischargeWardId = $patient->ward_id;
-            $dischargeBedNumber = $patient->bed_number;
+            // Store ward/bed info before clearing (fallback to patient data if bed not found)
+            if (!isset($dischargeWardId)) {
+                $dischargeWardId = $patient->ward_id;
+            }
+            if (!isset($dischargeBedNumber)) {
+                $dischargeBedNumber = $patient->bed_number;
+            }
 
             // Update patient status
             $patient->status = Patient::STATUS_DISCHARGED;
@@ -1304,9 +1339,17 @@ class AdtApiController extends Controller
             $patient->allergies = $allergies;
         }
 
-        // Fall Risk
-        if (!empty($custom['fall_risk'])) {
-            $patient->fall_risk = 'yes';
+        // Fall Risk - Support 0/1 from RMI segment
+        if (isset($custom['fall_risk'])) {
+            $val = $custom['fall_risk'];
+            if ($val === '1' || $val === true || $val === 'yes' || $val === 'Y') {
+                $patient->fall_risk = '1';
+            } elseif ($val === '0' || $val === false || $val === 'no' || $val === 'N') {
+                $patient->fall_risk = '0';
+            } else {
+                // Keep original value if it doesn't match standard yes/no/1/0
+                $patient->fall_risk = $val;
+            }
         }
 
         // Isolation Type from RMI segment or custom

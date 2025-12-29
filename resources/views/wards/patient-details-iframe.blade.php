@@ -20,11 +20,23 @@
             'careprovider' => true,
         ];
         $allergySource = $patient ? ($patient->allergies ?? []) : [];
-        $allergyStrings = collect($allergySource)->map(function ($a) {
+        $allergyList = collect($allergySource)->map(function ($a) {
             if (is_array($a)) {
-                return $a['allergen'] ?? $a['allergen_code'] ?? json_encode($a);
+                $rawName = $a['allergen'] ?? $a['allergen_code'] ?? 'Unknown';
+                $name = str_contains($rawName, '^') ? explode('^', $rawName)[1] ?? $rawName : $rawName;
+
+                return [
+                    'name' => $name,
+                    'status' => $a['status'] ?? 'Active',
+                ];
             }
-            return $a;
+            $rawName = $a;
+            $name = str_contains($rawName, '^') ? explode('^', $rawName)[1] ?? $rawName : $rawName;
+
+            return [
+                'name' => $name,
+                'status' => 'Active'
+            ];
         })->values()->toArray();
 
         // Get display names from database tables
@@ -122,8 +134,8 @@
                     </div>
 
                     <div x-show="activeTab === 'additional'" x-cloak x-data="{
-                    allergies: @json($allergyStrings)
-                 }">
+                                allergies: @json($allergyList)
+                             }">
                         <h3 class="text-lg font-semibold text-gray-800 mb-3">Patient Additional Info</h3>
                         <p class="text-sm text-gray-600 mb-4">
                             View clinical indicators and patient care information. Diet types and allergies are managed by
@@ -191,12 +203,15 @@
                             <div class="flex flex-wrap gap-2">
                                 <template x-for="(allergy, index) in allergies" :key="index">
                                     <span
-                                        class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-pink-100 text-pink-800 border border-pink-200">
+                                        class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium border"
+                                        :class="allergy.status === 'Resolved' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-pink-100 text-pink-800 border-pink-200'">
                                         <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                         </svg>
-                                        <span x-text="allergy"></span>
+                                        <span x-text="allergy.name"></span>
+                                        <span class="ml-1 text-xs font-semibold"
+                                            x-text="allergy.status === 'Resolved' ? '(Resolved)' : ''"></span>
                                     </span>
                                 </template>
                                 <p x-show="allergies.length === 0" class="text-sm text-gray-400 italic">No allergies

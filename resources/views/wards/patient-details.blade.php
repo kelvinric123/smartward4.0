@@ -336,17 +336,32 @@
 
                 <!-- Patient Additional Info - Clinical Indicators -->
                 @php
-                    // Normalize allergies - convert object array to string array for UI
-                    $allergyStrings = collect($patient->allergies ?? [])->map(function ($a) {
+                    // Normalize allergies - convert to array of objects with standard structure
+                    $allergyList = collect($patient->allergies ?? [])->map(function ($a) {
                         if (is_array($a)) {
-                            return $a['allergen'] ?? $a['allergen_code'] ?? json_encode($a);
+                            // Use parsed allergen name, or fallback to code
+                            $rawName = $a['allergen'] ?? $a['allergen_code'] ?? 'Unknown';
+                            // If name contains caret (legacy data), take part after caret
+                            $name = str_contains($rawName, '^') ? explode('^', $rawName)[1] ?? $rawName : $rawName;
+
+                            return [
+                                'name' => $name,
+                                'status' => $a['status'] ?? 'Active', // Default to Active if not specified
+                            ];
                         }
-                        return $a;
+                        // Simple string legacy data
+                        $rawName = $a;
+                        $name = str_contains($rawName, '^') ? explode('^', $rawName)[1] ?? $rawName : $rawName;
+
+                        return [
+                            'name' => $name,
+                            'status' => 'Active'
+                        ];
                     })->values()->toArray();
                 @endphp
                 <div x-show="activeTab === 'additional'" x-cloak
                      x-data="{
-                        allergies: @json($allergyStrings)
+                        allergies: @json($allergyList)
                      }">
                     <h3 class="text-lg font-semibold text-gray-800 mb-3">Patient Additional Info</h3>
                     <p class="text-sm text-gray-600 mb-4">
@@ -410,24 +425,37 @@
                                 </div>
                             </div>
 
-                            <!-- Fall Risk Alert -->
+                            <!-- Fall Risk Alert (Read-only from ADT) -->
                             <div>
-                                <label for="fall_risk" class="block text-sm font-semibold text-gray-700 mb-2">
+                                <label class="block text-sm font-semibold text-gray-700 mb-2">
                                     <div class="flex items-center">
                                         <svg class="w-4 h-4 mr-2 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                                         </svg>
                                         Fall Risk Alert
+                                        <span class="ml-2 text-xs font-normal text-gray-400">(from ADT)</span>
                                     </div>
                                 </label>
-                                <select id="fall_risk" name="fall_risk" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
-                                    @foreach($clinicalIndicatorOptions['fall_risk'] ?? [] as $option)
-                                        <option value="{{ $option['value'] }}" {{ ($patient->fall_risk ?? 'none') === $option['value'] ? 'selected' : '' }}>
-                                            {{ $option['label'] }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                <p class="mt-1 text-xs text-gray-500">Patient fall risk assessment</p>
+                                @php
+                                    $fallRiskVal = $patient->fall_risk;
+                                    $isFallRisk = $fallRiskVal === '1' || $fallRiskVal === 'yes' || $fallRiskVal === true;
+                                    $fallRiskLabel = $isFallRisk ? 'Alert Active' : 'No Risk';
+                                    $fallRiskColor = $isFallRisk ? 'red' : 'green';
+                                    // Handle legacy/other values
+                                    if ($fallRiskVal !== '0' && $fallRiskVal !== '1' && $fallRiskVal !== 'none' && !empty($fallRiskVal)) {
+                                        $fallRiskLabel = ucfirst($fallRiskVal);
+                                        $fallRiskColor = 'orange'; // Unknown non-empty
+                                    } elseif (empty($fallRiskVal) || $fallRiskVal === 'none') {
+                                        $fallRiskLabel = 'Not Assessed';
+                                        $fallRiskColor = 'gray';
+                                    }
+                                @endphp
+                                <div class="mt-1 block w-full rounded-md border-gray-300 bg-gray-50 px-3 py-2 text-sm shadow-sm border">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-{{ $fallRiskColor }}-100 text-{{ $fallRiskColor }}-800">
+                                        {{ $fallRiskLabel }}
+                                    </span>
+                                </div>
+                                <p class="mt-1 text-xs text-gray-500">Patient fall risk (managed by ADT)</p>
                             </div>
 
                             <!-- Isolation Precautions -->
@@ -462,16 +490,26 @@
                                     <span class="ml-2 text-xs font-normal text-gray-400">(from ADT)</span>
                                 </div>
                             </label>
-                            <p class="text-xs text-gray-500 mb-3">Allergies are managed by ADT system</p>
+                            <!-- Allergies Summary -->
+                            <div class="mb-3" x-show="allergies.length > 0">
+                                <p class="text-xs text-gray-600">
+                                    <span class="font-medium" x-text="allergies.filter(a => a.status !== 'Resolved').length"></span>
+                                    <span class="text-pink-600">Active</span>,
+                                    <span class="font-medium" x-text="allergies.filter(a => a.status === 'Resolved').length"></span>
+                                    <span class="text-green-600">Resolved</span>
+                                </p>
+                            </div>
 
                             <!-- Allergies List (Read-only) -->
                             <div class="flex flex-wrap gap-2" x-show="allergies.length > 0">
                                 <template x-for="(allergy, index) in allergies" :key="index">
-                                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-pink-100 text-pink-800 border border-pink-200">
+                                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium border"
+                                          :class="allergy.status === 'Resolved' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-pink-100 text-pink-800 border-pink-200'">
                                         <svg class="w-3 h-3 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                                         </svg>
-                                        <span x-text="allergy"></span>
+                                        <span x-text="allergy.name"></span>
+                                        <span class="ml-1 text-xs font-semibold" x-text="allergy.status === 'Resolved' ? '(Resolved)' : ''"></span>
                                     </span>
                                 </template>
                             </div>
@@ -611,8 +649,10 @@
                                     'level_3' => 'bg-yellow-100 border-yellow-300 text-yellow-700',
                                     'level_4' => 'bg-red-100 border-red-300 text-red-700',
                                 ];
-                                $fallRiskNum = ['low' => '1', 'moderate' => '2', 'high' => '3', 'alert_active' => '4'];
+                                $fallRiskNum = ['0' => '0', '1' => '1', 'low' => '1', 'moderate' => '2', 'high' => '3', 'alert_active' => '4'];
                                 $fallRiskColors = [
+                                    '0' => 'bg-green-100 border-green-300 text-green-700',
+                                    '1' => 'bg-red-100 border-red-300 text-red-700',
                                     'low' => 'bg-green-100 border-green-300 text-green-700',
                                     'moderate' => 'bg-yellow-100 border-yellow-300 text-yellow-700',
                                     'high' => 'bg-orange-100 border-orange-300 text-orange-700',
@@ -691,7 +731,7 @@
 
                                 {{-- Isolation with virus icon --}}
                                 @php 
-                                                                                                                                    $hasIsolation = $patient->isolation_type && $patient->isolation_type !== 'none';
+                                                                                                                                                                                                                                                                                                    $hasIsolation = $patient->isolation_type && $patient->isolation_type !== 'none';
                                     $criticalIsolations = ['covid', 'tb', 'airborne', 'COVID', 'TB', 'AIR'];
                                     $isCritical = $hasIsolation && (in_array($patient->isolation_type, $criticalIsolations) || in_array(strtoupper($patient->isolation_type), $criticalIsolations));
                                 @endphp
@@ -714,15 +754,47 @@
                                 </div>
 
                                 {{-- Allergies with warning icon --}}
-                                @php $allergyCount = count($patient->allergies ?? []); @endphp
-                                <div class="rounded-lg p-3 text-center border-2 {{ $allergyCount > 0 ? 'bg-pink-100 border-pink-300' : 'bg-gray-50 border-gray-200' }}">
+                                @php 
+                                                                                                                                                                    $rawAllergies = $patient->allergies ?? [];
+                                    $allAllergies = collect($rawAllergies)->map(function ($a) {
+                                        return is_array($a) ? $a : ['status' => 'Active'];
+                                    });
+                                    $totalAllergies = $allAllergies->count();
+                                    $activeAllergies = $allAllergies->filter(function ($a) {
+                                        return ($a['status'] ?? 'Active') !== 'Resolved';
+                                    })->count();
+                                    $resolvedAllergies = $totalAllergies - $activeAllergies;
+
+                                    $allergyColor = 'bg-gray-50 border-gray-200';
+                                    $allergyText = 'text-gray-600';
+                                    $allergyIcon = 'text-gray-400';
+
+                                    if ($activeAllergies > 0) {
+                                        $allergyColor = 'bg-pink-100 border-pink-300';
+                                        $allergyText = 'text-pink-700';
+                                        $allergyIcon = 'text-pink-600';
+                                    } elseif ($resolvedAllergies > 0) {
+                                        $allergyColor = 'bg-green-100 border-green-300'; // Green for resolved only
+                                        $allergyText = 'text-green-700';
+                                        $allergyIcon = 'text-green-600';
+                                    }
+                                @endphp
+                                <div class="rounded-lg p-3 text-center border-2 {{ $allergyColor }}">
                                     <div class="flex justify-center mb-1">
-                                        <svg class="w-5 h-5 {{ $allergyCount > 0 ? 'text-pink-600' : 'text-gray-400' }}" fill="currentColor" viewBox="0 0 24 24">
+                                        <svg class="w-5 h-5 {{ $allergyIcon }}" fill="currentColor" viewBox="0 0 24 24">
                                             <path d="M12 2L1 21h22L12 2zm0 3.5L19.5 19h-15L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/>
                                         </svg>
                                     </div>
-                                    <div class="{{ $allergyCount > 0 ? 'text-pink-700' : 'text-gray-600' }} font-semibold text-[10px]">Allergies</div>
-                                    <div class="text-gray-800 mt-0.5 font-bold">{{ $allergyCount > 0 ? $allergyCount : '-' }}</div>
+                                    <div class="{{ $allergyText }} font-semibold text-[10px]">Allergies</div>
+                                    <div class="text-gray-800 mt-0.5 font-bold">
+                                        @if($activeAllergies > 0)
+                                            {{ $activeAllergies }} <span class="text-[9px] font-normal text-gray-500">Active</span>
+                                        @elseif($resolvedAllergies > 0)
+                                            {{ $resolvedAllergies }} <span class="text-[9px] font-normal text-gray-500">Rsvd</span>
+                                        @else
+                                            -
+                                        @endif
+                                    </div>
                                 </div>
                             </div>
                         </div>

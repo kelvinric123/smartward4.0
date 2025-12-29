@@ -839,6 +839,49 @@
                                                 <span class="truncate" title="{{ $bed['consultant'] }}">{{ $bed['consultant'] }}</span>
                                             </div>
                                         @endif
+                                        {{-- Prebook Button/Indicator for Pending Discharge Beds --}}
+                                        @if($isPendingDischarge && $isVisible('prebook_button'))
+                                            @if($bed['has_pending_prebook'] ?? false)
+                                                {{-- Show pending prebook indicator with cancel option --}}
+                                                <div class="w-full px-2 py-1 bg-blue-100 border border-blue-300 text-blue-800 rounded text-xs flex items-center justify-between gap-1 mb-1"
+                                                    title="Next patient prebooked: {{ $bed['pending_prebook_patient_name'] ?? 'Unknown' }}">
+                                                    <div class="flex items-center gap-1 min-w-0 flex-1">
+                                                        <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor"
+                                                            viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                        </svg>
+                                                        <span class="truncate font-medium">Prebooked:
+                                                            {{ Str::limit($bed['pending_prebook_patient_name'] ?? 'Next Patient', 15) }}</span>
+                                                    </div>
+                                                    <form method="POST"
+                                                        action="{{ route('ward.cancel-prebook', $bed['pending_prebook_patient_id']) }}"
+                                                        onsubmit="return confirm('Cancel this pending prebook?')" class="flex-shrink-0">
+                                                        @csrf
+                                                        <button type="submit"
+                                                            class="p-0.5 text-red-600 hover:text-red-800 hover:bg-red-100 rounded"
+                                                            title="Cancel Prebook">
+                                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                    d="M6 18L18 6M6 6l12 12" />
+                                                            </svg>
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            @else
+                                                {{-- Show prebook button --}}
+                                                <button
+                                                    onclick="window.dispatchEvent(new CustomEvent('open-prebook-modal', { detail: { bedNumber: '{{ $bed['number'] }}', wardId: {{ $selectedWard->id }}, isPendingDischarge: true } }))"
+                                                    class="w-full px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors flex items-center justify-center gap-1 mb-1"
+                                                    title="Prebook this bed for next patient while awaiting discharge">
+                                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                    </svg>
+                                                    Prebook Next Patient
+                                                </button>
+                                            @endif
+                                        @endif
                                         @if($isVisible('nurse'))
                                             <div class="flex items-center text-xs text-gray-600 min-w-0">
                                                 <svg class="w-3 h-3 mr-2 flex-shrink-0" fill="none" stroke="currentColor"
@@ -1001,21 +1044,26 @@
                                                 @endif
 
                                                 {{-- Fall Risk - Click to show level --}}
-                                                @if($showPatientInfo('fall_risk') && !empty($bed['fall_risk']) && $bed['fall_risk'] !== 'none')
+                                                @if($showPatientInfo('fall_risk') && isset($bed['fall_risk']) && $bed['fall_risk'] !== 'none')
                                                     @php
                                                         $fallColors = [
+                                                            '0' => ['bg' => 'bg-green-500', 'text' => 'text-white', 'border' => 'border-green-600', 'level' => '0'],
+                                                            '1' => ['bg' => 'bg-red-500', 'text' => 'text-white', 'border' => 'border-red-600', 'level' => '1'],
                                                             'low' => ['bg' => 'bg-green-500', 'text' => 'text-white', 'border' => 'border-green-600', 'level' => '1'],
                                                             'moderate' => ['bg' => 'bg-yellow-500', 'text' => 'text-white', 'border' => 'border-yellow-600', 'level' => '2'],
                                                             'high' => ['bg' => 'bg-orange-500', 'text' => 'text-white', 'border' => 'border-orange-600', 'level' => '3'],
                                                             'alert_active' => ['bg' => 'bg-red-500', 'text' => 'text-white', 'border' => 'border-red-600', 'level' => '4'],
                                                         ];
                                                         $fallDesc = [
+                                                            '0' => 'No Fall Risk',
+                                                            '1' => 'Fall Risk Alert',
                                                             'low' => 'Low Risk - Standard precautions',
                                                             'moderate' => 'Moderate Risk - Enhanced monitoring',
                                                             'high' => 'High Risk - Close supervision',
                                                             'alert_active' => 'Alert Active - Constant observation',
                                                         ];
-                                                        $currentFall = $fallColors[$bed['fall_risk']] ?? ['bg' => 'bg-orange-500', 'text' => 'text-white', 'border' => 'border-orange-600', 'level' => '?'];
+                                                        $val = (string) ($bed['fall_risk']);
+                                                        $currentFall = $fallColors[$val] ?? $fallColors[$bed['fall_risk']] ?? ['bg' => 'bg-orange-500', 'text' => 'text-white', 'border' => 'border-orange-600', 'level' => '?'];
                                                     @endphp
                                                     <div class="relative">
                                                         <button type="button"
@@ -1107,16 +1155,34 @@
                                                 {{-- Allergies - Click to show list --}}
                                                 @if($showPatientInfo('allergies') && !empty($bed['allergies']) && is_array($bed['allergies']) && count($bed['allergies']) > 0)
                                                     @php
-                                                        $allergyList = collect($bed['allergies'])->map(function ($a) {
-                                                            return is_array($a) ? ($a['allergen'] ?? $a['allergen_code'] ?? 'Unknown') : $a;
-                                                        })->toArray();
-                                                        $allergyCount = count($allergyList);
+                                                        $processedAllergies = collect($bed['allergies'])->map(function ($a) {
+                                                            if (is_array($a)) {
+                                                                $rawName = $a['allergen'] ?? $a['allergen_code'] ?? 'Unknown';
+                                                                $name = str_contains($rawName, '^') ? explode('^', $rawName)[1] ?? $rawName : $rawName;
+
+                                                                return [
+                                                                    'name' => $name,
+                                                                    'status' => $a['status'] ?? 'Active',
+                                                                ];
+                                                            }
+                                                            $rawName = $a;
+                                                            $name = str_contains($rawName, '^') ? explode('^', $rawName)[1] ?? $rawName : $rawName;
+                                                            return ['name' => $name, 'status' => 'Active'];
+                                                        });
+
+                                                        $activeCount = $processedAllergies->filter(fn($a) => ($a['status'] ?? 'Active') !== 'Resolved')->count();
+                                                        $totalCount = $processedAllergies->count();
+                                                        $hasActive = $activeCount > 0;
+
+                                                        $btnClass = $hasActive
+                                                            ? 'bg-red-600 text-white border-red-700'
+                                                            : 'bg-green-600 text-white border-green-700';
                                                     @endphp
                                                     <div class="relative">
                                                         <button type="button"
                                                             @click="openPopover = openPopover === 'allergy_{{ $bed['patient_id'] }}' ? null : 'allergy_{{ $bed['patient_id'] }}'"
-                                                            class="w-6 h-6 bg-red-600 text-white text-xs rounded flex items-center justify-center cursor-pointer border border-red-700"
-                                                            title="Allergies">
+                                                            class="w-6 h-6 text-xs rounded flex items-center justify-center cursor-pointer border {{ $btnClass }}"
+                                                            title="Allergies ({{ $hasActive ? $activeCount . ' Active' : 'Resolved' }})">
                                                             <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                                                                 <path
                                                                     d="M12 2L1 21h22L12 2zm0 3.5L19.5 19h-15L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z" />
@@ -1124,14 +1190,27 @@
                                                         </button>
                                                         <div x-show="openPopover === 'allergy_{{ $bed['patient_id'] }}'"
                                                             @click.away="openPopover = null" x-transition
-                                                            class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 bg-white rounded-lg shadow-2xl border border-gray-200 p-2">
-                                                            <div class="text-xs font-bold text-red-700 mb-2">⚠️ Allergies
-                                                                ({{ $allergyCount }})</div>
-                                                            <ul class="space-y-1">
-                                                                @foreach($allergyList as $allergy)
-                                                                    <li class="text-xs text-gray-700 flex items-center">
-                                                                        <span class="w-1.5 h-1.5 bg-red-500 rounded-full mr-2"></span>
-                                                                        {{ $allergy }}
+                                                            class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-white rounded-lg shadow-2xl border border-gray-200 p-3">
+                                                            <div class="text-xs font-bold mb-2 flex justify-between items-center"
+                                                                class="{{ $hasActive ? 'text-red-700' : 'text-green-700' }}">
+                                                                <span>Allergies</span>
+                                                                <span
+                                                                    class="text-[10px] px-1.5 py-0.5 rounded-full {{ $hasActive ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800' }}">
+                                                                    {{ $totalCount }} Total
+                                                                </span>
+                                                            </div>
+                                                            <ul class="space-y-1.5 max-h-48 overflow-y-auto">
+                                                                @foreach($processedAllergies as $allergy)
+                                                                    <li class="text-xs text-gray-700 flex items-start">
+                                                                        <span
+                                                                            class="w-1.5 h-1.5 mt-1.5 rounded-full mr-2 shrink-0 {{ ($allergy['status'] ?? 'Active') === 'Resolved' ? 'bg-green-500' : 'bg-red-500' }}"></span>
+                                                                        <div class="flex-1">
+                                                                            <span class="block font-medium">{{ $allergy['name'] }}</span>
+                                                                            <span
+                                                                                class="block text-[10px] {{ ($allergy['status'] ?? 'Active') === 'Resolved' ? 'text-green-600' : 'text-red-600' }}">
+                                                                                {{ $allergy['status'] }}
+                                                                            </span>
+                                                                        </div>
                                                                     </li>
                                                                 @endforeach
                                                             </ul>
@@ -1824,8 +1903,8 @@
                         if (document.getElementById('booked_at')) document.getElementById('booked_at').value = this.booked_at;
                         if (document.getElementById('prebook_notes')) document.getElementById('prebook_notes').value = this.notes;
                     });
-                }
-            };
+             
+            }};
         }
     </script>
 

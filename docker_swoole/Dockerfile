@@ -67,20 +67,20 @@ RUN cp /usr/share/zoneinfo/${TZ} /etc/localtime \
 # Install PHP extensions
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
-        pdo \
-        pdo_mysql \
-        mysqli \
-        mbstring \
-        xml \
-        curl \
-        zip \
-        bcmath \
-        gd \
-        intl \
-        opcache \
-        pcntl \
-        sockets \
-        ldap
+    pdo \
+    pdo_mysql \
+    mysqli \
+    mbstring \
+    xml \
+    curl \
+    zip \
+    bcmath \
+    gd \
+    intl \
+    opcache \
+    pcntl \
+    sockets \
+    ldap
 
 # Install Swoole extension
 RUN pecl install swoole-${SWOOLE_VERSION} \
@@ -148,7 +148,8 @@ RUN apk add --no-cache nodejs npm
 # Install ALL PHP dependencies (including dev for Faker - needed for seeding)
 # Ensure opcache preload file exists so PHP doesn't fail on startup during build
 # Use composer update to get latest compatible versions
-RUN touch /app/bootstrap/cache/opcache-preload.php \
+RUN git config --global --add safe.directory '*' \
+    && touch /app/bootstrap/cache/opcache-preload.php \
     && composer update --optimize-autoloader --no-interaction --prefer-dist
 
 # Always build frontend assets fresh (ensures local fonts are used, no external CDN dependencies)
@@ -191,11 +192,11 @@ RUN bash -c '\
     \
     echo "Waiting for MariaDB socket to be ready..."; \
     for i in $(seq 1 30); do \
-        if [ -S /var/run/mysqld/mysqld.sock ]; then \
-            echo "MariaDB socket ready after $i seconds"; \
-            break; \
-        fi; \
-        sleep 1; \
+    if [ -S /var/run/mysqld/mysqld.sock ]; then \
+    echo "MariaDB socket ready after $i seconds"; \
+    break; \
+    fi; \
+    sleep 1; \
     done; \
     sleep 3; \
     \
@@ -228,7 +229,8 @@ RUN rm -f /app/.env /app/docker.env
 
 # Remove dev dependencies (Faker etc.) for production - no longer needed after seeding
 # Use composer update to ensure latest compatible versions
-RUN composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-scripts \
+RUN git config --global --add safe.directory '*' \
+    && composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-scripts \
     && rm -f bootstrap/cache/packages.php bootstrap/cache/services.php
 
 # Reset permissions after migrations

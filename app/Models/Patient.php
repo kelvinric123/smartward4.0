@@ -25,6 +25,7 @@ class Patient extends Model
         'is_active',
         'ward_id',
         'bed_number',
+        'target_bed_number',
         'consultant_id',
         'nurse_id',
         'anaesthetist_id',
@@ -50,6 +51,7 @@ class Patient extends Model
      * Patient status constants
      */
     const STATUS_PREBOOK = 'prebook';
+    const STATUS_PREBOOK_PENDING = 'prebook_pending'; // Prebook for a bed with pending discharge
     const STATUS_ADMITTED = 'admitted';
     const STATUS_PENDING_DISCHARGE = 'pending_discharge';
     const STATUS_DISCHARGED = 'discharged';

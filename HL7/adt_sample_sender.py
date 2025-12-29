@@ -348,6 +348,66 @@ def send_and_display_response(host: str, port: int, event_type: str):
     print(f"\nDescription: {msg_info['description']}")
     print(f"\n{'─'*80}")
     
+    # Customization for A08: Fall Risk and Allergies
+    if event_type == 'A08':
+        print("\n--- optional: Clinical Indicators ---")
+        
+        # Fall Risk
+        fr_input = input("Set Fall Risk 'High'? (y/n) [Current: 0/Low]: ").strip().lower()
+        if fr_input in ('y', 'yes', '1'):
+            if 'RMI|0' in message:
+                message = message.replace('RMI|0', 'RMI|1')
+                print("  ✓ Modified message: Set Fall Risk = 1 (High)")
+            elif 'RMI|' not in message:
+                # Append RMI if not present (simplified for this sample)
+                message += "\nRMI|1|||CI^Contact Isolation"
+                print("  ✓ Added RMI segment with Fall Risk = 1")
+        else:
+            # Ensure it is 0 if user says no/default, just to be sure
+            if 'RMI|1' in message:
+                message = message.replace('RMI|1', 'RMI|0')
+                print("  ✓ Modified message: Set Fall Risk = 0 (Low)")
+
+        # Allergies
+        print("\n--- optional: Allergy Simulation ---")
+        print("Scenarios:")
+        print("  [0] No Allergies (Default)")
+        print("  [1] Single Allergy (Cucumber - Active)")
+        print("  [2] Two Allergies (Peanuts & Penicillin - Active)")
+        print("  [3] Resolved Allergy (Egg - Resolved)")
+        print("  [4] Mixed (1 Active, 1 Resolved)")
+        
+        al_input = input("Select Allergy Scenario [0-4]: ").strip()
+        
+        # AL1 Segments templates
+        # Format: AL1|SetID|Type|AllergenCode^AllergenDesc|Status^|Reaction
+        al1_scenario_1 = "AL1|1|FOOD|FD00051^CUCUMBER|Active^|Rash"
+        
+        al1_scenario_2 = (
+            "AL1|1|FOOD|FD00099^PEANUTS|Active^|Anaphylaxis\n"
+            "AL1|2|DRUG|DG00123^PENICILLIN|Active^|Hives"
+        )
+        
+        al1_scenario_3 = "AL1|1|FOOD|FD00022^EGG|Resolved^|Nausea"
+        
+        al1_scenario_4 = (
+            "AL1|1|FOOD|FD00051^CUCUMBER|Active^|Rash\n"
+            "AL1|2|FOOD|FD00022^EGG|Resolved^|Nausea"
+        )
+
+        if al_input == '1':
+            message += "\n" + al1_scenario_1
+            print("  ✓ Added Single Allergy (Cucumber)")
+        elif al_input == '2':
+            message += "\n" + al1_scenario_2
+            print("  ✓ Added Two Allergies")
+        elif al_input == '3':
+            message += "\n" + al1_scenario_3
+            print("  ✓ Added Resolved Allergy")
+        elif al_input == '4':
+            message += "\n" + al1_scenario_4
+            print("  ✓ Added Mixed Allergies")
+
     response = send_hl7_message(host, port, message)
     
     print(f"\n{'─'*80}")
