@@ -1339,6 +1339,33 @@
                                         @endif
                                     </div>
                                     <div class="flex gap-2 px-3 py-2 border-t flex-shrink-0 mt-auto justify-center">
+                                        @php
+                                            $prebookData = [
+                                                'bedNumber' => $bed['number'],
+                                                'wardId' => $selectedWard->id,
+                                                'prefillData' => [
+                                                    'patientId' => $bed['patient_id'],
+                                                    'patientName' => $bed['patient_name'],
+                                                    'mrn' => $bed['mrn'],
+                                                    'consultantId' => $bed['consultant_id'] ?? null,
+                                                    'consultantName' => $bed['consultant'] ?? null,
+                                                    'anaesthetistId' => $bed['anaesthetist_id'] ?? null,
+                                                    'gender' => $bed['gender'] ?? null,
+                                                    'age' => $bed['age'] ?? null,
+                                                    'bookedAt' => $bed['booked_at_raw'] ?? null,
+                                                    'notes' => $bed['prebook_notes'] ?? null
+                                                ]
+                                            ];
+                                        @endphp
+                                        <button type="button" @click='$dispatch("open-prebook-modal", @json($prebookData))'
+                                            class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center"
+                                            title="Edit Prebook">
+                                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                            </svg>
+                                            Edit
+                                        </button>
                                         <form method="POST" action="{{ route('ward.cancel-prebook', $bed['patient_id']) }}"
                                             onsubmit="return confirm('Are you sure you want to cancel this prebook?')">
                                             @csrf
@@ -1722,6 +1749,13 @@
                     this.selectedAnaesthetist = null;
                     this.anaesthetistSearch = '';
                 },
+                // Form fields for direct x-model binding
+                gender: '',
+                age: '',
+                booked_at: '',
+                notes: '',
+                patientId: '', // For existing patient update
+
                 resetForm() {
                     this.patientSearch = '';
                     this.selectedPatient = null;
@@ -1731,6 +1765,65 @@
                     this.selectedNurse = null;
                     this.anaesthetistSearch = '';
                     this.selectedAnaesthetist = null;
+
+                    this.gender = '';
+                    this.age = '';
+                    this.booked_at = '';
+                    this.notes = '';
+                    this.patientId = '';
+
+                    // Reset input values manually if x-model doesn't catch them immediately or for non-x-model fields
+                    if (document.getElementById('prebook_gender')) document.getElementById('prebook_gender').value = '';
+                    if (document.getElementById('prebook_age')) document.getElementById('prebook_age').value = '';
+                    if (document.getElementById('booked_at')) document.getElementById('booked_at').value = '';
+                    if (document.getElementById('prebook_notes')) document.getElementById('prebook_notes').value = '';
+                },
+
+                populateForm(data) {
+                    console.log('Populating form with:', data);
+
+                    if (data.patientId) {
+                        this.patientId = data.patientId;
+                        // Pre-select patient if we have the ID and name
+                        // Note: We might not have the full patient object in the modalData.patients list if they are already assigned to a bed (since modalData.patients filters for unassigned)
+                        // But for prebook edit, the patient IS assigned to this bed.
+                        // So we construct a temporary object for display
+                        this.selectedPatient = { id: data.patientId, name: data.patientName || '', mrn: data.mrn || '' };
+                        this.patientSearch = (data.patientName || '') + (data.mrn ? ' (MRN: ' + data.mrn + ')' : '');
+                    }
+
+                    if (data.consultantId) {
+                        // Find consultant object or create temp
+                        let consultant = this.consultants.find(c => c.id == data.consultantId);
+                        if (!consultant && data.consultantName) consultant = { id: data.consultantId, name: data.consultantName };
+
+                        if (consultant) {
+                            this.selectedConsultant = consultant;
+                            this.consultantSearch = consultant.name;
+                        }
+                    }
+
+                    if (data.anaesthetistId) {
+                        let anaesthetist = this.anaesthetists.find(a => a.id == data.anaesthetistId);
+                        // Anaesthetist name isn't usually passed in bed data directly as a property, but we might not need name if we have ID and list
+                        if (anaesthetist) {
+                            this.selectedAnaesthetist = anaesthetist;
+                            this.anaesthetistSearch = anaesthetist.name;
+                        }
+                    }
+
+                    this.gender = data.gender || '';
+                    this.age = data.age || '';
+                    this.booked_at = data.bookedAt || '';
+                    this.notes = data.notes || '';
+
+                    // Force update inputs that might not be fully bound yet
+                    this.$nextTick(() => {
+                        if (document.getElementById('prebook_gender')) document.getElementById('prebook_gender').value = this.gender;
+                        if (document.getElementById('prebook_age')) document.getElementById('prebook_age').value = this.age;
+                        if (document.getElementById('booked_at')) document.getElementById('booked_at').value = this.booked_at;
+                        if (document.getElementById('prebook_notes')) document.getElementById('prebook_notes').value = this.notes;
+                    });
                 }
             };
         }
@@ -1940,7 +2033,7 @@
 
     <!-- Prebook Patient Modal -->
     <div x-data="prebookModalComponent()"
-        @open-prebook-modal.window="open = true; bedNumber = $event.detail.bedNumber; wardId = $event.detail.wardId; resetForm()"
+        @open-prebook-modal.window="open = true; bedNumber = $event.detail.bedNumber; wardId = $event.detail.wardId; resetForm(); if($event.detail.prefillData) populateForm($event.detail.prefillData)"
         x-show="open" class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
         <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
             <div x-show="open" @click="open = false" x-transition:enter="ease-out duration-300"
@@ -2129,7 +2222,7 @@
                                             <label for="prebook_gender"
                                                 class="block text-sm font-medium text-gray-700">Gender
                                                 (Optional)</label>
-                                            <select name="gender" id="prebook_gender"
+                                            <select name="gender" id="prebook_gender" x-model="gender"
                                                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                                                 <option value="">Select gender...</option>
                                                 <option value="Male">Male</option>
@@ -2141,6 +2234,7 @@
                                             <label for="prebook_age" class="block text-sm font-medium text-gray-700">Age
                                                 (Optional)</label>
                                             <input type="number" name="age" id="prebook_age" min="0" max="150"
+                                                x-model="age"
                                                 class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                                 placeholder="Enter age">
                                         </div>
@@ -2149,14 +2243,14 @@
                                     <div>
                                         <label for="booked_at" class="block text-sm font-medium text-gray-700">Booking
                                             Date & Time (Optional)</label>
-                                        <input type="datetime-local" name="booked_at" id="booked_at"
+                                        <input type="datetime-local" name="booked_at" id="booked_at" x-model="booked_at"
                                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
                                     </div>
 
                                     <div>
                                         <label for="prebook_notes" class="block text-sm font-medium text-gray-700">Notes
                                             (Optional)</label>
-                                        <textarea name="notes" id="prebook_notes" rows="3"
+                                        <textarea name="notes" id="prebook_notes" rows="3" x-model="notes"
                                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                             placeholder="Enter any notes or special instructions..."></textarea>
                                     </div>
