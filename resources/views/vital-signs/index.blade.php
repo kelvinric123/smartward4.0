@@ -37,10 +37,9 @@
 
             <!-- Full Width Stacked Layout -->
             <div class="space-y-6">
-                <!-- Top Section: Record New Vital Signs (Full Width) -->
                 <div class="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
                     <div class="px-6 py-4 bg-gradient-to-r from-rose-500 to-pink-500 text-white">
-                        <div class="flex justify-between items-center">
+                        <div class="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4">
                             <div>
                                 <h3 class="text-lg font-bold flex items-center">
                                     <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
@@ -50,14 +49,39 @@
                                 </h3>
                                 <p class="text-sm text-white/80 mt-1">Enter patient vital sign readings</p>
                             </div>
-                            <div class="flex items-center space-x-3">
+                            <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                                <!-- Active Bindings Display -->
                                 @if(isset($activeBindings) && $activeBindings->count() > 0)
-                                <div class="flex items-center text-xs bg-white/20 px-3 py-1.5 rounded-lg backdrop-blur-sm">
-                                    <div class="h-2 w-2 rounded-full bg-emerald-400 mr-2 animate-pulse"></div>
-                                    <span>{{ $activeBindings->count() }} Active Binding(s)</span>
+                                <div class="flex flex-wrap gap-2">
+                                    @foreach($activeBindings as $binding)
+                                    <div class="flex items-center bg-white/20 backdrop-blur-sm rounded-lg px-3 py-2 text-sm">
+                                        <div class="flex items-center mr-2">
+                                            <div class="h-2 w-2 rounded-full bg-emerald-400 mr-2 animate-pulse"></div>
+                                            <span class="font-medium">{{ $binding->apiUser->name ?? 'Gateway' }}</span>
+                                            <svg class="w-3 h-3 mx-1 text-white/60" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                                            </svg>
+                                            <span>{{ $binding->nurse->name ?? 'Nurse' }}</span>
+                                        </div>
+                                        <form action="{{ route('vital-sign-integration.unbind', $binding) }}" method="POST" class="inline" onsubmit="return confirm('Unbind this gateway?');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="ml-2 p-1 hover:bg-white/20 rounded transition" title="Unbind">
+                                                <svg class="w-4 h-4 text-white/80 hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                                </svg>
+                                            </button>
+                                        </form>
+                                    </div>
+                                    @endforeach
                                 </div>
                                 @endif
-                                <button type="button" @click="$dispatch('open-bind-modal')" class="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-semibold backdrop-blur-sm transition">
+                                
+                                <!-- Prominent Bind Gateway Button -->
+                                <button type="button" @click="$dispatch('open-bind-modal')" class="px-4 py-2.5 bg-white text-rose-600 hover:bg-rose-50 rounded-lg font-bold shadow-lg transition-all flex items-center whitespace-nowrap">
+                                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                                    </svg>
                                     Bind Gateway
                                 </button>
                             </div>
@@ -501,9 +525,99 @@
     </div>
 
     <!-- Bind Gateway Modal -->
-    <div x-data="{ open: false }" 
-         @open-bind-modal.window="open = true" 
-         @keydown.escape.window="open = false"
+    <div x-data="{ 
+        open: false,
+        scannerInput: '',
+        scannerStatus: '',
+        scannerError: false,
+        selectedGatewayId: '',
+        cameraActive: false,
+        html5QrCode: null,
+        gateways: {{ Js::from($gateways) }},
+        handleScan() {
+            const searchTerm = this.scannerInput.trim().toLowerCase();
+            if (!searchTerm) {
+                this.scannerStatus = '';
+                this.scannerError = false;
+                return;
+            }
+            
+            // Find gateway by name (case-insensitive)
+            const match = this.gateways.find(g => 
+                g.name.toLowerCase() === searchTerm || 
+                g.name.toLowerCase().includes(searchTerm)
+            );
+            
+            if (match) {
+                this.selectedGatewayId = match.id;
+                document.getElementById('api_user_id').value = match.id;
+                this.scannerStatus = 'Found: ' + match.name;
+                this.scannerError = false;
+            } else {
+                this.scannerStatus = 'No gateway found matching: ' + this.scannerInput;
+                this.scannerError = true;
+            }
+        },
+        resetScanner() {
+            this.scannerInput = '';
+            this.scannerStatus = '';
+            this.scannerError = false;
+            this.stopCamera();
+        },
+        async startCamera() {
+            if (this.cameraActive) {
+                this.stopCamera();
+                return;
+            }
+            
+            this.cameraActive = true;
+            
+            // Load html5-qrcode if not already loaded
+            if (typeof Html5Qrcode === 'undefined') {
+                const script = document.createElement('script');
+                script.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+                script.onload = () => this.initCamera();
+                document.head.appendChild(script);
+            } else {
+                this.initCamera();
+            }
+        },
+        initCamera() {
+            const self = this;
+            this.html5QrCode = new Html5Qrcode('qr-reader');
+            
+            this.html5QrCode.start(
+                { facingMode: 'environment' },
+                {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 }
+                },
+                (decodedText) => {
+                    // Success callback
+                    self.scannerInput = decodedText;
+                    self.handleScan();
+                    self.stopCamera();
+                },
+                (errorMessage) => {
+                    // Error callback - ignore, just means no QR found yet
+                }
+            ).catch((err) => {
+                console.error('Camera error:', err);
+                self.scannerStatus = 'Camera access denied or unavailable';
+                self.scannerError = true;
+                self.cameraActive = false;
+            });
+        },
+        stopCamera() {
+            if (this.html5QrCode) {
+                this.html5QrCode.stop().catch(err => console.log('Stop error:', err));
+                this.html5QrCode = null;
+            }
+            this.cameraActive = false;
+        }
+    }" 
+         @open-bind-modal.window="open = true; $nextTick(() => { $refs.scannerInput.focus(); resetScanner(); })" 
+         @keydown.escape.window="open = false; stopCamera();"
          class="relative z-[60]" 
          aria-labelledby="modal-title" 
          role="dialog" 
@@ -528,9 +642,82 @@
                                 <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
                                     <h3 class="text-base font-semibold leading-6 text-gray-900" id="modal-title">Bind Gateway to Operator</h3>
                                     <div class="mt-4 space-y-4">
+                                        <!-- Barcode/QR Scanner Input -->
+                                        <div>
+                                            <label for="scanner_input" class="block text-sm font-medium text-gray-700">
+                                                <div class="flex items-center">
+                                                    <svg class="h-4 w-4 mr-1.5 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h2M4 12h2m10 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                                    </svg>
+                                                    Scan Gateway Barcode/QR
+                                                </div>
+                                            </label>
+                                            
+                                            <!-- Camera Scan Button -->
+                                            <button type="button" 
+                                                @click="startCamera()"
+                                                :class="cameraActive ? 'bg-red-600 hover:bg-red-700' : 'bg-rose-600 hover:bg-rose-700'"
+                                                class="mt-2 w-full flex items-center justify-center px-4 py-3 text-white font-semibold rounded-lg shadow-md transition-colors">
+                                                <template x-if="!cameraActive">
+                                                    <span class="flex items-center">
+                                                        <svg class="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        </svg>
+                                                        Scan with Camera
+                                                    </span>
+                                                </template>
+                                                <template x-if="cameraActive">
+                                                    <span class="flex items-center">
+                                                        <svg class="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                        Stop Camera
+                                                    </span>
+                                                </template>
+                                            </button>
+                                            
+                                            <!-- Camera Preview Area -->
+                                            <div x-show="cameraActive" 
+                                                 x-transition
+                                                 class="mt-3 rounded-lg overflow-hidden border-2 border-rose-300 bg-black">
+                                                <div id="qr-reader" style="width: 100%;"></div>
+                                            </div>
+                                            
+                                            <!-- Manual Input -->
+                                            <div class="mt-3 relative">
+                                                <input 
+                                                    type="text" 
+                                                    id="scanner_input"
+                                                    x-ref="scannerInput"
+                                                    x-model="scannerInput"
+                                                    @keydown.enter.prevent="handleScan()"
+                                                    @input.debounce.300ms="handleScan()"
+                                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-rose-500 focus:ring-rose-500 sm:text-sm pl-10"
+                                                    placeholder="Or type gateway name..."
+                                                    autocomplete="off"
+                                                >
+                                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                    <svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                                    </svg>
+                                                </div>
+                                            </div>
+                                            <!-- Scanner Status Message -->
+                                            <p x-show="scannerStatus" 
+                                               x-text="scannerStatus" 
+                                               :class="scannerError ? 'text-red-600' : 'text-green-600'"
+                                               class="mt-1 text-sm font-medium"></p>
+                                            <p class="mt-1 text-xs text-gray-400">Use camera to scan QR code, or type gateway name and press Enter</p>
+                                        </div>
+
+                                        <div class="border-t border-gray-200 pt-4">
+                                            <p class="text-xs text-gray-500 mb-2">Or select manually:</p>
+                                        </div>
+
                                         <div>
                                             <label for="api_user_id" class="block text-sm font-medium text-gray-700">Select Gateway</label>
-                                            <select name="api_user_id" id="api_user_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-rose-500 focus:ring-rose-500 sm:text-sm" required>
+                                            <select name="api_user_id" id="api_user_id" x-model="selectedGatewayId" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-rose-500 focus:ring-rose-500 sm:text-sm" required>
                                                 @foreach($gateways as $gateway)
                                                     <option value="{{ $gateway->id }}">{{ $gateway->name }} ({{ $gateway->username }})</option>
                                                 @endforeach

@@ -143,6 +143,7 @@ Route::middleware('auth')->group(function () {
     // Vital Sign Integration Routes
     Route::get('/vital-sign-integration', [VitalSignIntegrationController::class, 'index'])->name('vital-sign-integration.index');
     Route::post('/vital-sign-integration/bind', [VitalSignIntegrationController::class, 'storeBinding'])->name('vital-sign-integration.bind');
+    Route::delete('/vital-sign-integration/unbind/{binding}', [VitalSignIntegrationController::class, 'unbindGateway'])->name('vital-sign-integration.unbind');
     Route::post('/vital-sign-integration/api-user', [VitalSignIntegrationController::class, 'storeApiUser'])->name('vital-sign-integration.api-user.store');
     Route::put('/vital-sign-integration/api-user/{apiUser}', [VitalSignIntegrationController::class, 'updateApiUser'])->name('vital-sign-integration.api-user.update');
     Route::delete('/vital-sign-integration/api-user/{apiUser}', [VitalSignIntegrationController::class, 'destroyApiUser'])->name('vital-sign-integration.api-user.destroy');

@@ -720,6 +720,11 @@ Content-Type: application/json</pre>
                                     <div class="flex justify-between items-start">
                                         <div class="flex-1">
                                             <div class="flex items-center mb-2">
+                                                <svg class="w-5 h-5 mr-1.5 text-rose-500 flex-shrink-0" fill="none"
+                                                    viewBox="0 0 24 24" stroke="currentColor" title="Scannable Name">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                        d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h2M4 12h2m10 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                                </svg>
                                                 <h4 class="text-lg font-bold text-gray-800">{{ $user->name }}</h4>
                                                 <span
                                                     class="ml-2 px-2 py-0.5 text-xs font-medium {{ $user->is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }} rounded-full">
@@ -919,9 +924,9 @@ Content-Type: application/json</pre>
                                 active devices from the API. Make sure the following environment variables are set:</p>
                             <pre
                                 class="text-sm text-gray-300 font-mono overflow-x-auto"><span class="text-cyan-400">API_BASE_URL</span>=<span class="text-green-400">"http://{{ $gatewayConfig['server_ip'] }}:{{ $gatewayConfig['server_port'] }}/api/v1"</span>
-                                <span class="text-cyan-400">API_PASSPHRASE</span>=<span class="text-green-400">"{{ $gatewayConfig['passphrase'] }}"</span>
-                                <span class="text-cyan-400">API_USERNAME</span>=<span class="text-green-400">"your_api_user"</span>
-                                <span class="text-cyan-400">API_PASSWORD</span>=<span class="text-green-400">"your_password"</span></pre>
+                                    <span class="text-cyan-400">API_PASSPHRASE</span>=<span class="text-green-400">"{{ $gatewayConfig['passphrase'] }}"</span>
+                                    <span class="text-cyan-400">API_USERNAME</span>=<span class="text-green-400">"your_api_user"</span>
+                                    <span class="text-cyan-400">API_PASSWORD</span>=<span class="text-green-400">"your_password"</span></pre>
                             <p class="text-xs text-gray-500 mt-3">Devices configured here will be fetched via <code
                                     class="text-cyan-300">GET /api/v1/monitor-devices</code></p>
                         </div>
@@ -1248,10 +1253,21 @@ Content-Type: application/json</pre>
 
                         <div class="space-y-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    <div class="flex items-center">
+                                        <svg class="w-4 h-4 mr-1.5 text-emerald-600" fill="none" viewBox="0 0 24 24"
+                                            stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h2M4 12h2m10 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                        </svg>
+                                        Name * <span class="text-xs font-normal text-gray-400 ml-1">(Scannable)</span>
+                                    </div>
+                                </label>
                                 <input type="text" name="name" x-model="userFormData.name" required
                                     class="w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
-                                    placeholder="e.g., Gateway Device 1">
+                                    placeholder="e.g., GW-001">
+                                <p class="mt-1 text-xs text-gray-500">This name is used for barcode/QR code scanning
+                                    when binding gateways.</p>
                             </div>
 
                             <div>

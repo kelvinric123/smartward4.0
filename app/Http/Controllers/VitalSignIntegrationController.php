@@ -101,6 +101,16 @@ class VitalSignIntegrationController extends Controller
     }
 
     /**
+     * Unbind a gateway (end the binding immediately).
+     */
+    public function unbindGateway(\App\Models\GatewayNurseBinding $binding)
+    {
+        $binding->update(['end_at' => now()]);
+
+        return back()->with('success', 'Gateway unbound successfully.');
+    }
+
+    /**
      * Get local IP address.
      */
     private function getLocalIp(): string
