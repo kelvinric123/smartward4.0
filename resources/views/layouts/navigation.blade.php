@@ -28,7 +28,7 @@
     <div
         class="shrink-0 flex items-center justify-between px-4 py-4 border-b border-blue-400/30 h-16 backdrop-blur-sm bg-white/10">
         <a href="{{ route('dashboard') }}" x-show="sidebarOpen" x-transition class="flex items-center">
-            <img src="{{ asset('logo_phkl.webp') }}" alt="PHKL Logo" class="h-10 w-auto">
+            <img src="{{ asset('phkl_new.png') }}" alt="PHKL Logo" class="h-10 w-auto">
         </a>
         <button @click="sidebarOpen = !sidebarOpen"
             class="p-2 rounded-lg hover:bg-white/20 transition-colors text-white">
