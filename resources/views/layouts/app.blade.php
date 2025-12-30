@@ -54,7 +54,7 @@
                         <div class="flex items-center space-x-2">
                             <span class="text-xs text-gray-500">Developed by</span>
                             <a href="https://qmed.asia" target="_blank" class="hover:opacity-75 transition-opacity">
-                                <img src="{{ asset('logo qmed.png') }}" alt="Qmed" class="h-5 w-auto">
+                                <img src="{{ asset('logo_qmed.png') }}" alt="Qmed" class="h-5 w-auto">
                             </a>
                             <span class="text-xs text-gray-400">© 2025</span>
                         </div>

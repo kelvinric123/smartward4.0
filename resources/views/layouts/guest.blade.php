@@ -47,7 +47,7 @@
             <div class="mt-8 text-center">
                 <div class="flex items-center justify-center space-x-2 text-white/90">
                     <span class="text-sm">Developed by</span>
-                    <img src="{{ asset('logo qmed.png') }}" alt="Qmed" class="h-6 w-auto">
+                    <img src="{{ asset('logo_qmed.png') }}" alt="Qmed" class="h-6 w-auto">
                 </div>
                 <p class="text-xs text-white/70 mt-2">© 2025 Qmed.asia. All Rights Reserved</p>
             </div>

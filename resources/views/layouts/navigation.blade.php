@@ -453,7 +453,7 @@
                 <p class="text-xs text-white/90 font-medium">Developed by</p>
                 <a href="https://qmed.asia" target="_blank"
                     class="inline-flex items-center mt-1 hover:opacity-80 transition-opacity">
-                    <img src="{{ asset('logo qmed.png') }}" alt="Qmed" class="h-6 w-auto">
+                    <img src="{{ asset('logo_qmed.png') }}" alt="Qmed" class="h-6 w-auto">
                 </a>
                 <p class="text-xs text-white/70 mt-1">© 2025 All Rights Reserved</p>
             </div>
