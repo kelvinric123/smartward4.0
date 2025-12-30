@@ -28,7 +28,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
 </head>
 <body class="bg-gray-50">
-    <div class="p-4" x-data="{ filter: '{{ $filter }}', wardId: '{{ $wardId }}', tab: '{{ $tab }}', showUnbindModal: false, unbindPumpId: null, unbindPumpName: '' }">
+    <div class="p-4" x-data="{ filter: '{{ $filter }}', wardId: '{{ $wardId }}', tab: '{{ $tab }}', showUnbindModal: false, unbindPumpId: null, unbindPumpName: '', unbindPumpHasActiveInfusion: false }">
         <!-- Header with Stats -->
         <div class="mb-4">
             <div class="flex items-center justify-between mb-3">
@@ -311,6 +311,49 @@
                 <p class="text-xs text-gray-400 mt-2">Infusions will appear here when pump gateways send data.</p>
             </div>
         @endif
+        
+        <!-- Recently Completed Section (Only show when filter is 'active' and there are completed infusions) -->
+        @if($filter === 'active' && isset($recentlyCompleted) && $recentlyCompleted->count() > 0)
+            <div class="mt-8 border-t-2 border-dashed border-gray-200 pt-6">
+                <h3 class="text-lg font-bold text-gray-700 mb-4 flex items-center">
+                    <span class="w-3 h-3 bg-blue-500 rounded-full mr-2"></span>
+                    Recently Completed Infusions (Last 24h)
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    @foreach($recentlyCompleted as $infusion)
+                        <div class="rounded-xl border border-gray-200 bg-gray-50 opacity-80 hover:opacity-100 transition-opacity">
+                            <!-- Header -->
+                            <div class="px-3 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white flex items-center justify-between rounded-t-xl">
+                                <div class="flex items-center">
+                                    <span class="font-bold text-sm">{{ $infusion->patient->bed_number ?? 'N/A' }}</span>
+                                </div>
+                                <span class="text-xs bg-white/20 px-2 py-0.5 rounded uppercase font-semibold">
+                                    Completed
+                                </span>
+                            </div>
+
+                            <!-- Content -->
+                            <div class="p-3 space-y-2">
+                                <!-- Patient Info -->
+                                <div class="text-sm">
+                                    <div class="font-semibold text-gray-800 truncate">{{ $infusion->patient->name ?? 'Unknown' }}</div>
+                                    <div class="text-xs text-gray-500">MRN: {{ $infusion->patient->mrn ?? 'N/A' }}</div>
+                                </div>
+
+                                <!-- Medication -->
+                                <div class="bg-white rounded-lg p-2 border border-gray-200">
+                                    <div class="text-xs text-gray-500">Medication</div>
+                                    <div class="font-semibold text-gray-800 text-sm truncate">{{ $infusion->medication_name }}</div>
+                                    <div class="text-xs text-gray-500">
+                                        {{ number_format($infusion->total_volume, 1) }} ml • Completed {{ $infusion->completed_at ? $infusion->completed_at->format('H:i') : '' }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        @endif
         </div>
 
         <!-- Devices Tab Content -->
@@ -398,8 +441,14 @@
                                             </td>
                                             <td class="px-4 py-3 whitespace-nowrap text-sm">
                                                 @if($pump->patient_id)
+                                                    @php
+                                                        $hasActiveInfusion = \App\Models\Infusion::where('patient_id', $pump->patient_id)
+                                                            ->where('infusion_pump_id', $pump->id)
+                                                            ->active()
+                                                            ->exists();
+                                                    @endphp
                                                     <button 
-                                                        @click="showUnbindModal = true; unbindPumpId = {{ $pump->id }}; unbindPumpName = '{{ $pump->device_id }}'"
+                                                        @click="showUnbindModal = true; unbindPumpId = {{ $pump->id }}; unbindPumpName = '{{ $pump->device_id }}'; unbindPumpHasActiveInfusion = {{ $hasActiveInfusion ? 'true' : 'false' }}"
                                                         class="px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-xs font-medium transition-colors">
                                                         <svg class="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -445,7 +494,19 @@
                         <p class="text-sm text-gray-500">This action will remove the pump binding</p>
                     </div>
                 </div>
-                <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
+                <!-- Warning for Active Infusion -->
+                <div x-show="unbindPumpHasActiveInfusion" class="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                    <p class="text-sm text-red-800 flex items-start">
+                        <svg class="w-5 h-5 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                        </svg>
+                        <span>
+                            <strong>CRITICAL WARNING:</strong> This pump has an <strong>ACTIVE INFUSION</strong>. Unbinding it will automatically mark the infusion as <strong>COMPLETED</strong>.
+                        </span>
+                    </p>
+                </div>
+                <!-- Standard Warning -->
+                <div x-show="!unbindPumpHasActiveInfusion" class="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4">
                     <p class="text-sm text-amber-800">
                         <strong>Warning:</strong> Unbinding this pump will remove the patient association and may affect ongoing infusion tracking.
                     </p>

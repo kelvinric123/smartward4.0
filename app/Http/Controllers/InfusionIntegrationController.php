@@ -144,6 +144,21 @@ class InfusionIntegrationController extends Controller
 
         $infusions = $query->latest('last_updated_at')->get();
 
+        // If filtering by active, also get recently completed infusions (last 24 hours)
+        // so we can show them in a separate section
+        $recentlyCompleted = collect();
+        if ($filter === 'active') {
+            $completedQuery = Infusion::with(['patient', 'infusionPump'])
+                ->completed()
+                ->where('completed_at', '>=', now()->subHours(24));
+
+            if ($wardId) {
+                $completedQuery->inWard($wardId);
+            }
+
+            $recentlyCompleted = $completedQuery->latest('completed_at')->get();
+        }
+
         // Get summary stats
         $stats = [
             'running' => Infusion::when($wardId, fn($q) => $q->inWard($wardId))->running()->count(),
@@ -164,7 +179,7 @@ class InfusionIntegrationController extends Controller
 
         $pumps = $pumpsQuery->get();
 
-        return view('wards.infusion-overview', compact('infusions', 'stats', 'filter', 'wardId', 'tab', 'pumps'));
+        return view('wards.infusion-overview', compact('infusions', 'stats', 'filter', 'wardId', 'tab', 'pumps', 'recentlyCompleted'));
     }
 
     /**
@@ -286,6 +301,20 @@ class InfusionIntegrationController extends Controller
      */
     public function unlinkPumpFromPatient(Request $request, InfusionPump $pump)
     {
+        // Check for active infusions and mark them as completed
+        $activeInfusion = Infusion::where('patient_id', $pump->patient_id)
+            ->where('infusion_pump_id', $pump->id)
+            ->active()
+            ->first();
+
+        if ($activeInfusion) {
+            $activeInfusion->update([
+                'status' => 'completed',
+                'completed_at' => now(),
+                'notes' => ($activeInfusion->notes ? $activeInfusion->notes . "\n" : "") . "Auto-completed due to pump unbind at " . now()->format('Y-m-d H:i:s'),
+            ]);
+        }
+
         $pump->unlinkFromPatient();
 
         if ($request->ajax() || $request->wantsJson()) {
