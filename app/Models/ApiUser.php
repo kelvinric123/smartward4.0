@@ -39,7 +39,7 @@ class ApiUser extends Model
     public function generateToken(int $expiresInHours = 24): string
     {
         $token = Str::random(64);
-        
+
         $this->update([
             'api_token' => hash('sha256', $token),
             'token_expires_at' => now()->addHours($expiresInHours),
@@ -98,12 +98,37 @@ class ApiUser extends Model
     }
 
     /**
+     * Get the bindings for this gateway.
+     */
+    public function bindings(): HasMany
+    {
+        return $this->hasMany(GatewayNurseBinding::class);
+    }
+
+    /**
+     * Get the active nurse binding for this gateway at a specific time (default now).
+     */
+    public function getActiveBinding(?\Carbon\Carbon $at = null): ?GatewayNurseBinding
+    {
+        $at = $at ?? now();
+
+        return $this->bindings()
+            ->where('start_at', '<=', $at)
+            ->where(function ($query) use ($at) {
+                $query->whereNull('end_at')
+                    ->orWhere('end_at', '>=', $at);
+            })
+            ->latest('start_at')
+            ->first();
+    }
+
+    /**
      * Find a user by their API token.
      */
     public static function findByToken(string $token): ?self
     {
         $hashedToken = hash('sha256', $token);
-        
+
         return static::where('api_token', $hashedToken)
             ->where('is_active', true)
             ->where('token_expires_at', '>', now())

@@ -56,7 +56,21 @@ class VitalSignController extends Controller
         if ($patientId) {
             $selectedPatient = Patient::find($patientId);
             $admissions = $this->getPatientAdmissions($patientId);
+            $admissions = $this->getPatientAdmissions($patientId);
         }
+
+        // Get gateways (API users) and nurses for binding modal
+        $gateways = \App\Models\ApiUser::where('is_active', true)->orderBy('name')->get();
+        $nurses = \App\Models\Nurse::where('is_active', true)->orderBy('name')->get();
+
+        // Get active bindings
+        $activeBindings = \App\Models\GatewayNurseBinding::with(['apiUser', 'nurse'])
+            ->where('start_at', '<=', now())
+            ->where(function ($query) {
+                $query->whereNull('end_at')
+                    ->orWhere('end_at', '>=', now());
+            })
+            ->get();
 
         return view('vital-signs.index', [
             'vitalSigns' => $vitalSigns,
@@ -66,6 +80,9 @@ class VitalSignController extends Controller
             'search' => $search,
             'patientId' => $patientId,
             'admissionId' => $admissionId,
+            'gateways' => $gateways,
+            'nurses' => $nurses,
+            'activeBindings' => $activeBindings,
         ]);
     }
 

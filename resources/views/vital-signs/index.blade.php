@@ -40,13 +40,20 @@
                 <div class="lg:col-span-1">
                     <div class="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
                         <div class="px-6 py-4 bg-gradient-to-r from-rose-500 to-pink-500 text-white">
-                            <h3 class="text-lg font-bold flex items-center">
-                                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
-                                </svg>
-                                Record Vital Signs
-                            </h3>
-                            <p class="text-sm text-white/80 mt-1">Enter patient vital sign readings</p>
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <h3 class="text-lg font-bold flex items-center">
+                                        <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/>
+                                        </svg>
+                                        Record Vital Signs
+                                    </h3>
+                                    <p class="text-sm text-white/80 mt-1">Enter patient vital sign readings</p>
+                                </div>
+                                <button type="button" @click="$dispatch('open-bind-modal')" class="px-3 py-1 bg-white/20 hover:bg-white/30 rounded text-xs font-semibold backdrop-blur-sm transition">
+                                    Bind Gateway
+                                </button>
+                            </div>
                         </div>
                         
                         <form method="POST" action="{{ route('vital-signs.store') }}" class="p-6 space-y-4">
@@ -283,6 +290,41 @@
                             </button>
                         </form>
                     </div>
+
+                    <!-- Active Bindings Display -->
+                    @if(isset($activeBindings) && $activeBindings->count() > 0)
+                    <div class="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden mt-6">
+                        <div class="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white">
+                            <h3 class="text-md font-bold flex items-center">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                Active Gateway Bindings
+                            </h3>
+                        </div>
+                        <div class="p-4 bg-emerald-50/50">
+                            <div class="space-y-3">
+                                @foreach($activeBindings as $binding)
+                                <div class="flex items-start p-3 bg-white rounded-lg border border-emerald-100 shadow-sm">
+                                    <div class="flex-shrink-0 pt-0.5">
+                                        <div class="h-2 w-2 rounded-full bg-emerald-500 mt-2 animate-pulse"></div>
+                                    </div>
+                                    <div class="ml-3 flex-1">
+                                        <p class="text-sm font-medium text-gray-900">
+                                            {{ $binding->apiUser->name }} 
+                                            <span class="text-gray-400 mx-1">→</span> 
+                                            {{ $binding->nurse->name }}
+                                        </p>
+                                        <p class="text-xs text-gray-500 mt-0.5">
+                                            Expires {{ $binding->end_at ? $binding->end_at->diffForHumans() : 'Never' }}
+                                        </p>
+                                    </div>
+                                </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    </div>
+                    @endif
                 </div>
 
                 <!-- Right Panel: Vital Signs History -->
@@ -482,6 +524,73 @@
             </div>
         </div>
     </div>
+    </div>
+
+    <!-- Bind Gateway Modal -->
+    <div x-data="{ open: false }" 
+         @open-bind-modal.window="open = true" 
+         @keydown.escape.window="open = false"
+         class="relative z-[60]" 
+         aria-labelledby="modal-title" 
+         role="dialog" 
+         aria-modal="true"
+         x-show="open" 
+         style="display: none;">
+        
+        <div x-show="open" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+            <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+                <div x-show="open" x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100" x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100" x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" class="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg" @click.away="open = false">
+                    <form action="{{ route('vital-sign-integration.bind') }}" method="POST">
+                        @csrf
+                        <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                            <div class="sm:flex sm:items-start">
+                                <div class="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-rose-100 sm:mx-0 sm:h-10 sm:w-10">
+                                    <svg class="h-6 w-6 text-rose-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                                    </svg>
+                                </div>
+                                <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                                    <h3 class="text-base font-semibold leading-6 text-gray-900" id="modal-title">Bind Gateway to Operator</h3>
+                                    <div class="mt-4 space-y-4">
+                                        <div>
+                                            <label for="api_user_id" class="block text-sm font-medium text-gray-700">Select Gateway</label>
+                                            <select name="api_user_id" id="api_user_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-rose-500 focus:ring-rose-500 sm:text-sm" required>
+                                                @foreach($gateways as $gateway)
+                                                    <option value="{{ $gateway->id }}">{{ $gateway->name }} ({{ $gateway->username }})</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label for="nurse_id" class="block text-sm font-medium text-gray-700">Select Nurse (Operator)</label>
+                                            <select name="nurse_id" id="nurse_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-rose-500 focus:ring-rose-500 sm:text-sm" required>
+                                                @foreach($nurses as $nurse)
+                                                    <option value="{{ $nurse->id }}">{{ $nurse->name }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label for="duration_hours" class="block text-sm font-medium text-gray-700">Duration (Hours)</label>
+                                            <input type="number" name="duration_hours" id="duration_hours" min="1" max="24" value="8" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-rose-500 focus:ring-rose-500 sm:text-sm" required>
+                                            <p class="mt-1 text-xs text-gray-500">The binding will automatically expire after this duration.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                            <button type="submit" class="inline-flex w-full justify-center rounded-md bg-rose-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-rose-500 sm:ml-3 sm:w-auto">Bind</button>
+                            <button type="button" @click="open = false" class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </x-app-layout>
 
 

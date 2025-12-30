@@ -71,6 +71,36 @@ class VitalSignIntegrationController extends Controller
     }
 
     /**
+     * Store a new gateway-nurse binding.
+     */
+    public function storeBinding(Request $request)
+    {
+        $request->validate([
+            'api_user_id' => 'required|exists:api_users,id',
+            'nurse_id' => 'required|exists:nurses,id',
+            'duration_hours' => 'required|integer|min:1|max:24',
+        ]);
+
+        $apiUser = ApiUser::findOrFail($request->api_user_id);
+
+        // Close any existing active binding for this gateway
+        $activeBinding = $apiUser->getActiveBinding();
+        if ($activeBinding) {
+            $activeBinding->update(['end_at' => now()]);
+        }
+
+        // Create new binding
+        \App\Models\GatewayNurseBinding::create([
+            'api_user_id' => $request->api_user_id,
+            'nurse_id' => $request->nurse_id,
+            'start_at' => now(),
+            'end_at' => now()->addHours((int) $request->duration_hours),
+        ]);
+
+        return back()->with('success', 'Gateway successfully bound to nurse.');
+    }
+
+    /**
      * Get local IP address.
      */
     private function getLocalIp(): string
@@ -321,6 +351,7 @@ class VitalSignIntegrationController extends Controller
                 'reading_type' => 'single', // gateway source tracked in notes
                 'notes' => 'Received via Gateway API' . (isset($reading['device_id']) ? ' (Device: ' . $reading['device_id'] . ')' : ''),
                 'recorded_at' => isset($reading['recorded_at']) ? $reading['recorded_at'] : now(),
+                'operator_id' => $apiUser->getActiveBinding()?->nurse_id,
             ]);
 
             $results[] = [
@@ -472,6 +503,7 @@ class VitalSignIntegrationController extends Controller
             'reading_type' => 'single', // gateway source tracked in notes
             'notes' => 'Received via Gateway API' . ($request->device_id ? ' (Device: ' . $request->device_id . ')' : ''),
             'recorded_at' => $request->recorded_at ?? now(),
+            'operator_id' => $apiUser->getActiveBinding()?->nurse_id,
         ]);
 
         $apiUser->incrementRequestCount();

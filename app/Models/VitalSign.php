@@ -20,6 +20,7 @@ class VitalSign extends Model
         'reading_type',
         'notes',
         'recorded_at',
+        'operator_id',
     ];
 
     protected $casts = [
@@ -40,6 +41,11 @@ class VitalSign extends Model
     public function recordedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'recorded_by');
+    }
+
+    public function operator(): BelongsTo
+    {
+        return $this->belongsTo(Nurse::class, 'operator_id');
     }
 
     /**
@@ -91,7 +97,7 @@ class VitalSign extends Model
     {
         return $query->whereHas('patient', function ($q) use ($search) {
             $q->where('name', 'like', '%' . $search . '%')
-              ->orWhere('mrn', 'like', '%' . $search . '%');
+                ->orWhere('mrn', 'like', '%' . $search . '%');
         });
     }
 }
