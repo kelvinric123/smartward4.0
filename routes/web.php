@@ -134,6 +134,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/vital-signs', [VitalSignController::class, 'store'])->name('vital-signs.store');
     Route::get('/vital-signs/patient', [VitalSignController::class, 'patientVitals'])->name('vital-signs.patient');
     Route::get('/vital-signs/latest', [VitalSignController::class, 'latestVitals'])->name('vital-signs.latest');
+    Route::get('/vital-signs/check-new', [VitalSignController::class, 'checkNewVitalSigns'])->name('vital-signs.check-new');
 
 
     // LDAP Integration Routes

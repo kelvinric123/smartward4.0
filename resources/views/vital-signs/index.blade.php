@@ -754,6 +754,177 @@
 
 </x-app-layout>
 
+<!-- Vital Sign Notification System -->
+<div x-data="vitalSignNotifications()" x-init="init()" class="fixed bottom-4 right-4 z-50 space-y-2">
+    <!-- Toast Notifications Container -->
+    <template x-for="(notification, index) in notifications" :key="notification.id">
+        <div x-show="true" 
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 transform translate-x-full"
+             x-transition:enter-end="opacity-100 transform translate-x-0"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100 transform translate-x-0"
+             x-transition:leave-end="opacity-0 transform translate-x-full"
+             class="bg-white rounded-xl shadow-2xl border-l-4 border-emerald-500 p-4 max-w-sm">
+            <div class="flex items-start">
+                <div class="flex-shrink-0">
+                    <div class="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                        <svg class="h-6 w-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-3 flex-1">
+                    <p class="text-sm font-bold text-gray-900">New Vital Sign</p>
+                    <p class="text-sm text-gray-700" x-text="notification.patient_name + ' (' + notification.gateway + ')'"></p>
+                    <div class="mt-1 text-xs text-gray-500 space-x-2">
+                        <span x-show="notification.systolic_bp" x-text="'BP: ' + notification.systolic_bp + '/' + notification.diastolic_bp"></span>
+                        <span x-show="notification.pulse_rate" x-text="'HR: ' + notification.pulse_rate"></span>
+                        <span x-show="notification.spo2" x-text="'SpO2: ' + notification.spo2 + '%'"></span>
+                    </div>
+                </div>
+                <button @click="removeNotification(index)" class="ml-2 text-gray-400 hover:text-gray-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </template>
+</div>
+
+<!-- Notification Permission Banner -->
+<div x-data="{ showBanner: false }" 
+     x-init="setTimeout(() => { if (Notification.permission === 'default') showBanner = true; }, 2000)"
+     x-show="showBanner"
+     class="fixed top-4 right-4 z-50">
+    <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 shadow-lg max-w-sm">
+        <div class="flex items-start">
+            <svg class="w-5 h-5 text-blue-500 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+            </svg>
+            <div class="ml-3 flex-1">
+                <p class="text-sm font-medium text-blue-800">Enable Notifications?</p>
+                <p class="text-xs text-blue-600 mt-1">Get notified when new vital signs arrive from gateways.</p>
+                <div class="mt-2 flex space-x-2">
+                    <button @click="Notification.requestPermission(); showBanner = false;" 
+                            class="px-3 py-1 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700">
+                        Enable
+                    </button>
+                    <button @click="showBanner = false" class="px-3 py-1 text-blue-600 text-xs font-medium hover:underline">
+                        Later
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function vitalSignNotifications() {
+    return {
+        notifications: [],
+        lastCheck: new Date().toISOString(),
+        pollInterval: null,
+        seenIds: new Set(),
+        
+        init() {
+            // Start polling for new vital signs
+            this.startPolling();
+            
+            // Request notification permission on first visit
+            if ('Notification' in window && Notification.permission === 'default') {
+                // Permission banner will handle this
+            }
+        },
+        
+        startPolling() {
+            // Poll every 10 seconds
+            this.pollInterval = setInterval(() => this.checkForNewVitals(), 10000);
+            // Also check immediately
+            this.checkForNewVitals();
+        },
+        
+        async checkForNewVitals() {
+            try {
+                const response = await fetch(`{{ route('vital-signs.check-new') }}?since=${encodeURIComponent(this.lastCheck)}`);
+                const data = await response.json();
+                
+                if (data.success && data.count > 0) {
+                    data.new_vitals.forEach(vital => {
+                        // Avoid duplicate notifications
+                        if (!this.seenIds.has(vital.id)) {
+                            this.seenIds.add(vital.id);
+                            this.showNotification(vital);
+                        }
+                    });
+                }
+                
+                // Update last check timestamp
+                this.lastCheck = data.timestamp;
+            } catch (error) {
+                console.error('Failed to check for new vital signs:', error);
+            }
+        },
+        
+        showNotification(vital) {
+            // Add to toast notifications
+            this.notifications.push(vital);
+            
+            // Auto-remove after 10 seconds
+            setTimeout(() => {
+                const index = this.notifications.findIndex(n => n.id === vital.id);
+                if (index !== -1) {
+                    this.notifications.splice(index, 1);
+                }
+            }, 10000);
+            
+            // Play notification sound
+            this.playNotificationSound();
+            
+            // Show browser notification if permitted
+            if ('Notification' in window && Notification.permission === 'granted') {
+                const bpText = vital.systolic_bp ? `BP: ${vital.systolic_bp}/${vital.diastolic_bp}` : '';
+                const hrText = vital.pulse_rate ? `HR: ${vital.pulse_rate}` : '';
+                const spo2Text = vital.spo2 ? `SpO2: ${vital.spo2}%` : '';
+                const tempText = vital.temperature ? `Temp: ${vital.temperature}°C` : '';
+                
+                new Notification(`New Vital Sign - ${vital.gateway}`, {
+                    body: `${vital.patient_name}\n${[bpText, hrText, spo2Text, tempText].filter(Boolean).join(' | ')}`,
+                    icon: '/favicon.ico',
+                    tag: `vital-${vital.id}`,
+                });
+            }
+        },
+        
+        playNotificationSound() {
+            // Create a simple beep sound using Web Audio API
+            try {
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.value = 800;
+                oscillator.type = 'sine';
+                gainNode.gain.value = 0.3;
+                
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + 0.2);
+            } catch (e) {
+                console.log('Audio notification not available');
+            }
+        },
+        
+        removeNotification(index) {
+            this.notifications.splice(index, 1);
+        }
+    }
+}
+</script>
+
 
 
 

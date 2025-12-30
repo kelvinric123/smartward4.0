@@ -304,6 +304,70 @@ class VitalSignController extends Controller
             'time_ago' => $latestVital->recorded_at->diffForHumans(),
         ]);
     }
+
+    /**
+     * Check for new vital signs from bound gateways (for browser notifications).
+     */
+    public function checkNewVitalSigns(Request $request)
+    {
+        $since = $request->input('since'); // ISO timestamp or seconds since epoch
+        $sinceTime = $since ? \Carbon\Carbon::parse($since) : now()->subMinutes(1);
+
+        // Get active gateway bindings
+        $activeBindings = \App\Models\GatewayNurseBinding::with(['apiUser', 'nurse'])
+            ->where('start_at', '<=', now())
+            ->where(function ($query) {
+                $query->whereNull('end_at')
+                    ->orWhere('end_at', '>=', now());
+            })
+            ->get();
+
+        if ($activeBindings->isEmpty()) {
+            return response()->json([
+                'success' => true,
+                'new_vitals' => [],
+                'count' => 0,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+        }
+
+        // Get operator IDs from active bindings
+        $operatorIds = $activeBindings->pluck('nurse_id')->unique()->toArray();
+
+        // Get new vital signs from bound operators since the given time
+        $newVitals = VitalSign::with('patient')
+            ->whereIn('operator_id', $operatorIds)
+            ->where('recorded_at', '>', $sinceTime)
+            ->orderBy('recorded_at', 'desc')
+            ->limit(10)
+            ->get()
+            ->map(function ($vital) use ($activeBindings) {
+                // Find the gateway name for this operator
+                $binding = $activeBindings->firstWhere('nurse_id', $vital->operator_id);
+                $gatewayName = $binding?->apiUser?->name ?? 'Gateway';
+
+                return [
+                    'id' => $vital->id,
+                    'patient_name' => $vital->patient->name ?? 'Unknown',
+                    'patient_mrn' => $vital->patient->mrn ?? '',
+                    'gateway' => $gatewayName,
+                    'systolic_bp' => $vital->systolic_bp,
+                    'diastolic_bp' => $vital->diastolic_bp,
+                    'pulse_rate' => $vital->pulse_rate,
+                    'temperature' => $vital->temperature,
+                    'spo2' => $vital->spo2,
+                    'respiratory_rate' => $vital->respiratory_rate,
+                    'recorded_at' => $vital->recorded_at->format('H:i:s'),
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'new_vitals' => $newVitals,
+            'count' => $newVitals->count(),
+            'timestamp' => now()->toIso8601String(),
+        ]);
+    }
 }
 
 
