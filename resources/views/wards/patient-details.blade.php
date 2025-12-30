@@ -745,7 +745,7 @@
 
                                 {{-- Isolation with virus icon --}}
                                 @php 
-                                                                                                                                                                                                                                                                                                                                    $hasIsolation = $patient->isolation_type && $patient->isolation_type !== 'none';
+                                                                                                                                                                                                                                                                                                                                                                    $hasIsolation = $patient->isolation_type && $patient->isolation_type !== 'none';
                                     $criticalIsolations = ['covid', 'tb', 'airborne', 'COVID', 'TB', 'AIR'];
                                     $isCritical = $hasIsolation && (in_array($patient->isolation_type, $criticalIsolations) || in_array(strtoupper($patient->isolation_type), $criticalIsolations));
                                 @endphp
@@ -769,7 +769,7 @@
 
                                 {{-- Allergies with warning icon --}}
                                 @php 
-                                                                                                                                                                                                    $rawAllergies = $patient->allergies ?? [];
+                                                                                                                                                                                                                                    $rawAllergies = $patient->allergies ?? [];
                                     $allAllergies = collect($rawAllergies)->map(function ($a) {
                                         return is_array($a) ? $a : ['status' => 'Active'];
                                     });
@@ -1392,271 +1392,285 @@
                         (for example Radiology, Surgery, etc.).
                     </p>
 
-                    <!-- New Movement Form -->
-                    <form method="POST" action="{{ route('ward.patient-movements.store') }}" class="mb-6 space-y-4">
-                        @csrf
-                        <input type="hidden" name="patient_id" value="{{ $patient->id }}">
-                        <input type="hidden" name="active_tab" value="movement">
-
-                        <div class="space-y-4">
-                            <!-- Quick Location Buttons -->
-                            <div>
-                                <label class="block text-xs font-semibold text-gray-700 mb-2">Quick Location</label>
-                                <div class="grid grid-cols-3 md:grid-cols-5 gap-2 text-xs">
-                                    <button type="button"
-                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 transition-all font-medium"
-                                            onclick="selectQuickLocation('Radiology', 'radiology', this)">
-                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
-                                        Radiology
-                                    </button>
-                                    <button type="button"
-                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100 hover:border-purple-400 transition-all font-medium"
-                                            onclick="selectQuickLocation('Surgery', 'surgery', this)">
-                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/></svg>
-                                        Surgery
-                                    </button>
-                                    <button type="button"
-                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-red-200 text-red-700 bg-red-50 hover:bg-red-100 hover:border-red-400 transition-all font-medium"
-                                            onclick="selectQuickLocation('Cath Lab', 'cath_lab', this)">
-                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
-                                        Cath Lab
-                                    </button>
-                                    <button type="button"
-                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-cyan-200 text-cyan-700 bg-cyan-50 hover:bg-cyan-100 hover:border-cyan-400 transition-all font-medium"
-                                            onclick="selectQuickLocation('Dialysis', 'dialysis', this)">
-                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
-                                        Dialysis
-                                    </button>
-                                    <button type="button"
-                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-pink-200 text-pink-700 bg-pink-50 hover:bg-pink-100 hover:border-pink-400 transition-all font-medium"
-                                            onclick="selectQuickLocation('Heart Centre', 'heart_centre', this)">
-                                        <svg class="w-4 h-4 mx-auto mb-1" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                                        Heart Centre
-                                    </button>
-                                    <button type="button"
-                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-teal-200 text-teal-700 bg-teal-50 hover:bg-teal-100 hover:border-teal-400 transition-all font-medium"
-                                            onclick="selectQuickLocation('Lung Function Test', 'lung_function', this)">
-                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                                        Lung Function
-                                    </button>
-                                    <button type="button"
-                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 hover:border-indigo-400 transition-all font-medium"
-                                            onclick="selectQuickLocation('Specialist Clinic (SCC)', 'specialist_clinic', this)">
-                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
-                                        SCC
-                                    </button>
-                                    <button type="button"
-                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100 hover:border-orange-400 transition-all font-medium"
-                                            onclick="selectQuickLocation('Rehab', 'rehab', this)">
-                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                        Rehab
-                                    </button>
-                                    <button type="button"
-                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 hover:border-emerald-400 transition-all font-medium"
-                                            onclick="selectQuickLocation('Endoscopy', 'endoscopy', this)">
-                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                                        Endoscopy
-                                    </button>
-                                    <button type="button"
-                                            class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-gray-200 text-gray-700 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 transition-all font-medium"
-                                            onclick="selectQuickLocation('', 'other', this); document.getElementById('movement_location').focus();">
-                                        <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-                                        Other
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <!-- Destination Input -->
-                                <div>
-                                    <label for="movement_location" class="block text-xs font-semibold text-gray-700 mb-1">
-                                        Destination / Location
-                                    </label>
-                                    <input type="text"
-                                           id="movement_location"
-                                           name="location"
-                                           required
-                                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
-                                           placeholder="Select above or type here">
-                                    <input type="hidden" id="movement_location_type" name="location_type" value="">
-                                </div>
-
-                                <!-- Date Picker -->
-                                <div>
-                                    <label class="block text-xs font-semibold text-gray-700 mb-1">
-                                        Scheduled Date
-                                    </label>
-                                    <input type="date"
-                                           id="movement_date"
-                                           class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
-                                           value="{{ now()->format('Y-m-d') }}">
-                                </div>
-                            </div>
-
-                            <!-- Time Grid Picker -->
-                            <div x-data="{ timePeriod: 'morning' }">
-                                <label class="block text-xs font-semibold text-gray-700 mb-2">
-                                    Scheduled Time <span class="text-gray-400 font-normal">(15-min intervals)</span>
-                                </label>
-                                <div class="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                                    <!-- Time Period Tabs -->
-                                    <div class="flex gap-2 mb-3">
-                                        <button type="button" 
-                                                @click="timePeriod = 'morning'" 
-                                                :class="timePeriod === 'morning' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'"
-                                                class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-all border border-gray-200">
-                                            🌅 Morning
-                                            <span class="block text-[10px] opacity-75">6AM - 12PM</span>
-                                        </button>
-                                        <button type="button" 
-                                                @click="timePeriod = 'afternoon'" 
-                                                :class="timePeriod === 'afternoon' ? 'bg-orange-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'"
-                                                class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-all border border-gray-200">
-                                            ☀️ Afternoon
-                                            <span class="block text-[10px] opacity-75">12PM - 6PM</span>
-                                        </button>
-                                        <button type="button" 
-                                                @click="timePeriod = 'evening'" 
-                                                :class="timePeriod === 'evening' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'"
-                                                class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-all border border-gray-200">
-                                            🌙 Evening
-                                            <span class="block text-[10px] opacity-75">6PM - 12AM</span>
-                                        </button>
-                                    </div>
-
-                                    <!-- Morning Times -->
-                                    <div x-show="timePeriod === 'morning'" class="grid grid-cols-4 md:grid-cols-6 gap-2">
-                                        @php
-                                            $morningTimes = [];
-                                            for ($h = 6; $h < 12; $h++) {
-                                                foreach ([0, 15, 30, 45] as $m) {
-                                                    $morningTimes[] = sprintf('%02d:%02d', $h, $m);
-                                                }
-                                            }
-                                        @endphp
-                                        @foreach($morningTimes as $time)
-                                            <button type="button"
-                                                    class="time-slot-btn px-2 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-blue-100 hover:border-blue-400 hover:text-blue-700 transition-all text-sm font-medium"
-                                                    onclick="selectTime('{{ $time }}', this)">
-                                                {{ $time }}
-                                            </button>
-                                        @endforeach
-                                    </div>
-
-                                    <!-- Afternoon Times -->
-                                    <div x-show="timePeriod === 'afternoon'" class="grid grid-cols-4 md:grid-cols-6 gap-2">
-                                        @php
-                                            $afternoonTimes = [];
-                                            for ($h = 12; $h < 18; $h++) {
-                                                foreach ([0, 15, 30, 45] as $m) {
-                                                    $afternoonTimes[] = sprintf('%02d:%02d', $h, $m);
-                                                }
-                                            }
-                                        @endphp
-                                        @foreach($afternoonTimes as $time)
-                                            <button type="button"
-                                                    class="time-slot-btn px-2 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-orange-100 hover:border-orange-400 hover:text-orange-700 transition-all text-sm font-medium"
-                                                    onclick="selectTime('{{ $time }}', this)">
-                                                {{ $time }}
-                                            </button>
-                                        @endforeach
-                                    </div>
-
-                                    <!-- Evening Times -->
-                                    <div x-show="timePeriod === 'evening'" class="grid grid-cols-4 md:grid-cols-6 gap-2">
-                                        @php
-                                            $eveningTimes = [];
-                                            for ($h = 18; $h < 24; $h++) {
-                                                foreach ([0, 15, 30, 45] as $m) {
-                                                    $eveningTimes[] = sprintf('%02d:%02d', $h, $m);
-                                                }
-                                            }
-                                        @endphp
-                                        @foreach($eveningTimes as $time)
-                                            <button type="button"
-                                                    class="time-slot-btn px-2 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-indigo-100 hover:border-indigo-400 hover:text-indigo-700 transition-all text-sm font-medium"
-                                                    onclick="selectTime('{{ $time }}', this)">
-                                                {{ $time }}
-                                            </button>
-                                        @endforeach
-                                    </div>
-
-                                    <!-- Selected Time Display -->
-                                    <div class="mt-3 flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-gray-200">
-                                        <span class="text-xs text-gray-500">Selected:</span>
-                                        <span id="selected_time_display" class="text-sm font-bold text-blue-600">--:--</span>
-                                    </div>
-                                </div>
-                                <!-- Hidden input for form submission -->
-                                <input type="hidden" id="movement_time" value="">
-                                <input type="hidden" id="movement_scheduled_at" name="scheduled_at" required>
-                            </div>
-                        </div>
-
-                        <script>
-                            function selectQuickLocation(location, type, btn) {
-                                document.getElementById('movement_location').value = location;
-                                document.getElementById('movement_location_type').value = type;
-
-                                // Remove active state from all quick location buttons
-                                document.querySelectorAll('.quick-loc-btn').forEach(b => {
-                                    b.classList.remove('ring-2', 'ring-offset-2', 'ring-blue-500');
-                                });
-
-                                // Add active state to clicked button
-                                btn.classList.add('ring-2', 'ring-offset-2', 'ring-blue-500');
-                            }
-
-                            function selectTime(time, btn) {
-                                document.getElementById('movement_time').value = time;
-                                document.getElementById('selected_time_display').textContent = time;
-
-                                // Remove active state from all time buttons
-                                document.querySelectorAll('.time-slot-btn').forEach(b => {
-                                    b.classList.remove('bg-blue-600', 'bg-orange-500', 'bg-indigo-600', 'text-white', 'border-blue-600', 'border-orange-500', 'border-indigo-600');
-                                });
-
-                                // Add active state to clicked button
-                                btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
-
-                                // Update hidden scheduled_at field
-                                updateScheduledAt();
-                            }
-
-                            function updateScheduledAt() {
-                                const date = document.getElementById('movement_date').value;
-                                const time = document.getElementById('movement_time').value;
-                                if (date && time) {
-                                    document.getElementById('movement_scheduled_at').value = date + 'T' + time;
-                                }
-                            }
-
-                            // Update scheduled_at when date changes
-                            document.getElementById('movement_date').addEventListener('change', updateScheduledAt);
-                        </script>
-
-                        <div>
-                            <label for="movement_notes" class="block text-xs font-semibold text-gray-700 mb-1">
-                                Notes (optional)
-                            </label>
-                            <textarea id="movement_notes"
-                                      name="notes"
-                                      rows="2"
-                                      class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
-                                      placeholder="E.g. CT brain, fasting from 06:00, escort required"></textarea>
-                        </div>
-
-                        <div class="flex justify-end">
-                            <button type="submit"
-                                    class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                          d="M12 4v16m8-8H4"/>
+                    @if($additionalInfoReadOnly ?? false)
+                        <div class="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                            <div class="flex items-center text-sm text-orange-700">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                                 </svg>
-                                Schedule Movement
-                            </button>
+                                <span class="font-medium">Read Only Mode</span>
+                                <span class="ml-1">- Scheduling new movements is disabled.</span>
+                            </div>
                         </div>
-                    </form>
+                    @endif
+
+                    <!-- New Movement Form -->
+                    @if(!($additionalInfoReadOnly ?? false))
+                        <form method="POST" action="{{ route('ward.patient-movements.store') }}" class="mb-6 space-y-4">
+                            @csrf
+                            <input type="hidden" name="patient_id" value="{{ $patient->id }}">
+                            <input type="hidden" name="active_tab" value="movement">
+
+                            <div class="space-y-4">
+                                <!-- Quick Location Buttons -->
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-700 mb-2">Quick Location</label>
+                                    <div class="grid grid-cols-3 md:grid-cols-5 gap-2 text-xs">
+                                        <button type="button"
+                                                class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 hover:border-blue-400 transition-all font-medium"
+                                                onclick="selectQuickLocation('Radiology', 'radiology', this)">
+                                            <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
+                                            Radiology
+                                        </button>
+                                        <button type="button"
+                                                class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-purple-200 text-purple-700 bg-purple-50 hover:bg-purple-100 hover:border-purple-400 transition-all font-medium"
+                                                onclick="selectQuickLocation('Surgery', 'surgery', this)">
+                                            <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/></svg>
+                                            Surgery
+                                        </button>
+                                        <button type="button"
+                                                class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-red-200 text-red-700 bg-red-50 hover:bg-red-100 hover:border-red-400 transition-all font-medium"
+                                                onclick="selectQuickLocation('Cath Lab', 'cath_lab', this)">
+                                            <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+                                            Cath Lab
+                                        </button>
+                                        <button type="button"
+                                                class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-cyan-200 text-cyan-700 bg-cyan-50 hover:bg-cyan-100 hover:border-cyan-400 transition-all font-medium"
+                                                onclick="selectQuickLocation('Dialysis', 'dialysis', this)">
+                                            <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+                                            Dialysis
+                                        </button>
+                                        <button type="button"
+                                                class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-pink-200 text-pink-700 bg-pink-50 hover:bg-pink-100 hover:border-pink-400 transition-all font-medium"
+                                                onclick="selectQuickLocation('Heart Centre', 'heart_centre', this)">
+                                            <svg class="w-4 h-4 mx-auto mb-1" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                                            Heart Centre
+                                        </button>
+                                        <button type="button"
+                                                class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-teal-200 text-teal-700 bg-teal-50 hover:bg-teal-100 hover:border-teal-400 transition-all font-medium"
+                                                onclick="selectQuickLocation('Lung Function Test', 'lung_function', this)">
+                                            <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+                                            Lung Function
+                                        </button>
+                                        <button type="button"
+                                                class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 hover:border-indigo-400 transition-all font-medium"
+                                                onclick="selectQuickLocation('Specialist Clinic (SCC)', 'specialist_clinic', this)">
+                                            <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                                            SCC
+                                        </button>
+                                        <button type="button"
+                                                class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-orange-200 text-orange-700 bg-orange-50 hover:bg-orange-100 hover:border-orange-400 transition-all font-medium"
+                                                onclick="selectQuickLocation('Rehab', 'rehab', this)">
+                                            <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                            Rehab
+                                        </button>
+                                        <button type="button"
+                                                class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-emerald-200 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 hover:border-emerald-400 transition-all font-medium"
+                                                onclick="selectQuickLocation('Endoscopy', 'endoscopy', this)">
+                                            <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                            Endoscopy
+                                        </button>
+                                        <button type="button"
+                                                class="quick-loc-btn px-3 py-2 rounded-lg border-2 border-gray-200 text-gray-700 bg-gray-50 hover:bg-gray-100 hover:border-gray-400 transition-all font-medium"
+                                                onclick="selectQuickLocation('', 'other', this); document.getElementById('movement_location').focus();">
+                                            <svg class="w-4 h-4 mx-auto mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                                            Other
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <!-- Destination Input -->
+                                    <div>
+                                        <label for="movement_location" class="block text-xs font-semibold text-gray-700 mb-1">
+                                            Destination / Location
+                                        </label>
+                                        <input type="text"
+                                               id="movement_location"
+                                               name="location"
+                                               required
+                                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                               placeholder="Select above or type here">
+                                        <input type="hidden" id="movement_location_type" name="location_type" value="">
+                                    </div>
+
+                                    <!-- Date Picker -->
+                                    <div>
+                                        <label class="block text-xs font-semibold text-gray-700 mb-1">
+                                            Scheduled Date
+                                        </label>
+                                        <input type="date"
+                                               id="movement_date"
+                                               class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                               value="{{ now()->format('Y-m-d') }}">
+                                    </div>
+                                </div>
+
+                                <!-- Time Grid Picker -->
+                                <div x-data="{ timePeriod: 'morning' }">
+                                    <label class="block text-xs font-semibold text-gray-700 mb-2">
+                                        Scheduled Time <span class="text-gray-400 font-normal">(15-min intervals)</span>
+                                    </label>
+                                    <div class="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                                        <!-- Time Period Tabs -->
+                                        <div class="flex gap-2 mb-3">
+                                            <button type="button" 
+                                                    @click="timePeriod = 'morning'" 
+                                                    :class="timePeriod === 'morning' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'"
+                                                    class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-all border border-gray-200">
+                                                🌅 Morning
+                                                <span class="block text-[10px] opacity-75">6AM - 12PM</span>
+                                            </button>
+                                            <button type="button" 
+                                                    @click="timePeriod = 'afternoon'" 
+                                                    :class="timePeriod === 'afternoon' ? 'bg-orange-500 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'"
+                                                    class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-all border border-gray-200">
+                                                ☀️ Afternoon
+                                                <span class="block text-[10px] opacity-75">12PM - 6PM</span>
+                                            </button>
+                                            <button type="button" 
+                                                    @click="timePeriod = 'evening'" 
+                                                    :class="timePeriod === 'evening' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'"
+                                                    class="flex-1 px-3 py-2 rounded-lg text-xs font-semibold transition-all border border-gray-200">
+                                                🌙 Evening
+                                                <span class="block text-[10px] opacity-75">6PM - 12AM</span>
+                                            </button>
+                                        </div>
+
+                                        <!-- Morning Times -->
+                                        <div x-show="timePeriod === 'morning'" class="grid grid-cols-4 md:grid-cols-6 gap-2">
+                                            @php
+                                                $morningTimes = [];
+                                                for ($h = 6; $h < 12; $h++) {
+                                                    foreach ([0, 15, 30, 45] as $m) {
+                                                        $morningTimes[] = sprintf('%02d:%02d', $h, $m);
+                                                    }
+                                                }
+                                            @endphp
+                                            @foreach($morningTimes as $time)
+                                                <button type="button"
+                                                        class="time-slot-btn px-2 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-blue-100 hover:border-blue-400 hover:text-blue-700 transition-all text-sm font-medium"
+                                                        onclick="selectTime('{{ $time }}', this)">
+                                                    {{ $time }}
+                                                </button>
+                                            @endforeach
+                                        </div>
+
+                                        <!-- Afternoon Times -->
+                                        <div x-show="timePeriod === 'afternoon'" class="grid grid-cols-4 md:grid-cols-6 gap-2">
+                                            @php
+                                                $afternoonTimes = [];
+                                                for ($h = 12; $h < 18; $h++) {
+                                                    foreach ([0, 15, 30, 45] as $m) {
+                                                        $afternoonTimes[] = sprintf('%02d:%02d', $h, $m);
+                                                    }
+                                                }
+                                            @endphp
+                                            @foreach($afternoonTimes as $time)
+                                                <button type="button"
+                                                        class="time-slot-btn px-2 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-orange-100 hover:border-orange-400 hover:text-orange-700 transition-all text-sm font-medium"
+                                                        onclick="selectTime('{{ $time }}', this)">
+                                                    {{ $time }}
+                                                </button>
+                                            @endforeach
+                                        </div>
+
+                                        <!-- Evening Times -->
+                                        <div x-show="timePeriod === 'evening'" class="grid grid-cols-4 md:grid-cols-6 gap-2">
+                                            @php
+                                                $eveningTimes = [];
+                                                for ($h = 18; $h < 24; $h++) {
+                                                    foreach ([0, 15, 30, 45] as $m) {
+                                                        $eveningTimes[] = sprintf('%02d:%02d', $h, $m);
+                                                    }
+                                                }
+                                            @endphp
+                                            @foreach($eveningTimes as $time)
+                                                <button type="button"
+                                                        class="time-slot-btn px-2 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-indigo-100 hover:border-indigo-400 hover:text-indigo-700 transition-all text-sm font-medium"
+                                                        onclick="selectTime('{{ $time }}', this)">
+                                                    {{ $time }}
+                                                </button>
+                                            @endforeach
+                                        </div>
+
+                                        <!-- Selected Time Display -->
+                                        <div class="mt-3 flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-gray-200">
+                                            <span class="text-xs text-gray-500">Selected:</span>
+                                            <span id="selected_time_display" class="text-sm font-bold text-blue-600">--:--</span>
+                                        </div>
+                                    </div>
+                                    <!-- Hidden input for form submission -->
+                                    <input type="hidden" id="movement_time" value="">
+                                    <input type="hidden" id="movement_scheduled_at" name="scheduled_at" required>
+                                </div>
+                            </div>
+
+                            <script>
+                                function selectQuickLocation(location, type, btn) {
+                                    document.getElementById('movement_location').value = location;
+                                    document.getElementById('movement_location_type').value = type;
+
+                                    // Remove active state from all quick location buttons
+                                    document.querySelectorAll('.quick-loc-btn').forEach(b => {
+                                        b.classList.remove('ring-2', 'ring-offset-2', 'ring-blue-500');
+                                    });
+
+                                    // Add active state to clicked button
+                                    btn.classList.add('ring-2', 'ring-offset-2', 'ring-blue-500');
+                                }
+
+                                function selectTime(time, btn) {
+                                    document.getElementById('movement_time').value = time;
+                                    document.getElementById('selected_time_display').textContent = time;
+
+                                    // Remove active state from all time buttons
+                                    document.querySelectorAll('.time-slot-btn').forEach(b => {
+                                        b.classList.remove('bg-blue-600', 'bg-orange-500', 'bg-indigo-600', 'text-white', 'border-blue-600', 'border-orange-500', 'border-indigo-600');
+                                    });
+
+                                    // Add active state to clicked button
+                                    btn.classList.add('bg-blue-600', 'text-white', 'border-blue-600');
+
+                                    // Update hidden scheduled_at field
+                                    updateScheduledAt();
+                                }
+
+                                function updateScheduledAt() {
+                                    const date = document.getElementById('movement_date').value;
+                                    const time = document.getElementById('movement_time').value;
+                                    if (date && time) {
+                                        document.getElementById('movement_scheduled_at').value = date + 'T' + time;
+                                    }
+                                }
+
+                                // Update scheduled_at when date changes
+                                document.getElementById('movement_date').addEventListener('change', updateScheduledAt);
+                            </script>
+
+                            <div>
+                                <label for="movement_notes" class="block text-xs font-semibold text-gray-700 mb-1">
+                                    Notes (optional)
+                                </label>
+                                <textarea id="movement_notes"
+                                          name="notes"
+                                          rows="2"
+                                          class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                          placeholder="E.g. CT brain, fasting from 06:00, escort required"></textarea>
+                            </div>
+
+                            <div class="flex justify-end">
+                                <button type="submit"
+                                        class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                              d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                    Schedule Movement
+                                </button>
+                            </div>
+                        </form>
+                    @endif
 
                     <!-- Existing & Upcoming Movements -->
                     <div class="space-y-4 text-sm">
@@ -1757,28 +1771,30 @@
                                                 </div>
                                             </td>
                                             <td class="px-3 py-2 border-b align-top text-right space-y-1">
-                                                @if($movement->status === 'scheduled')
-                                                    <form method="POST"
-                                                          action="{{ route('ward.patient-movements.send', $movement) }}">
-                                                        @csrf
-                                                        <input type="hidden" name="active_tab" value="movement">
-                                                        <button type="submit"
-                                                                class="inline-flex items-center px-2 py-1 bg-blue-600 text-white text-[11px] font-semibold rounded hover:bg-blue-700">
-                                                            Send Patient
-                                                        </button>
-                                                    </form>
-                                                @elseif($movement->status === 'sent' && !$movement->returned_at)
-                                                    <form method="POST"
-                                                          action="{{ route('ward.patient-movements.return', $movement) }}">
-                                                        @csrf
-                                                        <input type="hidden" name="active_tab" value="movement">
-                                                        <button type="submit"
-                                                                class="inline-flex items-center px-2 py-1 bg-green-600 text-white text-[11px] font-semibold rounded hover:bg-green-700">
-                                                            Mark Returned
-                                                        </button>
-                                                    </form>
-                                                @else
-                                                    <span class="text-[11px] text-gray-400">No actions</span>
+                                                @if(!($additionalInfoReadOnly ?? false))
+                                                    @if($movement->status === 'scheduled')
+                                                        <form method="POST"
+                                                              action="{{ route('ward.patient-movements.send', $movement) }}">
+                                                            @csrf
+                                                            <input type="hidden" name="active_tab" value="movement">
+                                                            <button type="submit"
+                                                                    class="inline-flex items-center px-2 py-1 bg-blue-600 text-white text-[11px] font-semibold rounded hover:bg-blue-700">
+                                                                Send Patient
+                                                            </button>
+                                                        </form>
+                                                    @elseif($movement->status === 'sent' && !$movement->returned_at)
+                                                        <form method="POST"
+                                                              action="{{ route('ward.patient-movements.return', $movement) }}">
+                                                            @csrf
+                                                            <input type="hidden" name="active_tab" value="movement">
+                                                            <button type="submit"
+                                                                    class="inline-flex items-center px-2 py-1 bg-green-600 text-white text-[11px] font-semibold rounded hover:bg-green-700">
+                                                                Mark Returned
+                                                            </button>
+                                                        </form>
+                                                    @else
+                                                        {{-- Completed/Cancelled --}}
+                                                    @endif
                                                 @endif
                                             </td>
                                         </tr>

@@ -53,19 +53,108 @@
                             @csrf
                             
                             <!-- Patient Selection -->
-                            <div>
-                                <label for="patient_id" class="block text-sm font-semibold text-gray-700 mb-1">
+                            <!-- Patient Selection -->
+                            <div x-data="{
+                                search: '',
+                                open: false,
+                                selectedId: '{{ old('patient_id', $patientId) }}',
+                                patients: {{ Js::from($patients) }},
+                                get filteredPatients() {
+                                    if (this.search === '' && !this.selectedId) return this.patients;
+                                    const term = this.search.toLowerCase();
+                                    return this.patients.filter(p => 
+                                        p.name.toLowerCase().includes(term) || 
+                                        (p.mrn && p.mrn.toLowerCase().includes(term)) || 
+                                        (p.rn && p.rn.toLowerCase().includes(term))
+                                    );
+                                },
+                                selectPatient(patient) {
+                                    this.selectedId = patient.id;
+                                    this.search = patient.name;
+                                    this.open = false;
+                                },
+                                init() {
+                                    if (this.selectedId) {
+                                        const p = this.patients.find(p => p.id == this.selectedId);
+                                        if (p) {
+                                            this.search = p.name;
+                                        }
+                                    }
+                                    this.$watch('search', (value) => {
+                                        if (!this.open && value !== '') {
+                                            this.open = true;
+                                        }
+                                        if (value === '') {
+                                            this.selectedId = '';
+                                        }
+                                    });
+                                }
+                            }" class="relative">
+                                <label for="patient_search" class="block text-sm font-semibold text-gray-700 mb-1">
                                     Select Patient <span class="text-red-500">*</span>
                                 </label>
-                                <select name="patient_id" id="patient_id" required class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-rose-500 focus:ring-rose-500 text-sm">
-                                    <option value="">Choose a patient...</option>
-                                    @foreach($patients as $patient)
-                                        <option value="{{ $patient->id }}" {{ $patientId == $patient->id ? 'selected' : '' }}>
-                                            {{ $patient->name }} (MRN: {{ $patient->mrn }})
-                                            @if($patient->status === 'admitted') - Admitted @endif
-                                        </option>
-                                    @endforeach
-                                </select>
+                                <input type="hidden" name="patient_id" :value="selectedId">
+                                
+                                <div class="relative" @click.away="open = false">
+                                    <div class="relative">
+                                        <input 
+                                            type="text" 
+                                            id="patient_search"
+                                            x-model="search"
+                                            @focus="open = true"
+                                            @click="open = true"
+                                            @keydown.escape="open = false"
+                                            class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-rose-500 focus:ring-rose-500 text-sm pl-10"
+                                            placeholder="Search by Name, MRN, or RN..."
+                                            autocomplete="off"
+                                        >
+                                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                            </svg>
+                                        </div>
+                                        <div class="absolute inset-y-0 right-0 pr-3 flex items-center cursor-pointer" x-show="search" @click="search = ''; selectedId = ''; open = true">
+                                            <svg class="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                            </svg>
+                                        </div>
+                                    </div>
+                                    
+                                    <div 
+                                        x-show="open" 
+                                        x-transition
+                                        class="absolute z-50 w-full mt-1 bg-white rounded-lg shadow-xl border border-gray-200 max-h-60 overflow-y-auto"
+                                        style="display: none;"
+                                    >
+                                        <ul class="py-1">
+                                            <template x-for="patient in filteredPatients" :key="patient.id">
+                                                <li 
+                                                    @click="selectPatient(patient)"
+                                                    class="px-4 py-2 hover:bg-rose-50 cursor-pointer flex justify-between items-center group"
+                                                    :class="{'bg-rose-50': selectedId == patient.id}"
+                                                >
+                                                    <div>
+                                                        <div class="text-sm font-medium text-gray-900" x-text="patient.name"></div>
+                                                        <div class="text-xs text-gray-500 flex items-center space-x-2">
+                                                            <span x-show="patient.mrn">MRN: <span x-text="patient.mrn"></span></span>
+                                                            <span x-show="patient.rn" class="text-gray-300">|</span>
+                                                            <span x-show="patient.rn">RN: <span x-text="patient.rn"></span></span>
+                                                        </div>
+                                                    </div>
+                                                    <span 
+                                                        x-show="patient.status === 'admitted'" 
+                                                        class="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-800"
+                                                    >
+                                                        Admitted
+                                                    </span>
+                                                </li>
+                                            </template>
+                                            <li x-show="filteredPatients.length === 0" class="px-4 py-3 text-sm text-gray-500 text-center">
+                                                No patients found
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- Blood Pressure -->

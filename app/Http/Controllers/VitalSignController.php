@@ -24,7 +24,7 @@ class VitalSignController extends Controller
         // Get all patients for the dropdown
         $patients = Patient::where('is_active', true)
             ->orderBy('name')
-            ->get(['id', 'name', 'mrn', 'status', 'admitted_at']);
+            ->get(['id', 'name', 'mrn', 'rn', 'status', 'admitted_at']);
 
         // Query vital signs with patient relationship
         $query = VitalSign::with(['patient', 'recordedBy'])

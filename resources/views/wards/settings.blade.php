@@ -44,20 +44,20 @@
     <!-- Passcode Modal (for non-admin users) -->
     @if(!$isExemptFromPasscode)
         <div x-data="{ 
-                    passcodeVerified: false, 
-                    passcode: '', 
-                    error: false,
-                    correctPasscode: 'qmedno1',
-                    verifyPasscode() {
-                        if (this.passcode === this.correctPasscode) {
-                            this.passcodeVerified = true;
-                            this.error = false;
-                        } else {
-                            this.error = true;
-                            this.passcode = '';
+                        passcodeVerified: false, 
+                        passcode: '', 
+                        error: false,
+                        correctPasscode: 'qmedno1',
+                        verifyPasscode() {
+                            if (this.passcode === this.correctPasscode) {
+                                this.passcodeVerified = true;
+                                this.error = false;
+                            } else {
+                                this.error = true;
+                                this.passcode = '';
+                            }
                         }
-                    }
-                }">
+                    }">
             <!-- Passcode Overlay -->
             <div x-show="!passcodeVerified" x-cloak
                 class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/80 backdrop-blur-sm">
@@ -540,12 +540,10 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                             </svg>
-                            Additional Info Read Only Mode
+                            Additional Info & Movement Read Only Mode
                         </h4>
                         <p class="text-xs text-gray-500 mb-4">
-                            When enabled, users cannot modify clinical indicators (nursing level, isolation, HGT
-                            settings) in
-                            the Patient Details modal.
+                            When enabled, users cannot modify clinical indicators or schedule patient movements.
                         </p>
 
                         <form method="POST" action="{{ route('ward.settings.update') }}">
@@ -563,9 +561,8 @@
                                 </div>
                                 <div class="ms-3">
                                     <span class="text-sm font-medium text-gray-700">Enable Read Only Mode</span>
-                                    <p class="text-xs text-gray-500">Prevent users from editing clinical indicators in
-                                        Patient
-                                        Additional Info tab</p>
+                                    <p class="text-xs text-gray-500">Prevent editing clinical info and scheduling
+                                        movements</p>
                                 </div>
                             </label>
 
