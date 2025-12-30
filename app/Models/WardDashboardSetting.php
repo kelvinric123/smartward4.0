@@ -19,6 +19,7 @@ class WardDashboardSetting extends Model
         'clinical_settings',
         'patient_vitals_mode',
         'bed_box_vitals_mode',
+        'additional_info_read_only',
     ];
 
     protected $casts = [
@@ -28,6 +29,7 @@ class WardDashboardSetting extends Model
         'clinical_indicator_options' => 'array',
         'dashboard_display' => 'array',
         'clinical_settings' => 'array',
+        'additional_info_read_only' => 'boolean',
     ];
 }
 

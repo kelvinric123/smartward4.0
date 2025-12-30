@@ -368,6 +368,18 @@
                         View clinical indicators and patient care information. Diet types and allergies are managed by the ADT system.
                     </p>
 
+                    @if($additionalInfoReadOnly ?? false)
+                        <div class="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                            <div class="flex items-center text-sm text-orange-700">
+                                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                </svg>
+                                <span class="font-medium">Read Only Mode</span>
+                                <span class="ml-1">- Clinical indicators cannot be modified.</span>
+                            </div>
+                        </div>
+                    @endif
+
                     <form method="POST" action="{{ route('ward.update-patient-clinical') }}" class="space-y-6">
                         @csrf
                         <input type="hidden" name="patient_id" value="{{ $patient->id }}">
@@ -384,7 +396,7 @@
                                         Nursing Level of Care
                                     </div>
                                 </label>
-                                <select id="nursing_level" name="nursing_level" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                                <select id="nursing_level" name="nursing_level" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm {{ ($additionalInfoReadOnly ?? false) ? 'bg-gray-100 cursor-not-allowed' : '' }}" @disabled($additionalInfoReadOnly ?? false)>
                                     @foreach($clinicalIndicatorOptions['nursing_level'] ?? [] as $option)
                                         <option value="{{ $option['value'] }}" {{ ($patient->nursing_level ?? 'none') === $option['value'] ? 'selected' : '' }}>
                                             {{ $option['label'] }}
@@ -468,7 +480,7 @@
                                         Isolation Precautions
                                     </div>
                                 </label>
-                                <select id="isolation_type" name="isolation_type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                                <select id="isolation_type" name="isolation_type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm {{ ($additionalInfoReadOnly ?? false) ? 'bg-gray-100 cursor-not-allowed' : '' }}" @disabled($additionalInfoReadOnly ?? false)>
                                     @foreach($clinicalIndicatorOptions['isolation_type'] ?? [] as $option)
                                         <option value="{{ $option['value'] }}" {{ ($patient->isolation_type ?? 'none') === $option['value'] ? 'selected' : '' }}>
                                             {{ $option['label'] }}
@@ -531,8 +543,8 @@
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                 <!-- HGT Enabled Toggle -->
                                 <div class="flex items-center">
-                                    <label class="inline-flex items-center cursor-pointer">
-                                        <input type="checkbox" name="hgt_enabled" value="1" class="sr-only peer" {{ ($patient->hgt_enabled ?? false) ? 'checked' : '' }}>
+                                    <label class="inline-flex items-center {{ ($additionalInfoReadOnly ?? false) ? 'cursor-not-allowed opacity-60' : 'cursor-pointer' }}">
+                                        <input type="checkbox" name="hgt_enabled" value="1" class="sr-only peer" {{ ($patient->hgt_enabled ?? false) ? 'checked' : '' }} @disabled($additionalInfoReadOnly ?? false)>
                                         <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-teal-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-500"></div>
                                         <span class="ms-3 text-sm font-medium text-gray-700">Enable HGT Monitoring</span>
                                     </label>
@@ -541,7 +553,7 @@
                                 <!-- HGT Frequency -->
                                 <div>
                                     <label for="hgt_frequency" class="block text-xs font-medium text-gray-600 mb-1">Frequency</label>
-                                    <select id="hgt_frequency" name="hgt_frequency" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm">
+                                    <select id="hgt_frequency" name="hgt_frequency" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm {{ ($additionalInfoReadOnly ?? false) ? 'bg-gray-100 cursor-not-allowed' : '' }}" @disabled($additionalInfoReadOnly ?? false)>
                                         <option value="">Select frequency...</option>
                                         <option value="bd" {{ ($patient->hgt_frequency ?? '') === 'bd' ? 'selected' : '' }}>BD (Twice Daily)</option>
                                         <option value="tds" {{ ($patient->hgt_frequency ?? '') === 'tds' ? 'selected' : '' }}>TDS (Three Times Daily)</option>
@@ -552,21 +564,23 @@
                             </div>
 
                             <!-- Record New HGT Reading -->
-                            <div class="bg-teal-50 border border-teal-200 rounded-lg p-3 mb-3">
-                                <h5 class="text-xs font-semibold text-teal-700 mb-2">Record New HGT Reading</h5>
-                                <div class="flex items-end gap-2">
-                                    <div class="flex-1">
-                                        <label for="hgt_value" class="block text-xs font-medium text-gray-600 mb-1">Value (mmol/L)</label>
-                                        <input type="number" id="hgt_value" name="hgt_value" step="0.1" min="0" max="50" placeholder="e.g., 5.6" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm">
+                            @if(!($additionalInfoReadOnly ?? false))
+                                <div class="bg-teal-50 border border-teal-200 rounded-lg p-3 mb-3">
+                                    <h5 class="text-xs font-semibold text-teal-700 mb-2">Record New HGT Reading</h5>
+                                    <div class="flex items-end gap-2">
+                                        <div class="flex-1">
+                                            <label for="hgt_value" class="block text-xs font-medium text-gray-600 mb-1">Value (mmol/L)</label>
+                                            <input type="number" id="hgt_value" name="hgt_value" step="0.1" min="0" max="50" placeholder="e.g., 5.6" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500 text-sm">
+                                        </div>
+                                        <button type="button" onclick="recordHgtReading()" class="px-3 py-2 bg-teal-600 text-white text-sm font-medium rounded-md hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500">
+                                            <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                            </svg>
+                                            Record
+                                        </button>
                                     </div>
-                                    <button type="button" onclick="recordHgtReading()" class="px-3 py-2 bg-teal-600 text-white text-sm font-medium rounded-md hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500">
-                                        <svg class="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                                        </svg>
-                                        Record
-                                    </button>
                                 </div>
-                            </div>
+                            @endif
 
                             <!-- Recent HGT Readings -->
                             @php
@@ -731,7 +745,7 @@
 
                                 {{-- Isolation with virus icon --}}
                                 @php 
-                                                                                                                                                                                                                                                                                                    $hasIsolation = $patient->isolation_type && $patient->isolation_type !== 'none';
+                                                                                                                                                                                                                                                                                                                                    $hasIsolation = $patient->isolation_type && $patient->isolation_type !== 'none';
                                     $criticalIsolations = ['covid', 'tb', 'airborne', 'COVID', 'TB', 'AIR'];
                                     $isCritical = $hasIsolation && (in_array($patient->isolation_type, $criticalIsolations) || in_array(strtoupper($patient->isolation_type), $criticalIsolations));
                                 @endphp
@@ -755,7 +769,7 @@
 
                                 {{-- Allergies with warning icon --}}
                                 @php 
-                                                                                                                                                                    $rawAllergies = $patient->allergies ?? [];
+                                                                                                                                                                                                    $rawAllergies = $patient->allergies ?? [];
                                     $allAllergies = collect($rawAllergies)->map(function ($a) {
                                         return is_array($a) ? $a : ['status' => 'Active'];
                                     });
@@ -799,15 +813,17 @@
                             </div>
                         </div>
 
-                        <div class="flex justify-end">
-                            <button type="submit"
-                                    class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                                </svg>
-                                Save Clinical Indicators
-                            </button>
-                        </div>
+                        @if(!($additionalInfoReadOnly ?? false))
+                            <div class="flex justify-end">
+                                <button type="submit"
+                                        class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                    </svg>
+                                    Save Clinical Indicators
+                                </button>
+                            </div>
+                        @endif
                     </form>
                 </div>
 

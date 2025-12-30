@@ -1030,10 +1030,12 @@ class WardDashboardController extends Controller
         $clinicalIndicatorOptions = $this->getEnrichedClinicalIndicatorOptions($initialOptions);
 
         $patientVitalsMode = 'demo';
+        $additionalInfoReadOnly = false;
         if (Auth::check()) {
             $settings = WardDashboardSetting::where('user_id', Auth::id())->first();
             if ($settings) {
                 $patientVitalsMode = $settings->bed_box_vitals_mode ?? 'demo';
+                $additionalInfoReadOnly = (bool) ($settings->additional_info_read_only ?? false);
             }
         }
 
@@ -1048,6 +1050,7 @@ class WardDashboardController extends Controller
             'patientDetailsTabs' => $patientDetailsTabs,
             'clinicalIndicatorOptions' => $clinicalIndicatorOptions,
             'patientVitalsMode' => $patientVitalsMode,
+            'additionalInfoReadOnly' => $additionalInfoReadOnly,
             'consultantName' => $displayNames['consultant'],
             'nurseName' => $displayNames['nurse'],
             'anaesthetistName' => $displayNames['anaesthetist'],
@@ -1164,6 +1167,9 @@ class WardDashboardController extends Controller
         $patientVitalsMode = $settings->patient_vitals_mode ?? 'demo';
         $bedBoxVitalsMode = $settings->bed_box_vitals_mode ?? 'demo';
 
+        // Additional info read-only setting
+        $additionalInfoReadOnly = (bool) ($settings->additional_info_read_only ?? false);
+
         return view('wards.settings', [
             'tabs' => $tabs,
             'bedBoxDisplay' => $bedBoxDisplay,
@@ -1173,6 +1179,7 @@ class WardDashboardController extends Controller
             'clinicalSettings' => $clinicalSettings,
             'patientVitalsMode' => $patientVitalsMode,
             'bedBoxVitalsMode' => $bedBoxVitalsMode,
+            'additionalInfoReadOnly' => $additionalInfoReadOnly,
         ]);
     }
 
@@ -1259,6 +1266,14 @@ class WardDashboardController extends Controller
             }
 
             return back()->with('success', 'Bed box vitals mode updated successfully.');
+        }
+
+        if ($settingType === 'additional_info_read_only') {
+            // Handle additional info read-only mode toggle
+            $settings->additional_info_read_only = $request->has('additional_info_read_only');
+            $settings->save();
+
+            return back()->with('success', 'Additional Info read-only setting updated successfully.');
         }
 
         // Handle patient details tabs settings (default)
