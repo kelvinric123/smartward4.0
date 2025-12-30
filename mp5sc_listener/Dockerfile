@@ -19,7 +19,7 @@ RUN apk add --no-cache \
     && rm -rf /var/cache/apk/*
 
 # Copy requirements first for better caching
-COPY mp5sc_listener/listener/requirements.txt .
+COPY mp5sc_listener/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt

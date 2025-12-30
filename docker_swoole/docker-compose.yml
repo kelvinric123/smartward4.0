@@ -53,20 +53,20 @@ services:
     environment:
       # Timezone (default: Asia/Kuala_Lumpur - GMT+8)
       TZ: "${TZ:-Asia/Kuala_Lumpur}"
-      
+
       # Application (APP_KEY comes from env_file)
       APP_NAME: "${APP_NAME:-SmartWard}"
       APP_ENV: "${APP_ENV:-production}"
       APP_DEBUG: "${APP_DEBUG:-false}"
       APP_URL: "${APP_URL:-http://localhost}"
       APP_TIMEZONE: "${APP_TIMEZONE:-Asia/Kuala_Lumpur}"
-      
+
       # Octane/Swoole (Aggressive settings)
       OCTANE_SERVER: "swoole"
       OCTANE_WORKERS: "${OCTANE_WORKERS:-16}"
       OCTANE_TASK_WORKERS: "${OCTANE_TASK_WORKERS:-16}"
       OCTANE_MAX_REQUESTS: "${OCTANE_MAX_REQUESTS:-500}"
-      
+
       # Database (internal MySQL)
       DB_CONNECTION: "mysql"
       DB_HOST: "127.0.0.1"
@@ -74,22 +74,22 @@ services:
       DB_DATABASE: "${DB_DATABASE:-smartward}"
       DB_USERNAME: "${DB_USERNAME:-root}"
       DB_PASSWORD: "${DB_PASSWORD:-smartward_secret}"
-      
+
       # Redis (internal)
       REDIS_HOST: "127.0.0.1"
       REDIS_PORT: "6379"
       REDIS_PASSWORD: "${REDIS_PASSWORD:-null}"
-      
+
       # Session & Cache via Redis
       SESSION_DRIVER: "redis"
       SESSION_LIFETIME: "120"
       CACHE_STORE: "redis"
       QUEUE_CONNECTION: "redis"
-      
+
       # Logging
       LOG_CHANNEL: "stack"
       LOG_LEVEL: "${LOG_LEVEL:-warning}"
-      
+
       # ADT HL7 Listener (Docker service name for inter-container communication)
       ADT_HOST: "adt"
       ADT_PORT: "3000"
@@ -106,7 +106,7 @@ services:
       # ECG files - shared with ECG container (Laravel reads from ecg/store)
       - ecg_data:/app/ecg/store:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:88/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:88/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -145,7 +145,7 @@ services:
       - adt_logs:/app/HL7/logs
       - adt_messages:/app/HL7/received_messages
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "3000"]
+      test: [ "CMD", "nc", "-z", "localhost", "3000" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -189,7 +189,7 @@ services:
       - ecg_store:/app/ecg/store
       - ecg_logs:/app/ecg/logs
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -210,56 +210,56 @@ services:
         tag: "smartward4-ecg"
 
   # MP5sc Vital Sign Monitor Listener Container
-  mp5sc:
-    build:
-      context: ..
-      dockerfile: mp5sc_listener/Dockerfile
-    container_name: smartward4-mp5sc
-    restart: unless-stopped
-    # No ports exposed - this is an outbound UDP client
-    network_mode: "host"  # Required for UDP communication with medical devices on local network
-    environment:
-      # API Server Configuration (connects to smartward container)
-      API_BASE_URL: "${MP5SC_API_BASE_URL:-http://127.0.0.1:88/api/v1}"
-      API_PASSPHRASE: "${MP5SC_API_PASSPHRASE:-qmedno1}"
-      API_USERNAME: "${MP5SC_API_USERNAME:-api@qmed.asia}"
-      API_PASSWORD: "${MP5SC_API_PASSWORD:-88888888}"
-      # Monitor Device Configuration
-      # Legacy single device mode (used when USE_API_DEVICES=false)
-      MONITOR_IP: "${MP5SC_MONITOR_IP:-192.168.0.5}"
-      # Multi-device mode (fetch devices from API)
-      USE_API_DEVICES: "${MP5SC_USE_API_DEVICES:-true}"
-      DEVICE_FETCH_INTERVAL: "${MP5SC_DEVICE_FETCH_INTERVAL:-60}"
-      # Polling Configuration
-      POLL_INTERVAL: "${MP5SC_POLL_INTERVAL:-2}"
-      REFRESH_INTERVAL: "${MP5SC_REFRESH_INTERVAL:-10}"
-      # Debug Mode - enabled by default for detailed logging
-      DEBUG_MODE: "${MP5SC_DEBUG_MODE:-true}"
-      # Python unbuffered for real-time logs
-      PYTHONUNBUFFERED: "1"
-    volumes:
-      # Persist logs
-      - mp5sc_logs:/app/mp5sc_listener/logs
-    healthcheck:
-      test: ["CMD", "pgrep", "-f", "python.*vital_sign_listener"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: "128M"
-        reservations:
-          cpus: "0.1"
-          memory: "32M"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "5"
-        tag: "smartward4-mp5sc"
+  # mp5sc:
+  #   build:
+  #     context: ..
+  #     dockerfile: mp5sc_listener/Dockerfile
+  #   container_name: smartward4-mp5sc
+  #   restart: unless-stopped
+  #   # No ports exposed - this is an outbound UDP client
+  #   network_mode: "host"  # Required for UDP communication with medical devices on local network
+  #   environment:
+  #     # API Server Configuration (connects to smartward container)
+  #     API_BASE_URL: "${MP5SC_API_BASE_URL:-http://127.0.0.1:88/api/v1}"
+  #     API_PASSPHRASE: "${MP5SC_API_PASSPHRASE:-qmedno1}"
+  #     API_USERNAME: "${MP5SC_API_USERNAME:-api@qmed.asia}"
+  #     API_PASSWORD: "${MP5SC_API_PASSWORD:-88888888}"
+  #     # Monitor Device Configuration
+  #     # Legacy single device mode (used when USE_API_DEVICES=false)
+  #     MONITOR_IP: "${MP5SC_MONITOR_IP:-192.168.0.5}"
+  #     # Multi-device mode (fetch devices from API)
+  #     USE_API_DEVICES: "${MP5SC_USE_API_DEVICES:-true}"
+  #     DEVICE_FETCH_INTERVAL: "${MP5SC_DEVICE_FETCH_INTERVAL:-60}"
+  #     # Polling Configuration
+  #     POLL_INTERVAL: "${MP5SC_POLL_INTERVAL:-2}"
+  #     REFRESH_INTERVAL: "${MP5SC_REFRESH_INTERVAL:-10}"
+  #     # Debug Mode - enabled by default for detailed logging
+  #     DEBUG_MODE: "${MP5SC_DEBUG_MODE:-true}"
+  #     # Python unbuffered for real-time logs
+  #     PYTHONUNBUFFERED: "1"
+  #   volumes:
+  #     # Persist logs
+  #     - mp5sc_logs:/app/mp5sc_listener/logs
+  #   healthcheck:
+  #     test: ["CMD", "pgrep", "-f", "python.*vital_sign_listener"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 15s
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: "0.5"
+  #         memory: "128M"
+  #       reservations:
+  #         cpus: "0.1"
+  #         memory: "32M"
+  #   logging:
+  #     driver: "json-file"
+  #     options:
+  #       max-size: "50m"
+  #       max-file: "5"
+  #       tag: "smartward4-mp5sc"
 
   # B.Braun HL7 Infusion Pump Listener Container
   bbraun:
@@ -291,7 +291,7 @@ services:
       # Persist logs
       - bbraun_logs:/app/bbraun/logs
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "5001"]
+      test: [ "CMD", "nc", "-z", "localhost", "5001" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -314,7 +314,7 @@ services:
   # Seekink E-Ink Display Admin System Container
   seekink:
     image: q546877436/seekink-ubuntu:1.0.2
-    pull_policy: always  # Auto-pull if not available or check for updates
+    pull_policy: always # Auto-pull if not available or check for updates
     container_name: smartward4-seekink
     restart: unless-stopped
     ports:
@@ -336,7 +336,7 @@ services:
       # Persist Seekink data and configurations
       - seekink_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -386,4 +386,3 @@ networks:
   default:
     name: smartward-network
     driver: bridge
-
