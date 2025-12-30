@@ -46,7 +46,7 @@ class VitalSignApiV1Controller extends Controller
     public function receiveVitalSigns(Request $request)
     {
         $startTime = microtime(true);
-        
+
         // Log incoming request for debugging
         Log::info('[API V1] Vital Signs Request', [
             'ip' => $request->ip(),
@@ -56,147 +56,170 @@ class VitalSignApiV1Controller extends Controller
         ]);
 
         try {
-        
-        // Validate passphrase
-        $passphraseError = $this->validatePassphrase($request);
-        if ($passphraseError) {
-            return $passphraseError;
-        }
 
-        // Validate and authenticate user
-        $apiUser = $this->authenticateUser($request);
-        if (!$apiUser) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid credentials',
-            ], 401);
-        }
+            // Validate passphrase
+            $passphraseError = $this->validatePassphrase($request);
+            if ($passphraseError) {
+                return $passphraseError;
+            }
 
-        // Validate vital signs data
-        $validator = Validator::make($request->all(), [
-            'patient_code' => 'required|string',
-            'measured_at' => 'nullable|date',
-            'blood_pressure_systolic' => 'nullable|numeric|min:0|max:300',
-            'blood_pressure_diastolic' => 'nullable|numeric|min:0|max:200',
-            'pulse_rate' => 'nullable|numeric|min:0|max:300',
-            'heart_rate' => 'nullable|numeric|min:0|max:300',
-            'spo2' => 'nullable|numeric|min:0|max:100',
-            'temperature' => 'nullable|numeric|min:20|max:50',
-            'respiratory_rate' => 'nullable|numeric|min:0|max:100',
-            'weight' => 'nullable|numeric|min:0|max:500',
-            'height' => 'nullable|numeric|min:0|max:300',
-            'notes' => 'nullable|string|max:1000',
-        ]);
+            // Validate and authenticate user
+            $apiUser = $this->authenticateUser($request);
+            if (!$apiUser) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid credentials',
+                ], 401);
+            }
 
-        if ($validator->fails()) {
+            // Validate vital signs data
+            $validator = Validator::make($request->all(), [
+                'patient_code' => 'required|string',
+                'measured_at' => 'nullable|date',
+                'blood_pressure_systolic' => 'nullable|numeric|min:0|max:300',
+                'blood_pressure_diastolic' => 'nullable|numeric|min:0|max:200',
+                'pulse_rate' => 'nullable|numeric|min:0|max:300',
+                'heart_rate' => 'nullable|numeric|min:0|max:300',
+                'spo2' => 'nullable|numeric|min:0|max:100',
+                'temperature' => 'nullable|numeric|min:20|max:50',
+                'respiratory_rate' => 'nullable|numeric|min:0|max:100',
+                'weight' => 'nullable|numeric|min:0|max:500',
+                'height' => 'nullable|numeric|min:0|max:300',
+                'notes' => 'nullable|string|max:1000',
+            ]);
+
+            if ($validator->fails()) {
+                $responseData = [
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors(),
+                ];
+
+                $this->logApiRequest(
+                    $apiUser,
+                    '/api/v1/vital-signs',
+                    'POST',
+                    $this->maskSensitiveData($request->all()),
+                    $responseData,
+                    422,
+                    $startTime
+                );
+
+                return response()->json($responseData, 422);
+            }
+
+            // Find patient by patient_code (could be MRN or visit_number)
+            $patientCode = $request->patient_code;
+            $patient = Patient::where('mrn', $patientCode)
+                ->orWhere('visit_number', $patientCode)
+                ->orWhere('ic_passport', $patientCode)
+                ->first();
+
+            if (!$patient) {
+                $responseData = [
+                    'success' => false,
+                    'message' => 'Patient not found',
+                ];
+
+                $this->logApiRequest(
+                    $apiUser,
+                    '/api/v1/vital-signs',
+                    'POST',
+                    $this->maskSensitiveData($request->all()),
+                    $responseData,
+                    404,
+                    $startTime
+                );
+
+                return response()->json($responseData, 404);
+            }
+
+            // Check if patient is admitted (has a bed assigned)
+            if (!$patient->bed) {
+                $responseData = [
+                    'success' => false,
+                    'message' => 'Patient is not currently admitted',
+                ];
+
+                $this->logApiRequest(
+                    $apiUser,
+                    '/api/v1/vital-signs',
+                    'POST',
+                    $this->maskSensitiveData($request->all()),
+                    $responseData,
+                    400,
+                    $startTime
+                );
+
+                return response()->json($responseData, 400);
+            }
+
+            // Build notes field
+            $notes = [];
+            if ($request->notes) {
+                $notes[] = $request->notes;
+            }
+            if ($request->weight) {
+                $notes[] = "Weight: {$request->weight} kg";
+            }
+            if ($request->height) {
+                $notes[] = "Height: {$request->height} cm";
+            }
+
+            // Check for active nurse binding
+            $activeBinding = \App\Models\GatewayNurseBinding::where('api_user_id', $apiUser->id)
+                ->where('start_at', '<=', now())
+                ->where(function ($query) {
+                    $query->whereNull('end_at')
+                        ->orWhere('end_at', '>=', now());
+                })
+                ->latest()
+                ->first();
+
+            // Create vital sign record
+            // Map field names from Python client to database schema
+            $vitalSign = VitalSign::create([
+                'patient_id' => $patient->id,
+                'admission_id' => $patient->id, // Using patient ID as admission reference
+                'recorded_by' => null, // Gateway submission
+                'operator_id' => $activeBinding?->nurse_id, // Link to bound nurse
+                'systolic_bp' => $request->blood_pressure_systolic ?? null,
+                'diastolic_bp' => $request->blood_pressure_diastolic ?? null,
+                'pulse_rate' => $request->pulse_rate ?? $request->heart_rate ?? null,
+                'temperature' => $request->temperature ?? null,
+                'spo2' => $request->spo2 ? round($request->spo2) : null,
+                'respiratory_rate' => $request->respiratory_rate ?? null,
+                'reading_type' => 'single', // 'single' or 'full' - 'gateway' tracked in notes
+                'notes' => 'Gateway API v1' . (count($notes) > 0 ? '; ' . implode('; ', $notes) : ''),
+                'recorded_at' => $request->measured_at ?? now(),
+            ]);
+
+            $apiUser->incrementRequestCount();
+
             $responseData = [
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
+                'success' => true,
+                'message' => 'Vital sign recorded successfully',
+                'data' => [
+                    'vital_sign_id' => $vitalSign->id,
+                    'patient_name' => $patient->name,
+                    'patient_mrn' => $patient->mrn,
+                    'recorded_at' => $vitalSign->recorded_at->toIso8601String(),
+                ],
             ];
 
-            $this->logApiRequest($apiUser, '/api/v1/vital-signs', 'POST', 
-                $this->maskSensitiveData($request->all()), 
-                $responseData, 
-                422, 
+            $this->logApiRequest(
+                $apiUser,
+                '/api/v1/vital-signs',
+                'POST',
+                $this->maskSensitiveData($request->all()),
+                $responseData,
+                201,
                 $startTime
             );
 
-            return response()->json($responseData, 422);
-        }
+            Log::info('[API V1] Vital sign recorded', ['vital_sign_id' => $vitalSign->id, 'patient' => $patient->name]);
 
-        // Find patient by patient_code (could be MRN or visit_number)
-        $patientCode = $request->patient_code;
-        $patient = Patient::where('mrn', $patientCode)
-            ->orWhere('visit_number', $patientCode)
-            ->orWhere('ic_passport', $patientCode)
-            ->first();
-
-        if (!$patient) {
-            $responseData = [
-                'success' => false,
-                'message' => 'Patient not found',
-            ];
-
-            $this->logApiRequest($apiUser, '/api/v1/vital-signs', 'POST', 
-                $this->maskSensitiveData($request->all()), 
-                $responseData, 
-                404, 
-                $startTime
-            );
-
-            return response()->json($responseData, 404);
-        }
-
-        // Check if patient is admitted (has a bed assigned)
-        if (!$patient->bed) {
-            $responseData = [
-                'success' => false,
-                'message' => 'Patient is not currently admitted',
-            ];
-
-            $this->logApiRequest($apiUser, '/api/v1/vital-signs', 'POST', 
-                $this->maskSensitiveData($request->all()), 
-                $responseData, 
-                400, 
-                $startTime
-            );
-
-            return response()->json($responseData, 400);
-        }
-
-        // Build notes field
-        $notes = [];
-        if ($request->notes) {
-            $notes[] = $request->notes;
-        }
-        if ($request->weight) {
-            $notes[] = "Weight: {$request->weight} kg";
-        }
-        if ($request->height) {
-            $notes[] = "Height: {$request->height} cm";
-        }
-        
-        // Create vital sign record
-        // Map field names from Python client to database schema
-        $vitalSign = VitalSign::create([
-            'patient_id' => $patient->id,
-            'admission_id' => $patient->id, // Using patient ID as admission reference
-            'recorded_by' => null, // Gateway submission
-            'systolic_bp' => $request->blood_pressure_systolic ?? null,
-            'diastolic_bp' => $request->blood_pressure_diastolic ?? null,
-            'pulse_rate' => $request->pulse_rate ?? $request->heart_rate ?? null,
-            'temperature' => $request->temperature ?? null,
-            'spo2' => $request->spo2 ? round($request->spo2) : null,
-            'respiratory_rate' => $request->respiratory_rate ?? null,
-            'reading_type' => 'single', // 'single' or 'full' - 'gateway' tracked in notes
-            'notes' => 'Gateway API v1' . (count($notes) > 0 ? '; ' . implode('; ', $notes) : ''),
-            'recorded_at' => $request->measured_at ?? now(),
-        ]);
-
-        $apiUser->incrementRequestCount();
-
-        $responseData = [
-            'success' => true,
-            'message' => 'Vital sign recorded successfully',
-            'data' => [
-                'vital_sign_id' => $vitalSign->id,
-                'patient_name' => $patient->name,
-                'patient_mrn' => $patient->mrn,
-                'recorded_at' => $vitalSign->recorded_at->toIso8601String(),
-            ],
-        ];
-
-        $this->logApiRequest($apiUser, '/api/v1/vital-signs', 'POST', 
-            $this->maskSensitiveData($request->all()), 
-            $responseData, 
-            201, 
-            $startTime
-        );
-
-        Log::info('[API V1] Vital sign recorded', ['vital_sign_id' => $vitalSign->id, 'patient' => $patient->name]);
-
-        return response()->json($responseData, 201);
+            return response()->json($responseData, 201);
 
         } catch (\Exception $e) {
             Log::error('[API V1] Error in receiveVitalSigns', [
@@ -250,10 +273,13 @@ class VitalSignApiV1Controller extends Controller
                 'message' => 'Patient not found',
             ];
 
-            $this->logApiRequest($apiUser, "/api/v1/patients/{$patientCode}", 'GET', 
-                ['patient_code' => $patientCode], 
-                $responseData, 
-                404, 
+            $this->logApiRequest(
+                $apiUser,
+                "/api/v1/patients/{$patientCode}",
+                'GET',
+                ['patient_code' => $patientCode],
+                $responseData,
+                404,
                 $startTime
             );
 
@@ -279,10 +305,13 @@ class VitalSignApiV1Controller extends Controller
             ],
         ];
 
-        $this->logApiRequest($apiUser, "/api/v1/patients/{$patientCode}", 'GET', 
-            ['patient_code' => $patientCode], 
-            $responseData, 
-            200, 
+        $this->logApiRequest(
+            $apiUser,
+            "/api/v1/patients/{$patientCode}",
+            'GET',
+            ['patient_code' => $patientCode],
+            $responseData,
+            200,
             $startTime
         );
 
@@ -321,10 +350,13 @@ class VitalSignApiV1Controller extends Controller
             ],
         ];
 
-        $this->logApiRequest($apiUser, '/api/v1/device/login', 'POST', 
-            $this->maskSensitiveData($request->all()), 
-            $responseData, 
-            200, 
+        $this->logApiRequest(
+            $apiUser,
+            '/api/v1/device/login',
+            'POST',
+            $this->maskSensitiveData($request->all()),
+            $responseData,
+            200,
             $startTime
         );
 
@@ -394,11 +426,11 @@ class VitalSignApiV1Controller extends Controller
      * Log API request.
      */
     private function logApiRequest(
-        ApiUser $apiUser, 
-        string $endpoint, 
-        string $method, 
-        array $requestData, 
-        array $responseData, 
+        ApiUser $apiUser,
+        string $endpoint,
+        string $method,
+        array $requestData,
+        array $responseData,
         int $statusCode,
         float $startTime
     ): void {

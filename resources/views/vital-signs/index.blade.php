@@ -91,6 +91,30 @@
                                     </div>
                                 @endif
 
+                                <!-- Notification Toggle Button -->
+                                <button type="button" 
+                                    @click="$dispatch('toggle-notifications')"
+                                    x-data="{ enabled: localStorage.getItem('vital_sign_notifications_enabled') !== 'false' }"
+                                    @notification-toggled.window="enabled = $event.detail"
+                                    class="px-4 py-2.5 bg-white rounded-lg font-bold shadow-lg transition-all flex items-center whitespace-nowrap"
+                                    :class="enabled ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-400 hover:bg-gray-50'">
+                                    
+                                    <!-- Enabled Icon -->
+                                    <svg x-show="enabled" class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                    </svg>
+                                    
+                                    <!-- Disabled Icon -->
+                                    <svg x-show="!enabled" class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display: none;">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                            d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" clip-rule="evenodd" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                    </svg>
+                                    
+                                    <span x-text="enabled ? 'Notifications ON' : 'Notifications OFF'"></span>
+                                </button>
+
                                 <!-- Prominent Bind Gateway Button -->
                                 <button type="button" @click="$dispatch('open-bind-modal')"
                                     class="px-4 py-2.5 bg-white text-rose-600 hover:bg-rose-50 rounded-lg font-bold shadow-lg transition-all flex items-center whitespace-nowrap">
@@ -503,7 +527,8 @@
                                         <tr class="hover:bg-gray-50">
                                             <td class="px-4 py-3">
                                                 <div class="text-sm font-semibold text-gray-900">
-                                                    {{ $vital->patient->name ?? 'N/A' }}</div>
+                                                    {{ $vital->patient->name ?? 'N/A' }}
+                                                </div>
                                                 <div class="text-xs text-gray-500">MRN: {{ $vital->patient->mrn ?? 'N/A' }}
                                                 </div>
                                             </td>
@@ -857,42 +882,111 @@
 </x-app-layout>
 
 <!-- Vital Sign Notification System -->
-<div x-data="vitalSignNotifications()" x-init="init()" class="fixed bottom-4 right-4 z-50 space-y-2">
-    <!-- Toast Notifications Container -->
+<div x-data="vitalSignNotifications()" x-init="init()" 
+    @toggle-notifications.window="toggleNotifications()"
+    class="relative z-[100]">
+    <!-- Large Central Notification Overlay -->
     <template x-for="(notification, index) in notifications" :key="notification.id">
-        <div x-show="true" x-transition:enter="transition ease-out duration-300"
-            x-transition:enter-start="opacity-0 transform translate-x-full"
-            x-transition:enter-end="opacity-100 transform translate-x-0"
-            x-transition:leave="transition ease-in duration-200"
-            x-transition:leave-start="opacity-100 transform translate-x-0"
-            x-transition:leave-end="opacity-0 transform translate-x-full"
-            class="bg-white rounded-xl shadow-2xl border-l-4 border-emerald-500 p-4 max-w-sm">
-            <div class="flex items-start">
-                <div class="flex-shrink-0">
-                    <div class="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center">
-                        <svg class="h-6 w-6 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                        </svg>
+        <div class="fixed inset-0 z-[100] flex items-start justify-center pt-20 px-4 sm:px-6 pointer-events-none">
+
+            <!-- Transparent Backdrop (Click to dismiss) -->
+            <div x-show="true" 
+                x-transition:enter="ease-out duration-300"
+                x-transition:enter-start="opacity-0"
+                x-transition:enter-end="opacity-100"
+                x-transition:leave="ease-in duration-200"
+                x-transition:leave-start="opacity-100"
+                x-transition:leave-end="opacity-0"
+                class="fixed inset-0 pointer-events-auto"
+                @click="removeNotification(index)"></div>
+
+            <!-- Notification Card -->
+            <div x-show="true" x-transition:enter="transform ease-out duration-300 transition"
+                x-transition:enter-start="translate-y-2 opacity-0 sm:translate-y-0 sm:scale-95"
+                x-transition:enter-end="translate-y-0 opacity-100 sm:scale-100"
+                x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100"
+                x-transition:leave-end="opacity-0"
+                class="pointer-events-auto w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5 border-t-8 border-emerald-500">
+
+                <div class="p-6">
+                    <div class="flex items-start">
+                        <div class="flex-shrink-0 pt-1">
+                            <div
+                                class="h-12 w-12 rounded-full bg-emerald-100 flex items-center justify-center animate-pulse">
+                                <svg class="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                </svg>
+                            </div>
+                        </div>
+                        <div class="ml-5 flex-1 w-0">
+                            <!-- Header -->
+                            <div class="flex items-center justify-between">
+                                <h3 class="text-xl font-bold text-gray-900">New Vital Sign Recorded</h3>
+                                <p class="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-md"
+                                    x-text="notification.recorded_at"></p>
+                            </div>
+
+                            <!-- Source Info -->
+                            <p class="mt-1 text-sm text-gray-600">
+                                Source: <span class="font-semibold text-emerald-600"
+                                    x-text="notification.source || notification.gateway"></span>
+                            </p>
+
+                            <!-- Patient Info -->
+                            <div class="mt-4 bg-gray-50 rounded-lg p-3 border border-gray-100">
+                                <p class="text-lg font-bold text-gray-900" x-text="notification.patient_name"></p>
+                                <p class="text-sm text-gray-500" x-show="notification.patient_mrn"
+                                    x-text="'MRN: ' + notification.patient_mrn"></p>
+                            </div>
+
+                            <!-- Vitals Grid -->
+                            <div class="mt-4 grid grid-cols-2 gap-4">
+                                <div x-show="notification.systolic_bp"
+                                    class="bg-red-50 p-3 rounded-lg border border-red-100 text-center">
+                                    <span class="block text-xs uppercase text-red-600 font-bold tracking-wider">Blood
+                                        Pressure</span>
+                                    <span class="block text-2xl font-bold text-gray-900"
+                                        x-text="notification.systolic_bp + '/' + notification.diastolic_bp"></span>
+                                    <span class="text-xs text-gray-500">mmHg</span>
+                                </div>
+                                <div x-show="notification.pulse_rate"
+                                    class="bg-blue-50 p-3 rounded-lg border border-blue-100 text-center">
+                                    <span class="block text-xs uppercase text-blue-600 font-bold tracking-wider">Heart
+                                        Rate</span>
+                                    <span class="block text-2xl font-bold text-gray-900"
+                                        x-text="notification.pulse_rate"></span>
+                                    <span class="text-xs text-gray-500">bpm</span>
+                                </div>
+                                <div x-show="notification.spo2"
+                                    class="bg-green-50 p-3 rounded-lg border border-green-100 text-center">
+                                    <span
+                                        class="block text-xs uppercase text-green-600 font-bold tracking-wider">SpO2</span>
+                                    <span class="block text-2xl font-bold text-gray-900"
+                                        x-text="notification.spo2 + '%'"></span>
+                                    <span class="text-xs text-gray-500">Saturation</span>
+                                </div>
+                                <div x-show="notification.temperature"
+                                    class="bg-orange-50 p-3 rounded-lg border border-orange-100 text-center">
+                                    <span
+                                        class="block text-xs uppercase text-orange-600 font-bold tracking-wider">Temp</span>
+                                    <span class="block text-2xl font-bold text-gray-900"
+                                        x-text="notification.temperature + '°C'"></span>
+                                    <span class="text-xs text-gray-500">Celsius</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Footer / Actions -->
+                    <div class="mt-6 flex justify-end">
+                        <button type="button" @click="removeNotification(index)"
+                            class="inline-flex items-center rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 transition-all">
+                            Acknowledge
+                        </button>
                     </div>
                 </div>
-                <div class="ml-3 flex-1">
-                    <p class="text-sm font-bold text-gray-900">New Vital Sign</p>
-                    <p class="text-sm text-gray-700"
-                        x-text="notification.patient_name + ' (' + notification.gateway + ')'"></p>
-                    <div class="mt-1 text-xs text-gray-500 space-x-2">
-                        <span x-show="notification.systolic_bp"
-                            x-text="'BP: ' + notification.systolic_bp + '/' + notification.diastolic_bp"></span>
-                        <span x-show="notification.pulse_rate" x-text="'HR: ' + notification.pulse_rate"></span>
-                        <span x-show="notification.spo2" x-text="'SpO2: ' + notification.spo2 + '%'"></span>
-                    </div>
-                </div>
-                <button @click="removeNotification(index)" class="ml-2 text-gray-400 hover:text-gray-600">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
             </div>
         </div>
     </template>
@@ -940,9 +1034,9 @@
             osc2.frequency.value = 659; // E5
             osc2.type = 'sine';
             gain2.gain.setValueAtTime(0.4, now + 0.2);
-            gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+            gain2.gain.exponentialRampToValueAtTime(0.01, now + 1.2); // Longer decay
             osc2.start(now + 0.2);
-            osc2.stop(now + 0.6);
+            osc2.stop(now + 1.2);
         } catch (e) {
             console.log('Audio notification not available:', e);
         }
@@ -971,23 +1065,40 @@
     function vitalSignNotifications() {
         return {
             notifications: [],
-            lastCheck: new Date().toISOString(),
+            lastCheck: '{{ $serverTime ?? now()->toIso8601String() }}',
             pollInterval: null,
             seenIds: new Set(),
+            notificationsEnabled: true,
 
             init() {
-                // Start polling for new vital signs
+                // Load preference
+                this.notificationsEnabled = localStorage.getItem('vital_sign_notifications_enabled') !== 'false';
+                
+                // Start polling
                 this.startPolling();
+            },
+            
+            toggleNotifications() {
+                this.notificationsEnabled = !this.notificationsEnabled;
+                localStorage.setItem('vital_sign_notifications_enabled', this.notificationsEnabled);
+                
+                // Broadcast event to update button state
+                window.dispatchEvent(new CustomEvent('notification-toggled', { 
+                    detail: this.notificationsEnabled 
+                }));
             },
 
             startPolling() {
-                // Poll every 10 seconds
-                this.pollInterval = setInterval(() => this.checkForNewVitals(), 10000);
+                // Poll every 5 seconds (more frequent for "live" feel)
+                this.pollInterval = setInterval(() => this.checkForNewVitals(), 5000);
                 // Also check immediately
                 this.checkForNewVitals();
             },
 
             async checkForNewVitals() {
+                // Skip check if notifications are disabled
+                if (!this.notificationsEnabled) return;
+
                 try {
                     const response = await fetch(`{{ route('vital-signs.check-new') }}?since=${encodeURIComponent(this.lastCheck)}`);
                     const data = await response.json();
@@ -1010,29 +1121,22 @@
             },
 
             showNotification(vital) {
-                // Add to toast notifications
-                this.notifications.push(vital);
+                // Double check enabled state
+                if (!this.notificationsEnabled) return;
 
-                // Auto-remove after 10 seconds
-                setTimeout(() => {
-                    const index = this.notifications.findIndex(n => n.id === vital.id);
-                    if (index !== -1) {
-                        this.notifications.splice(index, 1);
-                    }
-                }, 10000);
+                // Add to notifications queue
+                this.notifications.push(vital);
 
                 // Play ding-dong notification sound
                 playDingDong();
-
+                
                 // Show browser notification if permitted
                 if ('Notification' in window && Notification.permission === 'granted') {
                     const bpText = vital.systolic_bp ? `BP: ${vital.systolic_bp}/${vital.diastolic_bp}` : '';
                     const hrText = vital.pulse_rate ? `HR: ${vital.pulse_rate}` : '';
-                    const spo2Text = vital.spo2 ? `SpO2: ${vital.spo2}%` : '';
-                    const tempText = vital.temperature ? `Temp: ${vital.temperature}°C` : '';
-
-                    new Notification(`New Vital Sign - ${vital.gateway}`, {
-                        body: `${vital.patient_name}\n${[bpText, hrText, spo2Text, tempText].filter(Boolean).join(' | ')}`,
+                    
+                    new Notification(`New Vital Sign - ${vital.source || vital.gateway}`, {
+                        body: `${vital.patient_name}\n${[bpText, hrText].filter(Boolean).join(' | ')}`,
                         icon: '/favicon.ico',
                         tag: `vital-${vital.id}`,
                     });

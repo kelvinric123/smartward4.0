@@ -83,6 +83,7 @@ class VitalSignController extends Controller
             'gateways' => $gateways,
             'nurses' => $nurses,
             'activeBindings' => $activeBindings,
+            'serverTime' => now()->toIso8601String(),
         ]);
     }
 
@@ -308,49 +309,49 @@ class VitalSignController extends Controller
     /**
      * Check for new vital signs from bound gateways (for browser notifications).
      */
+    /**
+     * Check for new vital signs (for browser notifications).
+     * Returns ANY new vital sign recorded after the 'since' timestamp.
+     */
     public function checkNewVitalSigns(Request $request)
     {
         $since = $request->input('since'); // ISO timestamp or seconds since epoch
-        $sinceTime = $since ? \Carbon\Carbon::parse($since) : now()->subMinutes(1);
+        $sinceTime = $since ? \Carbon\Carbon::parse($since) : now()->subSeconds(10);
 
-        // Get active gateway bindings
-        $activeBindings = \App\Models\GatewayNurseBinding::with(['apiUser', 'nurse'])
-            ->where('start_at', '<=', now())
-            ->where(function ($query) {
-                $query->whereNull('end_at')
-                    ->orWhere('end_at', '>=', now());
-            })
-            ->get();
-
-        if ($activeBindings->isEmpty()) {
-            return response()->json([
-                'success' => true,
-                'new_vitals' => [],
-                'count' => 0,
-                'timestamp' => now()->toIso8601String(),
-            ]);
-        }
-
-        // Get operator IDs from active bindings
-        $operatorIds = $activeBindings->pluck('nurse_id')->unique()->toArray();
-
-        // Get new vital signs from bound operators since the given time
-        $newVitals = VitalSign::with('patient')
-            ->whereIn('operator_id', $operatorIds)
+        // Get new vital signs recorded since the given time
+        $newVitals = VitalSign::with(['patient', 'operator', 'recordedBy'])
             ->where('recorded_at', '>', $sinceTime)
+            // prevent fetching future dated records that might be manually entered erroneously
+            ->where('recorded_at', '<=', now())
             ->orderBy('recorded_at', 'desc')
             ->limit(10)
             ->get()
-            ->map(function ($vital) use ($activeBindings) {
-                // Find the gateway name for this operator
-                $binding = $activeBindings->firstWhere('nurse_id', $vital->operator_id);
-                $gatewayName = $binding?->apiUser?->name ?? 'Gateway';
+            ->map(function ($vital) {
+                // Determine source name
+                $source = 'Manual';
+                if ($vital->operator) {
+                    // Try to find if this operator is currently bound to a gateway
+                    // This is just for display, not for filtering
+                    $binding = \App\Models\GatewayNurseBinding::with('apiUser')
+                        ->where('nurse_id', $vital->operator_id)
+                        ->where('start_at', '<=', $vital->recorded_at)
+                        ->where(function ($q) use ($vital) {
+                        $q->whereNull('end_at')
+                            ->orWhere('end_at', '>=', $vital->recorded_at);
+                    })
+                        ->first();
+
+                    $source = $binding ? $binding->apiUser->name : ($vital->operator->name . ' (Device)');
+                } elseif ($vital->recordedBy) {
+                    $source = $vital->recordedBy->name;
+                }
 
                 return [
                     'id' => $vital->id,
                     'patient_name' => $vital->patient->name ?? 'Unknown',
                     'patient_mrn' => $vital->patient->mrn ?? '',
-                    'gateway' => $gatewayName,
+                    'source' => $source, // Renamed from 'gateway' to 'source' to be more generic
+                    'gateway' => $source, // Keep 'gateway' for backward compatibility if needed temporarily
                     'systolic_bp' => $vital->systolic_bp,
                     'diastolic_bp' => $vital->diastolic_bp,
                     'pulse_rate' => $vital->pulse_rate,
