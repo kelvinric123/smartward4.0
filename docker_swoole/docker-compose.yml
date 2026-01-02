@@ -317,6 +317,8 @@ services:
     pull_policy: always # Auto-pull if not available or check for updates
     container_name: smartward4-seekink
     restart: unless-stopped
+    env_file:
+      - ../seekink/seekink.env
     ports:
       # Java Port (Web Admin Interface) - Using default 8080 for E-Ink devices
       - "${SEEKINK_JAVA_PORT:-8080}:8080"
