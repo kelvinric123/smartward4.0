@@ -332,8 +332,7 @@ services:
       SERVER_IP: "${SEEKINK_SERVER_IP:-192.168.0.1}"
       # Host Port - The external Java port (must match the mapped port)
       HOST_PORT: "${SEEKINK_HOST_PORT:-8080}"
-      # MQTT Enable - Set to 'true' only if base station supports MQTT
-      MQTT_ENABLE: "${SEEKINK_MQTT_ENABLE:-false}"
+      # MQTT Enable - Now read from env_file (MQTT_ENABLE variable)
     volumes:
       # Persist Seekink data and configurations
       - seekink_data:/data
