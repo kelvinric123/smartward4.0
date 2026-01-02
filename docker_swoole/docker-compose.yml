@@ -172,11 +172,11 @@ services:
     container_name: smartward4-ecg
     restart: unless-stopped
     ports:
-      - "${ECG_PORT:-8080}:8080"
+      - "${ECG_PORT:-8088}:8080"
     environment:
       # Server Configuration
       ECG_HOST: "0.0.0.0"
-      ECG_PORT: "8080"
+      ECG_PORT: "8088"
       ECG_USERNAME: "${ECG_USERNAME:-admin}"
       ECG_PASSWORD: "${ECG_PASSWORD:-admin123}"
       # Timezone
@@ -318,8 +318,8 @@ services:
     container_name: smartward4-seekink
     restart: unless-stopped
     ports:
-      # Java Port (Web Admin Interface) - Using 8088 since 8080 is used by ECG
-      - "${SEEKINK_JAVA_PORT:-8088}:8080"
+      # Java Port (Web Admin Interface) - Using default 8080 for E-Ink devices
+      - "${SEEKINK_JAVA_PORT:-8080}:8080"
       # TCP Port (Device Communication)
       - "${SEEKINK_TCP_PORT:-8003}:8003"
       # MQTT Port (Optional - for base stations supporting MQTT)
@@ -329,7 +329,7 @@ services:
       # Required for image updates to work correctly
       SERVER_IP: "${SEEKINK_SERVER_IP:-192.168.0.1}"
       # Host Port - The external Java port (must match the mapped port)
-      HOST_PORT: "${SEEKINK_HOST_PORT:-8088}"
+      HOST_PORT: "${SEEKINK_HOST_PORT:-8080}"
       # MQTT Enable - Set to 'true' only if base station supports MQTT
       MQTT_ENABLE: "${SEEKINK_MQTT_ENABLE:-false}"
     volumes:
