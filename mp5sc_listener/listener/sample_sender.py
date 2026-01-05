@@ -26,18 +26,46 @@ def get_config():
         'api_password': os.getenv('API_PASSWORD', ''),
     }
 
-def send_vital_signs(config, patient_id="100001", patient_name="Test Patient"):
+def send_vital_signs(config, patient_id="100001", patient_name="Test Patient", manual_input=False):
     """Send vital signs data to the API server"""
     try:
         api_url = f"{config['api_base_url']}/vital-signs"
         
-        # Generate random vital signs
-        bp_sys = random.randint(110, 140)
-        bp_dias = random.randint(70, 90)
-        heart_rate = random.randint(60, 100)
-        oxygen = round(random.uniform(95.0, 100.0), 1)
-        temperature = round(random.uniform(36.5, 37.5), 1)
-        resp_rate = random.randint(12, 20)
+        # Generate default random vital signs
+        default_bp_sys = random.randint(110, 140)
+        default_bp_dias = random.randint(70, 90)
+        default_heart_rate = random.randint(60, 100)
+        default_oxygen = round(random.uniform(95.0, 100.0), 1)
+        default_temperature = round(random.uniform(36.5, 37.5), 1)
+        default_resp_rate = random.randint(12, 20)
+        
+        if manual_input:
+            print("\nEnter vital signs (press Enter to use default random value):")
+            
+            bp_sys_input = input(f"  Blood Pressure Systolic [{default_bp_sys}]: ").strip()
+            bp_sys = int(bp_sys_input) if bp_sys_input else default_bp_sys
+            
+            bp_dias_input = input(f"  Blood Pressure Diastolic [{default_bp_dias}]: ").strip()
+            bp_dias = int(bp_dias_input) if bp_dias_input else default_bp_dias
+            
+            heart_rate_input = input(f"  Heart Rate [{default_heart_rate}]: ").strip()
+            heart_rate = int(heart_rate_input) if heart_rate_input else default_heart_rate
+            
+            oxygen_input = input(f"  SpO2 % [{default_oxygen}]: ").strip()
+            oxygen = float(oxygen_input) if oxygen_input else default_oxygen
+            
+            temperature_input = input(f"  Temperature °C [{default_temperature}]: ").strip()
+            temperature = float(temperature_input) if temperature_input else default_temperature
+            
+            resp_rate_input = input(f"  Respiratory Rate [{default_resp_rate}]: ").strip()
+            resp_rate = int(resp_rate_input) if resp_rate_input else default_resp_rate
+        else:
+            bp_sys = default_bp_sys
+            bp_dias = default_bp_dias
+            heart_rate = default_heart_rate
+            oxygen = default_oxygen
+            temperature = default_temperature
+            resp_rate = default_resp_rate
         
         timestamp = datetime.now()
         timestamp_str = timestamp.strftime('%Y-%m-%d %H:%M:%S')
@@ -103,5 +131,9 @@ if __name__ == "__main__":
     else:
         p_name = "Test Patient"
 
-    send_vital_signs(config, p_id, p_name)
+    # Ask if user wants to manually input vitals
+    manual_choice = input("Manually input vital signs? (y/N): ").strip().lower()
+    manual_input = manual_choice in ['y', 'yes']
+
+    send_vital_signs(config, p_id, p_name, manual_input=manual_input)
     print("\nDone.")
