@@ -256,9 +256,8 @@ def run_scheduler():
         schedule.run_pending()
         time.sleep(1)
 
-if __name__ == "__main__":
-    import sys
-    
+def initialize_app():
+    """Initialize the application - run scheduler and initial sync."""
     # Start scheduler in a background thread
     scheduler_thread = threading.Thread(target=run_scheduler)
     scheduler_thread.daemon = True
@@ -267,7 +266,15 @@ if __name__ == "__main__":
     # Run initial sync on startup
     print("Running initial sync on startup...")
     fetch_ldap_data()
+    print("LDAP service initialized successfully.", flush=True)
 
-    # Start Flask app
-    print("Starting Flask server on port 5000...", flush=True)
+# Initialize when module is imported (for Gunicorn)
+# Use a flag to ensure it only runs once even with multiple workers
+import os
+if os.environ.get('WERKZEUG_RUN_MAIN') != 'true':
+    initialize_app()
+
+if __name__ == "__main__":
+    # For development/testing - run with Flask dev server
+    print("Starting Flask development server on port 5000...", flush=True)
     app.run(host='0.0.0.0', port=5000)
