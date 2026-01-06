@@ -47,6 +47,8 @@ services:
     env_file:
       - docker.env
     ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
       - "${APP_PORT:-88}:88"
       - "${DB_PORT:-3307}:3306"
       - "${REDIS_PORT:-6380}:6379"
@@ -110,6 +112,10 @@ services:
       # Map host's CA certificates into the container
       - /usr/local/share/ca-certificates/IntermediateCA.crt:/usr/local/share/ca-certificates/IntermediateCA.crt:ro
       - /usr/local/share/ca-certificates/phklsmartward.crt:/usr/local/share/ca-certificates/phklsmartward.crt:ro
+      # SSL certificates for nginx (create these on host)
+      - /etc/ssl/smartward/phklsmartward.crt:/etc/nginx/ssl/phklsmartward.crt:ro
+      - /etc/ssl/smartward/phklsmartward.key:/etc/nginx/ssl/phklsmartward.key:ro
+      - /etc/ssl/smartward/IntermediateCA.crt:/etc/nginx/ssl/IntermediateCA.crt:ro
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:88/health" ]
       interval: 30s

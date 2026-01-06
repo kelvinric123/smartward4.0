@@ -29,6 +29,8 @@ RUN apk add --no-cache \
     mariadb-common \
     # Redis
     redis \
+    # Nginx for SSL termination
+    nginx \
     # Supervisor for process management
     supervisor \
     # Build dependencies
@@ -110,6 +112,8 @@ RUN mkdir -p \
     /var/log/redis \
     /var/log/supervisor \
     /var/run/supervisor \
+    /var/log/nginx \
+    /var/run/nginx \
     /app/storage/framework/sessions \
     /app/storage/framework/views \
     /app/storage/framework/cache \
@@ -131,7 +135,11 @@ COPY docker_swoole/conf/php-fpm.conf /usr/local/etc/php-fpm.d/www.conf
 COPY docker_swoole/conf/supervisord.conf /etc/supervisor/supervisord.conf
 COPY docker_swoole/conf/mysql.cnf /etc/my.cnf.d/mariadb-server.cnf
 COPY docker_swoole/conf/redis.conf /etc/redis.conf
+COPY docker_swoole/conf/nginx.conf /etc/nginx/nginx.conf
 COPY docker_swoole/scripts/entrypoint.sh /entrypoint.sh
+
+# Create SSL directory for certificates (will be mounted at runtime)
+RUN mkdir -p /etc/nginx/ssl
 
 # Make entrypoint executable
 RUN chmod +x /entrypoint.sh
@@ -240,8 +248,8 @@ RUN chown -R www:www /app \
 # Allow binding to privileged ports (port 88)
 RUN setcap 'cap_net_bind_service=+ep' /usr/local/bin/php || true
 
-# Expose ports
-EXPOSE 88 3306 6379
+# Expose ports (80/443 for nginx, 88 for Swoole internal, 3306 MySQL, 6379 Redis)
+EXPOSE 80 443 88 3306 6379
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
