@@ -434,33 +434,32 @@
                 }
             }
         }">
-            <div class="flex items-center space-x-4">
+            <!-- Left: Title and Ward Selector -->
+            <div class="flex items-center space-x-3">
                 <div>
                     <a href="{{ route('ward.dashboard', request()->query()) }}"
                         onclick="window.location.reload(); return false;" title="Click to refresh"
                         class="inline-flex items-center group">
                         <h2
-                            class="font-bold text-2xl text-gray-800 leading-tight group-hover:text-blue-600 transition-colors cursor-pointer">
+                            class="font-bold text-xl text-gray-800 leading-tight group-hover:text-blue-600 transition-colors cursor-pointer">
                             Ward Dashboard
                         </h2>
-                        <svg class="w-4 h-4 ml-2 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none"
+                        <svg class="w-4 h-4 ml-1 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none"
                             stroke="currentColor" viewBox="0 0 24 24" title="Refresh">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                     </a>
-                    <p class="text-sm text-gray-500 mt-1">Real-time bed and patient management <span
-                            class="text-xs text-gray-400">(click title to refresh)</span></p>
                 </div>
                 <!-- Ward Selector -->
                 <div class="relative">
                     <form method="GET" action="{{ route('ward.dashboard') }}">
                         <select name="ward_id" onchange="this.form.submit()"
-                            class="px-4 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-semibold text-gray-700">
+                            class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-semibold text-gray-700 text-sm">
                             @if(count($wards) > 0)
                                 @foreach($wards as $ward)
                                     <option value="{{ $ward->id }}" {{ request('ward_id') == $ward->id ? 'selected' : (empty(request('ward_id')) && $loop->first ? 'selected' : '') }}>
-                                        {{ $ward->ward_name }} - {{ $ward->specialties }}
+                                        {{ $ward->ward_name }}
                                     </option>
                                 @endforeach
                             @else
@@ -470,7 +469,75 @@
                     </form>
                 </div>
             </div>
-            <div class="flex items-center space-x-4">
+
+            <!-- Center: Section Tabs and Action Buttons -->
+            <div class="flex items-center space-x-2">
+                <!-- Section Tabs -->
+                <button onclick="clearBedFilters(); filterBySection(null)"
+                    class="px-3 py-1.5 bg-white text-gray-700 rounded-lg font-medium shadow-sm hover:bg-gray-50 border border-gray-300 text-sm">
+                    All
+                </button>
+                <button onclick="filterBySection(1)"
+                    class="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200 text-sm">
+                    Section 1
+                </button>
+                <button onclick="filterBySection(2)"
+                    class="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200 text-sm">
+                    Section 2
+                </button>
+                <button onclick="filterBySection(3)"
+                    class="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200 text-sm">
+                    Section 3
+                </button>
+                <button
+                    class="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200 flex items-center text-sm">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                    </svg>
+                    Map View
+                </button>
+
+                <!-- Separator -->
+                <div class="w-px h-6 bg-gray-300 mx-1"></div>
+
+                <!-- Action Buttons -->
+                <button onclick="window.dispatchEvent(new CustomEvent('open-notifications-modal'))"
+                    class="px-3 py-1.5 bg-yellow-500 text-white rounded-lg font-medium shadow hover:bg-yellow-600 flex items-center relative text-sm">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    Notifications
+                    @if(($notificationCount ?? 0) > 0)
+                        <span
+                            class="absolute -top-2 -right-2 bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                            {{ $notificationCount > 9 ? '9+' : $notificationCount }}
+                        </span>
+                    @endif
+                </button>
+                <button onclick="window.dispatchEvent(new CustomEvent('open-settings-modal'))"
+                    class="px-3 py-1.5 bg-gray-600 text-white rounded-lg font-medium shadow hover:bg-gray-700 flex items-center text-sm">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Settings
+                </button>
+                <button onclick="window.dispatchEvent(new CustomEvent('open-admission-logs-modal'))"
+                    class="px-3 py-1.5 bg-gray-700 text-white rounded-lg font-medium shadow hover:bg-gray-800 flex items-center text-sm">
+                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Admission Logs
+                </button>
+            </div>
+
+            <!-- Right: Date/Time and Fullscreen Toggle -->
+            <div class="flex items-center space-x-3">
                 <div class="text-sm text-gray-500">
                     {{ date('l, F j, Y \a\t g:i A') }}
                 </div>
@@ -601,72 +668,6 @@
     "
         :class="[customFullscreen ? fullscreenTextClass : '', customFullscreen ? fullscreenResolutionClass : '', customFullscreen ? 'h-[calc(100vh-80px)] overflow-hidden' : '']">
         <div class="mx-auto flex-1 flex flex-col overflow-hidden w-full" :class="customFullscreen ? 'px-2' : 'px-[5%]'">
-            <!-- Tabs and Action Buttons -->
-            <div class="flex-shrink-0 mb-4 flex items-center justify-between"
-                :class="customFullscreen ? 'mb-2' : 'mb-6'">
-                <div class="flex items-center space-x-2">
-                    <button onclick="clearBedFilters(); filterBySection(null)"
-                        class="px-4 py-2 bg-white text-gray-700 rounded-lg font-medium shadow-sm hover:bg-gray-50 border border-gray-300">
-                        All
-                    </button>
-                    <button onclick="filterBySection(1)"
-                        class="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200">
-                        Section 1
-                    </button>
-                    <button onclick="filterBySection(2)"
-                        class="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200">
-                        Section 2
-                    </button>
-                    <button onclick="filterBySection(3)"
-                        class="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200">
-                        Section 3
-                    </button>
-                    <button
-                        class="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200 flex items-center">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                        </svg>
-                        Map View
-                    </button>
-                </div>
-
-                <div class="flex items-center space-x-2">
-                    <button onclick="window.dispatchEvent(new CustomEvent('open-notifications-modal'))"
-                        class="px-4 py-2 bg-yellow-500 text-white rounded-lg font-medium shadow hover:bg-yellow-600 flex items-center relative">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                        </svg>
-                        Notifications
-                        @if(($notificationCount ?? 0) > 0)
-                            <span
-                                class="absolute -top-2 -right-2 bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                                {{ $notificationCount > 9 ? '9+' : $notificationCount }}
-                            </span>
-                        @endif
-                    </button>
-                    <button onclick="window.dispatchEvent(new CustomEvent('open-settings-modal'))"
-                        class="px-4 py-2 bg-gray-600 text-white rounded-lg font-medium shadow hover:bg-gray-700 flex items-center">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                        Settings
-                    </button>
-                    <button onclick="window.dispatchEvent(new CustomEvent('open-admission-logs-modal'))"
-                        class="px-4 py-2 bg-gray-700 text-white rounded-lg font-medium shadow hover:bg-gray-800 flex items-center">
-                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        Admission Logs
-                    </button>
-                </div>
-            </div>
-
             <!-- Beds Grid - scrollable area -->
             <div class="flex-1 overflow-y-auto pb-4" :class="customFullscreen ? 'pr-2' : ''">
                 <div class="grid gap-4"
