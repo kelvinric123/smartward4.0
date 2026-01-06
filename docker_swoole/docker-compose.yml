@@ -112,10 +112,10 @@ services:
       # Map host's CA certificates into the container
       - /usr/local/share/ca-certificates/IntermediateCA.crt:/usr/local/share/ca-certificates/IntermediateCA.crt:ro
       - /usr/local/share/ca-certificates/phklsmartward.crt:/usr/local/share/ca-certificates/phklsmartward.crt:ro
-      # SSL certificates for nginx (create these on host)
-      - /etc/ssl/smartward/phklsmartward.crt:/etc/nginx/ssl/phklsmartward.crt:ro
-      - /etc/ssl/smartward/phklsmartward.key:/etc/nginx/ssl/phklsmartward.key:ro
-      - /etc/ssl/smartward/IntermediateCA.crt:/etc/nginx/ssl/IntermediateCA.crt:ro
+      # SSL certificates for nginx HTTPS
+      - /usr/local/share/ca-certificates/phklsmartward.crt:/etc/nginx/ssl/phklsmartward.crt:ro
+      - /usr/local/share/ca-certificates/phklsmartward.key:/etc/nginx/ssl/phklsmartward.key:ro
+      - /usr/local/share/ca-certificates/IntermediateCA.crt:/etc/nginx/ssl/IntermediateCA.crt:ro
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:88/health" ]
       interval: 30s
