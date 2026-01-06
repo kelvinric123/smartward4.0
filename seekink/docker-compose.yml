@@ -6,13 +6,13 @@
 services:
   seekink-admin:
     image: q546877436/seekink-ubuntu:1.0.2
-    container_name: smartward4-seekink
+    container_name: seekink
     restart: unless-stopped
     env_file:
       - seekink.env
     ports:
-      # Java Port (Web Admin Interface) - Using 8088 since 8080 is in use
-      - "${SEEKINK_JAVA_PORT:-8088}:8080"
+      # Java Port (Web Admin Interface) - Port 8080 for E-Ink devices
+      - "${SEEKINK_JAVA_PORT:-8080}:8080"
       # TCP Port (Device Communication)
       - "${SEEKINK_TCP_PORT:-8003}:8003"
       # MQTT Port (Optional - for base stations supporting MQTT)
