@@ -110,12 +110,12 @@ services:
       # ECG files - shared with ECG container (Laravel reads from ecg/store)
       - ecg_data:/app/ecg/store:ro
       # Map host's CA certificates into the container
-      - /usr/local/share/ca-certificates/IntermediateCA.crt:/usr/local/share/ca-certificates/IntermediateCA.crt:ro
-      - /usr/local/share/ca-certificates/phklsmartward.crt:/usr/local/share/ca-certificates/phklsmartward.crt:ro
+      - ./conf/ssl/IntermediateCA.cer:/usr/local/share/ca-certificates/IntermediateCA.crt:ro
+      - ./conf/ssl/phklsmartward.cer:/usr/local/share/ca-certificates/phklsmartward.crt:ro
       # SSL certificates for nginx HTTPS
-      - /usr/local/share/ca-certificates/phklsmartward.crt:/etc/nginx/ssl/phklsmartward.crt:ro
-      - /etc/ssl/private/server_qmed.key:/etc/nginx/ssl/phklsmartward.key:ro
-      - /usr/local/share/ca-certificates/IntermediateCA.crt:/etc/nginx/ssl/IntermediateCA.crt:ro
+      - ./conf/ssl/phklsmartward.cer:/etc/nginx/ssl/phklsmartward.crt:ro
+      - ./conf/ssl/phklsmartward.key:/etc/nginx/ssl/phklsmartward.key:ro
+      - ./conf/ssl/IntermediateCA.cer:/etc/nginx/ssl/IntermediateCA.crt:ro
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:88/health" ]
       interval: 30s
