@@ -17,14 +17,8 @@ services:
       - "${SEEKINK_TCP_PORT:-8003}:8003"
       # MQTT Port (Optional - for base stations supporting MQTT)
       - "${SEEKINK_MQTT_PORT:-1883}:1883"
-    environment:
-      # Server IP - Replace with your public/external IP address
-      # Required for image updates to work correctly
-      SERVER_IP: "${SEEKINK_SERVER_IP:-192.168.0.1}"
-      # Host Port - The external Java port (must match the mapped port)
-      HOST_PORT: "${SEEKINK_HOST_PORT:-8088}"
-      # MQTT Enable - Set to 'true' only if base station supports MQTT
-      MQTT_ENABLE: "${SEEKINK_MQTT_ENABLE:-false}"
+    # Environment variables are loaded from seekink.env via env_file
+    # SERVER_IP, HOST_PORT, and MQTT_ENABLE are set there directly
     volumes:
       # Persist Seekink data and configurations
       - seekink_data:/data
