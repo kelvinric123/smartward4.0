@@ -776,6 +776,90 @@ class VitalSignIntegrationController extends Controller
             'message' => 'Device status updated',
         ]);
     }
+
+    /**
+     * API: Receive monitor status log (generic).
+     */
+    public function apiReceiveMonitorStatus(Request $request)
+    {
+        $startTime = microtime(true);
+
+        // Validate passphrase
+        $passphrase = $request->header('X-Passphrase');
+        $expectedPassphrase = config('services.vital_sign_api.passphrase', 'qmedno1');
+
+        if ($passphrase !== $expectedPassphrase) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid passphrase',
+            ], 401);
+        }
+
+        // Validate credentials and data
+        $validator = Validator::make($request->all(), [
+            'username' => 'required|string',
+            'password' => 'required|string',
+            'timestamp' => 'nullable|date',
+            'monitor_ip' => 'nullable|ip',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        // Authenticate API User
+        $apiUser = ApiUser::where('username', $request->username)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$apiUser || !$apiUser->verifyPassword($request->password)) {
+            // Log failed attempt but don't expose too much
+            $this->logApiRequest(
+                $apiUser ?? new ApiUser(['id' => null]), // Dummy user for log if not found
+                '/api/v1/monitor/status',
+                'POST',
+                $request->all(),
+                ['message' => 'Invalid credentials'],
+                401,
+                $startTime
+            );
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid credentials',
+            ], 401);
+        }
+
+        // Update device status if IP provided
+        if ($request->monitor_ip) {
+            $device = VitalSignMonitorDevice::where('ip_address', $request->monitor_ip)->first();
+            if ($device) {
+                $device->updateConnectionStatus('Online (Log Received)', true);
+            }
+        }
+
+        $responseData = [
+            'success' => true,
+            'message' => 'Monitor status received',
+        ];
+
+        // Log the request
+        $this->logApiRequest(
+            $apiUser,
+            '/api/v1/monitor/status',
+            'POST',
+            $request->all(),
+            $responseData,
+            200,
+            $startTime
+        );
+
+        return response()->json($responseData);
+    }
 }
 
 

@@ -249,6 +249,9 @@ Route::prefix('api/v1')->group(function () {
     // Monitor devices list for mp5sc listener
     Route::get('/monitor-devices', [VitalSignIntegrationController::class, 'apiGetDevices']);
     Route::post('/monitor-devices/{device}/status', [VitalSignIntegrationController::class, 'apiUpdateDeviceStatus']);
+
+    // Monitor status log endpoint
+    Route::post('/monitor/status', [VitalSignIntegrationController::class, 'apiReceiveMonitorStatus']);
 });
 
 require __DIR__ . '/auth.php';
