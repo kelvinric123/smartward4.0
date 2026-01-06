@@ -93,6 +93,8 @@ services:
       # ADT HL7 Listener (Docker service name for inter-container communication)
       ADT_HOST: "adt"
       ADT_PORT: "3000"
+      # Extra CA certificates for Node.js
+      NODE_EXTRA_CA_CERTS: "/usr/local/share/ca-certificates/IntermediateCA.crt"
     depends_on:
       - adt
       - ecg
@@ -105,6 +107,9 @@ services:
       - smartward_logs:/var/log
       # ECG files - shared with ECG container (Laravel reads from ecg/store)
       - ecg_data:/app/ecg/store:ro
+      # Map host's CA certificates into the container
+      - /usr/local/share/ca-certificates/IntermediateCA.crt:/usr/local/share/ca-certificates/IntermediateCA.crt:ro
+      - /usr/local/share/ca-certificates/phklsmartward.crt:/usr/local/share/ca-certificates/phklsmartward.crt:ro
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:88/health" ]
       interval: 30s
