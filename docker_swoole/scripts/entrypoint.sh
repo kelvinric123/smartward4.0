@@ -107,6 +107,28 @@ init_redis() {
 }
 
 # =============================================================================
+# Initialize Nginx
+# =============================================================================
+init_nginx() {
+    log_info "Initializing Nginx directories..."
+    
+    # Ensure log directory exists (in case /var/log is mounted as volume)
+    mkdir -p /var/log/nginx
+    chown -R www:www /var/log/nginx
+    chmod 755 /var/log/nginx
+    
+    # Ensure run directory exists
+    mkdir -p /var/run/nginx
+    chown -R www:www /var/run/nginx
+    
+    # Ensure cache/lib directories exist
+    mkdir -p /var/lib/nginx/logs
+    chown -R www:www /var/lib/nginx
+    
+    log_info "Nginx directories initialized"
+}
+
+# =============================================================================
 # Wait for service to be ready
 # =============================================================================
 wait_for_service() {
@@ -350,6 +372,7 @@ main() {
     # Initialize services
     init_mysql
     init_redis
+    init_nginx
     
     # Clean up any stale pid/socket files before starting services
     rm -f /var/run/mysqld/mysqld.pid /var/run/mysqld/mysqld.sock 2>/dev/null || true
