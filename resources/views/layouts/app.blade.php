@@ -32,7 +32,7 @@
             <!-- Page Heading -->
             @isset($header)
                 <header class="bg-white/80 backdrop-blur-sm shadow-sm border-b border-blue-100">
-                    <div class="w-full px-4 sm:px-6 lg:px-8 py-6">
+                    <div class="w-full px-4 sm:px-6 lg:px-8 py-4">
                         {{ $header }}
                     </div>
                 </header>
@@ -44,8 +44,8 @@
             </main>
 
             <!-- Footer -->
-            <footer x-show="!hideFooter" x-transition
-                class="bg-white/60 backdrop-blur-sm border-t border-blue-100 py-4">
+            <footer x-show="!hideFooter" x-transition class="bg-white/60 backdrop-blur-sm border-t border-blue-100 py-4"
+                :class="hideNav ? 'fixed bottom-0 left-0 right-0 z-50' : ''">
                 <div class="w-full px-4 sm:px-6 lg:px-8">
                     <div class="flex items-center justify-between">
                         <div class="text-sm text-gray-600">

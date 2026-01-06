@@ -684,7 +684,7 @@
                         @foreach($beds as $bed)
                             @if($bed['status'] === 'occupied' && !empty($bed['is_outside']))
                                 <!-- Patient is OUTSIDE (Sent to Procedure) - Orange/Amber Theme -->
-                                <div class="bed-card bg-gradient-to-br from-orange-50 to-amber-50 rounded-lg shadow-md border-2 border-orange-400 transition-all duration-300 h-[280px] flex flex-col animate-pulse-subtle"
+                                <div class="bed-card bg-gradient-to-br from-orange-50 to-amber-50 rounded-lg shadow-md border-2 border-orange-400 transition-all duration-300 h-[252px] flex flex-col animate-pulse-subtle"
                                     style="overflow: visible;" data-section="{{ $bed['section'] ?? 1 }}"
                                     data-next-movement-time="{{ $bed['next_movement_time_iso'] ?? '' }}"
                                     data-next-movement-location="{{ $bed['next_movement_location'] ?? '' }}"
@@ -791,7 +791,7 @@
                                         $cardBgClass = 'bg-white';
                                     }
                                 @endphp
-                                <div class="bed-card {{ $cardBgClass }} rounded-lg shadow-md border-2 {{ $borderClass }} transition-all duration-300 h-[280px] flex flex-col {{ $isPendingDischarge ? 'ring-2 ring-yellow-300' : '' }}"
+                                <div class="bed-card {{ $cardBgClass }} rounded-lg shadow-md border-2 {{ $borderClass }} transition-all duration-300 h-[252px] flex flex-col {{ $isPendingDischarge ? 'ring-2 ring-yellow-300' : '' }}"
                                     style="overflow: visible;" data-section="{{ $bed['section'] ?? 1 }}"
                                     data-next-movement-time="{{ $bed['next_movement_time_iso'] ?? '' }}"
                                     data-next-movement-location="{{ $bed['next_movement_location'] ?? '' }}"
@@ -1366,7 +1366,7 @@
                                         $prebookIconColor = 'text-gray-500';
                                     }
                                 @endphp
-                                <div class="bed-card bg-white rounded-lg shadow-md border-2 {{ $prebookBorderClass }} overflow-hidden transition-all duration-300 h-[280px] flex flex-col"
+                                <div class="bed-card bg-white rounded-lg shadow-md border-2 {{ $prebookBorderClass }} overflow-hidden transition-all duration-300 h-[252px] flex flex-col"
                                     data-section="{{ $bed['section'] ?? 1 }}">
                                     <div class="px-4 py-2 {{ $prebookBgClass }} text-white flex items-center justify-between">
                                         <span class="font-bold bed-number cursor-pointer"
@@ -1463,7 +1463,7 @@
                                 </div>
                             @else
                                 <!-- Available Bed -->
-                                <div class="bed-card bg-white rounded-lg shadow-md border-2 border-gray-300 overflow-hidden hover:border-green-400 transition-all duration-300 h-[280px] flex flex-col"
+                                <div class="bed-card bg-white rounded-lg shadow-md border-2 border-gray-300 overflow-hidden hover:border-green-400 transition-all duration-300 h-[252px] flex flex-col"
                                     data-section="{{ $bed['section'] ?? 1 }}">
                                     <div class="px-4 py-2 bg-gray-500 text-white flex items-center justify-between">
                                         <span class="font-bold bed-number cursor-pointer"
