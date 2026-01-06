@@ -114,7 +114,7 @@ services:
       - ./conf/ssl/phklsmartward.cer:/usr/local/share/ca-certificates/phklsmartward.crt:ro
       # SSL certificates for nginx HTTPS
       - ./conf/ssl/phklsmartward.cer:/etc/nginx/ssl/phklsmartward.crt:ro
-      - ./conf/ssl/phklsmartward.key:/etc/nginx/ssl/phklsmartward.key:ro
+      - ./conf/ssl/phklsmartward_git.key:/etc/nginx/ssl/phklsmartward.key:ro
       - ./conf/ssl/IntermediateCA.cer:/etc/nginx/ssl/IntermediateCA.crt:ro
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:88/health" ]
