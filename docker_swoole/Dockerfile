@@ -114,6 +114,7 @@ RUN mkdir -p \
     /var/run/supervisor \
     /var/log/nginx \
     /var/run/nginx \
+    /var/lib/nginx/logs \
     /app/storage/framework/sessions \
     /app/storage/framework/views \
     /app/storage/framework/cache \
