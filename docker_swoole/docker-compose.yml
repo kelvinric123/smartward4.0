@@ -113,7 +113,7 @@ services:
       - ./conf/ssl/IntermediateCA.cer:/usr/local/share/ca-certificates/IntermediateCA.crt:ro
       - ./conf/ssl/phklsmartward.cer:/usr/local/share/ca-certificates/phklsmartward.crt:ro
       # SSL certificates for nginx HTTPS
-      - ./conf/ssl/phklsmartward.cer:/etc/nginx/ssl/phklsmartward.crt:ro
+      - ./conf/ssl/phklsmartward_bundle.crt:/etc/nginx/ssl/phklsmartward.crt:ro
       - ./conf/ssl/phklsmartward_git.key:/etc/nginx/ssl/phklsmartward.key:ro
       - ./conf/ssl/IntermediateCA.cer:/etc/nginx/ssl/IntermediateCA.crt:ro
     healthcheck:
@@ -324,7 +324,6 @@ services:
         max-size: "50m"
         max-file: "5"
         tag: "smartward4-bbraun"
-
   # NOTE: Seekink E-Ink Display is managed separately from ./seekink/docker-compose.yml
   # Run: cd seekink && docker compose up -d
 
