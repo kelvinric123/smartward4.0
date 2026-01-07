@@ -113,8 +113,8 @@ services:
       - ./conf/ssl/IntermediateCA_converted.crt:/usr/local/share/ca-certificates/IntermediateCA.crt:ro
       - ./conf/ssl/phklsmartward.cer:/usr/local/share/ca-certificates/phklsmartward.crt:ro
       # SSL certificates for nginx HTTPS
-      - ./conf/ssl/phklsmartward_bundle.crt:/etc/nginx/ssl/phklsmartward_bundle.crt:ro
-      - ./conf/ssl/phklsmartward.key:/etc/nginx/ssl/phklsmartward.key:ro
+      - ./conf/ssl2/phklsmartward.crt:/etc/nginx/ssl/phklsmartward_bundle.crt:ro
+      - ./conf/ssl2/phklsmartward.key:/etc/nginx/ssl/phklsmartward.key:ro
       - ./conf/ssl/IntermediateCA_converted.crt:/etc/nginx/ssl/IntermediateCA.crt:ro
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:88/health" ]
@@ -135,6 +135,8 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    extra_hosts:
+      - "phklsmartward.ppl.ihh.com:${PHKL_RESOLVE_IP:-127.0.0.1}"
 
   # HL7 ADT Listener Container
   adt:
@@ -285,10 +287,9 @@ services:
       # Listener Configuration
       BBRAUN_HOST: "0.0.0.0"
       BBRAUN_PORT: "5001"
-      # Database Configuration (connects via host to exposed MySQL port)
-      # MySQL is internal to smartward container, so we connect via host gateway
-      DB_HOST: "host.docker.internal"
-      DB_PORT: "3307"
+      # Database Configuration (connects directly to smartward container on internal network)
+      DB_HOST: "smartward"
+      DB_PORT: "3306"
       DB_NAME: "${DB_DATABASE:-smartward}"
       DB_USER: "${DB_USERNAME:-root}"
       DB_PASSWORD: "${DB_PASSWORD:-smartward_secret}"
