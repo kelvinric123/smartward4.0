@@ -129,6 +129,19 @@ init_nginx() {
 }
 
 # =============================================================================
+# Initialize CA Certificates
+# =============================================================================
+init_ca_certificates() {
+    log_info "Updating CA certificates..."
+    
+    # Check if we have any mounted certificates
+    if [ -d "/usr/local/share/ca-certificates" ]; then
+        update-ca-certificates 2>/dev/null || true
+        log_info "CA certificates updated"
+    fi
+}
+
+# =============================================================================
 # Wait for service to be ready
 # =============================================================================
 wait_for_service() {
@@ -370,6 +383,7 @@ main() {
     log_info "=========================================="
     
     # Initialize services
+    init_ca_certificates
     init_mysql
     init_redis
     init_nginx
