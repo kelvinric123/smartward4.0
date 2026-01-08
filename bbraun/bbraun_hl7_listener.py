@@ -11,6 +11,7 @@ import sys
 import os
 import json
 import mysql.connector
+import time
 from datetime import datetime
 from typing import Optional, Tuple, List, Dict, Any
 import threading
@@ -245,24 +246,32 @@ class DatabaseManager:
     def __init__(self, logger: HL7Logger):
         self.logger = logger
         self.connection = None
-        self.connect()
+        self.connect(retries=5)
     
-    def connect(self):
+    def connect(self, retries: int = 1):
         """Connect to the database"""
-        try:
-            self.connection = mysql.connector.connect(
-                host=DB_HOST,
-                port=DB_PORT,
-                database=DB_NAME,
-                user=DB_USER,
-                password=DB_PASSWORD,
-                autocommit=True
-            )
-            self.logger.info(f"Connected to MySQL database: {DB_NAME}@{DB_HOST}")
-        except Exception as e:
-            self.logger.warning(f"Could not connect to MySQL: {str(e)}")
-            self.logger.info("Messages will be logged to files only")
-            self.connection = None
+        attempt = 0
+        while attempt < retries:
+            try:
+                self.connection = mysql.connector.connect(
+                    host=DB_HOST,
+                    port=DB_PORT,
+                    database=DB_NAME,
+                    user=DB_USER,
+                    password=DB_PASSWORD,
+                    autocommit=True
+                )
+                self.logger.info(f"Connected to MySQL database: {DB_NAME}@{DB_HOST}")
+                return
+            except Exception as e:
+                attempt += 1
+                if attempt < retries:
+                    self.logger.warning(f"Could not connect to MySQL (Attempt {attempt}/{retries}): {str(e)}")
+                    time.sleep(2)
+                else:
+                    self.logger.warning(f"Could not connect to MySQL after {retries} attempts: {str(e)}")
+                    self.logger.info("Messages will be logged to files only until database becomes available")
+                    self.connection = None
     
     def ensure_connection(self):
         """Ensure database connection is alive"""
@@ -274,11 +283,12 @@ class DatabaseManager:
     def log_message(self, parsed_data: dict, raw_message: str, source_ip: str, 
                    status: str = 'received', error_message: str = None) -> Optional[int]:
         """Log HL7 message to database"""
+        self.ensure_connection()
+        
         if self.connection is None:
             return None
         
         try:
-            self.ensure_connection()
             cursor = self.connection.cursor()
             
             msh = parsed_data.get('msh', {})
