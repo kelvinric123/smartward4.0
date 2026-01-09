@@ -111,7 +111,7 @@ services:
       - ecg_data:/app/ecg/store:ro
       # Map host's CA certificates into the container
       - ./conf/ssl/IntermediateCA_converted.crt:/usr/local/share/ca-certificates/IntermediateCA.crt:ro
-      - ./conf/ssl/phklsmartward.cer:/usr/local/share/ca-certificates/phklsmartward.crt:ro
+      - ./conf/ssl2/phklsmartward.crt:/usr/local/share/ca-certificates/phklsmartward.crt:ro
       # SSL certificates for nginx HTTPS
       - ./conf/ssl2/phklsmartward.crt:/etc/nginx/ssl/phklsmartward_bundle.crt:ro
       - ./conf/ssl2/phklsmartward.key:/etc/nginx/ssl/phklsmartward.key:ro
