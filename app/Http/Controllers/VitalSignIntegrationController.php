@@ -843,8 +843,7 @@ class VitalSignIntegrationController extends Controller
         }
 
         $responseData = [
-            'success' => true,
-            'message' => 'Monitor status received',
+            'status' => 'success',
         ];
 
         // Log the request
