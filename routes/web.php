@@ -31,6 +31,9 @@ Route::get('/', function () {
 Route::get('/login/ldap', [LdapConfigurationController::class, 'showLdapLogin'])->name('login.ldap');
 Route::post('/login/ldap', [LdapConfigurationController::class, 'ldapLogin'])->name('login.ldap.submit');
 
+// Public ECG PDF Route (for PDF viewer in iframes - authentication handled by signed URL or session)
+Route::get('/ecg/pdf/view', [EcgController::class, 'servePdf'])->name('ecg.pdf.public');
+
 Route::get('/dashboard', function () {
     return view('dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');

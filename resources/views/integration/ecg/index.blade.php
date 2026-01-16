@@ -348,7 +348,7 @@ python http_server.py</pre>
                                             <td class="px-4 py-3">
                                                 <div class="flex items-center space-x-2">
                                                     @if($ecg['has_pdf'])
-                                                        <a href="{{ route('ecg.pdf', ['file' => $ecg['pdf_file']]) }}" 
+                                                        <a href="{{ route('ecg.pdf.public', ['file' => $ecg['pdf_file']]) }}" 
                                                            target="_blank"
                                                            class="inline-flex items-center px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded text-xs font-medium transition-colors">
                                                             <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">

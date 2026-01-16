@@ -780,7 +780,7 @@ class ECGUploadHandler(BaseHTTPRequestHandler):
                     <div class="info-grid">
                         <div class="info-item">
                             <span class="info-label">Server URL</span>
-                            <span class="info-value"><code>http://localhost:8080/</code></span>
+                            <span class="info-value"><code>http://localhost:{ECG_PORT}/</code></span>
                         </div>
                         <div class="info-item">
                             <span class="info-label">Authentication</span>

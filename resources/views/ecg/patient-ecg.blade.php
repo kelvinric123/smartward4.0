@@ -168,7 +168,7 @@
                     <!-- PDF Container -->
                     <div id="ecgViewer" class="flex-1 bg-gray-50">
                         @if($latestEcg && $latestEcg['has_pdf'])
-                            <iframe id="pdfFrame" src="{{ route('ecg.pdf', ['file' => $latestEcg['pdf_file']]) }}"
+                            <iframe id="pdfFrame" src="{{ route('ecg.pdf.public', ['file' => $latestEcg['pdf_file']]) }}"
                                 class="w-full h-full pdf-viewer" title="ECG PDF Viewer"></iframe>
                         @else
                             <div id="noPdfMessage" class="flex items-center justify-center h-full">
@@ -224,7 +224,7 @@
     </div>
 
     <script>
-        let currentPdfUrl = '{{ $latestEcg && $latestEcg["has_pdf"] ? route("ecg.pdf", ["file" => $latestEcg["pdf_file"]]) : "" }}';
+        let currentPdfUrl = '{{ $latestEcg && $latestEcg["has_pdf"] ? route("ecg.pdf.public", ["file" => $latestEcg["pdf_file"]]) : "" }}';
         let currentEcgDate = '{{ $latestEcg && $latestEcg["recorded_at"] ? \Carbon\Carbon::parse($latestEcg["recorded_at"])->format("d M Y H:i") : "" }}';
         let isFullscreen = false;
 
@@ -250,7 +250,7 @@
             dateSpan.textContent = currentEcgDate;
 
             if (hasPdf && pdfFile) {
-                currentPdfUrl = '{{ route("ecg.pdf") }}?file=' + encodeURIComponent(pdfFile);
+                currentPdfUrl = '{{ route("ecg.pdf.public") }}?file=' + encodeURIComponent(pdfFile);
                 viewer.innerHTML = `<iframe id="pdfFrame" src="${currentPdfUrl}" class="w-full h-full pdf-viewer" title="ECG PDF Viewer"></iframe>`;
                 enlargeBtn.classList.remove('hidden');
             } else {

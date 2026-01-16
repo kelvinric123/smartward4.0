@@ -377,6 +377,7 @@ class VitalSignIntegrationController extends Controller
 
         $responseData = [
             'success' => true,
+            'ack' => true,  // Explicit ACK for machines to confirm receipt
             'message' => "Processed {$successCount} readings successfully, {$failCount} failed",
             'data' => [
                 'success_count' => $successCount,
@@ -520,6 +521,7 @@ class VitalSignIntegrationController extends Controller
 
         $responseData = [
             'success' => true,
+            'ack' => true,  // Explicit ACK for machines to confirm receipt
             'message' => 'Vital sign recorded successfully',
             'data' => [
                 'vital_sign_id' => $vitalSign->id,

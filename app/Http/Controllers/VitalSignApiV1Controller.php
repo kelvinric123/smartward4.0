@@ -198,6 +198,7 @@ class VitalSignApiV1Controller extends Controller
 
             $responseData = [
                 'success' => true,
+                'ack' => true,  // Explicit ACK for machines to confirm receipt
                 'message' => 'Vital sign recorded successfully',
                 'data' => [
                     'vital_sign_id' => $vitalSign->id,
