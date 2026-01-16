@@ -116,6 +116,8 @@ services:
       - ./conf/ssl_linux/phklsmartward.cer:/etc/nginx/ssl/phklsmartward_bundle.crt:ro
       - ./conf/ssl_linux/phklsmartward.key:/etc/nginx/ssl/phklsmartward.key:ro
       - ./conf/ssl_linux/phklsmartward.cer:/etc/nginx/ssl/IntermediateCA.crt:ro
+      # Mount Nginx config for easier updates
+      - ./conf/nginx.conf:/etc/nginx/nginx.conf:ro
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:88/health" ]
       interval: 30s
