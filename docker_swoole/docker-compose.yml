@@ -185,11 +185,11 @@ services:
     container_name: smartward4-ecg
     restart: unless-stopped
     ports:
-      - "${ECG_PORT:-8088}:8080"
+      - "${ECG_PORT:-3050}:3050"
     environment:
       # Server Configuration
       ECG_HOST: "0.0.0.0"
-      ECG_PORT: "8088"
+      ECG_PORT: "3050"
       ECG_USERNAME: "${ECG_USERNAME:-admin}"
       ECG_PASSWORD: "${ECG_PASSWORD:-admin123}"
       # Timezone
@@ -202,7 +202,7 @@ services:
       - ecg_store:/app/ecg/store
       - ecg_logs:/app/ecg/logs
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8080/" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:3050/" ]
       interval: 30s
       timeout: 10s
       retries: 3

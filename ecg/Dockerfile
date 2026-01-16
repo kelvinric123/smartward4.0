@@ -34,17 +34,17 @@ RUN mkdir -p ftp_data store logs \
 
 # Environment variables (can be overridden in docker-compose)
 ENV ECG_HOST=0.0.0.0
-ENV ECG_PORT=8080
+ENV ECG_PORT=3050
 ENV ECG_USERNAME=admin
 ENV ECG_PASSWORD=admin123
 ENV PYTHONUNBUFFERED=1
 
 # Expose HTTP port
-EXPOSE 8080
+EXPOSE 3050
 
 # Health check - verify the HTTP server is running
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8080/ || exit 1
+    CMD curl -f http://localhost:3050/ || exit 1
 
 # Run the HTTP server with unbuffered output for real-time logs
 CMD ["python", "-u", "http_server.py"]
