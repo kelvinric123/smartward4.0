@@ -19,6 +19,7 @@ class User extends Authenticatable
     public const ROLE_NURSE_HEAD = 'nurse_head';
     public const ROLE_WARD_DASHBOARD = 'ward_dashboard';
     public const ROLE_IT_ADMIN = 'it_admin';
+    public const ROLE_NURSE = 'nurse';
 
     public static function getRoles(): array
     {
@@ -28,6 +29,7 @@ class User extends Authenticatable
             self::ROLE_NURSE_HEAD => 'Nurse Head',
             self::ROLE_WARD_DASHBOARD => 'Ward Dashboard Login',
             self::ROLE_IT_ADMIN => 'IT Admin',
+            self::ROLE_NURSE => 'Nurse',
         ];
     }
 

@@ -15,52 +15,54 @@
                     Rows: Bed → Shift (AM / PM / ON)
                 </span>
 
-                @if(isset($individualMode) && $individualMode)
-                    <a href="{{ route('ward.schedule') }}"
+                @if(!($isLockedToNurse ?? false))
+                    @if(isset($individualMode) && $individualMode)
+                        <a href="{{ route('ward.schedule') }}"
+                            class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl font-semibold shadow-sm transition-all text-sm">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                            View All Staff
+                        </a>
+                    @else
+                        <a href="{{ route('ward.schedule.individual') }}"
+                            class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl font-semibold shadow-sm transition-all text-sm">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            View Individual
+                        </a>
+                    @endif
+
+                    <button type="button" onclick="openDownloadModal()"
                         class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl font-semibold shadow-sm transition-all text-sm">
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
-                        View All Staff
-                    </a>
-                @else
-                    <a href="{{ route('ward.schedule.individual') }}"
+                        Template
+                    </button>
+
+                    <button type="button" onclick="openUploadModal()"
                         class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl font-semibold shadow-sm transition-all text-sm">
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                         </svg>
-                        View Individual
-                    </a>
+                        Upload
+                    </button>
+
+                    <button type="button" onclick="openShiftSettings()"
+                        class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-xl font-semibold shadow-sm transition-all text-sm">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Shift Setting
+                    </button>
                 @endif
-
-                <button type="button" onclick="openDownloadModal()"
-                    class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl font-semibold shadow-sm transition-all text-sm">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Template
-                </button>
-
-                <button type="button" onclick="openUploadModal()"
-                    class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl font-semibold shadow-sm transition-all text-sm">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    Upload
-                </button>
-
-                <button type="button" onclick="openShiftSettings()"
-                    class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-xl font-semibold shadow-sm transition-all text-sm">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Shift Setting
-                </button>
             </div>
         </div>
     </x-slot>
@@ -186,43 +188,57 @@
                             @if(isset($individualMode) && $individualMode)
                                 <label for="nurse_id" class="block text-sm font-semibold text-gray-700 mb-2">Select
                                     Nurse</label>
-                                <select id="nurse_id" name="nurse_id"
-                                    class="w-full rounded-xl border-gray-200 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                                    @change="submitFilters()">
-                                    <option value="">-- All Assignments --</option>
-                                    @forelse($nurses as $nurse)
-                                        <option value="{{ $nurse->id }}" {{ (isset($selectedNurseId) && $selectedNurseId == $nurse->id) ? 'selected' : '' }}>
-                                            {{ $nurse->name }}
-                                        </option>
-                                    @empty
-                                        <option disabled>No nurses found</option>
-                                    @endforelse
-                                </select>
+                                @if($isLockedToNurse ?? false)
+                                    <div
+                                        class="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700 shadow-sm">
+                                        {{ $nurses->firstWhere('id', $selectedNurseId)->name ?? 'Unknown' }}
+                                    </div>
+                                    <input type="hidden" name="nurse_id" value="{{ $selectedNurseId }}">
+                                @else
+                                    <select id="nurse_id" name="nurse_id"
+                                        class="w-full rounded-xl border-gray-200 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                                        @change="submitFilters()">
+                                        <option value="">-- All Assignments --</option>
+                                        @forelse($nurses as $nurse)
+                                            <option value="{{ $nurse->id }}" {{ (isset($selectedNurseId) && $selectedNurseId == $nurse->id) ? 'selected' : '' }}>
+                                                {{ $nurse->name }}
+                                            </option>
+                                        @empty
+                                            <option disabled>No nurses found</option>
+                                        @endforelse
+                                    </select>
+                                @endif
                             @endif
                         </div>
                     </form>
 
                     <div
                         class="flex items-center justify-between gap-3 sticky top-0 z-30 bg-white/95 backdrop-blur px-4 py-3 -mx-4 border border-blue-100 rounded-xl">
-                        <div class="flex items-center gap-2">
-                            <span
-                                class="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-100">
-                                Selected shifts: <span x-text="selected.length"></span>
-                            </span>
-                            <button type="button" class="text-xs text-gray-500 hover:text-gray-700 underline"
-                                @click="clearSelection()" x-show="selected.length">Clear</button>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <button type="button" @click="assignModal = true" :disabled="!selected.length"
-                                class="inline-flex items-center px-4 py-2 rounded-lg font-semibold shadow-sm transition-all"
-                                :class="selected.length ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'">
-                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                </svg>
-                                Assign Nurses
-                            </button>
-                        </div>
+                        @if(!($isLockedToNurse ?? false))
+                            <div class="flex items-center gap-2">
+                                <span
+                                    class="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-100">
+                                    Selected shifts: <span x-text="selected.length"></span>
+                                </span>
+                                <button type="button" class="text-xs text-gray-500 hover:text-gray-700 underline"
+                                    @click="clearSelection()" x-show="selected.length">Clear</button>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" @click="assignModal = true" :disabled="!selected.length"
+                                    class="inline-flex items-center px-4 py-2 rounded-lg font-semibold shadow-sm transition-all"
+                                    :class="selected.length ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                    </svg>
+                                    Assign Nurses
+                                </button>
+                            </div>
+                        @else
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-semibold text-gray-700">Schedule View</span>
+                            </div>
+                        @endif
                     </div>
 
                     <div class="mt-4">
@@ -331,10 +347,11 @@
                                                             $cellKey = $bed->id . '|' . $date->toDateString() . '|' . $shift;
                                                         @endphp
                                                         <td class="px-6 py-4">
-                                                            <button type="button"
+                                                            <button type="button" @if(!($isLockedToNurse ?? false))
                                                                 @click="toggle({ key: '{{ $cellKey }}', bed_id: {{ $bed->id }}, bed: @js($bed->bed_display_name ?? 'Bed ' . $bed->bed_number), shift: '{{ $shift }}', date: '{{ $date->toDateString() }}' })"
+                                                            @else disabled @endif
                                                                 :class="isSelected('{{ $cellKey }}') ? 'ring-2 ring-offset-2 ring-green-400' : ''"
-                                                                class="w-full text-left">
+                                                                class="w-full text-left {{ ($isLockedToNurse ?? false) ? 'cursor-default' : '' }}">
                                                                 <div
                                                                     class="rounded-lg border {{ $isSelectedDate ? 'border-green-200 bg-green-50' : 'border-gray-100 bg-white' }} p-3 hover:border-blue-200 hover:bg-blue-50 transition-colors">
                                                                     <div class="flex items-center justify-between">

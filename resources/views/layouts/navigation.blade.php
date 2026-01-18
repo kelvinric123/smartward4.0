@@ -45,7 +45,7 @@
     <!-- Navigation Links -->
     <div class="flex-1 px-2 py-4 space-y-2 overflow-y-auto">
         <!-- Dashboard -->
-        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD))
+        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE))
             <a href="{{ route('dashboard') }}"
                 class="flex items-center px-3 py-2.5 rounded-lg text-white transition-all {{ request()->routeIs('dashboard') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -58,7 +58,7 @@
 
 
         <!-- Patient Section -->
-        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD))
+        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE))
             <div class="pt-2">
                 <button @click="toggleSection('patient')"
                     class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10">
@@ -91,7 +91,7 @@
 
 
         <!-- Admin Management Section -->
-        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD))
+        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE))
             <div class="pt-2">
                 <button @click="toggleSection('admin')"
                     class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10">
@@ -200,7 +200,7 @@
 
 
         <!-- Ward Management Section -->
-        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD))
+        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE))
             <div class="pt-2">
                 <button @click="toggleSection('wardManagement')"
                     class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10">
@@ -321,7 +321,7 @@
         </div>
 
         <!-- Integration Section -->
-        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD))
+        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE))
             <div class="pt-2">
                 <button @click="toggleSection('integration')"
                     class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*') || request()->routeIs('ecg.index') || request()->routeIs('ekad.*') ? 'bg-white/20' : '' }}">

@@ -198,6 +198,7 @@ class VitalSignApiV1Controller extends Controller
 
             $responseData = [
                 'success' => true,
+                'status' => 'success', // Required by Vital Signs Service
                 'ack' => true,  // Explicit ACK for machines to confirm receipt
                 'message' => 'Vital sign recorded successfully',
                 'data' => [
@@ -234,6 +235,73 @@ class VitalSignApiV1Controller extends Controller
                 'message' => 'Server error: ' . $e->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * Handle Ping service from Raspberry Pi.
+     * 
+     * Expected request format:
+     * {
+     *   "username": "...",
+     *   "password": "...",
+     *   "timestamp": "...",
+     *   "device_ip": "192.168.0.22"
+     * }
+     */
+    public function ping(Request $request)
+    {
+        $startTime = microtime(true);
+
+        // Validate passphrase optional for ping? User said "ping service only checks the status code".
+        // But let's assume standard security if possible. 
+        // User said: "The ping service only checks the status code... Vital Signs service explicitly checks for a specific JSON field."
+        // Let's support passphrase if sent, but maybe be lenient or just enforce it.
+        // Assuming strict for consistency.
+
+        // Validate passphrase
+        $passphraseError = $this->validatePassphrase($request);
+        if ($passphraseError) {
+            return $passphraseError;
+        }
+
+        // Validate and authenticate user
+        $apiUser = $this->authenticateUser($request);
+        if (!$apiUser) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid credentials',
+            ], 401);
+        }
+
+        // Update device status if device_ip is provided
+        if ($request->filled('device_ip')) {
+            $deviceIp = $request->input('device_ip');
+            $device = \App\Models\VitalSignMonitorDevice::where('ip_address', $deviceIp)->first();
+
+            if ($device) {
+                $device->updateConnectionStatus('Online', true);
+            }
+        }
+
+        $apiUser->incrementRequestCount();
+
+        $responseData = [
+            'success' => true,
+            'status' => 'success', // Consistent with Ack requirements
+            'message' => 'Ping received',
+        ];
+
+        $this->logApiRequest(
+            $apiUser,
+            '/api/v1/ping',
+            'POST',
+            $this->maskSensitiveData($request->all()),
+            $responseData,
+            200,
+            $startTime
+        );
+
+        return response()->json($responseData, 200);
     }
 
     /**

@@ -35,6 +35,7 @@ class DatabaseSeeder extends Seeder
             SpecialtySeeder::class,
             ConsultantSeeder::class,
             AnaesthetistSeeder::class,
+            NurseSeeder::class,
         ]);
     }
 }

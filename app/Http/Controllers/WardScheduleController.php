@@ -13,6 +13,8 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use App\Services\EkadService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
+use App\Models\User;
 
 class WardScheduleController extends Controller
 {
@@ -44,6 +46,16 @@ class WardScheduleController extends Controller
 
         $selectedDate = $request->input('date', now()->toDateString());
         $selectedNurseId = $individualMode ? $request->input('nurse_id') : null;
+
+        $isLockedToNurse = false;
+        if (Auth::user()->hasRole(User::ROLE_NURSE)) {
+            $nurse = Nurse::where('email', Auth::user()->email)->where('is_active', true)->first();
+            if ($nurse) {
+                $individualMode = true;
+                $selectedNurseId = $nurse->id;
+                $isLockedToNurse = true;
+            }
+        }
 
         $dateRange = collect(range(-2, 2))
             ->map(fn(int $offset) => Carbon::parse($selectedDate)->addDays($offset));
@@ -105,6 +117,7 @@ class WardScheduleController extends Controller
             'assignments' => $assignments->toArray(),
             'individualMode' => $individualMode,
             'selectedNurseId' => $selectedNurseId,
+            'isLockedToNurse' => $isLockedToNurse ?? false,
         ]);
     }
 
