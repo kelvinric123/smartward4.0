@@ -285,7 +285,8 @@ class VitalSignIntegrationController extends Controller
 
         $validator = Validator::make($request->all(), [
             'readings' => 'required|array|min:1',
-            'readings.*.patient_mrn' => 'required|string',
+            'readings.*.patient_mrn' => 'nullable|string|required_without:readings.*.patient_rn',
+            'readings.*.patient_rn' => 'nullable|string|required_without:readings.*.patient_mrn',
             'readings.*.systolic_bp' => 'nullable|integer|min:0|max:300',
             'readings.*.diastolic_bp' => 'nullable|integer|min:0|max:200',
             'readings.*.pulse_rate' => 'nullable|integer|min:0|max:300',
@@ -321,8 +322,17 @@ class VitalSignIntegrationController extends Controller
         $failCount = 0;
 
         foreach ($request->readings as $index => $reading) {
-            // Find patient by MRN
-            $patient = Patient::where('mrn', $reading['patient_mrn'])->first();
+            // Find patient by MRN or RN
+            $patient = null;
+            $mrn = $reading['patient_mrn'] ?? null;
+            $rn = $reading['patient_rn'] ?? null;
+
+            if ($mrn) {
+                $patient = Patient::where('mrn', $mrn)->first();
+            }
+            if (!$patient && $rn) {
+                $patient = Patient::where('rn', $rn)->first();
+            }
 
             if (!$patient) {
                 $results[] = [
@@ -336,7 +346,7 @@ class VitalSignIntegrationController extends Controller
             }
 
             // Check if patient has an active admission
-            if (!$patient->bed_id) {
+            if (!$patient->isAdmitted()) {
                 $results[] = [
                     'index' => $index,
                     'patient_mrn' => $reading['patient_mrn'],
@@ -419,6 +429,7 @@ class VitalSignIntegrationController extends Controller
         $validator = Validator::make($request->all(), [
             'patient_mrn' => 'nullable|string|required_without:patient_rn',
             'patient_rn' => 'nullable|string|required_without:patient_mrn',
+            'patient_name' => 'nullable|string', // Ignored, but allowed in payload
             'systolic_bp' => 'nullable|integer|min:0|max:300',
             'diastolic_bp' => 'nullable|integer|min:0|max:200',
             'pulse_rate' => 'nullable|integer|min:0|max:300',
@@ -481,7 +492,7 @@ class VitalSignIntegrationController extends Controller
         }
 
         // Check if patient has an active admission
-        if (!$patient->bed_id) {
+        if (!$patient->isAdmitted()) {
             $responseData = [
                 'success' => false,
                 'message' => 'Patient is not currently admitted',
