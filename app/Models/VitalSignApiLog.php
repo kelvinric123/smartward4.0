@@ -16,11 +16,13 @@ class VitalSignApiLog extends Model
         'status_code',
         'ip_address',
         'response_time_ms',
+        'debug_data',
     ];
 
     protected $casts = [
         'request_data' => 'array',
         'response_data' => 'array',
+        'debug_data' => 'array',
     ];
 
     /**

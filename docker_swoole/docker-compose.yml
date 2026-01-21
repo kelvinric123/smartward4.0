@@ -305,6 +305,8 @@ services:
     depends_on:
       - smartward
     volumes:
+      # Mount source code for hot-reloading/immediate updates
+      - ../bbraun:/app/bbraun
       # Persist logs
       - bbraun_logs:/app/bbraun/logs
     healthcheck:

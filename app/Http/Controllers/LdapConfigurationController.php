@@ -470,7 +470,7 @@ class LdapConfigurationController extends Controller
                 'ldap_dn' => $dn,
                 'ldap_configuration_id' => $config->id,
                 'is_ldap_user' => true,
-                'role' => $role,
+                // 'role' => $role, // Do not overwrite role for existing users
                 'ldap_synced_at' => now(),
             ]);
             return 'updated';
@@ -500,7 +500,7 @@ class LdapConfigurationController extends Controller
         $roleMappings = $config->roleMappings;
 
         // Default role
-        $role = 'user';
+        $role = User::ROLE_NURSE;
 
         // Check each group membership against role mappings
         if (is_array($memberOf)) {

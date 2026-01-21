@@ -39,21 +39,31 @@ def fetch_ldap_data():
 
         # 3. Execute the Search (The "SELECT" query)
         # attributes=['*'] fetches all standard user attributes
-        print("Executing search...")
-        conn.search(
+        # 3. Execute the Search (The "SELECT" query) with PAGINATION
+        # attributes=['*'] fetches all standard user attributes
+        print("Executing paged search...")
+        
+        # paged_size=1000 is standard, but you can adjust. 
+        # generator=True yields entries one by one as they are fetched.
+        entry_generator = conn.extend.standard.paged_search(
             search_base=SEARCH_BASE,
             search_filter=SEARCH_FILTER,
             search_scope=SUBTREE, 
-            attributes=['*'] 
+            attributes=['*'],
+            paged_size=1000,
+            generator=True
         )
 
         # 4. Process Results
-        print(f"Found {len(conn.entries)} entries.")
+        entry_count = 0
         
-        for entry in conn.entries:
-            # entry.entry_to_json() converts the LDAP object to a JSON string
-            # entry.entry_attributes_as_dict returns a Python dictionary
-            user_data = entry.entry_attributes_as_dict
+        for entry in entry_generator:
+            # When using generator=True, entry is a dictionary with keys like 'dn', 'attributes', 'type'
+            if 'attributes' not in entry:
+                continue
+                
+            entry_count += 1
+            user_data = entry['attributes']
             
             # Example: Print specific fields (handle if they are missing)
             name = user_data.get('cn', ['Unknown'])[0]

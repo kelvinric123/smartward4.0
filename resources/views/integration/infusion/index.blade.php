@@ -208,9 +208,26 @@
                             </div>
                         </div>
                         <div class="flex items-center">
-                            <span class="px-3 py-1.5 rounded-full text-sm font-medium {{ $listenerStatus === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' }}">
-                                <span class="inline-block w-2 h-2 rounded-full {{ $listenerStatus === 'active' ? 'bg-green-500 animate-pulse' : 'bg-gray-400' }} mr-2"></span>
-                                {{ $listenerStatus === 'active' ? 'Listener Active' : 'Listener Inactive' }}
+                            @php
+                                $statusClasses = [
+                                    'active' => 'bg-green-100 text-green-700',
+                                    'idle' => 'bg-blue-100 text-blue-700',
+                                    'inactive' => 'bg-red-100 text-red-700'
+                                ];
+                                $dotClasses = [
+                                    'active' => 'bg-green-500 animate-pulse',
+                                    'idle' => 'bg-blue-500',
+                                    'inactive' => 'bg-red-500'
+                                ];
+                                $statusText = [
+                                    'active' => 'Active (Receiving Data)',
+                                    'idle' => 'Active (No Recent Data)',
+                                    'inactive' => 'Listener Inactive'
+                                ];
+                            @endphp
+                            <span class="px-3 py-1.5 rounded-full text-sm font-medium {{ $statusClasses[$listenerStatus] ?? 'bg-gray-100 text-gray-600' }}">
+                                <span class="inline-block w-2 h-2 rounded-full {{ $dotClasses[$listenerStatus] ?? 'bg-gray-400' }} mr-2"></span>
+                                {{ $statusText[$listenerStatus] ?? 'Unknown Status' }}
                             </span>
                         </div>
                     </div>
@@ -233,6 +250,36 @@
                         <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
                             <div class="text-xs font-semibold text-gray-500 uppercase mb-1">HL7 Version</div>
                             <div class="text-lg font-mono font-bold text-purple-600">{{ $mllpConfig['hl7_version'] }}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-6 pt-6 border-t border-gray-100">
+                        <div class="flex items-center mb-4">
+                            <div class="p-2 bg-orange-100 rounded-lg mr-3">
+                                <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
+                                </svg>
+                            </div>
+                            <h4 class="text-sm font-bold text-gray-700 uppercase tracking-wider">Database Connection</h4>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <div class="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl p-4 border border-orange-100">
+                                <div class="text-xs font-semibold text-gray-500 uppercase mb-1">DB Host</div>
+                                <div class="text-lg font-mono font-bold text-gray-800">{{ $dbConfig['host'] }}</div>
+                            </div>
+                            <div class="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl p-4 border border-orange-100">
+                                <div class="text-xs font-semibold text-gray-500 uppercase mb-1">DB Port</div>
+                                <div class="text-lg font-mono font-bold text-orange-600">{{ $dbConfig['port'] }}</div>
+                            </div>
+                            <div class="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl p-4 border border-orange-100">
+                                <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Database</div>
+                                <div class="text-sm font-bold text-gray-800">{{ $dbConfig['database'] }}</div>
+                            </div>
+                            <div class="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl p-4 border border-orange-100">
+                                <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Username</div>
+                                <div class="text-lg font-mono font-bold text-gray-800">{{ $dbConfig['username'] }}</div>
+                            </div>
                         </div>
                     </div>
 

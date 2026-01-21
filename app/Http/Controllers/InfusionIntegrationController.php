@@ -20,8 +20,9 @@ class InfusionIntegrationController extends Controller
      */
     public function index(): View
     {
-        // Get HL7 logs from B.Braun listener
-        $hl7Logs = BbraunHl7Log::latest()
+        // Get HL7 logs from B.Braun listener (exclude heartbeats)
+        $hl7Logs = BbraunHl7Log::where('status', '!=', 'heartbeat')
+            ->latest()
             ->limit(50)
             ->get();
 
@@ -36,11 +37,27 @@ class InfusionIntegrationController extends Controller
             'supported_messages' => ['ORU', 'ORM', 'ADT', 'RAS', 'RDE', 'RGV'],
         ];
 
-        // Check if listener is running (by checking recent logs)
-        $lastLog = BbraunHl7Log::latest()->first();
-        $listenerStatus = $lastLog && $lastLog->created_at->diffInMinutes(now()) < 5
-            ? 'active'
-            : 'inactive';
+        // Database Configuration for display
+        $dbConfig = [
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '3306'),
+            'database' => env('DB_DATABASE', 'smartward'),
+            'username' => env('DB_USERNAME', 'root'),
+            // Password hidden for security
+        ];
+
+        // Check if listener is running
+        $lastActivity = BbraunHl7Log::latest()->first();
+        $isAlive = $lastActivity && $lastActivity->created_at->diffInMinutes(now()) < 5;
+
+        // precise status
+        if ($isAlive) {
+            $lastRealMessage = BbraunHl7Log::where('status', '!=', 'heartbeat')->latest()->first();
+            $hasRecentData = $lastRealMessage && $lastRealMessage->created_at->diffInMinutes(now()) < 5;
+            $listenerStatus = $hasRecentData ? 'active' : 'idle';
+        } else {
+            $listenerStatus = 'inactive';
+        }
 
         $stats = [
             'total_pumps' => InfusionPump::count(),
@@ -48,12 +65,12 @@ class InfusionIntegrationController extends Controller
             'active_infusions' => Infusion::active()->count(),
             'warnings' => Infusion::running()->withWarnings()->count(),
             'alarms' => Infusion::alarming()->count(),
-            'total_hl7_messages' => BbraunHl7Log::count(),
-            'messages_today' => BbraunHl7Log::whereDate('created_at', today())->count(),
+            'total_hl7_messages' => BbraunHl7Log::where('status', '!=', 'heartbeat')->count(),
+            'messages_today' => BbraunHl7Log::where('status', '!=', 'heartbeat')->whereDate('created_at', today())->count(),
             'error_messages' => BbraunHl7Log::where('status', 'error')->count(),
         ];
 
-        return view('integration.infusion.index', compact('hl7Logs', 'pumps', 'stats', 'mllpConfig', 'listenerStatus'));
+        return view('integration.infusion.index', compact('hl7Logs', 'pumps', 'stats', 'mllpConfig', 'listenerStatus', 'dbConfig'));
     }
 
     /**

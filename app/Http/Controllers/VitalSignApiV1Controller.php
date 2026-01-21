@@ -46,6 +46,13 @@ class VitalSignApiV1Controller extends Controller
     public function receiveVitalSigns(Request $request)
     {
         $startTime = microtime(true);
+        $debugData = [
+            'processing_steps' => [],
+            'parsing_details' => [],
+            'patient_lookup' => [],
+            'binding_info' => [],
+            'vital_sign_creation' => [],
+        ];
 
         // Log incoming request for debugging
         Log::info('[API V1] Vital Signs Request', [
@@ -55,13 +62,17 @@ class VitalSignApiV1Controller extends Controller
             'patient_code' => $request->input('patient_code'),
         ]);
 
+        $debugData['processing_steps'][] = 'Started vital signs processing';
+
         try {
 
             // Validate passphrase
             $passphraseError = $this->validatePassphrase($request);
             if ($passphraseError) {
+                $debugData['processing_steps'][] = 'FAILED: Invalid/missing passphrase';
                 return $passphraseError;
             }
+            $debugData['processing_steps'][] = 'Passphrase validated';
 
             // Validate and authenticate user
             $apiUser = $this->authenticateUser($request);
@@ -71,6 +82,7 @@ class VitalSignApiV1Controller extends Controller
                     'message' => 'Invalid credentials',
                 ], 401);
             }
+            $debugData['processing_steps'][] = 'User authenticated: ' . $apiUser->name;
 
             // Validate vital signs data
             $validator = Validator::make($request->all(), [
@@ -89,6 +101,9 @@ class VitalSignApiV1Controller extends Controller
             ]);
 
             if ($validator->fails()) {
+                $debugData['processing_steps'][] = 'FAILED: Validation errors';
+                $debugData['parsing_details']['validation_errors'] = $validator->errors()->toArray();
+
                 $responseData = [
                     'success' => false,
                     'message' => 'Validation failed',
@@ -102,20 +117,56 @@ class VitalSignApiV1Controller extends Controller
                     $this->maskSensitiveData($request->all()),
                     $responseData,
                     422,
-                    $startTime
+                    $startTime,
+                    $debugData
                 );
 
                 return response()->json($responseData, 422);
             }
 
+            $debugData['processing_steps'][] = 'Request validation passed';
+            $debugData['parsing_details']['received_fields'] = array_keys(array_filter($request->only([
+                'patient_code',
+                'measured_at',
+                'blood_pressure_systolic',
+                'blood_pressure_diastolic',
+                'pulse_rate',
+                'heart_rate',
+                'spo2',
+                'temperature',
+                'respiratory_rate',
+                'weight',
+                'height',
+                'notes'
+            ]), fn($v) => $v !== null && $v !== ''));
+
             // Find patient by patient_code (could be MRN or visit_number)
             $patientCode = $request->patient_code;
-            $patient = Patient::where('mrn', $patientCode)
-                ->orWhere('visit_number', $patientCode)
-                ->orWhere('ic_passport', $patientCode)
-                ->first();
+            $debugData['patient_lookup']['search_code'] = $patientCode;
+
+            // Search by MRN first
+            $patient = Patient::where('mrn', $patientCode)->first();
+            if ($patient) {
+                $debugData['patient_lookup']['found_by'] = 'mrn';
+            } else {
+                // Try visit_number
+                $patient = Patient::where('visit_number', $patientCode)->first();
+                if ($patient) {
+                    $debugData['patient_lookup']['found_by'] = 'visit_number';
+                } else {
+                    // Try ic_passport
+                    $patient = Patient::where('ic_passport', $patientCode)->first();
+                    if ($patient) {
+                        $debugData['patient_lookup']['found_by'] = 'ic_passport';
+                    }
+                }
+            }
 
             if (!$patient) {
+                $debugData['processing_steps'][] = 'FAILED: Patient not found';
+                $debugData['patient_lookup']['result'] = 'not_found';
+                $debugData['patient_lookup']['searched_tables'] = ['mrn', 'visit_number', 'ic_passport'];
+
                 $responseData = [
                     'success' => false,
                     'message' => 'Patient not found',
@@ -128,14 +179,28 @@ class VitalSignApiV1Controller extends Controller
                     $this->maskSensitiveData($request->all()),
                     $responseData,
                     404,
-                    $startTime
+                    $startTime,
+                    $debugData
                 );
 
                 return response()->json($responseData, 404);
             }
 
+            $debugData['processing_steps'][] = 'Patient found: ' . $patient->name;
+            $debugData['patient_lookup']['result'] = 'found';
+            $debugData['patient_lookup']['patient_id'] = $patient->id;
+            $debugData['patient_lookup']['patient_name'] = $patient->name;
+            $debugData['patient_lookup']['patient_mrn'] = $patient->mrn;
+            $debugData['patient_lookup']['patient_visit_number'] = $patient->visit_number;
+
             // Check if patient is admitted (has a bed assigned)
+            $debugData['patient_lookup']['bed_id'] = $patient->bed_id;
+            $debugData['patient_lookup']['has_bed'] = !empty($patient->bed);
+            $debugData['patient_lookup']['ward_id'] = $patient->ward_id;
+
             if (!$patient->bed) {
+                $debugData['processing_steps'][] = 'FAILED: Patient not admitted (no bed)';
+
                 $responseData = [
                     'success' => false,
                     'message' => 'Patient is not currently admitted',
@@ -148,11 +213,14 @@ class VitalSignApiV1Controller extends Controller
                     $this->maskSensitiveData($request->all()),
                     $responseData,
                     400,
-                    $startTime
+                    $startTime,
+                    $debugData
                 );
 
                 return response()->json($responseData, 400);
             }
+
+            $debugData['processing_steps'][] = 'Patient admission verified';
 
             // Build notes field
             $notes = [];
@@ -176,23 +244,65 @@ class VitalSignApiV1Controller extends Controller
                 ->latest()
                 ->first();
 
-            // Create vital sign record
-            // Map field names from Python client to database schema
-            $vitalSign = VitalSign::create([
-                'patient_id' => $patient->id,
-                'admission_id' => $patient->id, // Using patient ID as admission reference
-                'recorded_by' => null, // Gateway submission
-                'operator_id' => $activeBinding?->nurse_id, // Link to bound nurse
+            $debugData['binding_info']['has_active_binding'] = $activeBinding !== null;
+            if ($activeBinding) {
+                $debugData['binding_info']['binding_id'] = $activeBinding->id;
+                $debugData['binding_info']['nurse_id'] = $activeBinding->nurse_id;
+                $debugData['binding_info']['start_at'] = $activeBinding->start_at?->toIso8601String();
+                $debugData['binding_info']['end_at'] = $activeBinding->end_at?->toIso8601String();
+                $debugData['processing_steps'][] = 'Active nurse binding found, nurse_id: ' . $activeBinding->nurse_id;
+            } else {
+                $debugData['processing_steps'][] = 'No active nurse binding found';
+            }
+
+            // Parse vital sign values
+            $debugData['parsing_details']['raw_values'] = [
+                'blood_pressure_systolic' => $request->blood_pressure_systolic,
+                'blood_pressure_diastolic' => $request->blood_pressure_diastolic,
+                'pulse_rate' => $request->pulse_rate,
+                'heart_rate' => $request->heart_rate,
+                'spo2' => $request->spo2,
+                'temperature' => $request->temperature,
+                'respiratory_rate' => $request->respiratory_rate,
+                'measured_at' => $request->measured_at,
+            ];
+
+            $parsedValues = [
                 'systolic_bp' => $request->blood_pressure_systolic ?? null,
                 'diastolic_bp' => $request->blood_pressure_diastolic ?? null,
                 'pulse_rate' => $request->pulse_rate ?? $request->heart_rate ?? null,
                 'temperature' => $request->temperature ?? null,
                 'spo2' => $request->spo2 ? round($request->spo2) : null,
                 'respiratory_rate' => $request->respiratory_rate ?? null,
+                'recorded_at' => $request->measured_at ?? now(),
+            ];
+            $debugData['parsing_details']['parsed_values'] = $parsedValues;
+
+            // Create vital sign record
+            $vitalSignData = [
+                'patient_id' => $patient->id,
+                'admission_id' => $patient->id, // Using patient ID as admission reference
+                'recorded_by' => null, // Gateway submission
+                'operator_id' => $activeBinding?->nurse_id, // Link to bound nurse
+                'systolic_bp' => $parsedValues['systolic_bp'],
+                'diastolic_bp' => $parsedValues['diastolic_bp'],
+                'pulse_rate' => $parsedValues['pulse_rate'],
+                'temperature' => $parsedValues['temperature'],
+                'spo2' => $parsedValues['spo2'],
+                'respiratory_rate' => $parsedValues['respiratory_rate'],
                 'reading_type' => 'single', // 'single' or 'full' - 'gateway' tracked in notes
                 'notes' => 'Gateway API v1' . (count($notes) > 0 ? '; ' . implode('; ', $notes) : ''),
-                'recorded_at' => $request->measured_at ?? now(),
-            ]);
+                'recorded_at' => $parsedValues['recorded_at'],
+            ];
+
+            $debugData['vital_sign_creation']['input_data'] = $vitalSignData;
+            $debugData['processing_steps'][] = 'Creating vital sign record...';
+
+            $vitalSign = VitalSign::create($vitalSignData);
+
+            $debugData['vital_sign_creation']['created'] = true;
+            $debugData['vital_sign_creation']['vital_sign_id'] = $vitalSign->id;
+            $debugData['processing_steps'][] = 'Vital sign created with ID: ' . $vitalSign->id;
 
             $apiUser->incrementRequestCount();
 
@@ -205,9 +315,11 @@ class VitalSignApiV1Controller extends Controller
                     'vital_sign_id' => $vitalSign->id,
                     'patient_name' => $patient->name,
                     'patient_mrn' => $patient->mrn,
-                    'recorded_at' => $vitalSign->recorded_at->toIso8601String(),
+                    'recorded_at' => $vitalSign->recorded_at?->toIso8601String(),
                 ],
             ];
+
+            $debugData['processing_steps'][] = 'SUCCESS: Vital sign recorded successfully';
 
             $this->logApiRequest(
                 $apiUser,
@@ -216,7 +328,8 @@ class VitalSignApiV1Controller extends Controller
                 $this->maskSensitiveData($request->all()),
                 $responseData,
                 201,
-                $startTime
+                $startTime,
+                $debugData
             );
 
             Log::info('[API V1] Vital sign recorded', ['vital_sign_id' => $vitalSign->id, 'patient' => $patient->name]);
@@ -501,7 +614,8 @@ class VitalSignApiV1Controller extends Controller
         array $requestData,
         array $responseData,
         int $statusCode,
-        float $startTime
+        float $startTime,
+        ?array $debugData = null
     ): void {
         $responseTimeMs = (int) ((microtime(true) - $startTime) * 1000);
 
@@ -514,6 +628,7 @@ class VitalSignApiV1Controller extends Controller
             'status_code' => $statusCode,
             'ip_address' => request()->ip(),
             'response_time_ms' => $responseTimeMs,
+            'debug_data' => $debugData,
         ]);
     }
 }
