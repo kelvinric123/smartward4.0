@@ -18,81 +18,106 @@ SEARCH_BASE = "OU=Users,OU=MY-PHKL-02,OU=Managed Sites,OU=Malaysia,DC=PPL,DC=IHH
 # The criteria (The "WHERE" clause)
 SEARCH_FILTER = "(&(objectCategory=Person)(sAMAccountName=*)(memberOf=CN=MY-PHKL-02-smart_ward,OU=Security Groups,OU=MY-PHKL-02,OU=Managed Sites,OU=Malaysia,DC=PPL,DC=IHH,DC=COM))"
 
+def get_first_attr(attributes, key, default=None):
+    """Safely get valid first value from LDAP attributes dict which might contain lists or strings."""
+    val = attributes.get(key)
+    if val is None:
+        return default
+        
+    # If it's a list, take first item (if exists)
+    if isinstance(val, list):
+        if len(val) > 0:
+            return val[0]
+        return default
+        
+    # If bytes, decode
+    if isinstance(val, bytes):
+        return val.decode('utf-8', errors='ignore')
+        
+    # If string or other, return as is
+    return val
+
 def fetch_ldap_data():
+    conn_ldap = None
+    db = None
+    cursor = None
+    
     try:
         # 1. Define the Server
-        # use_ssl=True is mandatory because port is 636
-        # Define TLS configuration to ignore certificate errors
         print("Configuring TLS...")
         tls_configuration = Tls(validate=ssl.CERT_NONE, version=ssl.PROTOCOL_TLSv1_2)
         
         print(f"Creating Server object for {LDAP_SERVER_HOST}...")
-        # Removed get_info=ALL to prevent hanging on schema fetch
         server = Server(LDAP_SERVER_HOST, port=LDAP_PORT, use_ssl=True, tls=tls_configuration)
         
         # 2. Define the Connection
-        # auto_bind=True attempts to connect immediately
         print("Attempting to connect and bind...")
-        conn = Connection(server, user=LDAP_USER_DN, password=LDAP_PASSWORD, auto_bind=True)
-        
+        conn_ldap = Connection(server, user=LDAP_USER_DN, password=LDAP_PASSWORD, auto_bind=True)
         print(f"Successfully connected to {LDAP_SERVER_HOST}")
 
-        # 3. Execute the Search (The "SELECT" query)
-        # attributes=['*'] fetches all standard user attributes
-        # 3. Execute the Search (The "SELECT" query) with PAGINATION
-        # attributes=['*'] fetches all standard user attributes
-        print("Executing paged search...")
+        # 3. Connect to Database (Once)
+        import mysql.connector
+        import os
         
-        # paged_size=1000 is standard, but you can adjust. 
-        # generator=True yields entries one by one as they are fetched.
-        entry_generator = conn.extend.standard.paged_search(
+        print("Connecting to database...")
+        db = mysql.connector.connect(
+            host=os.environ.get('DB_HOST', 'smartward-db'),
+            port=int(os.environ.get('DB_PORT', 3306)),
+            user="root",
+            password=os.environ.get('DB_PASSWORD', 'smartward_secret'), 
+            database=os.environ.get('DB_DATABASE', 'smartward')
+        )
+        # Use buffered cursor to avoid "Unread result found"
+        cursor = db.cursor(buffered=True)
+
+        # 4. Execute the Search with PAGINATION
+        print("Executing paged search...")
+        entry_generator = conn_ldap.extend.standard.paged_search(
             search_base=SEARCH_BASE,
             search_filter=SEARCH_FILTER,
             search_scope=SUBTREE, 
-            attributes=['*'],
+            attributes=['cn', 'sAMAccountName', 'mail'], # Fetch only needed attributes
             paged_size=1000,
             generator=True
         )
 
-        # 4. Process Results
         entry_count = 0
+        sync_count = 0
         
         for entry in entry_generator:
-            # When using generator=True, entry is a dictionary with keys like 'dn', 'attributes', 'type'
             if 'attributes' not in entry:
                 continue
                 
             entry_count += 1
             user_data = entry['attributes']
             
-            # Example: Print specific fields (handle if they are missing)
-            name = user_data.get('cn', ['Unknown'])[0]
-            account = user_data.get('sAMAccountName', ['Unknown'])[0]
-            email = user_data.get('mail', [f'{account}@ldap.local'])[0]
-            print(f"User: {name} | Account: {account}")
+            # Extract data safely
+            name = get_first_attr(user_data, 'cn', 'Unknown')
+            account = get_first_attr(user_data, 'sAMAccountName')
+            
+            # Skip if no account name (crucial)
+            if not account:
+                continue
+                
+            # Default email if missing
+            email = get_first_attr(user_data, 'mail', f'{account}@ldap.local')
+            
+            # Debug log every 50 users or for specific ones
+            if entry_count % 50 == 0:
+                print(f"Processing {entry_count}: {name} ({account})")
 
-            # Database Update Logic
             try:
-                # Basic connection - in production use env vars
-                import mysql.connector
-                import os
-                
-                db = mysql.connector.connect(
-                    host=os.environ.get('DB_HOST', 'smartward-db'), # Using service name if in same network
-                    port=int(os.environ.get('DB_PORT', 3306)),
-                    user="root", # Ideally use a specific user
-                    password=os.environ.get('DB_PASSWORD', 'smartward_secret'), 
-                    database=os.environ.get('DB_DATABASE', 'smartward')
-                )
-                cursor = db.cursor()
-                
-                # Check if user exists
-                cursor.execute("SELECT id FROM users WHERE email = %s OR name = %s", (email, account))
+                # Check if user exists - Use LIMIT 1 to prevent multiple results issue
+                cursor.execute("SELECT id FROM users WHERE email = %s OR name = %s LIMIT 1", (email, account))
                 result = cursor.fetchone()
+                # consume any remaining results just in case (though limit 1 prevents it usually)
+                try: 
+                    cursor.fetchall() 
+                except: 
+                    pass
                 
                 if result:
                     # Update
-                    print(f"Updating user: {account}")
                     sql = """
                         UPDATE users 
                         SET name = %s, is_ldap_user = 1, ldap_synced_at = NOW()
@@ -101,30 +126,36 @@ def fetch_ldap_data():
                     cursor.execute(sql, (name, result[0]))
                 else:
                     # Insert
-                    print(f"Creating user: {account}")
-                    # Default role: 'user'
+                    # print(f"Creating user: {account}")
                     sql = """
                         INSERT INTO users (name, email, password, role, is_ldap_user, ldap_synced_at, created_at, updated_at)
                         VALUES (%s, %s, %s, %s, 1, NOW(), NOW(), NOW())
                     """
-                    # Use a dummy password for LDAP users as they auth via LDAP
-                    dummy_pass = '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi' # "password"
+                    dummy_pass = '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'
                     cursor.execute(sql, (name, email, dummy_pass, 'user'))
                 
-                db.commit()
-                cursor.close()
-                db.close()
+                sync_count += 1
                 
             except Exception as db_err:
                 print(f"Database error for {account}: {db_err}")
 
+        # Commit all changes at the end
+        db.commit()
+        print(f"Sync complete. Processed {entry_count} entries. Synced {sync_count} users.")
+
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"An error occurred during sync: {e}")
 
     finally:    
-        # Always close the connection
-        if 'conn' in locals() and conn.bound:
-            conn.unbind()
+        if cursor:
+            try: cursor.close()
+            except: pass
+        if db:
+            try: db.close()
+            except: pass
+        if conn_ldap and conn_ldap.bound:
+            try: conn_ldap.unbind()
+            except: pass
 
 
 def authenticate_ldap_user(username, password):
