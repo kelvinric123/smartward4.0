@@ -218,9 +218,9 @@ def authenticate_ldap_user(username, password):
             'success': True,
             'message': 'Authentication successful',
             'user_data': {
-                'username': user_data.get('sAMAccountName', [username])[0],
-                'email': user_data.get('mail', [f'{username}@ldap.local'])[0],
-                'name': user_data.get('cn', ['Unknown'])[0],
+                'username': get_first_attr(user_data, 'sAMAccountName', username),
+                'email': get_first_attr(user_data, 'mail', f'{username}@ldap.local'),
+                'name': get_first_attr(user_data, 'cn', 'Unknown'),
                 'dn': user_dn
             }
         }
