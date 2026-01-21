@@ -216,7 +216,7 @@ def authenticate_ldap_user(username, password):
         
         return {
             'success': True,
-            'message': 'Authentication successful',
+            'message': 'Authentication successful (v2)',
             'user_data': {
                 'username': get_first_attr(user_data, 'sAMAccountName', username),
                 'email': get_first_attr(user_data, 'mail', f'{username}@ldap.local'),
@@ -233,12 +233,12 @@ def authenticate_ldap_user(username, password):
         if 'invalidCredentials' in error_msg or '49' in error_msg:
             return {
                 'success': False,
-                'message': 'Invalid username or password'
+                'message': 'Invalid username or password (v2)'
             }
         else:
             return {
                 'success': False,
-                'message': f'Authentication error: {error_msg}'
+                'message': f'Authentication error (v2): {error_msg}'
             }
 
 
