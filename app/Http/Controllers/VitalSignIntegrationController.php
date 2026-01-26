@@ -22,10 +22,31 @@ class VitalSignIntegrationController extends Controller
             ->latest()
             ->get();
 
-        $recentLogs = VitalSignApiLog::with('apiUser')
-            ->latest()
-            ->limit(20)
-            ->get();
+        // Fetch 100 recent logs for each category
+        $logCategories = [
+            'vital_signs' => fn($q) => $q->where('endpoint', 'like', '%vital-sign%'),
+            'ping' => fn($q) => $q->where('endpoint', 'like', '%ping%'),
+            'login' => fn($q) => $q->where('endpoint', 'like', '%login%')->orWhere('endpoint', 'like', '%logout%'),
+            'patients' => fn($q) => $q->where('endpoint', 'like', '%patient%'),
+            'monitor' => fn($q) => $q->where('endpoint', 'like', '%monitor%')->orWhere('endpoint', 'like', '%device%'),
+        ];
+
+        $recentLogs = collect();
+
+        foreach ($logCategories as $key => $callback) {
+            $categoryLogs = VitalSignApiLog::with('apiUser')
+                ->where(function ($query) use ($callback) {
+                    $callback($query);
+                })
+                ->latest()
+                ->limit(100)
+                ->get();
+
+            $recentLogs = $recentLogs->merge($categoryLogs);
+        }
+
+        // Remove duplicates (in case a log matches multiple categories) and sort by date
+        $recentLogs = $recentLogs->unique('id')->sortByDesc('created_at')->values();
 
         // Get monitor devices
         $monitorDevices = VitalSignMonitorDevice::latest()->get();

@@ -684,6 +684,24 @@ Content-Type: application/json</pre>
                 </div>
             @endif
 
+            @if ($errors->any())
+                <div class="bg-gradient-to-r from-red-50 to-pink-50 border-l-4 border-red-500 text-red-800 px-6 py-4 rounded-lg shadow-md"
+                    role="alert">
+                    <div class="flex items-center mb-2">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span class="font-bold">Please check the form for errors:</span>
+                    </div>
+                    <ul class="list-disc list-inside text-sm pl-8">
+                        @foreach ($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
             <!-- API Users Section -->
             <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-emerald-100">
                 <div class="p-6 border-b border-emerald-100 bg-gradient-to-r from-emerald-50 to-teal-50">
@@ -924,9 +942,9 @@ Content-Type: application/json</pre>
                                 active devices from the API. Make sure the following environment variables are set:</p>
                             <pre
                                 class="text-sm text-gray-300 font-mono overflow-x-auto"><span class="text-cyan-400">API_BASE_URL</span>=<span class="text-green-400">"http://{{ $gatewayConfig['server_ip'] }}:{{ $gatewayConfig['server_port'] }}/api/v1"</span>
-                                            <span class="text-cyan-400">API_PASSPHRASE</span>=<span class="text-green-400">"{{ $gatewayConfig['passphrase'] }}"</span>
-                                            <span class="text-cyan-400">API_USERNAME</span>=<span class="text-green-400">"your_api_user"</span>
-                                            <span class="text-cyan-400">API_PASSWORD</span>=<span class="text-green-400">"your_password"</span></pre>
+                                                <span class="text-cyan-400">API_PASSPHRASE</span>=<span class="text-green-400">"{{ $gatewayConfig['passphrase'] }}"</span>
+                                                <span class="text-cyan-400">API_USERNAME</span>=<span class="text-green-400">"your_api_user"</span>
+                                                <span class="text-cyan-400">API_PASSWORD</span>=<span class="text-green-400">"your_password"</span></pre>
                             <p class="text-xs text-gray-500 mt-3">Devices configured here will be fetched via <code
                                     class="text-cyan-300">GET /api/v1/monitor-devices</code></p>
                         </div>
@@ -1198,7 +1216,7 @@ Content-Type: application/json</pre>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-100">
                                     @foreach($recentLogs as $log)
-                                                                                                <tr x-show="matchesFilter('{{ $log->endpoint }}')" @click="showLogDetails({{ json_encode([
+                                                                <tr x-show="matchesFilter('{{ $log->endpoint }}')" @click="showLogDetails({{ json_encode([
                                             'id' => $log->id,
                                             'created_at' => $log->created_at->format('M d, Y H:i:s'),
                                             'user' => $log->apiUser->name ?? 'Unknown',
@@ -1211,39 +1229,39 @@ Content-Type: application/json</pre>
                                             'response_data' => $log->response_data,
                                             'debug_data' => $log->debug_data,
                                         ]) }})" class="hover:bg-blue-50 transition-colors cursor-pointer">
-                                                                                                    <td class="px-4 py-3 text-sm text-gray-600">
-                                                                                                        {{ $log->created_at->format('M d, H:i:s') }}
-                                                                                                    </td>
-                                                                                                    <td class="px-4 py-3 text-sm font-medium text-gray-800">
-                                                                                                        {{ $log->apiUser->name ?? 'Unknown' }}
-                                                                                                    </td>
-                                                                                                    <td class="px-4 py-3">
-                                                                                                        <span
-                                                                                                            class="text-xs font-medium px-2 py-0.5 rounded {{ $log->method === 'POST' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700' }}">{{ $log->method }}</span>
-                                                                                                        <code class="ml-1 text-xs text-gray-600">{{ $log->endpoint }}</code>
-                                                                                                    </td>
-                                                                                                    <td class="px-4 py-3">
-                                                                                                        <span
-                                                                                                            class="text-xs font-medium px-2 py-0.5 rounded {{ $log->status_code >= 200 && $log->status_code < 300 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }}">
-                                                                                                            {{ $log->status_code }}
-                                                                                                        </span>
-                                                                                                    </td>
-                                                                                                    <td class="px-4 py-3 text-sm text-gray-600">{{ $log->response_time_ms }}ms</td>
-                                                                                                    <td class="px-4 py-3 text-sm text-gray-500">{{ $log->ip_address }}</td>
-                                                                                                    <td class="px-4 py-3">
-                                                                                                        <button type="button"
-                                                                                                            class="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center">
-                                                                                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor"
-                                                                                                                viewBox="0 0 24 24">
-                                                                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                                                                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                                                                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                                                                                            </svg>
-                                                                                                            Details
-                                                                                                        </button>
-                                                                                                    </td>
-                                                                                                </tr>
+                                                                    <td class="px-4 py-3 text-sm text-gray-600">
+                                                                        {{ $log->created_at->format('M d, H:i:s') }}
+                                                                    </td>
+                                                                    <td class="px-4 py-3 text-sm font-medium text-gray-800">
+                                                                        {{ $log->apiUser->name ?? 'Unknown' }}
+                                                                    </td>
+                                                                    <td class="px-4 py-3">
+                                                                        <span
+                                                                            class="text-xs font-medium px-2 py-0.5 rounded {{ $log->method === 'POST' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700' }}">{{ $log->method }}</span>
+                                                                        <code class="ml-1 text-xs text-gray-600">{{ $log->endpoint }}</code>
+                                                                    </td>
+                                                                    <td class="px-4 py-3">
+                                                                        <span
+                                                                            class="text-xs font-medium px-2 py-0.5 rounded {{ $log->status_code >= 200 && $log->status_code < 300 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' }}">
+                                                                            {{ $log->status_code }}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td class="px-4 py-3 text-sm text-gray-600">{{ $log->response_time_ms }}ms</td>
+                                                                    <td class="px-4 py-3 text-sm text-gray-500">{{ $log->ip_address }}</td>
+                                                                    <td class="px-4 py-3">
+                                                                        <button type="button"
+                                                                            class="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center">
+                                                                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor"
+                                                                                viewBox="0 0 24 24">
+                                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                                            </svg>
+                                                                            Details
+                                                                        </button>
+                                                                    </td>
+                                                                </tr>
                                     @endforeach
                                 </tbody>
                             </table>
@@ -1494,218 +1512,220 @@ Content-Type: application/json</pre>
             </div>
         </div>
 
-    <!-- Add/Edit User Modal -->
-    <div x-show="showAddUserModal || showEditUserModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto"
-        x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0"
-        x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200"
-        x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
-        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
-            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeModals()"></div>
+        <!-- Add/Edit User Modal -->
+        <div x-show="showAddUserModal || showEditUserModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto"
+            x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200"
+            x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeModals()"></div>
 
-            <div
-                class="relative inline-block w-full max-w-lg p-6 my-8 text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
-                <div class="flex justify-between items-center mb-6">
-                    <h3 class="text-xl font-bold text-gray-800"
-                        x-text="showEditUserModal ? 'Edit API User' : 'Add API User'"></h3>
-                    <button @click="closeModals()" class="text-gray-400 hover:text-gray-600">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
-
-                <form
-                    :action="showEditUserModal ? '{{ url('vital-sign-integration/api-user') }}/' + editingUser.id : '{{ route('vital-sign-integration.api-user.store') }}'"
-                    method="POST">
-                    @csrf
-                    <template x-if="showEditUserModal">
-                        <input type="hidden" name="_method" value="PUT">
-                    </template>
-
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">
-                                <div class="flex items-center">
-                                    <svg class="w-4 h-4 mr-1.5 text-emerald-600" fill="none" viewBox="0 0 24 24"
-                                        stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h2M4 12h2m10 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                                    </svg>
-                                    Name * <span class="text-xs font-normal text-gray-400 ml-1">(Scannable)</span>
-                                </div>
-                            </label>
-                            <input type="text" name="name" x-model="userFormData.name" required
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
-                                placeholder="e.g., GW-001">
-                            <p class="mt-1 text-xs text-gray-500">This name is used for barcode/QR code scanning
-                                when binding gateways.</p>
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Username *</label>
-                            <input type="text" name="username" x-model="userFormData.username" required
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
-                                placeholder="e.g., gateway_user_1">
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">
-                                Password <span x-show="!showEditUserModal">*</span>
-                                <span x-show="showEditUserModal" class="text-gray-400 font-normal">(leave empty to
-                                    keep current)</span>
-                            </label>
-                            <input type="password" name="password" x-model="userFormData.password"
-                                :required="!showEditUserModal"
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
-                                placeholder="Minimum 8 characters">
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                            <textarea name="description" x-model="userFormData.description" rows="2"
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
-                                placeholder="Optional description for this API user"></textarea>
-                        </div>
-
-                        <div x-show="showEditUserModal">
-                            <label class="flex items-center">
-                                <input type="checkbox" name="is_active" x-model="userFormData.is_active"
-                                    class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500">
-                                <span class="ml-2 text-sm text-gray-700">Active</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="mt-6 flex justify-end space-x-3">
-                        <button type="button" @click="closeModals()"
-                            class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">
-                            Cancel
-                        </button>
-                        <button type="submit"
-                            class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors">
-                            <span x-text="showEditUserModal ? 'Update User' : 'Create User'"></span>
+                <div
+                    class="relative inline-block w-full max-w-lg p-6 my-8 text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-gray-800"
+                            x-text="showEditUserModal ? 'Edit API User' : 'Add API User'"></h3>
+                        <button @click="closeModals()" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
                         </button>
                     </div>
-                </form>
-            </div>
-        </div>
-    </div>
 
-    <!-- Add/Edit Device Modal -->
-    <div x-show="showAddDeviceModal || showEditDeviceModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto"
-        x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0"
-        x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200"
-        x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
-        <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
-            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeDeviceModals()">
-            </div>
+                    <form
+                        :action="showEditUserModal ? '{{ url('vital-sign-integration/api-user') }}/' + editingUser.id : '{{ route('vital-sign-integration.api-user.store') }}'"
+                        method="POST">
+                        @csrf
+                        <template x-if="showEditUserModal">
+                            <input type="hidden" name="_method" value="PUT">
+                        </template>
 
-            <div
-                class="relative inline-block w-full max-w-lg p-6 my-8 text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
-                <div class="flex justify-between items-center mb-6">
-                    <h3 class="text-xl font-bold text-gray-800"
-                        x-text="showEditDeviceModal ? 'Edit Monitor Device' : 'Add Monitor Device'"></h3>
-                    <button @click="closeDeviceModals()" class="text-gray-400 hover:text-gray-600">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
-                </div>
-
-                <form
-                    :action="showEditDeviceModal ? '{{ url('vital-sign-integration/device') }}/' + editingDevice.id : '{{ route('vital-sign-integration.device.store') }}'"
-                    method="POST">
-                    @csrf
-                    <template x-if="showEditDeviceModal">
-                        <input type="hidden" name="_method" value="PUT">
-                    </template>
-
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Device Name *</label>
-                            <input type="text" name="name" x-model="deviceFormData.name" required
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
-                                placeholder="e.g., MP5SC Ward A">
-                        </div>
-
-                        <div class="grid grid-cols-3 gap-4">
-                            <div class="col-span-2">
-                                <label class="block text-sm font-medium text-gray-700 mb-1">IP Address *</label>
-                                <input type="text" name="ip_address" x-model="deviceFormData.ip_address" required
-                                    pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$"
-                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
-                                    placeholder="192.168.0.5">
-                            </div>
+                        <div class="space-y-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Port</label>
-                                <input type="number" name="port" x-model="deviceFormData.port"
-                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
-                                    placeholder="24105">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    <div class="flex items-center">
+                                        <svg class="w-4 h-4 mr-1.5 text-emerald-600" fill="none" viewBox="0 0 24 24"
+                                            stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h2M4 12h2m10 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                        </svg>
+                                        Name * <span class="text-xs font-normal text-gray-400 ml-1">(Scannable)</span>
+                                    </div>
+                                </label>
+                                <input type="text" name="name" x-model="userFormData.name" required
+                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
+                                    placeholder="e.g., GW-001">
+                                <p class="mt-1 text-xs text-gray-500">This name is used for barcode/QR code scanning
+                                    when binding gateways.</p>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Username *</label>
+                                <input type="text" name="username" x-model="userFormData.username" required
+                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
+                                    placeholder="e.g., gateway_user_1">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">
+                                    Password <span x-show="!showEditUserModal">*</span>
+                                    <span x-show="showEditUserModal" class="text-gray-400 font-normal">(leave empty to
+                                        keep current)</span>
+                                </label>
+                                <input type="password" name="password" x-model="userFormData.password"
+                                    :required="!showEditUserModal"
+                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
+                                    placeholder="Minimum 8 characters">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                <textarea name="description" x-model="userFormData.description" rows="2"
+                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
+                                    placeholder="Optional description for this API user"></textarea>
+                            </div>
+
+                            <div x-show="showEditUserModal">
+                                <label class="flex items-center">
+                                    <input type="checkbox" name="is_active" x-model="userFormData.is_active"
+                                        class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500">
+                                    <span class="ml-2 text-sm text-gray-700">Active</span>
+                                </label>
                             </div>
                         </div>
 
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                            <input type="text" name="location" x-model="deviceFormData.location"
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
-                                placeholder="e.g., Ward A - Bed 1">
+                        <div class="mt-6 flex justify-end space-x-3">
+                            <button type="button" @click="closeModals()"
+                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">
+                                Cancel
+                            </button>
+                            <button type="submit"
+                                class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors">
+                                <span x-text="showEditUserModal ? 'Update User' : 'Create User'"></span>
+                            </button>
                         </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                            <textarea name="description" x-model="deviceFormData.description" rows="2"
-                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
-                                placeholder="Optional description for this device"></textarea>
-                        </div>
-
-                        <div x-show="showEditDeviceModal">
-                            <label class="flex items-center">
-                                <input type="checkbox" name="is_active" x-model="deviceFormData.is_active"
-                                    class="rounded border-gray-300 text-cyan-600 shadow-sm focus:ring-cyan-500">
-                                <span class="ml-2 text-sm text-gray-700">Active</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="mt-6 flex justify-end space-x-3">
-                        <button type="button" @click="closeDeviceModals()"
-                            class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">
-                            Cancel
-                        </button>
-                        <button type="submit"
-                            class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-medium rounded-lg transition-colors">
-                            <span x-text="showEditDeviceModal ? 'Update Device' : 'Add Device'"></span>
-                        </button>
-                    </div>
-                </form>
+                    </form>
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- Toast Notification -->
-    <div x-show="toast.show" x-cloak x-transition:enter="transition ease-out duration-300"
-        x-transition:enter-start="opacity-0 transform translate-y-2"
-        x-transition:enter-end="opacity-100 transform translate-y-0"
-        x-transition:leave="transition ease-in duration-200"
-        x-transition:leave-start="opacity-100 transform translate-y-0"
-        x-transition:leave-end="opacity-0 transform translate-y-2" class="fixed bottom-4 right-4 z-50">
-        <div :class="toast.success ? 'bg-green-500' : 'bg-red-500'"
-            class="text-white px-6 py-4 rounded-lg shadow-lg max-w-md">
-            <div class="flex items-center">
-                <svg x-show="toast.success" class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <svg x-show="!toast.success" class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span x-text="toast.message" class="font-medium"></span>
+        <!-- Add/Edit Device Modal -->
+        <div x-show="showAddDeviceModal || showEditDeviceModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto"
+            x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0"
+            x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200"
+            x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeDeviceModals()">
+                </div>
+
+                <div
+                    class="relative inline-block w-full max-w-lg p-6 my-8 text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-xl font-bold text-gray-800"
+                            x-text="showEditDeviceModal ? 'Edit Monitor Device' : 'Add Monitor Device'"></h3>
+                        <button @click="closeDeviceModals()" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <form
+                        :action="showEditDeviceModal ? '{{ url('vital-sign-integration/device') }}/' + editingDevice.id : '{{ route('vital-sign-integration.device.store') }}'"
+                        method="POST">
+                        @csrf
+                        <template x-if="showEditDeviceModal">
+                            <input type="hidden" name="_method" value="PUT">
+                        </template>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Device Name *</label>
+                                <input type="text" name="name" x-model="deviceFormData.name" required
+                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+                                    placeholder="e.g., MP5SC Ward A">
+                            </div>
+
+                            <div class="grid grid-cols-3 gap-4">
+                                <div class="col-span-2">
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">IP Address *</label>
+                                    <input type="text" name="ip_address" x-model="deviceFormData.ip_address" required
+                                        pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$"
+                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+                                        placeholder="192.168.0.5">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Port</label>
+                                    <input type="number" name="port" x-model="deviceFormData.port"
+                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+                                        placeholder="24105">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                                <input type="text" name="location" x-model="deviceFormData.location"
+                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+                                    placeholder="e.g., Ward A - Bed 1">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                <textarea name="description" x-model="deviceFormData.description" rows="2"
+                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+                                    placeholder="Optional description for this device"></textarea>
+                            </div>
+
+                            <div x-show="showEditDeviceModal">
+                                <label class="flex items-center">
+                                    <input type="checkbox" name="is_active" x-model="deviceFormData.is_active"
+                                        class="rounded border-gray-300 text-cyan-600 shadow-sm focus:ring-cyan-500">
+                                    <span class="ml-2 text-sm text-gray-700">Active</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="mt-6 flex justify-end space-x-3">
+                            <button type="button" @click="closeDeviceModals()"
+                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">
+                                Cancel
+                            </button>
+                            <button type="submit"
+                                class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white font-medium rounded-lg transition-colors">
+                                <span x-text="showEditDeviceModal ? 'Update Device' : 'Add Device'"></span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
-    </div>
+
+        <!-- Toast Notification -->
+        <div x-show="toast.show" x-cloak x-transition:enter="transition ease-out duration-300"
+            x-transition:enter-start="opacity-0 transform translate-y-2"
+            x-transition:enter-end="opacity-100 transform translate-y-0"
+            x-transition:leave="transition ease-in duration-200"
+            x-transition:leave-start="opacity-100 transform translate-y-0"
+            x-transition:leave-end="opacity-0 transform translate-y-2" class="fixed bottom-4 right-4 z-50">
+            <div :class="toast.success ? 'bg-green-500' : 'bg-red-500'"
+                class="text-white px-6 py-4 rounded-lg shadow-lg max-w-md">
+                <div class="flex items-center">
+                    <svg x-show="toast.success" class="w-6 h-6 mr-3" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <svg x-show="!toast.success" class="w-6 h-6 mr-3" fill="none" stroke="currentColor"
+                        viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span x-text="toast.message" class="font-medium"></span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
