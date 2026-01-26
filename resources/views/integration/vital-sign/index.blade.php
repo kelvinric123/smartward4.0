@@ -942,9 +942,9 @@ Content-Type: application/json</pre>
                                 active devices from the API. Make sure the following environment variables are set:</p>
                             <pre
                                 class="text-sm text-gray-300 font-mono overflow-x-auto"><span class="text-cyan-400">API_BASE_URL</span>=<span class="text-green-400">"http://{{ $gatewayConfig['server_ip'] }}:{{ $gatewayConfig['server_port'] }}/api/v1"</span>
-                                                <span class="text-cyan-400">API_PASSPHRASE</span>=<span class="text-green-400">"{{ $gatewayConfig['passphrase'] }}"</span>
-                                                <span class="text-cyan-400">API_USERNAME</span>=<span class="text-green-400">"your_api_user"</span>
-                                                <span class="text-cyan-400">API_PASSWORD</span>=<span class="text-green-400">"your_password"</span></pre>
+                                                    <span class="text-cyan-400">API_PASSPHRASE</span>=<span class="text-green-400">"{{ $gatewayConfig['passphrase'] }}"</span>
+                                                    <span class="text-cyan-400">API_USERNAME</span>=<span class="text-green-400">"your_api_user"</span>
+                                                    <span class="text-cyan-400">API_PASSWORD</span>=<span class="text-green-400">"your_password"</span></pre>
                             <p class="text-xs text-gray-500 mt-3">Devices configured here will be fetched via <code
                                     class="text-cyan-300">GET /api/v1/monitor-devices</code></p>
                         </div>
@@ -1534,7 +1534,7 @@ Content-Type: application/json</pre>
                     </div>
 
                     <form
-                        :action="showEditUserModal ? '{{ url('vital-sign-integration/api-user') }}/' + editingUser.id : '{{ route('vital-sign-integration.api-user.store') }}'"
+                        :action="showEditUserModal ? '/vital-sign-integration/api-user/' + editingUser.id : '/vital-sign-integration/api-user'"
                         method="POST">
                         @csrf
                         <template x-if="showEditUserModal">
@@ -1633,7 +1633,7 @@ Content-Type: application/json</pre>
                     </div>
 
                     <form
-                        :action="showEditDeviceModal ? '{{ url('vital-sign-integration/device') }}/' + editingDevice.id : '{{ route('vital-sign-integration.device.store') }}'"
+                        :action="showEditDeviceModal ? '/vital-sign-integration/device/' + editingDevice.id : '/vital-sign-integration/device'"
                         method="POST">
                         @csrf
                         <template x-if="showEditDeviceModal">
@@ -1877,7 +1877,7 @@ DEVICE_PASSWORD = "your_password"`;
                     this.apiResponse = 'Sending login request...';
 
                     try {
-                        const response = await fetch('{{ url('/api/vital-sign/login') }}', {
+                        const response = await fetch('/api/vital-sign/login', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -1934,7 +1934,7 @@ DEVICE_PASSWORD = "your_password"`;
                         if (this.testVital.spo2) payload.spo2 = parseInt(this.testVital.spo2);
                         if (this.testVital.respiratory_rate) payload.respiratory_rate = parseInt(this.testVital.respiratory_rate);
 
-                        const response = await fetch('{{ url('/api/vital-sign/reading') }}', {
+                        const response = await fetch('/api/vital-sign/reading', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
@@ -2011,4 +2011,5 @@ DEVICE_PASSWORD = "your_password"`;
             };
         }
     </script>
+
 </x-app-layout>
