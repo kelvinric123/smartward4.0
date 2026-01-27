@@ -2,10 +2,8 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
+use App\Models\ApiUser;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 
 class ApiUserSeeder extends Seeder
 {
@@ -14,9 +12,7 @@ class ApiUserSeeder extends Seeder
      */
     public function run(): void
     {
-        $password = Hash::make('88888888');
-
-        // Define API users
+        // Define API users (username format)
         $users = [
             'api@qmed.asia',
             'api2@qmed.asia',
@@ -26,15 +22,14 @@ class ApiUserSeeder extends Seeder
             'api6@qmed.asia',
         ];
 
-        foreach ($users as $email) {
-            User::firstOrCreate(
-                ['email' => $email],
+        foreach ($users as $username) {
+            ApiUser::firstOrCreate(
+                ['username' => $username],
                 [
-                    'name' => $email, // Name same as username/email
-                    'password' => $password,
-                    // 'role' => 'user', // Default is 'user', so we can omit or explicitly set to 'user' if needed. Schema default is 'user'.
-                    'email_verified_at' => now(),
-                    'remember_token' => Str::random(10),
+                    'name' => $username,
+                    'password' => '88888888', // ApiUser model auto-hashes via setPasswordAttribute
+                    'is_active' => true,
+                    'description' => 'API user for external integrations',
                 ]
             );
         }
