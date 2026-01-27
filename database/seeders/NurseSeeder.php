@@ -64,21 +64,22 @@ class NurseSeeder extends Seeder
             $yearsOfExperience = $joinedDate->diffInYears(now());
 
             // Create User
-            $user = User::firstOrCreate(
-                ['email' => $email],
-                [
-                    'name' => $data['name'],
-                    'password' => Hash::make($password),
-                    'role' => User::ROLE_NURSE,
-                    'email_verified_at' => now(),
-                ]
-            );
+            // Create User
+            // $user = User::firstOrCreate(
+            //     ['email' => $email],
+            //     [
+            //         'name' => $data['name'],
+            //         'password' => Hash::make($password),
+            //         'role' => User::ROLE_NURSE,
+            //         'email_verified_at' => now(),
+            //     ]
+            // );
 
             // Ensure role is set correctly
-            if ($user->role !== User::ROLE_NURSE) {
-                $user->role = User::ROLE_NURSE;
-                $user->save();
-            }
+            // if ($user->role !== User::ROLE_NURSE) {
+            //     $user->role = User::ROLE_NURSE;
+            //     $user->save();
+            // }
 
             // Create Nurse Record
             Nurse::updateOrCreate(

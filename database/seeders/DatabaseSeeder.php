@@ -23,6 +23,13 @@ class DatabaseSeeder extends Seeder
             'role' => 'superadmin',
         ]);
 
+        User::factory()->create([
+            'name' => 'IHH Support Manager',
+            'email' => 'ihh_support_manager@ihh.com',
+            'password' => Hash::make('88888888'),
+            'role' => 'superadmin',
+        ]);
+
         // Seed Admin Management data
         $this->call([
             SuperAdminSeeder::class,
