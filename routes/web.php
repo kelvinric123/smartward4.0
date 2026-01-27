@@ -63,6 +63,7 @@ Route::middleware('auth')->group(function () {
     Route::post('anaesthetists-bulk-upload/confirm', [AnaesthetistController::class, 'bulkUploadConfirm'])->name('anaesthetists.bulk-upload.confirm');
 
     Route::resource('nurses', NurseController::class)->except(['show']);
+    Route::put('nurses/{nurse}/ldap-binding', [NurseController::class, 'updateLdapBinding'])->name('nurses.update-ldap-binding');
     Route::post('nurses/{nurse}/deactivate', [NurseController::class, 'deactivate'])->name('nurses.deactivate');
     Route::get('nurses-bulk-upload', [NurseController::class, 'bulkUploadForm'])->name('nurses.bulk-upload');
     Route::post('nurses-bulk-upload/preview', [NurseController::class, 'bulkUploadPreview'])->name('nurses.bulk-upload.preview');
@@ -70,6 +71,7 @@ Route::middleware('auth')->group(function () {
 
     Route::resource('users', \App\Http\Controllers\UsersController::class)->except(['show']);
     Route::post('users/{user}/update-role', [\App\Http\Controllers\UsersController::class, 'updateRole'])->name('users.update-role');
+    Route::post('users/{user}/toggle-status', [\App\Http\Controllers\UsersController::class, 'toggleStatus'])->name('users.toggle-status');
 
 
     // Patient Additional Field Routes (inside Admin Management)
@@ -155,10 +157,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/vital-sign-integration/logs', [VitalSignIntegrationController::class, 'getLogs'])->name('vital-sign-integration.logs');
     Route::post('/vital-sign-integration/logs/clear', [VitalSignIntegrationController::class, 'clearLogs'])->name('vital-sign-integration.logs.clear');
 
-    // Monitor Device Routes (for mp5sc listener)
-    Route::post('/vital-sign-integration/device', [VitalSignIntegrationController::class, 'storeDevice'])->name('vital-sign-integration.device.store');
-    Route::put('/vital-sign-integration/device/{device}', [VitalSignIntegrationController::class, 'updateDevice'])->name('vital-sign-integration.device.update');
-    Route::delete('/vital-sign-integration/device/{device}', [VitalSignIntegrationController::class, 'destroyDevice'])->name('vital-sign-integration.device.destroy');
+    // Qmed Gateway Routes
+    Route::post('/vital-sign-integration/gateway', [VitalSignIntegrationController::class, 'storeGateway'])->name('vital-sign-integration.gateway.store');
+    Route::put('/vital-sign-integration/gateway/{gateway}', [VitalSignIntegrationController::class, 'updateGateway'])->name('vital-sign-integration.gateway.update');
+    Route::delete('/vital-sign-integration/gateway/{gateway}', [VitalSignIntegrationController::class, 'destroyGateway'])->name('vital-sign-integration.gateway.destroy');
+
+    // Monitor Device Routes (for mp5sc listener) - REMOVED
+    // Route::post('/vital-sign-integration/device', [VitalSignIntegrationController::class, 'storeDevice'])->name('vital-sign-integration.device.store');
+    // ...
 
     // Infusion Integration Routes (B.Braun HL7/MLLP)
     Route::get('/infusion-integration', [InfusionIntegrationController::class, 'index'])->name('infusion-integration.index');

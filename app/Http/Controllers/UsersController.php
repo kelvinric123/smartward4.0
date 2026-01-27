@@ -177,4 +177,25 @@ class UsersController extends Controller
 
         return redirect()->route('users.index')->with('success', 'User deleted successfully.');
     }
+
+    public function toggleStatus(Request $request, User $user)
+    {
+        if ($user->isSuperadmin()) {
+            return back()->with('error', 'Cannot deactivate Superadmin.');
+        }
+
+        if ($user->id === auth()->id()) {
+            return back()->with('error', 'Cannot deactivate yourself.');
+        }
+
+        if ($user->isActive()) {
+            $user->update(['deactivated_at' => now()]);
+            $message = 'User deactivated successfully.';
+        } else {
+            $user->update(['deactivated_at' => null]);
+            $message = 'User activated successfully.';
+        }
+
+        return redirect()->back()->with('success', $message);
+    }
 }

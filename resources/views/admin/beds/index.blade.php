@@ -38,6 +38,7 @@
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Bed ID</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Display Name</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Ward</th>
+                                    <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Section</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Status</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Patient</th>
                                     <th class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Nurse</th>
@@ -53,6 +54,7 @@
                                         </td>
                                         <td class="px-6 py-4 text-gray-600 text-sm">{{ $bed->bed_display_name }}</td>
                                         <td class="px-6 py-4 text-gray-600 text-sm">{{ $bed->ward->ward_name ?? '-' }}</td>
+                                        <td class="px-6 py-4 text-gray-600 text-sm">{{ $bed->section ? 'Section ' . $bed->section : '-' }}</td>
                                         <td class="px-6 py-4 whitespace-nowrap">
                                             @php
                                                 $statusColors = [

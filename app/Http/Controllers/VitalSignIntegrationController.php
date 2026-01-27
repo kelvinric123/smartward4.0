@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ApiUser;
 use App\Models\VitalSign;
 use App\Models\VitalSignApiLog;
-use App\Models\VitalSignMonitorDevice;
+use App\Models\QmedGateway;
 use App\Models\Patient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -27,8 +27,8 @@ class VitalSignIntegrationController extends Controller
             ->limit(20)
             ->get();
 
-        // Get monitor devices
-        $monitorDevices = VitalSignMonitorDevice::latest()->get();
+        // Get Qmed gateways
+        $gateways = QmedGateway::with('apiUsers')->latest()->get();
 
         // Get gateway configuration for display
         $serverInfo = $this->getServerInfo();
@@ -40,7 +40,7 @@ class VitalSignIntegrationController extends Controller
             'server_port' => $serverInfo['port'],
         ];
 
-        return view('integration.vital-sign.index', compact('apiUsers', 'recentLogs', 'gatewayConfig', 'monitorDevices'));
+        return view('integration.vital-sign.index', compact('apiUsers', 'recentLogs', 'gatewayConfig', 'gateways'));
     }
 
     /**
@@ -666,211 +666,69 @@ class VitalSignIntegrationController extends Controller
     }
 
     // ============================================
-    // Monitor Device Management
+    // Qmed Gateway Management
     // ============================================
 
     /**
-     * Store a new monitor device.
+     * Store a new Qmed gateway.
      */
-    public function storeDevice(Request $request)
+    public function storeGateway(Request $request)
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'ip_address' => 'required|ip|unique:vital_sign_monitor_devices,ip_address',
-            'port' => 'nullable|integer|min:1|max:65535',
             'location' => 'nullable|string|max:255',
-            'description' => 'nullable|string|max:1000',
+            'mac_address' => 'nullable|string|max:255|unique:qmed_gateways,mac_address',
+            'api_users' => 'nullable|array',
+            'api_users.*' => 'exists:api_users,id',
         ]);
 
-        $validated['port'] = $validated['port'] ?? 24105;
+        $gateway = QmedGateway::create($validated);
 
-        VitalSignMonitorDevice::create($validated);
+        if (!empty($validated['api_users'])) {
+            $gateway->apiUsers()->sync($validated['api_users']);
+        }
 
         return redirect()->route('vital-sign-integration.index')
-            ->with('success', 'Monitor device added successfully.');
+            ->with('success', 'Qmed Gateway created successfully.');
     }
 
     /**
-     * Update an existing monitor device.
+     * Update an existing Qmed gateway.
      */
-    public function updateDevice(Request $request, VitalSignMonitorDevice $device)
+    public function updateGateway(Request $request, QmedGateway $gateway)
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'ip_address' => 'required|ip|unique:vital_sign_monitor_devices,ip_address,' . $device->id,
-            'port' => 'nullable|integer|min:1|max:65535',
             'location' => 'nullable|string|max:255',
-            'description' => 'nullable|string|max:1000',
+            'mac_address' => 'nullable|string|max:255|unique:qmed_gateways,mac_address,' . $gateway->id,
             'is_active' => 'boolean',
+            'api_users' => 'nullable|array',
+            'api_users.*' => 'exists:api_users,id',
         ]);
 
         $validated['is_active'] = $request->has('is_active');
-        $validated['port'] = $validated['port'] ?? 24105;
 
-        $device->update($validated);
+        $gateway->update($validated);
+
+        if (isset($validated['api_users'])) {
+            $gateway->apiUsers()->sync($validated['api_users']);
+        } else {
+            $gateway->apiUsers()->detach();
+        }
 
         return redirect()->route('vital-sign-integration.index')
-            ->with('success', 'Monitor device updated successfully.');
+            ->with('success', 'Qmed Gateway updated successfully.');
     }
 
     /**
-     * Delete a monitor device.
+     * Delete a Qmed gateway.
      */
-    public function destroyDevice(VitalSignMonitorDevice $device)
+    public function destroyGateway(QmedGateway $gateway)
     {
-        $device->delete();
+        $gateway->delete();
 
         return redirect()->route('vital-sign-integration.index')
-            ->with('success', 'Monitor device deleted successfully.');
-    }
-
-    // ============================================
-    // API Endpoints for MP5SC Listener
-    // ============================================
-
-    /**
-     * API: Get list of active monitor devices for the listener.
-     * Used by the mp5sc_listener container to know which devices to connect to.
-     */
-    public function apiGetDevices(Request $request)
-    {
-        // Validate passphrase
-        $passphrase = $request->header('X-Passphrase');
-        $expectedPassphrase = config('services.vital_sign_api.passphrase', 'qmedno1');
-
-        if ($passphrase !== $expectedPassphrase) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid passphrase',
-            ], 401);
-        }
-
-        $devices = VitalSignMonitorDevice::active()
-            ->select(['id', 'name', 'ip_address', 'port', 'location'])
-            ->get();
-
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'devices' => $devices,
-                'count' => $devices->count(),
-            ],
-        ]);
-    }
-
-    /**
-     * API: Update device connection status from listener.
-     */
-    public function apiUpdateDeviceStatus(Request $request, VitalSignMonitorDevice $device)
-    {
-        // Validate passphrase
-        $passphrase = $request->header('X-Passphrase');
-        $expectedPassphrase = config('services.vital_sign_api.passphrase', 'qmedno1');
-
-        if ($passphrase !== $expectedPassphrase) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid passphrase',
-            ], 401);
-        }
-
-        $validated = $request->validate([
-            'status' => 'required|string|max:255',
-            'connected' => 'boolean',
-        ]);
-
-        $device->updateConnectionStatus(
-            $validated['status'],
-            $validated['connected'] ?? false
-        );
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Device status updated',
-        ]);
-    }
-
-    /**
-     * API: Receive monitor status log (generic).
-     */
-    public function apiReceiveMonitorStatus(Request $request)
-    {
-        $startTime = microtime(true);
-
-        // Validate passphrase
-        $passphrase = $request->header('X-Passphrase');
-        $expectedPassphrase = config('services.vital_sign_api.passphrase', 'qmedno1');
-
-        if ($passphrase !== $expectedPassphrase) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid passphrase',
-            ], 401);
-        }
-
-        // Validate credentials and data
-        $validator = Validator::make($request->all(), [
-            'username' => 'required|string',
-            'password' => 'required|string',
-            'timestamp' => 'nullable|date',
-            'monitor_ip' => 'nullable|ip',
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors(),
-            ], 422);
-        }
-
-        // Authenticate API User
-        $apiUser = ApiUser::where('username', $request->username)
-            ->where('is_active', true)
-            ->first();
-
-        if (!$apiUser || !$apiUser->verifyPassword($request->password)) {
-            // Log failed attempt but don't expose too much
-            $this->logApiRequest(
-                $apiUser ?? new ApiUser(['id' => null]), // Dummy user for log if not found
-                '/api/v1/monitor/status',
-                'POST',
-                $request->all(),
-                ['message' => 'Invalid credentials'],
-                401,
-                $startTime
-            );
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid credentials',
-            ], 401);
-        }
-
-        // Update device status if IP provided
-        if ($request->monitor_ip) {
-            $device = VitalSignMonitorDevice::where('ip_address', $request->monitor_ip)->first();
-            if ($device) {
-                $device->updateConnectionStatus('Online (Log Received)', true);
-            }
-        }
-
-        $responseData = [
-            'status' => 'success',
-        ];
-
-        // Log the request
-        $this->logApiRequest(
-            $apiUser,
-            '/api/v1/monitor/status',
-            'POST',
-            $request->all(),
-            $responseData,
-            200,
-            $startTime
-        );
-
-        return response()->json($responseData);
+            ->with('success', 'Qmed Gateway deleted successfully.');
     }
 }
 

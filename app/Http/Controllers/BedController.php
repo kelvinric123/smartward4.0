@@ -16,16 +16,16 @@ class BedController extends Controller
     {
         // Sync bed status with patient assignments
         $this->syncBedStatus();
-        
+
         $beds = Bed::with(['ward', 'nurse', 'anaesthetist', 'patient', 'consultants'])->latest()->paginate(10);
         return view('admin.beds.index', compact('beds'));
     }
-    
+
     private function syncBedStatus()
     {
         // Get all beds
         $beds = Bed::all();
-        
+
         foreach ($beds as $bed) {
             // Check if bed has a patient assigned through the patient table
             $patient = Patient::where('ward_id', $bed->ward_id)
@@ -33,7 +33,7 @@ class BedController extends Controller
                 ->where('is_active', true)
                 ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
                 ->first();
-            
+
             if ($patient) {
                 // Update bed status based on patient status
                 $bedStatus = $patient->status === 'prebook' ? 'reserved' : 'occupied';
@@ -60,7 +60,7 @@ class BedController extends Controller
         $anaesthetists = Anaesthetist::where('is_active', true)->get();
         $patients = Patient::where('is_active', true)->get();
         $consultants = Consultant::where('is_active', true)->get();
-        
+
         return view('admin.beds.create', compact('wards', 'nurses', 'anaesthetists', 'patients', 'consultants'));
     }
 
@@ -68,6 +68,7 @@ class BedController extends Controller
     {
         $validated = $request->validate([
             'ward_id' => 'required|exists:wards,id',
+            'section' => 'nullable|string|in:1,2,3',
             'bed_number' => 'required|string|max:255',
             'bed_id' => 'required|string|max:255|unique:beds,bed_id',
             'bed_display_name' => 'required|string|max:255',
@@ -81,7 +82,7 @@ class BedController extends Controller
 
         $consultantIds = $validated['consultant_ids'] ?? [];
         unset($validated['consultant_ids']);
-        
+
         $validated['is_active'] = true;
         $bed = Bed::create($validated);
 
@@ -99,7 +100,7 @@ class BedController extends Controller
         $anaesthetists = Anaesthetist::where('is_active', true)->get();
         $patients = Patient::where('is_active', true)->get();
         $consultants = Consultant::where('is_active', true)->get();
-        
+
         return view('admin.beds.edit', compact('bed', 'wards', 'nurses', 'anaesthetists', 'patients', 'consultants'));
     }
 
@@ -107,6 +108,7 @@ class BedController extends Controller
     {
         $validated = $request->validate([
             'ward_id' => 'required|exists:wards,id',
+            'section' => 'nullable|string|in:1,2,3',
             'bed_number' => 'required|string|max:255',
             'bed_id' => 'required|string|max:255|unique:beds,bed_id,' . $bed->id,
             'bed_display_name' => 'required|string|max:255',
@@ -120,7 +122,7 @@ class BedController extends Controller
 
         $consultantIds = $validated['consultant_ids'] ?? [];
         unset($validated['consultant_ids']);
-        
+
         $bed->update($validated);
 
         if (isset($consultantIds)) {

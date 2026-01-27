@@ -72,11 +72,22 @@
             <div class="bg-white shadow-lg rounded-2xl border border-blue-100" x-data="{
                     selected: [],
                     assignModal: false,
+                    sectionAssignModal: false,
                     selectedNurse: '{{ $nurses->first()->id ?? '' }}',
                     assignError: '',
                     assignLoading: false,
                     hasNurses: {{ $nurses->count() ? 'true' : 'false' }},
                     patientModal: { open: false, patientId: null },
+                    
+                    // Section Assign Data
+                    beds: @js($beds),
+                    existingAssignments: @js($assignments),
+                    nurses: @js($nurses),
+                    sectionAssignSection: '',
+                    sectionAssignNurse: '',
+                    sectionAssignShifts: ['AM', 'PM', 'ON'], // Default all selected
+                    sectionAssignExcludedBeds: [],
+
                     submitFilters() {
                         if (this.$refs.filterForm) {
                             this.$refs.filterForm.submit();
@@ -127,8 +138,89 @@
                         this.$refs.nurseField.value = this.selectedNurse;
                         this.assignLoading = true;
                         this.$refs.assignForm.submit();
+                    },
+                    
+                    // Section Assign Methods
+                    getSectionBeds() {
+                        if (!this.sectionAssignSection) return [];
+                        return this.beds.filter(b => String(b.section) === String(this.sectionAssignSection));
+                    },
+                    isExcluded(bedId) {
+                        return this.sectionAssignExcludedBeds.includes(bedId);
+                    },
+                    toggleExclusion(bedId) {
+                        const index = this.sectionAssignExcludedBeds.indexOf(bedId);
+                        if (index === -1) {
+                            this.sectionAssignExcludedBeds.push(bedId);
+                        } else {
+                            this.sectionAssignExcludedBeds.splice(index, 1);
+                        }
+                    },
+                    toggleAllExclusion(shouldInclude) {
+                         const sectionBeds = this.getSectionBeds();
+                         if (shouldInclude) {
+                             // Remove all section beds from exclusion list
+                             this.sectionAssignExcludedBeds = this.sectionAssignExcludedBeds.filter(id => !sectionBeds.some(b => b.id === id));
+                         } else {
+                             // Add all section beds to exclusion list (if not already there)
+                             sectionBeds.forEach(bed => {
+                                 if (!this.sectionAssignExcludedBeds.includes(bed.id)) {
+                                     this.sectionAssignExcludedBeds.push(bed.id);
+                                 }
+                             });
+                         }
+                    },
+                    areAllIncluded() {
+                        const sectionBeds = this.getSectionBeds();
+                        if (!sectionBeds.length) return false;
+                        return sectionBeds.every(b => !this.sectionAssignExcludedBeds.includes(b.id));
+                    },
+                    getNurseName(bedId, shift) {
+                        const key = bedId + '|{{ $selectedDate }}|' + shift;
+                        const assignment = this.existingAssignments[key];
+                        return assignment ? assignment.nurse_name : '';
+                    },
+                    getNurseLabel(nurseId) {
+                        const nurse = this.nurses.find(n => n.id == nurseId);
+                        return nurse ? nurse.name : 'Unknown';
+                    },
+                    submitSectionAssign() {
+                        this.assignError = '';
+                        // get section beds that are NOT excluded
+                        const beds = this.getSectionBeds().filter(b => !this.isExcluded(b.id));
+                        
+                        if (!beds.length) {
+                             if (this.sectionAssignExcludedBeds.length > 0) {
+                                 this.assignError = 'All beds in this section are excluded. Uncheck some to assign.';
+                             } else {
+                                this.assignError = 'No beds in this section.';
+                             }
+                            return;
+                        }
+                        
+                        if (!this.sectionAssignShifts.length) {
+                            this.assignError = 'Select at least one shift.';
+                            return;
+                        }
+
+                        // Generate assignments
+                        const assignments = [];
+                        beds.forEach(bed => {
+                            this.sectionAssignShifts.forEach(shift => {
+                                assignments.push({
+                                    bed_id: bed.id,
+                                    date: '{{ $selectedDate }}',
+                                    shift: shift
+                                });
+                            });
+                        });
+
+                        this.$refs.assignmentsField.value = JSON.stringify(assignments);
+                        this.$refs.nurseField.value = this.sectionAssignNurse;
+                        this.assignLoading = true;
+                        this.$refs.assignForm.submit();
                     }
-                 }" x-effect="document.body.style.overflow = assignModal ? 'hidden' : ''">
+                 }" x-effect="document.body.style.overflow = (assignModal || sectionAssignModal) ? 'hidden' : ''">
                 <div class="p-6 space-y-6">
                     @if (session('success'))
                         <div
@@ -224,6 +316,14 @@
                                     @click="clearSelection()" x-show="selected.length">Clear</button>
                             </div>
                             <div class="flex items-center gap-2">
+                                <button type="button" @click="sectionAssignModal = true"
+                                    class="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                    </svg>
+                                    Section Assign
+                                </button>
                                 <button type="button" @click="assignModal = true" :disabled="!selected.length"
                                     class="inline-flex items-center px-4 py-2 rounded-lg font-semibold shadow-sm transition-all"
                                     :class="selected.length ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'">
@@ -292,12 +392,21 @@
                                                 class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider w-32">
                                                 Shift</th>
                                             @foreach($dateRange as $date)
+                                                @php
+                                                    $isToday = $date->isSameDay(\Carbon\Carbon::now());
+                                                @endphp
                                                 <th
-                                                    class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                                    class="px-6 py-3 text-left text-xs font-bold uppercase tracking-wider {{ $isToday ? 'bg-yellow-50 text-amber-800 border-b-2 border-yellow-300' : 'text-gray-700' }}">
                                                     <div class="flex flex-col">
                                                         <span
-                                                            class="text-sm font-semibold text-gray-800">{{ $date->format('l') }}</span>
-                                                        <span class="text-xs text-gray-500">{{ $date->toDateString() }}</span>
+                                                            class="text-sm font-semibold {{ $isToday ? 'text-amber-900' : 'text-gray-800' }}">{{ $date->format('l') }}</span>
+                                                        <span
+                                                            class="text-xs {{ $isToday ? 'text-amber-700' : 'text-gray-500' }}">
+                                                            @if($isToday)
+                                                                Today,
+                                                            @endif
+                                                            {{ $date->toDateString() }}
+                                                        </span>
                                                     </div>
                                                 </th>
                                             @endforeach
@@ -344,18 +453,22 @@
                                                     @foreach($dateRange as $date)
                                                         @php
                                                             $isSelectedDate = $date->isSameDay(\Carbon\Carbon::parse($selectedDate));
+                                                            $isToday = $date->isSameDay(\Carbon\Carbon::now());
                                                             $cellKey = $bed->id . '|' . $date->toDateString() . '|' . $shift;
                                                         @endphp
-                                                        <td class="px-6 py-4">
+                                                        <td class="px-6 py-4 {{ $isToday ? 'bg-yellow-50/30' : '' }}">
                                                             <button type="button" @if(!($isLockedToNurse ?? false))
                                                                 @click="toggle({ key: '{{ $cellKey }}', bed_id: {{ $bed->id }}, bed: @js($bed->bed_display_name ?? 'Bed ' . $bed->bed_number), shift: '{{ $shift }}', date: '{{ $date->toDateString() }}' })"
                                                             @else disabled @endif
                                                                 :class="isSelected('{{ $cellKey }}') ? 'ring-2 ring-offset-2 ring-green-400' : ''"
                                                                 class="w-full text-left {{ ($isLockedToNurse ?? false) ? 'cursor-default' : '' }}">
                                                                 <div
-                                                                    class="rounded-lg border {{ $isSelectedDate ? 'border-green-200 bg-green-50' : 'border-gray-100 bg-white' }} p-3 hover:border-blue-200 hover:bg-blue-50 transition-colors">
+                                                                    class="rounded-lg border {{ $isSelectedDate ? 'border-green-200 bg-green-50' : ($isToday ? 'border-yellow-200 bg-yellow-50' : 'border-gray-100 bg-white') }} p-3 hover:border-blue-200 hover:bg-blue-50 transition-colors">
                                                                     <div class="flex items-center justify-between">
-                                                                        <p class="text-xs text-gray-500">{{ $date->toDateString() }}</p>
+                                                                        <p
+                                                                            class="text-xs {{ $isToday ? 'text-amber-700 font-medium' : 'text-gray-500' }}">
+                                                                            {{ $date->toDateString() }}
+                                                                        </p>
                                                                         <span x-show="isSelected('{{ $cellKey }}')"
                                                                             class="text-xs font-semibold text-green-700 bg-green-100 border border-green-200 rounded-full px-2 py-0.5">Selected</span>
                                                                     </div>
@@ -467,6 +580,174 @@
                                         <span x-show="assignLoading">Assigning...</span>
                                         <span x-show="!assignLoading">Confirm Assign</span>
                                     </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section Assign Modal -->
+                    <div x-show="sectionAssignModal" style="display: none;" class="fixed inset-0 z-50 overflow-y-auto">
+                        <div class="fixed inset-0 bg-black/40" @click="sectionAssignModal = false"></div>
+                        <div class="flex min-h-full items-center justify-center p-4">
+                            <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl p-6 space-y-4 max-h-[90vh] overflow-y-auto"
+                                @click.stop>
+                                <div class="flex items-center justify-between">
+                                    <h3 class="text-lg font-semibold text-gray-800">Section Assign</h3>
+                                    <button type="button" class="text-gray-400 hover:text-gray-600"
+                                        @click="sectionAssignModal = false">&times;</button>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <!-- Controls -->
+                                    <div class="space-y-4">
+                                        <!-- Section Select -->
+                                        <div>
+                                            <label class="block text-sm font-semibold text-gray-700">Select
+                                                Section</label>
+                                            <select x-model="sectionAssignSection"
+                                                class="w-full rounded-lg border-gray-200 shadow-sm focus:ring-blue-500 focus:border-blue-500 mt-1">
+                                                <option value="">Select Section...</option>
+                                                <option value="1">Section 1</option>
+                                                <option value="2">Section 2</option>
+                                                <option value="3">Section 3</option>
+                                            </select>
+                                        </div>
+
+                                        <!-- Nurse Select -->
+                                        <div>
+                                            <label class="block text-sm font-semibold text-gray-700">Select
+                                                Nurse</label>
+                                            <select x-model="sectionAssignNurse"
+                                                class="w-full rounded-lg border-gray-200 shadow-sm focus:ring-blue-500 focus:border-blue-500 mt-1 disabled:bg-gray-100 disabled:text-gray-500"
+                                                :disabled="!hasNurses">
+                                                <option value="">Choose a nurse...</option>
+                                                @forelse($nurses as $nurse)
+                                                    <option value="{{ $nurse->id }}">
+                                                        {{ $nurse->name }}{{ $nurse->registration_number ? ' · ' . $nurse->registration_number : '' }}
+                                                    </option>
+                                                @empty
+                                                    <option disabled>No active nurses available</option>
+                                                @endforelse
+                                            </select>
+                                        </div>
+
+                                        <!-- Shifts Select -->
+                                        <div>
+                                            <label class="block text-sm font-semibold text-gray-700 mb-2">Select
+                                                Shifts</label>
+                                            <div class="flex flex-col gap-2">
+                                                <label class="inline-flex items-center">
+                                                    <input type="checkbox" value="AM" x-model="sectionAssignShifts"
+                                                        class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                                                    <span class="ml-2 text-gray-700">AM Shift</span>
+                                                </label>
+                                                <label class="inline-flex items-center">
+                                                    <input type="checkbox" value="PM" x-model="sectionAssignShifts"
+                                                        class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                                                    <span class="ml-2 text-gray-700">PM Shift</span>
+                                                </label>
+                                                <label class="inline-flex items-center">
+                                                    <input type="checkbox" value="ON" x-model="sectionAssignShifts"
+                                                        class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50">
+                                                    <span class="ml-2 text-gray-700">ON Shift</span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <p x-show="assignError" class="text-sm text-red-600" x-text="assignError"></p>
+
+                                        <div class="pt-4">
+                                            <button type="button"
+                                                class="w-full px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-colors"
+                                                :disabled="!sectionAssignSection || !sectionAssignNurse || !sectionAssignShifts.length || assignLoading"
+                                                @click="submitSectionAssign()">
+                                                <span x-show="assignLoading">Assigning...</span>
+                                                <span x-show="!assignLoading">Assign to Section</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Preview Table -->
+                                    <div class="md:col-span-2 bg-gray-50 rounded-xl p-4 border border-gray-200">
+                                        <h4 class="font-semibold text-gray-700 mb-2 flex items-center justify-between">
+                                            <span>
+                                                Preview: Beds in Section <span
+                                                    x-text="sectionAssignSection || '...'"></span>
+                                                <span class="text-xs font-normal text-gray-500 ml-2"
+                                                    x-show="sectionAssignSection">(Uncheck to exclude)</span>
+                                            </span>
+                                            <span class="text-xs text-gray-500">Date: {{ $selectedDate }}</span>
+                                        </h4>
+
+                                        <div class="overflow-y-auto max-h-[400px] border rounded-lg bg-white shadow-sm">
+                                            <table class="min-w-full divide-y divide-gray-200">
+                                                <thead class="bg-gray-50 sticky top-0 z-10">
+                                                    <tr>
+                                                        <th class="px-3 py-2 text-center w-10">
+                                                            <input type="checkbox"
+                                                                @change="toggleAllExclusion($event.target.checked)"
+                                                                :checked="areAllIncluded()"
+                                                                class="rounded border-gray-300 text-purple-600 shadow-sm focus:border-purple-300 focus:ring focus:ring-purple-200 focus:ring-opacity-50">
+                                                        </th>
+                                                        <th
+                                                            class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                            Bed</th>
+                                                        <th
+                                                            class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                            AM</th>
+                                                        <th
+                                                            class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                            PM</th>
+                                                        <th
+                                                            class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                            ON</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody class="bg-white divide-y divide-gray-200">
+                                                    <template x-for="bed in getSectionBeds()" :key="bed.id">
+                                                        <tr
+                                                            :class="isExcluded(bed.id) ? 'bg-gray-50 opacity-60' : (bed.id % 2 === 0 ? 'bg-white' : 'bg-gray-50')">
+                                                            <td class="px-3 py-2 text-center border-r">
+                                                                <input type="checkbox" :checked="!isExcluded(bed.id)"
+                                                                    @change="toggleExclusion(bed.id)"
+                                                                    class="rounded border-gray-300 text-purple-600 shadow-sm focus:border-purple-300 focus:ring focus:ring-purple-200 focus:ring-opacity-50">
+                                                            </td>
+                                                            <td class="px-3 py-2 text-sm font-medium text-gray-900 border-r"
+                                                                x-text="bed.bed_display_name"></td>
+                                                            <template x-for="shift in ['AM', 'PM', 'ON']">
+                                                                <td class="px-3 py-2 text-xs border-r relative"
+                                                                    :class="(!isExcluded(bed.id) && sectionAssignShifts.includes(shift)) ? 'bg-purple-50' : ''">
+                                                                    <!-- Current Assignment -->
+                                                                    <div x-text="getNurseName(bed.id, shift) || '-'"
+                                                                        class="truncate max-w-[80px]"
+                                                                        :class="getNurseName(bed.id, shift) ? 'text-gray-900' : 'text-gray-400'">
+                                                                    </div>
+
+                                                                    <!-- New Assignment Indicator -->
+                                                                    <div x-show="!isExcluded(bed.id) && sectionAssignShifts.includes(shift) && sectionAssignNurse"
+                                                                        class="text-[10px] text-purple-600 font-bold mt-1 flex items-center">
+                                                                        <svg class="w-3 h-3 mr-0.5" fill="none"
+                                                                            stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path stroke-linecap="round"
+                                                                                stroke-linejoin="round" stroke-width="2"
+                                                                                d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                                                                        </svg>
+                                                                        <span
+                                                                            x-text="getNurseLabel(sectionAssignNurse)"></span>
+                                                                    </div>
+                                                                </td>
+                                                            </template>
+                                                        </tr>
+                                                    </template>
+                                                    <tr x-show="!getSectionBeds().length">
+                                                        x-show="sectionAssignSection && !getSectionBeds().length">No
+                                                        beds found in this section</span>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

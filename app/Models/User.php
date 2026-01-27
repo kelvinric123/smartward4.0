@@ -49,6 +49,7 @@ class User extends Authenticatable
         'ldap_configuration_id',
         'is_ldap_user',
         'ldap_synced_at',
+        'deactivated_at',
     ];
 
     /**
@@ -73,6 +74,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_ldap_user' => 'boolean',
             'ldap_synced_at' => 'datetime',
+            'deactivated_at' => 'datetime',
         ];
     }
 
@@ -116,4 +118,24 @@ class User extends Authenticatable
         return $this->role === self::ROLE_SUPERADMIN;
     }
 
+    public function nurse()
+    {
+        return $this->hasOne(Nurse::class);
+    }
+
+    /**
+     * Check if user is active.
+     */
+    public function isActive(): bool
+    {
+        return is_null($this->deactivated_at);
+    }
+
+    /**
+     * Check if user is deactivated.
+     */
+    public function isDeactivated(): bool
+    {
+        return !is_null($this->deactivated_at);
+    }
 }

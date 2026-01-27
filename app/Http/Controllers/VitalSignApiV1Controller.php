@@ -365,12 +365,6 @@ class VitalSignApiV1Controller extends Controller
     {
         $startTime = microtime(true);
 
-        // Validate passphrase optional for ping? User said "ping service only checks the status code".
-        // But let's assume standard security if possible. 
-        // User said: "The ping service only checks the status code... Vital Signs service explicitly checks for a specific JSON field."
-        // Let's support passphrase if sent, but maybe be lenient or just enforce it.
-        // Assuming strict for consistency.
-
         // Validate passphrase
         $passphraseError = $this->validatePassphrase($request);
         if ($passphraseError) {
@@ -386,13 +380,36 @@ class VitalSignApiV1Controller extends Controller
             ], 401);
         }
 
-        // Update device status if device_ip is provided
-        if ($request->filled('device_ip')) {
-            $deviceIp = $request->input('device_ip');
-            $device = \App\Models\VitalSignMonitorDevice::where('ip_address', $deviceIp)->first();
+        // Identify Gateway
+        $gateway = null;
+        $ip = $request->input('device_ip') ?? $request->ip();
 
-            if ($device) {
-                $device->updateConnectionStatus('Online', true);
+        if ($request->filled('mac_address')) {
+            $gateway = \App\Models\QmedGateway::where('mac_address', $request->input('mac_address'))->first();
+        }
+
+        // Fallback: If no MAC, try to find a gateway associated with this API User?
+        // Or if we strictly require MAC for identification?
+        // Note: For now, if no MAC, and if we can't identify, we just log it.
+        // But if the user only has one gateway linked to this API user, we might guess.
+
+        if (!$gateway && $request->filled('device_ip')) {
+            // Try to find by last known IP? Or maybe we can't.
+        }
+
+        // If gateway found, update it.
+        if ($gateway) {
+            $gateway->updatePing($ip);
+        } else {
+            // Try to find any active gateway linked to this user?
+            // This might be risky if multiple gateways use same user.
+            // But if specific gateway logic is needed, let's assume MAC or unique user.
+            // For this task, "Gateway" section allows adding gateways and selecting users.
+
+            // Let's try to search by IP if it was previously recorded?
+            $gateway = \App\Models\QmedGateway::where('last_ping_ip', $ip)->first();
+            if ($gateway) {
+                $gateway->updatePing($ip);
             }
         }
 
@@ -400,7 +417,7 @@ class VitalSignApiV1Controller extends Controller
 
         $responseData = [
             'success' => true,
-            'status' => 'success', // Consistent with Ack requirements
+            'status' => 'success',
             'message' => 'Ping received',
         ];
 

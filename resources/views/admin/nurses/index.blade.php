@@ -77,6 +77,12 @@
                                         Qualification</th>
                                     <th
                                         class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                        Designation</th>
+                                    <th
+                                        class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                        LDAP Link</th>
+                                    <th
+                                        class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                                         Status</th>
                                     <th
                                         class="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
@@ -114,6 +120,16 @@
                                                 class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
                                                 {{ $nurse->qualification }}
                                             </span>
+                                        </td>
+                                        <td class="px-6 py-4 text-gray-600 text-sm">
+                                            <span class="font-medium text-gray-700">{{ $nurse->designation ?? '-' }}</span>
+                                        </td>
+                                        <td class="px-6 py-4 text-gray-600 text-sm">
+                                            <button
+                                                onclick="openLdapBindingModal('{{ $nurse->id }}', '{{ $nurse->user_id }}', '{{ $nurse->name }}')"
+                                                class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $nurse->user ? 'bg-blue-100 text-blue-800 hover:bg-blue-200' : 'bg-gray-100 text-gray-800 hover:bg-gray-200' }} transition-colors">
+                                                {{ $nurse->user ? 'On' : 'Off' }}
+                                            </button>
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap">
                                             <span
@@ -165,7 +181,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="7" class="px-6 py-12 text-center">
+                                        <td colspan="8" class="px-6 py-12 text-center">
                                             <div class="flex flex-col items-center">
                                                 <svg class="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor"
                                                     viewBox="0 0 24 24">
@@ -190,7 +206,89 @@
         </div>
     </div>
 
+    <!-- LDAP Binding Modal -->
+    <div id="ldapBindingModal" class="fixed inset-0 z-50 hidden overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <!-- Background overlay -->
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="closeLdapBindingModal()"></div>
+
+            <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                <form id="ldapBindingForm" method="POST" action="">
+                    @csrf
+                    @method('PUT')
+                    
+                    <div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div class="sm:flex sm:items-start">
+                            <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
+                                <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.131A8 8 0 008 8m0 0a8 8 0 00-6 4.906m21.6 9.4A21.96 21.96 0 0112 22 21.96 21.96 0 011.4 15.306" />
+                                </svg>
+                            </div>
+                            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                                <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-gray-100" id="modal-title">
+                                    Update LDAP Binding
+                                </h3>
+                                <div class="mt-2">
+                                    <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                                        Select a user account to bind to nurse: <span id="nurseName" class="font-semibold"></span>
+                                    </p>
+                                    
+                                    <div class="mb-4">
+                                        <label for="modal_user_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300 text-left">User Account</label>
+                                        <select name="user_id" id="modal_user_id"
+                                            class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                            <option value="">No Binding (Unlink)</option>
+                                            @foreach($users as $user)
+                                                <option value="{{ $user->id }}">
+                                                    {{ $user->name }} ({{ $user->email }})
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 dark:bg-gray-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                        <button type="submit" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm">
+                            Save Changes
+                        </button>
+                        <button type="button" onclick="closeLdapBindingModal()" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                            Cancel
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script>
+        function openLdapBindingModal(nurseId, currentUserId, nurseName) {
+            const modal = document.getElementById('ldapBindingModal');
+            const form = document.getElementById('ldapBindingForm');
+            const nameSpan = document.getElementById('nurseName');
+            const select = document.getElementById('modal_user_id');
+
+            // Set form action
+            form.action = `/nurses/${nurseId}/ldap-binding`;
+            
+            // Set nurse name
+            nameSpan.textContent = nurseName;
+            
+            // Set current value
+            select.value = currentUserId || '';
+            
+            // Show modal
+            modal.classList.remove('hidden');
+        }
+
+        function closeLdapBindingModal() {
+            const modal = document.getElementById('ldapBindingModal');
+            modal.classList.add('hidden');
+        }
+
         document.getElementById('searchInput').addEventListener('input', function (e) {
             const searchTerm = e.target.value.toLowerCase();
             const rows = document.querySelectorAll('#dataTable tbody tr');

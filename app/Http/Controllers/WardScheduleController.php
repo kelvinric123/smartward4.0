@@ -57,7 +57,7 @@ class WardScheduleController extends Controller
             }
         }
 
-        $dateRange = collect(range(-2, 2))
+        $dateRange = collect(range(0, 4))
             ->map(fn(int $offset) => Carbon::parse($selectedDate)->addDays($offset));
 
         $beds = $selectedWardId

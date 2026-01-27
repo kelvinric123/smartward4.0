@@ -142,6 +142,14 @@ class ApiUser extends Model
     {
         $this->attributes['password'] = Hash::make($value);
     }
+
+    /**
+     * Get associated Qmed Gateways.
+     */
+    public function gateways()
+    {
+        return $this->belongsToMany(QmedGateway::class, 'api_user_qmed_gateway');
+    }
 }
 
 

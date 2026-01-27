@@ -26,6 +26,18 @@ class AuthenticatedSessionController extends Controller
     {
         $request->authenticate();
 
+
+        if ($request->user()->isDeactivated()) {
+            Auth::guard('web')->logout();
+
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'email' => 'Your account has been deactivated.',
+            ]);
+        }
+
         $request->session()->regenerate();
 
         if ($request->user()->hasRole(\App\Models\User::ROLE_WARD_DASHBOARD)) {

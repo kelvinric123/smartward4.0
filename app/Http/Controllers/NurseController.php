@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Nurse;
+use App\Models\User;
 use Illuminate\Http\Request;
 
 class NurseController extends Controller
@@ -10,12 +11,18 @@ class NurseController extends Controller
     public function index()
     {
         $nurses = Nurse::latest()->paginate(10);
-        return view('admin.nurses.index', compact('nurses'));
+        $users = User::where('role', User::ROLE_NURSE)->get();
+        return view('admin.nurses.index', compact('nurses', 'users'));
     }
 
     public function create()
     {
-        return view('admin.nurses.create');
+        // Get users with 'nurse' role that are not already bound to a Nurse profile
+        $users = User::where('role', User::ROLE_NURSE)
+            ->whereDoesntHave('nurse')
+            ->get();
+
+        return view('admin.nurses.create', compact('users'));
     }
 
     public function store(Request $request)
@@ -27,9 +34,12 @@ class NurseController extends Controller
             'phone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
             'qualification' => 'required|in:Diploma,Degree,Masters',
+            'designation' => 'nullable|string|in:' . implode(',', Nurse::DESIGNATIONS),
             'years_of_experience' => 'nullable|integer|min:0',
+            'user_id' => 'nullable|exists:users,id',
         ]);
 
+        $validated['designation'] = $validated['designation'] ?? Nurse::DEFAULT_DESIGNATION;
         $validated['is_active'] = true;
         Nurse::create($validated);
 
@@ -38,7 +48,15 @@ class NurseController extends Controller
 
     public function edit(Nurse $nurse)
     {
-        return view('admin.nurses.edit', compact('nurse'));
+        // Get users with 'nurse' role that are not already bound to a Nurse profile OR match the current nurse's user_id
+        $users = User::where('role', User::ROLE_NURSE)
+            ->where(function ($query) use ($nurse) {
+                $query->whereDoesntHave('nurse')
+                    ->orWhere('id', $nurse->user_id);
+            })
+            ->get();
+
+        return view('admin.nurses.edit', compact('nurse', 'users'));
     }
 
     public function update(Request $request, Nurse $nurse)
@@ -50,7 +68,9 @@ class NurseController extends Controller
             'phone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
             'qualification' => 'required|in:Diploma,Degree,Masters',
+            'designation' => 'nullable|string|in:' . implode(',', Nurse::DESIGNATIONS),
             'years_of_experience' => 'nullable|integer|min:0',
+            'user_id' => 'nullable|exists:users,id',
         ]);
 
         $nurse->update($validated);
@@ -91,14 +111,14 @@ class NurseController extends Controller
 
         // Check existing nurses by personnel_code
         $existingCodes = Nurse::whereIn('personnel_code', collect($parsed['staff'])->pluck('personnel_code')->filter())->pluck('personnel_code')->toArray();
-        
+
         // Check existing nurses by username (registration_number)
         $existingUsernames = Nurse::whereIn('registration_number', collect($parsed['staff'])->pluck('registration_number')->filter())->pluck('registration_number')->toArray();
 
         // Get all current active nurses to check for missing staff
         $allActiveNurses = Nurse::where('is_active', true)->get();
         $uploadedCodes = collect($parsed['staff'])->pluck('personnel_code')->filter()->toArray();
-        
+
         $missingNurses = $allActiveNurses->filter(function ($nurse) use ($uploadedCodes) {
             return $nurse->personnel_code && !in_array($nurse->personnel_code, $uploadedCodes);
         });
@@ -119,11 +139,13 @@ class NurseController extends Controller
         }
 
         // Store parsed data in session for confirmation
-        session(['bulk_upload_data' => [
-            'to_add' => $toAdd,
-            'existing' => $existing,
-            'missing' => $missingNurses->toArray(),
-        ]]);
+        session([
+            'bulk_upload_data' => [
+                'to_add' => $toAdd,
+                'existing' => $existing,
+                'missing' => $missingNurses->toArray(),
+            ]
+        ]);
 
         return view('admin.nurses.bulk-upload-preview', [
             'toAdd' => $toAdd,
@@ -148,7 +170,9 @@ class NurseController extends Controller
                 'registration_number' => $staff['registration_number'],
                 'email' => $staff['email'],
                 'department' => $staff['department'],
-                'designation' => $staff['designation'],
+                'designation' => !empty($staff['designation']) && in_array($staff['designation'], Nurse::DESIGNATIONS)
+                    ? $staff['designation']
+                    : Nurse::DEFAULT_DESIGNATION,
                 'qualification' => 'Diploma', // Default qualification
                 'is_active' => true,
             ]);
@@ -166,6 +190,31 @@ class NurseController extends Controller
     }
 
     /**
+     * Update LDAP Binding for a nurse
+     */
+    public function updateLdapBinding(Request $request, Nurse $nurse)
+    {
+        $validated = $request->validate([
+            'user_id' => 'nullable|exists:users,id',
+        ]);
+
+        // Check if user is already bound to another nurse (unless it's the same nurse)
+        if ($validated['user_id']) {
+            $existing = Nurse::where('user_id', $validated['user_id'])
+                ->where('id', '!=', $nurse->id)
+                ->first();
+
+            if ($existing) {
+                return back()->withErrors(['user_id' => 'This user is already bound to ' . $existing->name]);
+            }
+        }
+
+        $nurse->update(['user_id' => $validated['user_id']]);
+
+        return back()->with('success', 'LDAP Binding updated successfully.');
+    }
+
+    /**
      * Parse staff list from markdown table format
      */
     private function parseStaffList(string $content): array
@@ -177,7 +226,7 @@ class NurseController extends Controller
 
         foreach ($lines as $line) {
             $line = trim($line);
-            
+
             // Skip empty lines and title
             if (empty($line) || strpos($line, '# ') === 0) {
                 continue;
@@ -192,10 +241,10 @@ class NurseController extends Controller
             if (strpos($line, '|') !== false) {
                 $cells = array_map('trim', explode('|', $line));
                 // Remove empty first and last elements (from leading/trailing |)
-                $cells = array_values(array_filter($cells, function($cell, $key) use ($cells) {
+                $cells = array_values(array_filter($cells, function ($cell, $key) use ($cells) {
                     return $key !== 0 || $cell !== '';
                 }, ARRAY_FILTER_USE_BOTH));
-                
+
                 // Clean up - remove truly empty first/last from pipe splitting
                 if (isset($cells[0]) && $cells[0] === '') {
                     array_shift($cells);
@@ -213,12 +262,18 @@ class NurseController extends Controller
                         // Map column positions
                         foreach ($cells as $idx => $cell) {
                             $lower = strtolower(trim($cell));
-                            if ($lower === 'name') $columnMap['name'] = $idx;
-                            if ($lower === 'email address') $columnMap['email'] = $idx;
-                            if ($lower === 'username') $columnMap['username'] = $idx;
-                            if ($lower === 'designation') $columnMap['designation'] = $idx;
-                            if ($lower === 'employee no') $columnMap['employee_no'] = $idx;
-                            if ($lower === 'department') $columnMap['department'] = $idx;
+                            if ($lower === 'name')
+                                $columnMap['name'] = $idx;
+                            if ($lower === 'email address')
+                                $columnMap['email'] = $idx;
+                            if ($lower === 'username')
+                                $columnMap['username'] = $idx;
+                            if ($lower === 'designation')
+                                $columnMap['designation'] = $idx;
+                            if ($lower === 'employee no')
+                                $columnMap['employee_no'] = $idx;
+                            if ($lower === 'department')
+                                $columnMap['department'] = $idx;
                         }
                         continue;
                     }
