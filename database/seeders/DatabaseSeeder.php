@@ -33,6 +33,7 @@ class DatabaseSeeder extends Seeder
         // Seed Admin Management data
         $this->call([
             SuperAdminSeeder::class,
+            ApiUserSeeder::class,
             AdminManagementSeeder::class,
             DietTypeSeeder::class,        // Patient Additional Fields - Diet Types
             IsolationTypeSeeder::class,   // Patient Additional Fields - Isolation Types
