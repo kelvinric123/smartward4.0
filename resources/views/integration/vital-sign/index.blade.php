@@ -684,6 +684,24 @@ Content-Type: application/json</pre>
                 </div>
             @endif
 
+            @if ($errors->any())
+                <div class="bg-gradient-to-r from-red-50 to-pink-50 border-l-4 border-red-500 text-red-800 px-6 py-4 rounded-lg shadow-md"
+                    role="alert">
+                    <div class="flex items-center mb-2">
+                        <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span class="font-bold">Please check the form for errors:</span>
+                    </div>
+                    <ul class="list-disc list-inside text-sm pl-8">
+                        @foreach ($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
             <!-- API Users Section -->
             <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-emerald-100">
                 <div class="p-6 border-b border-emerald-100 bg-gradient-to-r from-emerald-50 to-teal-50">
@@ -939,6 +957,30 @@ Content-Type: application/json</pre>
                                 </div>
                             @endforeach
                         </div>
+
+                        <!-- Docker Configuration Help -->
+                        <div class="mt-6 bg-slate-900 rounded-xl p-5">
+                            <div class="flex justify-between items-center mb-3">
+                                <h4 class="font-bold text-white flex items-center">
+                                    <svg class="w-5 h-5 mr-2 text-cyan-400" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                                    </svg>
+                                    MP5SC Listener Configuration
+                                </h4>
+                            </div>
+                            <p class="text-sm text-gray-400 mb-3">The mp5sc_listener container will automatically fetch
+                                active devices from the API. Make sure the following environment variables are set:</p>
+                            <pre
+                                class="text-sm text-gray-300 font-mono overflow-x-auto"><span class="text-cyan-400">API_BASE_URL</span>=<span class="text-green-400">"http://{{ $gatewayConfig['server_ip'] }}:{{ $gatewayConfig['server_port'] }}/api/v1"</span>
+                                                        <span class="text-cyan-400">API_PASSPHRASE</span>=<span class="text-green-400">"{{ $gatewayConfig['passphrase'] }}"</span>
+                                                        <span class="text-cyan-400">API_USERNAME</span>=<span class="text-green-400">"your_api_user"</span>
+                                                        <span class="text-cyan-400">API_PASSWORD</span>=<span class="text-green-400">"your_password"</span></pre>
+                            <p class="text-xs text-gray-500 mt-3">Devices configured here will be fetched via <code
+                                    class="text-cyan-300">GET /api/v1/monitor-devices</code></p>
+                        </div>
+
                     @else
                         <div class="text-center py-12">
                             <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor"
@@ -1523,7 +1565,7 @@ Content-Type: application/json</pre>
                     </div>
 
                     <form
-                        :action="showEditUserModal ? '{{ url('vital-sign-integration/api-user') }}/' + editingUser.id : '{{ route('vital-sign-integration.api-user.store') }}'"
+                        :action="showEditUserModal ? '/vital-sign-integration/api-user/' + editingUser.id : '/vital-sign-integration/api-user'"
                         method="POST">
                         @csrf
                         <template x-if="showEditUserModal">
@@ -1599,140 +1641,231 @@ Content-Type: application/json</pre>
             </div>
         </div>
 
-        <!-- Add/Edit Gateway Modal -->
-        <div x-show="showAddGatewayModal || showEditGatewayModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto"
-            x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0"
-            x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200"
-            x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
-            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeGatewayModals()">
-                </div>
-
-                <div
-                    class="relative inline-block w-full max-w-lg p-6 my-8 text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-xl font-bold text-gray-800"
-                            x-text="showEditGatewayModal ? 'Edit Qmed Gateway' : 'Add Qmed Gateway'"></h3>
-                        <button @click="closeGatewayModals()" class="text-gray-400 hover:text-gray-600">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    </div>
-
-                    <form
-                        :action="showEditGatewayModal ? '{{ url('vital-sign-integration/gateway') }}/' + editingGateway.id : '{{ route('vital-sign-integration.gateway.store') }}'"
-                        method="POST">
-                        @csrf
-                        <template x-if="showEditGatewayModal">
-                            <input type="hidden" name="_method" value="PUT">
-                        </template>
-
-                        <div class="space-y-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Gateway Name *</label>
-                                <input type="text" name="name" x-model="gatewayFormData.name" required
-                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
-                                    placeholder="e.g., Qmed Gateway 1">
+        <<<<<<< HEAD <!-- Add/Edit Gateway Modal -->
+            <div x-show="showAddGatewayModal || showEditGatewayModal" x-cloak
+                class="fixed inset-0 z-50 overflow-y-auto"=======<!-- Add/Edit Device Modal -->
+                <div x-show="showAddDeviceModal || showEditDeviceModal" x-cloak
+                    class="fixed inset-0 z-50 overflow-y-auto">>>>>>> 6669a7e6ff416ebe9f7e9757324d35d9ac766ae4
+                    x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0"
+                    x-transition:enter-end="opacity-100" x-transition:leave="ease-in duration-200"
+                    x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
+                    <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+                        <<<<<<< HEAD <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+                            @click="closeGatewayModals()">
+                            =======
+                            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+                                @click="closeDeviceModals()">
+                                >>>>>>> 6669a7e6ff416ebe9f7e9757324d35d9ac766ae4
                             </div>
 
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                                <input type="text" name="location" x-model="gatewayFormData.location"
-                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
-                                    placeholder="e.g., Ward A">
-                            </div>
-
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">MAC Address
-                                    (Optional)</label>
-                                <input type="text" name="mac_address" x-model="gatewayFormData.mac_address"
-                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
-                                    placeholder="00:11:22:33:44:55">
-                                <p class="text-xs text-gray-500 mt-1">Used for automatic identification.</p>
-                            </div>
-
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Linked API Users</label>
-                                <div class="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
-                                    @foreach($apiUsers as $user)
-                                        <label class="flex items-center">
-                                            <input type="checkbox" name="api_users[]" value="{{ $user->id }}"
-                                                x-model="gatewayFormData.api_users"
-                                                class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500">
-                                            <span class="ml-2 text-sm text-gray-700">{{ $user->name }}</span>
-                                        </label>
-                                    @endforeach
+                            <div
+                                class="relative inline-block w-full max-w-lg p-6 my-8 text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                                <div class="flex justify-between items-center mb-6">
+                                    <h3 class="text-xl font-bold text-gray-800" <<<<<<< HEAD
+                                        x-text="showEditGatewayModal ? 'Edit Qmed Gateway' : 'Add Qmed Gateway'"></h3>
+                                    <button @click="closeGatewayModals()" class="text-gray-400 hover:text-gray-600">
+                                        =======
+                                        x-text="showEditDeviceModal ? 'Edit Monitor Device' : 'Add Monitor Device'">
+                                        </h3>
+                                        <button @click="closeDeviceModals()" class="text-gray-400 hover:text-gray-600">
+                                            >>>>>>> 6669a7e6ff416ebe9f7e9757324d35d9ac766ae4
+                                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
                                 </div>
-                                <p class="text-xs text-gray-500 mt-1">Select API users that rely on this gateway.</p>
-                            </div>
 
-                            <div x-show="showEditGatewayModal">
-                                <label class="flex items-center">
-                                    <input type="checkbox" name="is_active" x-model="gatewayFormData.is_active"
-                                        class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500">
-                                    <span class="ml-2 text-sm text-gray-700">Active</span>
-                                </label>
-                            </div>
-                        </div>
+                                <form <<<<<<< HEAD
+                                    :action="showEditGatewayModal ? '{{ url('vital-sign-integration/gateway') }}/' + editingGateway.id : '{{ route('vital-sign-integration.gateway.store') }}'"
+                                    method="POST">
+                                    @csrf
+                                    <template x-if="showEditGatewayModal">
+                                        =======
+                                        :action="showEditDeviceModal ? '/vital-sign-integration/device/' +
+                                        editingDevice.id : '/vital-sign-integration/device'"
+                                        method="POST">
+                                        @csrf
+                                        <template x-if="showEditDeviceModal">
+                                            >>>>>>> 6669a7e6ff416ebe9f7e9757324d35d9ac766ae4
+                                            <input type="hidden" name="_method" value="PUT">
+                                        </template>
 
-                        <div class="mt-6 flex justify-end space-x-3">
-                            <button type="button" @click="closeGatewayModals()"
-                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">
-                                Cancel
-                            </button>
-                            <button type="submit"
-                                class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors">
-                                <span x-text="showEditGatewayModal ? 'Update Gateway' : 'Add Gateway'"></span>
-                            </button>
+                                        <div class="space-y-4">
+                                            <div>
+                                                <<<<<<< HEAD <label
+                                                    class="block text-sm font-medium text-gray-700 mb-1">Gateway Name
+                                                    *</label>
+                                                    <input type="text" name="name" x-model="gatewayFormData.name"
+                                                        required
+                                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
+                                                        placeholder="e.g., Qmed Gateway 1">
+                                                    =======
+                                                    <label class="block text-sm font-medium text-gray-700 mb-1">Device
+                                                        Name *</label>
+                                                    <input type="text" name="name" x-model="deviceFormData.name"
+                                                        required
+                                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+                                                        placeholder="e.g., MP5SC Ward A">
+                                            </div>
+
+                                            <div class="grid grid-cols-3 gap-4">
+                                                <div class="col-span-2">
+                                                    <label class="block text-sm font-medium text-gray-700 mb-1">IP
+                                                        Address *</label>
+                                                    <input type="text" name="ip_address"
+                                                        x-model="deviceFormData.ip_address" required
+                                                        pattern="^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d)\.?\b){4}$"
+                                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+                                                        placeholder="192.168.0.5">
+                                                </div>
+                                                <div>
+                                                    <label
+                                                        class="block text-sm font-medium text-gray-700 mb-1">Port</label>
+                                                    <input type="number" name="port" x-model="deviceFormData.port"
+                                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+                                                        placeholder="24105">
+                                                </div>
+                                                >>>>>>> 6669a7e6ff416ebe9f7e9757324d35d9ac766ae4
+                                            </div>
+
+                                            <div>
+                                                <label
+                                                    class="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                                                <<<<<<< HEAD <input type="text" name="location"
+                                                    x-model="gatewayFormData.location"
+                                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
+                                                    placeholder="e.g., Ward A">
+                                            </div>
+
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1">MAC Address
+                                                    (Optional)</label>
+                                                <input type="text" name="mac_address"
+                                                    x-model="gatewayFormData.mac_address"
+                                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
+                                                    placeholder="00:11:22:33:44:55">
+                                                <p class="text-xs text-gray-500 mt-1">Used for automatic identification.
+                                                </p>
+                                            </div>
+
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1">Linked API
+                                                    Users</label>
+                                                <div
+                                                    class="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
+                                                    @foreach($apiUsers as $user)
+                                                        <label class="flex items-center">
+                                                            <input type="checkbox" name="api_users[]"
+                                                                value="{{ $user->id }}" x-model="gatewayFormData.api_users"
+                                                                class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500">
+                                                            <span
+                                                                class="ml-2 text-sm text-gray-700">{{ $user->name }}</span>
+                                                        </label>
+                                                    @endforeach
+                                                </div>
+                                                <p class="text-xs text-gray-500 mt-1">Select API users that rely on this
+                                                    gateway.</p>
+                                            </div>
+
+                                            <div x-show="showEditGatewayModal">
+                                                <label class="flex items-center">
+                                                    <input type="checkbox" name="is_active"
+                                                        x-model="gatewayFormData.is_active"
+                                                        class="rounded border-gray-300 text-emerald-600 shadow-sm focus:ring-emerald-500">
+                                                    =======
+                                                    <input type="text" name="location" x-model="deviceFormData.location"
+                                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+                                                        placeholder="e.g., Ward A - Bed 1">
+                                            </div>
+
+                                            <div>
+                                                <label
+                                                    class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                                                <textarea name="description" x-model="deviceFormData.description"
+                                                    rows="2"
+                                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500"
+                                                    placeholder="Optional description for this device"></textarea>
+                                            </div>
+
+                                            <div x-show="showEditDeviceModal">
+                                                <label class="flex items-center">
+                                                    <input type="checkbox" name="is_active"
+                                                        x-model="deviceFormData.is_active"
+                                                        class="rounded border-gray-300 text-cyan-600 shadow-sm focus:ring-cyan-500">
+                                                    >>>>>>> 6669a7e6ff416ebe9f7e9757324d35d9ac766ae4
+                                                    <span class="ml-2 text-sm text-gray-700">Active</span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="mt-6 flex justify-end space-x-3">
+                                            <<<<<<< HEAD <button type="button"
+                                                @click="closeGatewayModals()"=======<button type="button"
+                                                @click="closeDeviceModals()">>>>>>>
+                                                6669a7e6ff416ebe9f7e9757324d35d9ac766ae4
+                                                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium
+                                                rounded-lg transition-colors">
+                                                Cancel
+                                                </button>
+                                                <button type="submit" <<<<<<< HEAD
+                                                    class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors">
+                                                    <span
+                                                        x-text="showEditGatewayModal ? 'Update Gateway' : 'Add Gateway'"></span>
+                                                    =======
+                                                    class="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white
+                                                    font-medium rounded-lg transition-colors">
+                                                    <span
+                                                        x-text="showEditDeviceModal ? 'Update Device' : 'Add Device'"></span>
+                                                    >>>>>>> 6669a7e6ff416ebe9f7e9757324d35d9ac766ae4
+                                                </button>
+                                        </div>
+                                </form>
+                            </div>
+                    </div>
+                </div>
+
+                <!-- Toast Notification -->
+                <div x-show="toast.show" x-cloak x-transition:enter="transition ease-out duration-300"
+                    x-transition:enter-start="opacity-0 transform translate-y-2"
+                    x-transition:enter-end="opacity-100 transform translate-y-0"
+                    x-transition:leave="transition ease-in duration-200"
+                    x-transition:leave-start="opacity-100 transform translate-y-0"
+                    x-transition:leave-end="opacity-0 transform translate-y-2" class="fixed bottom-4 right-4 z-50">
+                    <div :class="toast.success ? 'bg-green-500' : 'bg-red-500'"
+                        class="text-white px-6 py-4 rounded-lg shadow-lg max-w-md">
+                        <div class="flex items-center">
+                            <svg x-show="toast.success" class="w-6 h-6 mr-3" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <svg x-show="!toast.success" class="w-6 h-6 mr-3" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span x-text="toast.message" class="font-medium"></span>
                         </div>
-                    </form>
+                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Toast Notification -->
-        <div x-show="toast.show" x-cloak x-transition:enter="transition ease-out duration-300"
-            x-transition:enter-start="opacity-0 transform translate-y-2"
-            x-transition:enter-end="opacity-100 transform translate-y-0"
-            x-transition:leave="transition ease-in duration-200"
-            x-transition:leave-start="opacity-100 transform translate-y-0"
-            x-transition:leave-end="opacity-0 transform translate-y-2" class="fixed bottom-4 right-4 z-50">
-            <div :class="toast.success ? 'bg-green-500' : 'bg-red-500'"
-                class="text-white px-6 py-4 rounded-lg shadow-lg max-w-md">
-                <div class="flex items-center">
-                    <svg x-show="toast.success" class="w-6 h-6 mr-3" fill="none" stroke="currentColor"
-                        viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <svg x-show="!toast.success" class="w-6 h-6 mr-3" fill="none" stroke="currentColor"
-                        viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span x-text="toast.message" class="font-medium"></span>
-                </div>
-            </div>
-        </div>
-    </div>
+            <script>
+                // Global helper functions
+                function copyToClipboard(text) {
+                    navigator.clipboard.writeText(text).then(() => {
+                        // Show a brief toast notification
+                        const toast = document.createElement('div');
+                        toast.className = 'fixed bottom-4 right-4 z-50 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg';
+                        toast.textContent = 'Copied to clipboard!';
+                        document.body.appendChild(toast);
+                        setTimeout(() => toast.remove(), 2000);
+                    });
+                }
 
-    <script>
-        // Global helper functions
-        function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(() => {
-                // Show a brief toast notification
-                const toast = document.createElement('div');
-                toast.className = 'fixed bottom-4 right-4 z-50 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg';
-                toast.textContent = 'Copied to clipboard!';
-                document.body.appendChild(toast);
-                setTimeout(() => toast.remove(), 2000);
-            });
-        }
-
-        function copyGatewayConfig() {
-            const configText = `# Laravel API Configuration
+                function copyGatewayConfig() {
+                    const configText = `# Laravel API Configuration
 API_BASE_URL = "http://{{ $gatewayConfig['server_ip'] }}:{{ $gatewayConfig['server_port'] }}/api/v1"
 
 # API Passphrase (must match Laravel configuration)
@@ -1741,280 +1874,281 @@ API_PASSPHRASE = "{{ $gatewayConfig['passphrase'] }}"
 # Device Credentials (create an API User in Laravel)
 DEVICE_USERNAME = "your_api_user@example.com"
 DEVICE_PASSWORD = "your_password"`;
-            copyToClipboard(configText);
-        }
-
-        function vitalSignIntegration() {
-            return {
-                // User modal state
-                showAddUserModal: false,
-                showEditUserModal: false,
-                showPassphrase: false,
-                editingUser: {},
-                userFormData: {
-                    name: '',
-                    username: '',
-                    password: '',
-                    description: '',
-                    is_active: true
-                },
-
-                // Gateway modal state
-                showAddGatewayModal: false,
-                showEditGatewayModal: false,
-                editingGateway: {},
-                gatewayFormData: {
-                    name: '',
-                    location: '',
-                    mac_address: '',
-                    is_active: true,
-                    api_users: []
-                },
-
-                // Testing state
-                testLogin: {
-                    username: '',
-                    password: ''
-                },
-                testVital: {
-                    patient_mrn: '',
-                    patient_rn: '',
-                    systolic_bp: '',
-                    diastolic_bp: '',
-                    pulse_rate: '',
-                    temperature: '',
-                    spo2: '',
-                    respiratory_rate: ''
-                },
-                bearerToken: '',
-                apiResponse: '',
-                loginLoading: false,
-                vitalLoading: false,
-                toast: {
-                    show: false,
-                    success: false,
-                    message: ''
-                },
-
-                init() {
-                    @if(session('success'))
-                        this.showToast(true, '{{ session('success') }}');
-                    @endif
-                    @if(session('error'))
-                        this.showToast(false, '{{ session('error') }}');
-                    @endif
-                    @if($errors->any())
-                        this.showToast(false, '{{ $errors->first() }}');
-                    @endif
-                },
-
-                // User modal methods
-                closeModals() {
-                    this.showAddUserModal = false;
-                    this.showEditUserModal = false;
-                    this.resetUserForm();
-                },
-
-                resetUserForm() {
-                    this.userFormData = {
-                        name: '',
-                        username: '',
-                        password: '',
-                        description: '',
-                        is_active: true
-                    };
-                    this.editingUser = {};
-                },
-
-                populateUser(user) {
-                    this.editingUser = user;
-                    this.userFormData = {
-                        name: user.name,
-                        username: user.username,
-                        password: '', // Don't populate password
-                        description: user.description,
-                        is_active: user.is_active
-                    };
-                    this.showEditUserModal = true;
-                },
-
-                // Gateway modal methods
-                openAddGatewayModal() {
-                    this.resetGatewayForm();
-                    this.showAddGatewayModal = true;
-                },
-
-                editGateway(gateway, apiUsers) {
-                    this.editingGateway = gateway;
-                    this.gatewayFormData = {
-                        name: gateway.name,
-                        location: gateway.location,
-                        mac_address: gateway.mac_address,
-                        is_active: gateway.is_active,
-                        api_users: apiUsers
-                    };
-                    this.showEditGatewayModal = true;
-                },
-
-                closeGatewayModals() {
-                    this.showAddGatewayModal = false;
-                    this.showEditGatewayModal = false;
-                    this.resetGatewayForm();
-                },
-
-                resetGatewayForm() {
-                    this.gatewayFormData = {
-                        name: '',
-                        location: '',
-                        mac_address: '',
-                        is_active: true,
-                        api_users: []
-                    };
-                    this.editingGateway = {};
-                },
-
-                async performLogin() {
-                    if (!this.testLogin.username || !this.testLogin.password) {
-                        this.showToast(false, 'Please enter username and password');
-                        return;
-                    }
-
-                    this.loginLoading = true;
-                    this.apiResponse = 'Sending login request...';
-
-                    try {
-                        const response = await fetch('{{ url('/api/vital-sign/login') }}', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                username: this.testLogin.username,
-                                password: this.testLogin.password
-                            })
-                        });
-
-                        const data = await response.json();
-                        this.apiResponse = JSON.stringify(data, null, 2);
-
-                        if (data.success && data.data && data.data.token) {
-                            this.bearerToken = data.data.token;
-                            this.showToast(true, 'Login successful! Token received.');
-                        } else {
-                            this.showToast(false, data.message || 'Login failed');
-                        }
-                    } catch (error) {
-                        this.apiResponse = 'Error: ' + error.message;
-                        this.showToast(false, 'Connection error: ' + error.message);
-                    } finally {
-                        this.loginLoading = false;
-                    }
-                },
-
-                async sendVitalSign() {
-                    if (!this.bearerToken) {
-                        this.showToast(false, 'Please login first to get a bearer token');
-                        return;
-                    }
-
-                    if (!this.testVital.patient_mrn && !this.testVital.patient_rn) {
-                        this.showToast(false, 'Patient MRN or RN is required');
-                        return;
-                    }
-
-                    this.vitalLoading = true;
-                    this.apiResponse = 'Sending vital sign reading...';
-
-                    try {
-                        const payload = {};
-
-                        if (this.testVital.patient_mrn) payload.patient_mrn = this.testVital.patient_mrn;
-                        if (this.testVital.patient_rn) payload.patient_rn = this.testVital.patient_rn;
-
-                        // Only include non-empty values
-                        if (this.testVital.systolic_bp) payload.systolic_bp = parseInt(this.testVital.systolic_bp);
-                        if (this.testVital.diastolic_bp) payload.diastolic_bp = parseInt(this.testVital.diastolic_bp);
-                        if (this.testVital.pulse_rate) payload.pulse_rate = parseInt(this.testVital.pulse_rate);
-                        if (this.testVital.temperature) payload.temperature = parseFloat(this.testVital.temperature);
-                        if (this.testVital.spo2) payload.spo2 = parseInt(this.testVital.spo2);
-                        if (this.testVital.respiratory_rate) payload.respiratory_rate = parseInt(this.testVital.respiratory_rate);
-
-                        const response = await fetch('{{ url('/api/vital-sign/reading') }}', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'Accept': 'application/json',
-                                'Authorization': 'Bearer ' + this.bearerToken
-                            },
-                            body: JSON.stringify(payload)
-                        });
-
-                        const data = await response.json();
-                        this.apiResponse = JSON.stringify(data, null, 2);
-
-                        if (data.success) {
-                            this.showToast(true, 'Vital sign recorded successfully!');
-                        } else {
-                            this.showToast(false, data.message || 'Failed to record vital sign');
-                        }
-                    } catch (error) {
-                        this.apiResponse = 'Error: ' + error.message;
-                        this.showToast(false, 'Connection error: ' + error.message);
-                    } finally {
-                        this.vitalLoading = false;
-                    }
-                },
-
-                copyToken() {
-                    navigator.clipboard.writeText(this.bearerToken);
-                    this.showToast(true, 'Token copied to clipboard!');
-                },
-
-                showToast(success, message) {
-                    this.toast = { show: true, success, message };
-                    setTimeout(() => {
-                        this.toast.show = false;
-                    }, 4000);
+                    copyToClipboard(configText);
                 }
-            };
-        }
 
-        // API Logs Component
-        function apiLogsComponent() {
-            return {
-                categoryFilter: 'all',
-                showDetailsModal: false,
-                selectedLog: null,
-                activeTab: 'request',
+                function vitalSignIntegration() {
+                    return {
+                        // User modal state
+                        showAddUserModal: false,
+                        showEditUserModal: false,
+                        showPassphrase: false,
+                        editingUser: {},
+                        userFormData: {
+                            name: '',
+                            username: '',
+                            password: '',
+                            description: '',
+                            is_active: true
+                        },
 
-                matchesFilter(endpoint) {
-                    if (this.categoryFilter === 'all') return true;
+                        // Gateway modal state
+                        showAddGatewayModal: false,
+                        showEditGatewayModal: false,
+                        editingGateway: {},
+                        gatewayFormData: {
+                            name: '',
+                            location: '',
+                            mac_address: '',
+                            is_active: true,
+                            api_users: []
+                        },
 
-                    const endpointLower = endpoint.toLowerCase();
+                        // Testing state
+                        testLogin: {
+                            username: '',
+                            password: ''
+                        },
+                        testVital: {
+                            patient_mrn: '',
+                            patient_rn: '',
+                            systolic_bp: '',
+                            diastolic_bp: '',
+                            pulse_rate: '',
+                            temperature: '',
+                            spo2: '',
+                            respiratory_rate: ''
+                        },
+                        bearerToken: '',
+                        apiResponse: '',
+                        loginLoading: false,
+                        vitalLoading: false,
+                        toast: {
+                            show: false,
+                            success: false,
+                            message: ''
+                        },
 
-                    switch (this.categoryFilter) {
-                        case 'vital-signs':
-                            return endpointLower.includes('vital-sign') || endpointLower.includes('vital_sign');
-                        case 'ping':
-                            return endpointLower.includes('ping');
-                        case 'login':
-                            return endpointLower.includes('login') || endpointLower.includes('logout');
-                        case 'patients':
-                            return endpointLower.includes('patient');
-                        case 'monitor':
-                            return endpointLower.includes('monitor') || endpointLower.includes('device');
-                        default:
-                            return true;
-                    }
+                        init() {
+                            @if(session('success'))
+                                this.showToast(true, '{{ session('success') }}');
+                            @endif
+                            @if(session('error'))
+                                this.showToast(false, '{{ session('error') }}');
+                            @endif
+                            @if($errors->any())
+                                this.showToast(false, '{{ $errors->first() }}');
+                            @endif
                 },
 
-                showLogDetails(log) {
-                    this.selectedLog = log;
+                        // User modal methods
+                        closeModals() {
+                            this.showAddUserModal = false;
+                            this.showEditUserModal = false;
+                            this.resetUserForm();
+                        },
+
+                        resetUserForm() {
+                            this.userFormData = {
+                                name: '',
+                                username: '',
+                                password: '',
+                                description: '',
+                                is_active: true
+                            };
+                            this.editingUser = {};
+                        },
+
+                        populateUser(user) {
+                            this.editingUser = user;
+                            this.userFormData = {
+                                name: user.name,
+                                username: user.username,
+                                password: '', // Don't populate password
+                                description: user.description,
+                                is_active: user.is_active
+                            };
+                            this.showEditUserModal = true;
+                        },
+
+                        // Gateway modal methods
+                        openAddGatewayModal() {
+                            this.resetGatewayForm();
+                            this.showAddGatewayModal = true;
+                        },
+
+                        editGateway(gateway, apiUsers) {
+                            this.editingGateway = gateway;
+                            this.gatewayFormData = {
+                                name: gateway.name,
+                                location: gateway.location,
+                                mac_address: gateway.mac_address,
+                                is_active: gateway.is_active,
+                                api_users: apiUsers
+                            };
+                            this.showEditGatewayModal = true;
+                        },
+
+                        closeGatewayModals() {
+                            this.showAddGatewayModal = false;
+                            this.showEditGatewayModal = false;
+                            this.resetGatewayForm();
+                        },
+
+                        resetGatewayForm() {
+                            this.gatewayFormData = {
+                                name: '',
+                                location: '',
+                                mac_address: '',
+                                is_active: true,
+                                api_users: []
+                            };
+                            this.editingGateway = {};
+                        },
+
+                        async performLogin() {
+                            if (!this.testLogin.username || !this.testLogin.password) {
+                                this.showToast(false, 'Please enter username and password');
+                                return;
+                            }
+
+                            this.loginLoading = true;
+                            this.apiResponse = 'Sending login request...';
+
+                            try {
+                                const response = await fetch('/api/vital-sign/login', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Accept': 'application/json'
+                                    },
+                                    body: JSON.stringify({
+                                        username: this.testLogin.username,
+                                        password: this.testLogin.password
+                                    })
+                                });
+
+                                const data = await response.json();
+                                this.apiResponse = JSON.stringify(data, null, 2);
+
+                                if (data.success && data.data && data.data.token) {
+                                    this.bearerToken = data.data.token;
+                                    this.showToast(true, 'Login successful! Token received.');
+                                } else {
+                                    this.showToast(false, data.message || 'Login failed');
+                                }
+                            } catch (error) {
+                                this.apiResponse = 'Error: ' + error.message;
+                                this.showToast(false, 'Connection error: ' + error.message);
+                            } finally {
+                                this.loginLoading = false;
+                            }
+                        },
+
+                        async sendVitalSign() {
+                            if (!this.bearerToken) {
+                                this.showToast(false, 'Please login first to get a bearer token');
+                                return;
+                            }
+
+                            if (!this.testVital.patient_mrn && !this.testVital.patient_rn) {
+                                this.showToast(false, 'Patient MRN or RN is required');
+                                return;
+                            }
+
+                            this.vitalLoading = true;
+                            this.apiResponse = 'Sending vital sign reading...';
+
+                            try {
+                                const payload = {};
+
+                                if (this.testVital.patient_mrn) payload.patient_mrn = this.testVital.patient_mrn;
+                                if (this.testVital.patient_rn) payload.patient_rn = this.testVital.patient_rn;
+
+                                // Only include non-empty values
+                                if (this.testVital.systolic_bp) payload.systolic_bp = parseInt(this.testVital.systolic_bp);
+                                if (this.testVital.diastolic_bp) payload.diastolic_bp = parseInt(this.testVital.diastolic_bp);
+                                if (this.testVital.pulse_rate) payload.pulse_rate = parseInt(this.testVital.pulse_rate);
+                                if (this.testVital.temperature) payload.temperature = parseFloat(this.testVital.temperature);
+                                if (this.testVital.spo2) payload.spo2 = parseInt(this.testVital.spo2);
+                                if (this.testVital.respiratory_rate) payload.respiratory_rate = parseInt(this.testVital.respiratory_rate);
+
+                                const response = await fetch('/api/vital-sign/reading', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Accept': 'application/json',
+                                        'Authorization': 'Bearer ' + this.bearerToken
+                                    },
+                                    body: JSON.stringify(payload)
+                                });
+
+                                const data = await response.json();
+                                this.apiResponse = JSON.stringify(data, null, 2);
+
+                                if (data.success) {
+                                    this.showToast(true, 'Vital sign recorded successfully!');
+                                } else {
+                                    this.showToast(false, data.message || 'Failed to record vital sign');
+                                }
+                            } catch (error) {
+                                this.apiResponse = 'Error: ' + error.message;
+                                this.showToast(false, 'Connection error: ' + error.message);
+                            } finally {
+                                this.vitalLoading = false;
+                            }
+                        },
+
+                        copyToken() {
+                            navigator.clipboard.writeText(this.bearerToken);
+                            this.showToast(true, 'Token copied to clipboard!');
+                        },
+
+                        showToast(success, message) {
+                            this.toast = { show: true, success, message };
+                            setTimeout(() => {
+                                this.toast.show = false;
+                            }, 4000);
+                        }
+                    };
+                }
+
+                // API Logs Component
+                function apiLogsComponent() {
+                    return {
+                        categoryFilter: 'all',
+                        showDetailsModal: false,
+                        selectedLog: null,
+                        activeTab: 'request',
+
+                        matchesFilter(endpoint) {
+                            if (this.categoryFilter === 'all') return true;
+
+                            const endpointLower = endpoint.toLowerCase();
+
+                            switch (this.categoryFilter) {
+                                case 'vital-signs':
+                                    return endpointLower.includes('vital-sign') || endpointLower.includes('vital_sign');
+                                case 'ping':
+                                    return endpointLower.includes('ping');
+                                case 'login':
+                                    return endpointLower.includes('login') || endpointLower.includes('logout');
+                                case 'patients':
+                                    return endpointLower.includes('patient');
+                                case 'monitor':
+                                    return endpointLower.includes('monitor') || endpointLower.includes('device');
+                                default:
+                                    return true;
+                            }
+                        },
+
+                        showLogDetails(log) {
+                            this.selectedLog = log;
                 t his.activeTab = log.debug_data ? 'debug' : 'request';
-                    this.showDetailsModal = true;
+                            this.showDetailsModal = true;
+                        }
+                    };
                 }
-            };
-        }
-    </script>
+            </script>
+
 </x-app-layout>
