@@ -104,6 +104,14 @@ class ShiftSettingController extends Controller
             'shifts_count' => count($shiftsData),
         ]);
 
+        // Return JSON for AJAX requests (used when form is in iframe)
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Shift settings updated successfully.',
+            ]);
+        }
+
         return redirect()
             ->route('ward.shift-settings', ['ward_id' => $wardId])
             ->with('success', 'Shift settings updated successfully.');

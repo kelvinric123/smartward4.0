@@ -485,8 +485,9 @@ class VitalSignApiV1Controller extends Controller
             ], 401);
         }
 
-        // Find patient by patient_code (could be MRN, visit_number, or IC/passport)
+        // Find patient by patient_code (could be MRN, RN, visit_number, or IC/passport)
         $patient = Patient::where('mrn', $patientCode)
+            ->orWhere('rn', $patientCode)
             ->orWhere('visit_number', $patientCode)
             ->orWhere('ic_passport', $patientCode)
             ->first();
