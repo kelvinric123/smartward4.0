@@ -141,8 +141,27 @@ class VitalSignApiV1Controller extends Controller
             ]), fn($v) => $v !== null && $v !== ''));
 
             // Find patient by patient_code (could be MRN or visit_number)
-            $patientCode = $request->patient_code;
+            // Sanitize patient_code to remove invisible characters, null bytes, control characters
+            $rawPatientCode = $request->patient_code;
+            $patientCode = preg_replace('/[\x00-\x1F\x7F\xA0]/u', '', trim($rawPatientCode)); // Remove control chars and nbsp
+            $patientCode = preg_replace('/\s+/', '', $patientCode); // Remove any whitespace
+
             $debugData['patient_lookup']['search_code'] = $patientCode;
+            $debugData['patient_lookup']['raw_code'] = $rawPatientCode;
+            $debugData['patient_lookup']['raw_code_length'] = strlen($rawPatientCode);
+            $debugData['patient_lookup']['clean_code_length'] = strlen($patientCode);
+
+            // Log if there was a difference (debugging invisible chars)
+            if ($rawPatientCode !== $patientCode) {
+                $debugData['patient_lookup']['sanitized'] = true;
+                $debugData['patient_lookup']['removed_chars'] = bin2hex($rawPatientCode) . ' -> ' . bin2hex($patientCode);
+                Log::warning('[API V1] Patient code contained invisible characters', [
+                    'raw' => bin2hex($rawPatientCode),
+                    'clean' => $patientCode,
+                    'raw_length' => strlen($rawPatientCode),
+                    'clean_length' => strlen($patientCode),
+                ]);
+            }
 
             // Search by MRN first
             $patient = Patient::where('mrn', $patientCode)->first();
