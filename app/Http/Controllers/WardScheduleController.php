@@ -122,6 +122,58 @@ class WardScheduleController extends Controller
         ]);
     }
 
+    public function printSchedule(Request $request)
+    {
+        $request->validate([
+            'ward_id' => 'required|exists:wards,id',
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
+        ]);
+
+        $wardId = $request->input('ward_id');
+        $startDate = Carbon::parse($request->input('start_date'));
+        $endDate = Carbon::parse($request->input('end_date'));
+
+        $ward = Ward::find($wardId);
+        $beds = Bed::where('ward_id', $wardId)
+            ->where('is_active', true)
+            ->with([
+                'patient' => function ($q) {
+                    $q->where('is_active', true)
+                        ->whereIn('status', ['admitted', 'prebook', 'pending_discharge']);
+                }
+            ])
+            ->orderByRaw('CAST(bed_number AS UNSIGNED)')
+            ->orderBy('id')
+            ->get();
+
+        // Calculate date range
+        $dates = [];
+        for ($d = $startDate->copy(); $d->lte($endDate); $d->addDay()) {
+            $dates[] = $d->copy();
+        }
+        $dateRange = collect($dates);
+
+        $assignments = WardScheduleAssignment::with(['nurse.taggingNurses']) // Eager load tagging nurses
+            ->where('ward_id', $wardId)
+            ->whereBetween('scheduled_date', [
+                $startDate->toDateString(),
+                $endDate->toDateString(),
+            ])
+            ->get()
+            ->keyBy(fn($assignment) => $assignment->bed_id . '|' . $assignment->scheduled_date->format('Y-m-d') . '|' . $assignment->shift);
+
+        return view('wards.print-schedule', [
+            'ward' => $ward,
+            'beds' => $beds,
+            'dateRange' => $dateRange,
+            'shifts' => ['AM', 'PM', 'ON'],
+            'assignments' => $assignments,
+            'startDate' => $startDate,
+            'endDate' => $endDate,
+        ]);
+    }
+
     public function assignNurses(Request $request)
     {
         $rawAssignments = json_decode($request->input('assignments', '[]'), true);

@@ -103,6 +103,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/ward-schedule/patient-details', [WardScheduleController::class, 'patientDetailsIframe'])->name('ward.schedule.patient-details');
     Route::get('/ward-schedule/download-template', [WardScheduleController::class, 'downloadTemplate'])->name('ward.schedule.download-template');
     Route::post('/ward-schedule/upload', [WardScheduleController::class, 'uploadRoster'])->name('ward.schedule.upload');
+    Route::get('/ward-schedule/print', [WardScheduleController::class, 'printSchedule'])->name('ward.schedule.print');
 
     // Shift Settings Routes
     Route::get('/ward-schedule/shift-settings', [ShiftSettingController::class, 'index'])->name('ward.shift-settings');

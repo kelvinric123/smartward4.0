@@ -489,6 +489,10 @@
                     class="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200 text-sm">
                     Section 3
                 </button>
+                <button onclick="filterBySection(4)"
+                    class="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200 text-sm">
+                    Section 4
+                </button>
                 <button
                     class="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg font-medium hover:bg-gray-200 flex items-center text-sm">
                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">

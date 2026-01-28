@@ -42,6 +42,8 @@
                                         Section 2</option>
                                     <option value="3" {{ (old('section', $bed->section) == '3') ? 'selected' : '' }}>
                                         Section 3</option>
+                                    <option value="4" {{ (old('section', $bed->section) == '4') ? 'selected' : '' }}>
+                                        Section 4</option>
                                 </select>
                                 @error('section')
                                     <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
@@ -140,7 +142,8 @@
                                     <option value="">None</option>
                                     @foreach($anaesthetists as $anaesthetist)
                                         <option value="{{ $anaesthetist->id }}" {{ (old('anaesthetist_id', $bed->anaesthetist_id) == $anaesthetist->id) ? 'selected' : '' }}>
-                                            {{ $anaesthetist->name }}</option>
+                                            {{ $anaesthetist->name }}
+                                        </option>
                                     @endforeach
                                 </select>
                                 @error('anaesthetist_id')

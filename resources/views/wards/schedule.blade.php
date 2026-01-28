@@ -62,6 +62,15 @@
                         </svg>
                         Shift Setting
                     </button>
+
+                    <button type="button" onclick="window.dispatchEvent(new CustomEvent('open-print-modal'))"
+                        class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-xl font-semibold shadow-sm transition-all text-sm">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                        Print
+                    </button>
                 @endif
             </div>
         </div>
@@ -78,6 +87,9 @@
                     assignLoading: false,
                     hasNurses: {{ $nurses->count() ? 'true' : 'false' }},
                     patientModal: { open: false, patientId: null },
+                    printModal: false,
+                    printStartDate: '{{ $selectedDate }}',
+                    printEndDate: '{{ \Carbon\Carbon::parse($selectedDate)->addDays(6)->toDateString() }}',
                     
                     // Section Assign Data
                     beds: @js($beds),
@@ -225,8 +237,20 @@
                         this.$refs.nurseField.value = this.sectionAssignNurse;
                         this.assignLoading = true;
                         this.$refs.assignForm.submit();
+                    },
+                    openPrintModal() {
+                        this.printModal = true;
+                    },
+                    submitPrint() {
+                        const url = '{{ route('ward.schedule.print') }}' + 
+                            '?ward_id=' + '{{ $selectedWardId }}' + 
+                            '&start_date=' + this.printStartDate + 
+                            '&end_date=' + this.printEndDate;
+                        window.open(url, '_blank');
+                        this.printModal = false;
                     }
-                 }" x-effect="document.body.style.overflow = (assignModal || sectionAssignModal) ? 'hidden' : ''">
+                 }" x-on:open-print-modal.window="openPrintModal()"
+                x-effect="document.body.style.overflow = (assignModal || sectionAssignModal || printModal) ? 'hidden' : ''">
                 <div class="p-6 space-y-6">
                     @if (session('success'))
                         <div
@@ -616,6 +640,7 @@
                                                 <option value="1">Section 1</option>
                                                 <option value="2">Section 2</option>
                                                 <option value="3">Section 3</option>
+                                                <option value="4">Section 4</option>
                                             </select>
                                         </div>
 
@@ -794,6 +819,50 @@
                                 <template x-if="!patientModal.patientId">
                                     <p class="text-sm text-gray-500">No patient selected.</p>
                                 </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Print Modal -->
+                    <div x-show="printModal" style="display: none;" class="fixed inset-0 z-50 overflow-y-auto">
+                        <div class="fixed inset-0 bg-black/40" @click="printModal = false"></div>
+                        <div class="flex min-h-full items-center justify-center p-4">
+                            <div class="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4"
+                                @click.stop>
+                                <div class="flex items-center justify-between">
+                                    <h3 class="text-lg font-semibold text-gray-800">Print Schedule</h3>
+                                    <button type="button" class="text-gray-400 hover:text-gray-600"
+                                        @click="printModal = false">&times;</button>
+                                </div>
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-semibold text-gray-700 mb-1">Start Date</label>
+                                        <input type="date" x-model="printStartDate"
+                                            class="w-full rounded-lg border-gray-200 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-semibold text-gray-700 mb-1">End Date</label>
+                                        <input type="date" x-model="printEndDate"
+                                            class="w-full rounded-lg border-gray-200 shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                    </div>
+                                    <p class="text-xs text-gray-500">
+                                        Note: A landscape layout works best for date ranges up to 7-10 days.
+                                    </p>
+                                </div>
+                                <div class="flex justify-end gap-3 pt-2">
+                                    <button type="button"
+                                        class="px-4 py-2 rounded-lg text-gray-600 hover:text-gray-800 hover:bg-gray-100"
+                                        @click="printModal = false">Cancel</button>
+                                    <button type="button"
+                                        class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center"
+                                        @click="submitPrint()">
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                        </svg>
+                                        Print View
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

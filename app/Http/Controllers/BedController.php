@@ -68,7 +68,7 @@ class BedController extends Controller
     {
         $validated = $request->validate([
             'ward_id' => 'required|exists:wards,id',
-            'section' => 'nullable|string|in:1,2,3',
+            'section' => 'nullable|string|in:1,2,3,4',
             'bed_number' => 'required|string|max:255',
             'bed_id' => 'required|string|max:255|unique:beds,bed_id',
             'bed_display_name' => 'required|string|max:255',
@@ -108,7 +108,7 @@ class BedController extends Controller
     {
         $validated = $request->validate([
             'ward_id' => 'required|exists:wards,id',
-            'section' => 'nullable|string|in:1,2,3',
+            'section' => 'nullable|string|in:1,2,3,4',
             'bed_number' => 'required|string|max:255',
             'bed_id' => 'required|string|max:255|unique:beds,bed_id,' . $bed->id,
             'bed_display_name' => 'required|string|max:255',

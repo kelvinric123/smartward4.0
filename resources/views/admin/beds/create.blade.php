@@ -22,7 +22,8 @@
                                     <option value="">Select Ward</option>
                                     @foreach($wards as $ward)
                                         <option value="{{ $ward->id }}" {{ old('ward_id') == $ward->id ? 'selected' : '' }}>
-                                            {{ $ward->ward_name }} ({{ $ward->ward_code }})</option>
+                                            {{ $ward->ward_name }} ({{ $ward->ward_code }})
+                                        </option>
                                     @endforeach
                                 </select>
                                 @error('ward_id')
@@ -39,6 +40,7 @@
                                     <option value="1" {{ old('section') == '1' ? 'selected' : '' }}>Section 1</option>
                                     <option value="2" {{ old('section') == '2' ? 'selected' : '' }}>Section 2</option>
                                     <option value="3" {{ old('section') == '3' ? 'selected' : '' }}>Section 3</option>
+                                    <option value="4" {{ old('section') == '4' ? 'selected' : '' }}>Section 4</option>
                                 </select>
                                 @error('section')
                                     <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
