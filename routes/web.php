@@ -200,6 +200,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/ekad/preview-masking', [EkadController::class, 'previewMasking'])->name('ekad.preview-masking');
     Route::get('/ekad/activity-logs', [EkadController::class, 'getActivityLogs'])->name('ekad.activity-logs');
     Route::get('/ekad/response-logs', [EkadController::class, 'getResponseLogs'])->name('ekad.response-logs');
+    Route::post('/ekad/sync-all', [EkadController::class, 'syncAll'])->name('ekad.sync-all');
 
 
     // ADT Integration Routes

@@ -168,15 +168,21 @@ class VitalSignApiV1Controller extends Controller
             if ($patient) {
                 $debugData['patient_lookup']['found_by'] = 'mrn';
             } else {
-                // Try visit_number
-                $patient = Patient::where('visit_number', $patientCode)->first();
+                // Try RN (Registration Number) - this is what vital sign devices typically send
+                $patient = Patient::where('rn', $patientCode)->first();
                 if ($patient) {
-                    $debugData['patient_lookup']['found_by'] = 'visit_number';
+                    $debugData['patient_lookup']['found_by'] = 'rn';
                 } else {
-                    // Try ic_passport
-                    $patient = Patient::where('ic_passport', $patientCode)->first();
+                    // Try visit_number
+                    $patient = Patient::where('visit_number', $patientCode)->first();
                     if ($patient) {
-                        $debugData['patient_lookup']['found_by'] = 'ic_passport';
+                        $debugData['patient_lookup']['found_by'] = 'visit_number';
+                    } else {
+                        // Try ic_passport
+                        $patient = Patient::where('ic_passport', $patientCode)->first();
+                        if ($patient) {
+                            $debugData['patient_lookup']['found_by'] = 'ic_passport';
+                        }
                     }
                 }
             }
@@ -184,7 +190,7 @@ class VitalSignApiV1Controller extends Controller
             if (!$patient) {
                 $debugData['processing_steps'][] = 'FAILED: Patient not found';
                 $debugData['patient_lookup']['result'] = 'not_found';
-                $debugData['patient_lookup']['searched_tables'] = ['mrn', 'visit_number', 'ic_passport'];
+                $debugData['patient_lookup']['searched_tables'] = ['mrn', 'rn', 'visit_number', 'ic_passport'];
 
                 $responseData = [
                     'success' => false,

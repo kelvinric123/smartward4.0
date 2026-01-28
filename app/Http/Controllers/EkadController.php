@@ -398,5 +398,77 @@ class EkadController extends Controller
             'logs' => $logs,
         ]);
     }
+
+    /**
+     * Sync all bed mappings - push patient info or vacant status to all mapped devices
+     */
+    public function syncAll(Request $request)
+    {
+        $config = EkadConfiguration::getActive();
+        if (!$config || !$config->isTokenValid()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No valid EKAD configuration or token. Please login first.',
+            ], 400);
+        }
+
+        $service = new EkadService($config);
+        $mappings = EkadBedMapping::active()->with(['bed.patient', 'bed.ward'])->get();
+
+        $results = [
+            'total' => $mappings->count(),
+            'success' => 0,
+            'failed' => 0,
+            'details' => [],
+        ];
+
+        foreach ($mappings as $mapping) {
+            $bed = $mapping->bed;
+            if (!$bed) {
+                $results['failed']++;
+                $results['details'][] = [
+                    'mac' => $mapping->mac_address,
+                    'success' => false,
+                    'message' => 'Bed not found',
+                ];
+                continue;
+            }
+
+            $patient = $bed->patient;
+            if ($patient && $patient->isAdmitted()) {
+                // Push patient info
+                $result = $service->pushPatientInfo($patient, $bed, [], 'sync_all');
+            } else {
+                // Push vacant status
+                $result = $service->pushVacant($bed, 'sync_all');
+            }
+
+            if ($result['success']) {
+                $results['success']++;
+            } else {
+                $results['failed']++;
+            }
+
+            $results['details'][] = [
+                'mac' => $mapping->mac_address,
+                'bed' => $bed->bed_display_name ?? $bed->bed_number,
+                'patient' => $patient?->name ?? 'Vacant',
+                'success' => $result['success'],
+                'message' => $result['message'],
+            ];
+        }
+
+        Log::info('EKad: Sync all completed', [
+            'total' => $results['total'],
+            'success' => $results['success'],
+            'failed' => $results['failed'],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => "Sync complete: {$results['success']}/{$results['total']} successful",
+            'results' => $results,
+        ]);
+    }
 }
 

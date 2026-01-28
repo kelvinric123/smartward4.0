@@ -131,17 +131,34 @@
             <!-- Bed Mapping -->
             <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-indigo-100">
                 <div class="p-6 border-b border-indigo-100 bg-gradient-to-r from-indigo-50 to-violet-50">
-                    <div class="flex items-center">
-                        <div class="p-3 bg-indigo-600 rounded-xl mr-4">
-                            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="p-3 bg-indigo-600 rounded-xl mr-4">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-800">Bed Mapping</h3>
+                                <p class="text-sm text-gray-500">Map beds to E-Ink device MAC addresses</p>
+                            </div>
+                        </div>
+                        <button @click="syncAllEkad()" :disabled="syncingAll || bedMappings.length === 0"
+                            class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg transition-colors">
+                            <svg x-show="!syncingAll" class="w-4 h-4 mr-2" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
+                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
-                        </div>
-                        <div>
-                            <h3 class="text-lg font-bold text-gray-800">Bed Mapping</h3>
-                            <p class="text-sm text-gray-500">Map beds to E-Ink device MAC addresses</p>
-                        </div>
+                            <svg x-show="syncingAll" class="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                            <span x-text="syncingAll ? 'Syncing...' : 'Sync All EKAD'"></span>
+                        </button>
                     </div>
                 </div>
                 <div class="p-6">
@@ -698,6 +715,7 @@
                 selectedBedId: '',
                 newMacAddress: '',
                 addingMapping: false,
+                syncingAll: false,
 
                 // Push Patient Info
                 macList: [],
@@ -930,6 +948,32 @@
                         this.addLog('PUSH INFO', false, 'Request failed: ' + error.message);
                     }
                     this.pushingInfo = false;
+                },
+
+                async syncAllEkad() {
+                    this.syncingAll = true;
+                    try {
+                        const response = await fetch('{{ route("ekad.sync-all") }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            }
+                        });
+
+                        const data = await response.json();
+
+                        if (data.success) {
+                            this.addLog('SYNC ALL', true, data.message, data.results);
+                            // Refresh API logs to show new entries
+                            this.loadApiResponseLogs();
+                        } else {
+                            this.addLog('SYNC ALL', false, data.message);
+                        }
+                    } catch (error) {
+                        this.addLog('SYNC ALL', false, 'Connection error: ' + error.message);
+                    }
+                    this.syncingAll = false;
                 },
 
                 async loadActivityLogs() {
