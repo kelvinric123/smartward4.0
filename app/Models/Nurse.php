@@ -8,12 +8,14 @@ class Nurse extends Model
 {
     const DESIGNATIONS = [
         'Nurse Manager',
+        'Nurse Clinician',
         'Assistant Nurse Clinician',
         'SENIOR STAFF NURSE II',
         'STAFF NURSE I',
         'STAFF NURSE II',
         'GRADUATE NURSE',
         'Health Care Assistant',
+        'Patient Care Assistant',
     ];
 
     const DEFAULT_DESIGNATION = 'STAFF NURSE I';
@@ -30,6 +32,8 @@ class Nurse extends Model
         'qualification',
         'years_of_experience',
         'is_active',
+        'is_tagging',
+        'ward_id',
     ];
 
     public static function getDesignations(): array
@@ -39,6 +43,7 @@ class Nurse extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
+        'is_tagging' => 'boolean',
         'years_of_experience' => 'integer',
     ];
 
@@ -55,5 +60,28 @@ class Nurse extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function ward()
+    {
+        return $this->belongsTo(Ward::class);
+    }
+
+    /**
+     * The nurses that this nurse is tagging to (many-to-many)
+     */
+    public function taggingNurses()
+    {
+        return $this->belongsToMany(Nurse::class, 'nurse_tagging_nurses', 'nurse_id', 'tagging_nurse_id')
+            ->withTimestamps();
+    }
+
+    /**
+     * The nurses that are tagging to this nurse (inverse many-to-many)
+     */
+    public function taggedByNurses()
+    {
+        return $this->belongsToMany(Nurse::class, 'nurse_tagging_nurses', 'tagging_nurse_id', 'nurse_id')
+            ->withTimestamps();
     }
 }

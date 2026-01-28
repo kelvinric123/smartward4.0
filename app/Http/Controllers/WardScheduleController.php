@@ -69,7 +69,8 @@ class WardScheduleController extends Controller
                 ->get()
             : collect();
 
-        $nurses = Nurse::where('is_active', true)
+        $nurses = Nurse::with('taggingNurses')
+            ->where('is_active', true)
             ->orderBy('name')
             ->get();
 

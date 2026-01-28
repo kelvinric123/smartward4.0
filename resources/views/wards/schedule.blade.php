@@ -85,7 +85,7 @@
                     nurses: @js($nurses),
                     sectionAssignSection: '',
                     sectionAssignNurse: '',
-                    sectionAssignShifts: ['AM', 'PM', 'ON'], // Default all selected
+                    sectionAssignShifts: [], // Default none selected
                     sectionAssignExcludedBeds: [],
 
                     submitFilters() {
@@ -183,6 +183,12 @@
                     getNurseLabel(nurseId) {
                         const nurse = this.nurses.find(n => n.id == nurseId);
                         return nurse ? nurse.name : 'Unknown';
+                    },
+                    getTaggingNurseName(nurseId) {
+                        if (!nurseId) return '-';
+                        const nurse = this.nurses.find(n => n.id == nurseId);
+                        if (!nurse || !nurse.is_tagging || !nurse.tagging_nurses || !nurse.tagging_nurses.length) return '-';
+                        return nurse.tagging_nurses.map(tn => tn.name).join(', ');
                     },
                     submitSectionAssign() {
                         this.assignError = '';
@@ -629,6 +635,21 @@
                                                     <option disabled>No active nurses available</option>
                                                 @endforelse
                                             </select>
+                                            <!-- Tagging Nurse Display -->
+                                            <div class="mt-2 p-2 bg-gray-50 border border-gray-200 rounded-lg">
+                                                <p class="text-xs text-gray-600 font-medium flex items-center">
+                                                    <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor"
+                                                        viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1">
+                                                        </path>
+                                                    </svg>
+                                                    Tagging Nurse:
+                                                </p>
+                                                <p class="text-sm font-semibold text-gray-800 mt-0.5"
+                                                    x-text="getTaggingNurseName(sectionAssignNurse)"></p>
+                                            </div>
                                         </div>
 
                                         <!-- Shifts Select -->
@@ -739,9 +760,10 @@
                                                             </template>
                                                         </tr>
                                                     </template>
-                                                    <tr x-show="!getSectionBeds().length">
-                                                        x-show="sectionAssignSection && !getSectionBeds().length">No
-                                                        beds found in this section</span>
+                                                    <tr x-show="sectionAssignSection && !getSectionBeds().length">
+                                                        <td colspan="5"
+                                                            class="px-3 py-4 text-center text-sm text-gray-500">
+                                                            No beds found in this section
                                                         </td>
                                                     </tr>
                                                 </tbody>

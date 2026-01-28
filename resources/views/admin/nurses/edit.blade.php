@@ -103,6 +103,115 @@
                         </div>
 
                         <div class="mb-4">
+                            <label for="ward_id"
+                                class="block text-sm font-medium text-gray-700 dark:text-gray-300">Ward</label>
+                            <select name="ward_id" id="ward_id"
+                                class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                <option value="">Select Ward</option>
+                                @foreach($wards as $ward)
+                                    <option value="{{ $ward->id }}" {{ old('ward_id', $nurse->ward_id) == $ward->id ? 'selected' : '' }}>
+                                        {{ $ward->ward_name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('ward_id')
+                                <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <div class="mb-4" x-data="{
+                            isTagging: {{ old('is_tagging', $nurse->is_tagging) ? 'true' : 'false' }},
+                            selectedNurseId: '',
+                            selectedNurses: @js(old('tagging_nurse_ids', $nurse->taggingNurses->pluck('id')->toArray())),
+                            allNurses: @js($nurses->map(fn($n) => ['id' => $n->id, 'name' => $n->name])),
+                            addNurse() {
+                                if (!this.selectedNurseId) return;
+                                const id = parseInt(this.selectedNurseId);
+                                if (!this.selectedNurses.includes(id)) {
+                                    this.selectedNurses.push(id);
+                                }
+                                this.selectedNurseId = '';
+                            },
+                            removeNurse(id) {
+                                this.selectedNurses = this.selectedNurses.filter(n => n !== id);
+                            },
+                            getNurseName(id) {
+                                const nurse = this.allNurses.find(n => n.id === id);
+                                return nurse ? nurse.name : 'Unknown';
+                            },
+                            availableNurses() {
+                                return this.allNurses.filter(n => !this.selectedNurses.includes(n.id));
+                            }
+                        }">
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Tagging Nurse</label>
+                            <div class="mt-2 flex items-center gap-4">
+                                <label class="inline-flex items-center">
+                                    <input type="radio" name="is_tagging" value="0" x-on:change="isTagging = false"
+                                        {{ !old('is_tagging', $nurse->is_tagging) ? 'checked' : '' }}
+                                        class="form-radio text-indigo-600 focus:ring-indigo-500 dark:bg-gray-900 dark:border-gray-700">
+                                    <span class="ml-2 text-gray-700 dark:text-gray-300">No</span>
+                                </label>
+                                <label class="inline-flex items-center">
+                                    <input type="radio" name="is_tagging" value="1" x-on:change="isTagging = true"
+                                        {{ old('is_tagging', $nurse->is_tagging) ? 'checked' : '' }}
+                                        class="form-radio text-indigo-600 focus:ring-indigo-500 dark:bg-gray-900 dark:border-gray-700">
+                                    <span class="ml-2 text-gray-700 dark:text-gray-300">Yes</span>
+                                </label>
+                            </div>
+                            @error('is_tagging')
+                                <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                            @enderror
+
+                            <div x-show="isTagging" x-cloak class="mt-4">
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Add Tagging Nurse</label>
+                                
+                                <!-- Add Nurse Row -->
+                                <div class="flex items-center gap-2">
+                                    <select x-model="selectedNurseId"
+                                        class="flex-1 rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                        <option value="">Select a nurse to add...</option>
+                                        <template x-for="nurse in availableNurses()" :key="nurse.id">
+                                            <option :value="nurse.id" x-text="nurse.name"></option>
+                                        </template>
+                                    </select>
+                                    <button type="button" @click="addNurse()" :disabled="!selectedNurseId"
+                                        class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest transition ease-in-out duration-150">
+                                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                                        </svg>
+                                        Add
+                                    </button>
+                                </div>
+
+                                <!-- Selected Nurses List -->
+                                <div class="mt-3 space-y-2">
+                                    <template x-for="nurseId in selectedNurses" :key="nurseId">
+                                        <div class="flex items-center justify-between bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-lg px-3 py-2">
+                                            <span class="text-sm font-medium text-indigo-800 dark:text-indigo-200" x-text="getNurseName(nurseId)"></span>
+                                            <button type="button" @click="removeNurse(nurseId)"
+                                                class="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                            <input type="hidden" name="tagging_nurse_ids[]" :value="nurseId">
+                                        </div>
+                                    </template>
+                                    <p x-show="selectedNurses.length === 0" class="text-sm text-gray-500 dark:text-gray-400 italic">
+                                        No tagging nurses added yet.
+                                    </p>
+                                </div>
+
+                                @error('tagging_nurse_ids')
+                                    <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                                @enderror
+                                @error('tagging_nurse_ids.*')
+                                    <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
                             <label for="user_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">LDAP
                                 Binding (Optional)</label>
                             <select name="user_id" id="user_id"

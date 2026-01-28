@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Nurse;
 use App\Models\User;
+use App\Models\Ward;
 use Illuminate\Http\Request;
 
 class NurseController extends Controller
@@ -21,8 +22,10 @@ class NurseController extends Controller
         $users = User::where('role', User::ROLE_NURSE)
             ->whereDoesntHave('nurse')
             ->get();
+        $wards = Ward::where('is_active', true)->orderBy('ward_name')->get();
+        $nurses = Nurse::where('is_active', true)->orderBy('name')->get();
 
-        return view('admin.nurses.create', compact('users'));
+        return view('admin.nurses.create', compact('users', 'wards', 'nurses'));
     }
 
     public function store(Request $request)
@@ -37,11 +40,25 @@ class NurseController extends Controller
             'designation' => 'nullable|string|in:' . implode(',', Nurse::DESIGNATIONS),
             'years_of_experience' => 'nullable|integer|min:0',
             'user_id' => 'nullable|exists:users,id',
+            'ward_id' => 'nullable|exists:wards,id',
+            'is_tagging' => 'nullable|boolean',
+            'tagging_nurse_ids' => 'nullable|array',
+            'tagging_nurse_ids.*' => 'exists:nurses,id',
         ]);
 
         $validated['designation'] = $validated['designation'] ?? Nurse::DEFAULT_DESIGNATION;
         $validated['is_active'] = true;
-        Nurse::create($validated);
+        $validated['is_tagging'] = $request->boolean('is_tagging');
+
+        $taggingNurseIds = $validated['tagging_nurse_ids'] ?? [];
+        unset($validated['tagging_nurse_ids']);
+
+        $nurse = Nurse::create($validated);
+
+        // Sync tagging nurses if is_tagging is true
+        if ($validated['is_tagging'] && !empty($taggingNurseIds)) {
+            $nurse->taggingNurses()->sync($taggingNurseIds);
+        }
 
         return redirect()->route('nurses.index')->with('success', 'Nurse created successfully.');
     }
@@ -55,8 +72,10 @@ class NurseController extends Controller
                     ->orWhere('id', $nurse->user_id);
             })
             ->get();
+        $wards = Ward::where('is_active', true)->orderBy('ward_name')->get();
+        $nurses = Nurse::where('is_active', true)->where('id', '!=', $nurse->id)->orderBy('name')->get();
 
-        return view('admin.nurses.edit', compact('nurse', 'users'));
+        return view('admin.nurses.edit', compact('nurse', 'users', 'wards', 'nurses'));
     }
 
     public function update(Request $request, Nurse $nurse)
@@ -71,9 +90,25 @@ class NurseController extends Controller
             'designation' => 'nullable|string|in:' . implode(',', Nurse::DESIGNATIONS),
             'years_of_experience' => 'nullable|integer|min:0',
             'user_id' => 'nullable|exists:users,id',
+            'ward_id' => 'nullable|exists:wards,id',
+            'is_tagging' => 'nullable|boolean',
+            'tagging_nurse_ids' => 'nullable|array',
+            'tagging_nurse_ids.*' => 'exists:nurses,id',
         ]);
 
+        $validated['is_tagging'] = $request->boolean('is_tagging');
+
+        $taggingNurseIds = $validated['tagging_nurse_ids'] ?? [];
+        unset($validated['tagging_nurse_ids']);
+
         $nurse->update($validated);
+
+        // Sync tagging nurses - if is_tagging is false, clear the relationships
+        if ($validated['is_tagging']) {
+            $nurse->taggingNurses()->sync($taggingNurseIds);
+        } else {
+            $nurse->taggingNurses()->sync([]);
+        }
 
         return redirect()->route('nurses.index')->with('success', 'Nurse updated successfully.');
     }
