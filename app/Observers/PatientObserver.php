@@ -53,10 +53,10 @@ class PatientObserver
     protected function handlePatientChange(Patient $patient, string $event): void
     {
         try {
-            // Only push EKAD updates for active patients (admitted or prebooked)
-            // This prevents duplicate updates when a prebook patient is cancelled during new admission
-            if (!in_array($patient->status, [Patient::STATUS_ADMITTED, Patient::STATUS_PREBOOK])) {
-                Log::debug('EKad PatientObserver: Patient not in active status, skipping', [
+            // Only push EKAD updates for admitted patients
+            // Prebook patients are excluded to prevent issues with E-Ink display
+            if ($patient->status !== Patient::STATUS_ADMITTED) {
+                Log::debug('EKad PatientObserver: Patient not admitted, skipping', [
                     'patient_id' => $patient->id,
                     'status' => $patient->status,
                 ]);

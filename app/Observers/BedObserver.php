@@ -61,7 +61,14 @@ class BedObserver
 
                 $result = $service->pushVacant($bed, 'Bed Vacated');
             }
-            // Case 2: Bed is Occupied (Admit / Transfer In)
+            // Case 2: Bed is Reserved (Prebook) - Skip Ekad push
+            elseif ($bed->status === 'reserved') {
+                Log::debug('EKad BedObserver: Bed is reserved (prebook), skipping Ekad push.', [
+                    'bed_number' => $bed->bed_number,
+                ]);
+                return;
+            }
+            // Case 3: Bed is Occupied (Admit / Transfer In)
             else {
                 $patient = $bed->patient;
                 if ($patient) {
