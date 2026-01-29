@@ -844,49 +844,7 @@
                                                 <span class="truncate" title="{{ $bed['consultant'] }}">{{ $bed['consultant'] }}</span>
                                             </div>
                                         @endif
-                                        {{-- Prebook Button/Indicator for Pending Discharge Beds --}}
-                                        @if($isPendingDischarge && $isVisible('prebook_button'))
-                                            @if($bed['has_pending_prebook'] ?? false)
-                                                {{-- Show pending prebook indicator with cancel option --}}
-                                                <div class="w-full px-2 py-1 bg-blue-100 border border-blue-300 text-blue-800 rounded text-xs flex items-center justify-between gap-1 mb-1"
-                                                    title="Next patient prebooked: {{ $bed['pending_prebook_patient_name'] ?? 'Unknown' }}">
-                                                    <div class="flex items-center gap-1 min-w-0 flex-1">
-                                                        <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor"
-                                                            viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                        </svg>
-                                                        <span class="truncate font-medium">Prebooked:
-                                                            {{ Str::limit($bed['pending_prebook_patient_name'] ?? 'Next Patient', 15) }}</span>
-                                                    </div>
-                                                    <form method="POST"
-                                                        action="{{ route('ward.cancel-prebook', $bed['pending_prebook_patient_id']) }}"
-                                                        onsubmit="return confirm('Cancel this pending prebook?')" class="flex-shrink-0">
-                                                        @csrf
-                                                        <button type="submit"
-                                                            class="p-0.5 text-red-600 hover:text-red-800 hover:bg-red-100 rounded"
-                                                            title="Cancel Prebook">
-                                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                                    d="M6 18L18 6M6 6l12 12" />
-                                                            </svg>
-                                                        </button>
-                                                    </form>
-                                                </div>
-                                            @else
-                                                {{-- Show prebook button --}}
-                                                <button
-                                                    onclick="window.dispatchEvent(new CustomEvent('open-prebook-modal', { detail: { bedNumber: '{{ $bed['number'] }}', wardId: {{ $selectedWard->id }}, isPendingDischarge: true } }))"
-                                                    class="w-full px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors flex items-center justify-center gap-1 mb-1"
-                                                    title="Prebook this bed for next patient while awaiting discharge">
-                                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                                    </svg>
-                                                    Prebook Next Patient
-                                                </button>
-                                            @endif
-                                        @endif
+
                                         @if($isVisible('nurse'))
                                             <div class="flex items-center text-xs text-gray-600 min-w-0">
                                                 <svg class="w-3 h-3 mr-2 flex-shrink-0" fill="none" stroke="currentColor"
@@ -916,13 +874,47 @@
                                             </div>
                                         @endif
                                         @if($isVisible('admitted_duration'))
-                                            <div class="flex items-center text-xs text-gray-600 min-w-0">
-                                                <svg class="w-3 h-3 mr-2 flex-shrink-0" fill="none" stroke="currentColor"
-                                                    viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                </svg>
-                                                <span class="truncate">{{ $bed['days'] }} days, {{ $bed['hours'] }} hours</span>
+                                            <div class="flex items-center justify-between text-xs text-gray-600 min-w-0 mt-1">
+                                                <div class="flex items-center min-w-0 flex-1 mr-1">
+                                                    <svg class="w-3 h-3 mr-2 flex-shrink-0" fill="none" stroke="currentColor"
+                                                        viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                    </svg>
+                                                    <span class="truncate">{{ $bed['days'] }} days, {{ $bed['hours'] }} hours</span>
+                                                </div>
+
+                                                @if($isVisible('prebook_button'))
+                                                    @if($bed['has_pending_prebook'] ?? false)
+                                                        {{-- Compact Prebook Indicator --}}
+                                                        <div class="flex items-center gap-1 flex-shrink-0 bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5"
+                                                            title="Prebooked: {{ $bed['pending_prebook_patient_name'] }}">
+                                                            <span class="text-[10px] text-blue-800 font-medium truncate max-w-[60px]">
+                                                                {{ Str::limit($bed['pending_prebook_patient_name'] ?? 'Next', 8) }}
+                                                            </span>
+                                                            <form method="POST"
+                                                                action="{{ route('ward.cancel-prebook', $bed['pending_prebook_patient_id']) }}"
+                                                                onsubmit="return confirm('Cancel prebook?')" class="flex items-center">
+                                                                @csrf
+                                                                <button type="submit" class="text-red-500 hover:text-red-700 ml-1">
+                                                                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor"
+                                                                        viewBox="0 0 24 24">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                            d="M6 18L18 6M6 6l12 12" />
+                                                                    </svg>
+                                                                </button>
+                                                            </form>
+                                                        </div>
+                                                    @else
+                                                        {{-- Small Prebook Button --}}
+                                                        <button
+                                                            onclick="window.dispatchEvent(new CustomEvent('open-prebook-modal', { detail: { bedNumber: '{{ $bed['number'] }}', wardId: {{ $selectedWard->id }} } }))"
+                                                            class="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded-[4px] text-[10px] font-bold uppercase tracking-wider transition-colors shadow-sm flex-shrink-0"
+                                                            title="Prebook Next Patient">
+                                                            Prebook
+                                                        </button>
+                                                    @endif
+                                                @endif
                                             </div>
                                         @endif
 

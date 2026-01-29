@@ -218,34 +218,17 @@ class VitalSignApiV1Controller extends Controller
             $debugData['patient_lookup']['patient_mrn'] = $patient->mrn;
             $debugData['patient_lookup']['patient_visit_number'] = $patient->visit_number;
 
-            // Check if patient is admitted (has a bed assigned)
+            // Log patient bed/ward info for debugging (admission no longer required)
             $debugData['patient_lookup']['bed_id'] = $patient->bed_id;
             $debugData['patient_lookup']['has_bed'] = !empty($patient->bed);
             $debugData['patient_lookup']['ward_id'] = $patient->ward_id;
+            $debugData['patient_lookup']['is_admitted'] = !empty($patient->bed);
 
-            if (!$patient->bed) {
-                $debugData['processing_steps'][] = 'FAILED: Patient not admitted (no bed)';
-
-                $responseData = [
-                    'success' => false,
-                    'message' => 'Patient is not currently admitted',
-                ];
-
-                $this->logApiRequest(
-                    $apiUser,
-                    '/api/v1/vital-signs',
-                    'POST',
-                    $this->maskSensitiveData($request->all()),
-                    $responseData,
-                    400,
-                    $startTime,
-                    $debugData
-                );
-
-                return response()->json($responseData, 400);
+            if ($patient->bed) {
+                $debugData['processing_steps'][] = 'Patient is admitted (has bed)';
+            } else {
+                $debugData['processing_steps'][] = 'Patient not admitted (no bed) - proceeding anyway';
             }
-
-            $debugData['processing_steps'][] = 'Patient admission verified';
 
             // Build notes field
             $notes = [];
@@ -519,7 +502,7 @@ class VitalSignApiV1Controller extends Controller
             'data' => [
                 'patient_code' => $patient->mrn,
                 'name' => $patient->name,
-                'date_of_birth' => $patient->date_of_birth ? $patient->date_of_birth->format('Y-m-d') : null,
+                'date_of_birth' => $patient->date_of_birth ? \Carbon\Carbon::parse($patient->date_of_birth)->format('Y-m-d') : null,
                 'gender' => $patient->gender,
                 'mrn' => $patient->mrn,
                 'visit_number' => $patient->visit_number,
