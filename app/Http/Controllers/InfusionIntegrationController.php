@@ -20,9 +20,7 @@ class InfusionIntegrationController extends Controller
      */
     public function index(): View
     {
-        // Get HL7 logs from B.Braun listener (exclude heartbeats)
-        $hl7Logs = BbraunHl7Log::where('status', '!=', 'heartbeat')
-            ->latest()
+        $hl7Logs = BbraunHl7Log::latest()
             ->limit(50)
             ->get();
 
@@ -46,31 +44,18 @@ class InfusionIntegrationController extends Controller
             // Password hidden for security
         ];
 
-        // Check if listener is running
-        $lastActivity = BbraunHl7Log::latest()->first();
-        $isAlive = $lastActivity && $lastActivity->created_at->diffInMinutes(now()) < 5;
-
-        // precise status
-        if ($isAlive) {
-            $lastRealMessage = BbraunHl7Log::where('status', '!=', 'heartbeat')->latest()->first();
-            $hasRecentData = $lastRealMessage && $lastRealMessage->created_at->diffInMinutes(now()) < 5;
-            $listenerStatus = $hasRecentData ? 'active' : 'idle';
-        } else {
-            $listenerStatus = 'inactive';
-        }
-
         $stats = [
             'total_pumps' => InfusionPump::count(),
             'active_pumps' => InfusionPump::where('is_active', true)->count(),
             'active_infusions' => Infusion::active()->count(),
             'warnings' => Infusion::running()->withWarnings()->count(),
             'alarms' => Infusion::alarming()->count(),
-            'total_hl7_messages' => BbraunHl7Log::where('status', '!=', 'heartbeat')->count(),
-            'messages_today' => BbraunHl7Log::where('status', '!=', 'heartbeat')->whereDate('created_at', today())->count(),
+            'total_hl7_messages' => BbraunHl7Log::count(),
+            'messages_today' => BbraunHl7Log::whereDate('created_at', today())->count(),
             'error_messages' => BbraunHl7Log::where('status', 'error')->count(),
         ];
 
-        return view('integration.infusion.index', compact('hl7Logs', 'pumps', 'stats', 'mllpConfig', 'listenerStatus', 'dbConfig'));
+        return view('integration.infusion.index', compact('hl7Logs', 'pumps', 'stats', 'mllpConfig', 'dbConfig'));
     }
 
     /**

@@ -1421,46 +1421,6 @@ class BbraunHL7Listener:
         
         self.logger.info(f"\n{'-'*40}\n")
     
-    def heartbeat_loop(self):
-        """Periodically log heartbeat to database to indicate listener is active"""
-        self.logger.info("Heartbeat thread started")
-        while self.running:
-            try:
-                # Create a dummy heartbeat message
-                heartbeat_data = {
-                    'msh': {
-                        'message_type': 'HEARTBEAT', 
-                        'event_type': 'SYS',
-                        'message_control_id': f'HB-{int(time.time())}',
-                        'sending_application': 'BBRAUN_LISTENER',
-                        'sending_facility': 'SYSTEM'
-                    },
-                    'pid': {},
-                    'pv1': {},
-                    'infusion_data': {
-                        'device_id': 'SYSTEM_HEARTBEAT',
-                        'pump_status': 'running'
-                    }
-                }
-                
-                # Log to database (status='heartbeat' to distinguish from real messages)
-                self.db.log_message(
-                    parsed_data=heartbeat_data, 
-                    raw_message='SYSTEM_HEARTBEAT_CHECK', 
-                    source_ip='127.0.0.1', 
-                    status='heartbeat'
-                )
-                
-                # Sleep for 60 seconds
-                for _ in range(60):
-                    if not self.running:
-                        break
-                    time.sleep(1)
-                    
-            except Exception as e:
-                self.logger.error(f"Heartbeat error: {str(e)}")
-                time.sleep(60)
-
     def start(self):
         """Start the HL7 listener"""
         self.running = True
@@ -1498,12 +1458,6 @@ class BbraunHL7Listener:
             
             self.logger.info("")
             
-            # Start heartbeat thread
-            heartbeat_thread = threading.Thread(
-                target=self.heartbeat_loop,
-                daemon=True
-            )
-            heartbeat_thread.start()
             
             while self.running:
                 try:

@@ -207,29 +207,14 @@
                                 <p class="text-sm text-gray-500">B.Braun HL7 message listener settings</p>
                             </div>
                         </div>
-                        <div class="flex items-center">
-                            @php
-                                $statusClasses = [
-                                    'active' => 'bg-green-100 text-green-700',
-                                    'idle' => 'bg-blue-100 text-blue-700',
-                                    'inactive' => 'bg-red-100 text-red-700'
-                                ];
-                                $dotClasses = [
-                                    'active' => 'bg-green-500 animate-pulse',
-                                    'idle' => 'bg-blue-500',
-                                    'inactive' => 'bg-red-500'
-                                ];
-                                $statusText = [
-                                    'active' => 'Active (Receiving Data)',
-                                    'idle' => 'Active (No Recent Data)',
-                                    'inactive' => 'Listener Inactive'
-                                ];
-                            @endphp
-                            <span class="px-3 py-1.5 rounded-full text-sm font-medium {{ $statusClasses[$listenerStatus] ?? 'bg-gray-100 text-gray-600' }}">
-                                <span class="inline-block w-2 h-2 rounded-full {{ $dotClasses[$listenerStatus] ?? 'bg-gray-400' }} mr-2"></span>
-                                {{ $statusText[$listenerStatus] ?? 'Unknown Status' }}
-                            </span>
-                        </div>
+                        @if($stats['active_pumps'] > 0)
+                            <div class="flex items-center">
+                                <span class="px-3 py-1.5 rounded-full text-sm font-medium bg-green-100 text-green-700">
+                                    <span class="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse mr-2"></span>
+                                    {{ $stats['active_pumps'] }} Pumps Online
+                                </span>
+                            </div>
+                        @endif
                     </div>
                 </div>
 

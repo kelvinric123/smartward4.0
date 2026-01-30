@@ -886,25 +886,23 @@
 
                                                 @if($isVisible('prebook_button'))
                                                     @if($bed['has_pending_prebook'] ?? false)
-                                                        {{-- Compact Prebook Indicator --}}
-                                                        <div class="flex items-center gap-1 flex-shrink-0 bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5"
-                                                            title="Prebooked: {{ $bed['pending_prebook_patient_name'] }}">
-                                                            <span class="text-[10px] text-blue-800 font-medium truncate max-w-[60px]">
-                                                                {{ Str::limit($bed['pending_prebook_patient_name'] ?? 'Next', 8) }}
-                                                            </span>
-                                                            <form method="POST"
-                                                                action="{{ route('ward.cancel-prebook', $bed['pending_prebook_patient_id']) }}"
-                                                                onsubmit="return confirm('Cancel prebook?')" class="flex items-center">
-                                                                @csrf
-                                                                <button type="submit" class="text-red-500 hover:text-red-700 ml-1">
-                                                                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor"
-                                                                        viewBox="0 0 24 24">
-                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                                            d="M6 18L18 6M6 6l12 12" />
-                                                                    </svg>
-                                                                </button>
-                                                            </form>
-                                                        </div>
+                                                        @php
+                                                            $pendingPrebookData = [
+                                                                'bedNumber' => $bed['number'],
+                                                                'wardId' => $selectedWard->id,
+                                                                'prefillData' => [
+                                                                    'patientId' => $bed['pending_prebook_patient_id'],
+                                                                    'patientName' => $bed['pending_prebook_patient_name'],
+                                                                    'notes' => $bed['pending_prebook_notes'] ?? '',
+                                                                ]
+                                                            ];
+                                                        @endphp
+                                                        <button
+                                                            onclick='window.dispatchEvent(new CustomEvent("open-prebook-modal", { detail: @json($pendingPrebookData) }))'
+                                                            class="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded-[4px] text-[10px] font-bold uppercase tracking-wider transition-colors shadow-sm flex-shrink-0"
+                                                            title="Prebooked for: {{ $bed['pending_prebook_patient_name'] }}">
+                                                            Prebooked
+                                                        </button>
                                                     @else
                                                         {{-- Small Prebook Button --}}
                                                         <button

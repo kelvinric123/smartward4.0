@@ -158,6 +158,7 @@ class WardDashboardController extends Controller
         $beds = Bed::where('ward_id', $wardId)->get();
 
         foreach ($beds as $bed) {
+            /** @var \App\Models\Bed $bed */
             // Check if bed has a patient assigned through the patient table
             $patient = Patient::where('ward_id', $wardId)
                 ->where('bed_number', $bed->bed_number)
@@ -174,8 +175,27 @@ class WardDashboardController extends Controller
                     'patient_id' => $patient->id,
                 ]);
             } else {
-                // No patient assigned, mark bed as available
-                if ($bed->status !== 'maintenance') {
+                // No ACTIVE patient assigned.
+                // Check if there is a PENDING PREBOOK waiting for this bed
+                $pendingPrebook = Patient::where('ward_id', $wardId)
+                    ->where('target_bed_number', $bed->bed_number)
+                    ->where('is_active', true)
+                    ->where('status', 'prebook_pending')
+                    ->first();
+
+                if ($pendingPrebook) {
+                    // Activate the prebook!
+                    $pendingPrebook->update([
+                        'status' => 'prebook',
+                        'bed_number' => $bed->bed_number,
+                    ]);
+
+                    $bed->update([
+                        'status' => 'reserved',
+                        'patient_id' => $pendingPrebook->id,
+                    ]);
+                } else if ($bed->status !== 'maintenance') {
+                    // No patient assigned and not maintenance, mark bed as available
                     $bed->update([
                         'status' => 'available',
                         'patient_id' => null,
@@ -285,14 +305,12 @@ class WardDashboardController extends Controller
                 $isPendingDischarge = $patient->status === 'pending_discharge' || $patient->pending_discharge_at !== null;
 
                 // Check if there's already a pending prebook for this bed (prebook_pending status)
-                $pendingPrebook = null;
-                if ($isPendingDischarge) {
-                    $pendingPrebook = Patient::where('ward_id', $ward->id)
-                        ->where('target_bed_number', $bedNumber)
-                        ->where('is_active', true)
-                        ->where('status', 'prebook_pending')
-                        ->first();
-                }
+                // We now check for ANY occupied bed, not just pending discharge
+                $pendingPrebook = Patient::where('ward_id', $ward->id)
+                    ->where('target_bed_number', $bedNumber)
+                    ->where('is_active', true)
+                    ->where('status', 'prebook_pending')
+                    ->first();
 
                 // Get latest vital signs and calculate EWS
                 $latestVitals = VitalSign::where('patient_id', $patient->id)
@@ -597,25 +615,27 @@ class WardDashboardController extends Controller
             // Allow prebook only for pending_discharge beds, block for admitted/prebook
             $isPrebookForPendingDischarge = false;
             if ($existingPatient) {
-                if ($existingPatient->status === 'pending_discharge') {
-                    // This is allowed - prebook can coexist with pending discharge
+                if ($existingPatient->status === 'pending_discharge' || $existingPatient->status === 'admitted') {
+                    // This is allowed - prebook can coexist with admitted or pending discharge patients
+                    // The new prebook will have status 'prebook_pending'
                     $isPrebookForPendingDischarge = true;
-                    Log::info('Prebook for pending discharge bed', [
+                    Log::info('Prebook for occupied bed', [
                         'bed_number' => $request->bed_number,
                         'ward_id' => $request->ward_id,
-                        'pending_discharge_patient_id' => $existingPatient->id,
+                        'current_patient_id' => $existingPatient->id,
+                        'current_status' => $existingPatient->status,
                         'user_id' => Auth::id(),
                     ]);
                 } else {
-                    // Block prebook for admitted or already prebooked beds
-                    Log::warning('Prebook failed: Bed already occupied', [
+                    // Block prebook for already prebooked beds
+                    Log::warning('Prebook failed: Bed already prebooked', [
                         'bed_number' => $request->bed_number,
                         'ward_id' => $request->ward_id,
                         'attempted_patient_id' => $request->patient_id,
                         'existing_patient_id' => $existingPatient->id,
                         'user_id' => Auth::id(),
                     ]);
-                    return back()->with('error', 'This bed is already occupied or prebooked!');
+                    return back()->with('error', 'This bed is already prebooked!');
                 }
             }
 
@@ -2179,6 +2199,7 @@ class WardDashboardController extends Controller
         };
 
         foreach ($patients as $patient) {
+            /** @var \App\Models\Patient $patient */
             // Add Attending Doctors (PV1-7) - Primary physician
             $attendingDoctors = $patient->activeCareProviders()
                 ->where('role', PatientCareProvider::ROLE_ATTENDING)
@@ -2391,6 +2412,7 @@ class WardDashboardController extends Controller
             ->get();
 
         foreach ($patients as $patient) {
+            /** @var \App\Models\Patient $patient */
             // Get anaesthetists from care providers (consulting or attending role with anaesthetist link)
             $anaesthetistProviders = $patient->activeCareProviders()
                 ->whereNotNull('anaesthetist_id')
