@@ -16,37 +16,65 @@ class VitalSignIntegrationController extends Controller
     /**
      * Display the Vital Sign Integration page.
      */
-    public function index()
+    public function index(Request $request)
     {
         $apiUsers = ApiUser::withCount('apiLogs')
             ->latest()
             ->get();
 
-        // Fetch 100 recent logs for each category
-        $logCategories = [
-            'vital_signs' => fn($q) => $q->where('endpoint', 'like', '%vital-sign%'),
-            'ping' => fn($q) => $q->where('endpoint', 'like', '%ping%'),
-            'login' => fn($q) => $q->where('endpoint', 'like', '%login%')->orWhere('endpoint', 'like', '%logout%'),
-            'patients' => fn($q) => $q->where('endpoint', 'like', '%patient%'),
-            'monitor' => fn($q) => $q->where('endpoint', 'like', '%monitor%')->orWhere('endpoint', 'like', '%device%'),
-        ];
-
         $recentLogs = collect();
+        $isFiltered = false;
 
-        foreach ($logCategories as $key => $callback) {
-            $categoryLogs = VitalSignApiLog::with('apiUser')
-                ->where(function ($query) use ($callback) {
-                    $callback($query);
-                })
-                ->latest()
-                ->limit(100)
-                ->get();
+        // Filter Logic
+        if ($request->has('api_user_id') || $request->has('duration')) {
+            $isFiltered = true;
+            $query = VitalSignApiLog::with('apiUser')->latest();
 
-            $recentLogs = $recentLogs->merge($categoryLogs);
+            if ($request->api_user_id && $request->api_user_id !== 'all') {
+                $query->where('api_user_id', $request->api_user_id);
+            }
+
+            if ($request->duration) {
+                switch ($request->duration) {
+                    case '24h':
+                        $query->where('created_at', '>=', now()->subHours(24));
+                        break;
+                    case '7d':
+                        $query->where('created_at', '>=', now()->subDays(7));
+                        break;
+                    case '30d':
+                        $query->where('created_at', '>=', now()->subDays(30));
+                        break;
+                    // 'all' case doesn't need a where clause
+                }
+            }
+
+            $recentLogs = $query->paginate(50)->withQueryString();
+        } else {
+            // Default "Dashboard" View - Fetch 100 recent logs for each category
+            $logCategories = [
+                'vital_signs' => fn($q) => $q->where('endpoint', 'like', '%vital-sign%'),
+                'ping' => fn($q) => $q->where('endpoint', 'like', '%ping%'),
+                'login' => fn($q) => $q->where('endpoint', 'like', '%login%')->orWhere('endpoint', 'like', '%logout%'),
+                'patients' => fn($q) => $q->where('endpoint', 'like', '%patient%'),
+                'monitor' => fn($q) => $q->where('endpoint', 'like', '%monitor%')->orWhere('endpoint', 'like', '%device%'),
+            ];
+
+            foreach ($logCategories as $key => $callback) {
+                $categoryLogs = VitalSignApiLog::with('apiUser')
+                    ->where(function ($query) use ($callback) {
+                        $callback($query);
+                    })
+                    ->latest()
+                    ->limit(100)
+                    ->get();
+
+                $recentLogs = $recentLogs->merge($categoryLogs);
+            }
+
+            // Remove duplicates (in case a log matches multiple categories) and sort by date
+            $recentLogs = $recentLogs->unique('id')->sortByDesc('created_at')->values();
         }
-
-        // Remove duplicates (in case a log matches multiple categories) and sort by date
-        $recentLogs = $recentLogs->unique('id')->sortByDesc('created_at')->values();
 
         // Get Qmed gateways
         $gateways = QmedGateway::with('apiUsers')->latest()->get();
@@ -61,7 +89,7 @@ class VitalSignIntegrationController extends Controller
             'server_port' => $serverInfo['port'],
         ];
 
-        return view('integration.vital-sign.index', compact('apiUsers', 'recentLogs', 'gatewayConfig', 'gateways'));
+        return view('integration.vital-sign.index', compact('apiUsers', 'recentLogs', 'gatewayConfig', 'gateways', 'isFiltered'));
     }
 
     /**
@@ -684,6 +712,88 @@ class VitalSignIntegrationController extends Controller
 
         return redirect()->route('vital-sign-integration.index')
             ->with('success', 'API logs cleared successfully.');
+    }
+
+    /**
+     * Export API Logs to CSV.
+     */
+    public function exportLogs(Request $request)
+    {
+        $fileName = 'api_logs_' . date('Y-m-d_H-i-s') . '.csv';
+
+        $query = VitalSignApiLog::with('apiUser')->latest();
+
+        if ($request->api_user_id && $request->api_user_id !== 'all') {
+            $query->where('api_user_id', $request->api_user_id);
+        }
+
+        if ($request->duration) {
+            switch ($request->duration) {
+                case '24h':
+                    $query->where('created_at', '>=', now()->subHours(24));
+                    break;
+                case '7d':
+                    $query->where('created_at', '>=', now()->subDays(7));
+                    break;
+                case '30d':
+                    $query->where('created_at', '>=', now()->subDays(30));
+                    break;
+            }
+        }
+
+        return response()->streamDownload(function () use ($query) {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, ['ID', 'Time', 'User', 'Endpoint', 'Method', 'Status Code', 'Response Time (ms)', 'IP Address']);
+
+            $query->chunk(500, function ($logs) use ($handle) {
+                foreach ($logs as $log) {
+                    fputcsv($handle, [
+                        $log->id,
+                        $log->created_at->format('Y-m-d H:i:s'),
+                        $log->apiUser->name ?? 'Unknown',
+                        $log->endpoint,
+                        $log->method,
+                        $log->status_code,
+                        $log->response_time_ms,
+                        $log->ip_address,
+                    ]);
+                }
+            });
+
+            fclose($handle);
+        }, $fileName, [
+            'Content-Type' => 'text/csv',
+        ]);
+    }
+
+    /**
+     * Print API Logs view.
+     */
+    public function printLogs(Request $request)
+    {
+        $query = VitalSignApiLog::with('apiUser')->latest();
+
+        if ($request->api_user_id && $request->api_user_id !== 'all') {
+            $query->where('api_user_id', $request->api_user_id);
+        }
+
+        if ($request->duration) {
+            switch ($request->duration) {
+                case '24h':
+                    $query->where('created_at', '>=', now()->subHours(24));
+                    break;
+                case '7d':
+                    $query->where('created_at', '>=', now()->subDays(7));
+                    break;
+                case '30d':
+                    $query->where('created_at', '>=', now()->subDays(30));
+                    break;
+            }
+        }
+
+        $logs = $query->limit(500)->get(); // Limit to 500 for printing to avoid crash
+
+        return view('integration.vital-sign.print', compact('logs'));
     }
 
     // ============================================

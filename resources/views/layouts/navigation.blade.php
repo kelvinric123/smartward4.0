@@ -13,6 +13,8 @@
         $openSection = 'vitalSign';
     } elseif (request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*') || request()->routeIs('ecg.index') || request()->routeIs('ekad.*')) {
         $openSection = 'integration';
+    } elseif (request()->routeIs('user-activities.*')) {
+        $openSection = 'appLogs';
     }
 @endphp
 
@@ -402,6 +404,38 @@
                                 d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                         </svg>
                         <span class="ml-2">EKad (E-Ink)</span>
+                    </a>
+                </div>
+            </div>
+        @endif
+
+        <!-- Application Logs Section -->
+        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE))
+            <div class="pt-2">
+                <button @click="toggleSection('appLogs')"
+                    class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('user-activities.*') ? 'bg-white/20' : '' }}">
+                    <div class="flex items-center">
+                        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Application Logs</span>
+                    </div>
+                    <svg x-show="sidebarOpen" :class="{'rotate-180': isSectionOpen('appLogs')}"
+                        class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+
+                <div x-show="isSectionOpen('appLogs') && sidebarOpen" x-transition
+                    class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
+                    <a href="{{ route('user-activities.index') }}"
+                        class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('user-activities.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span class="ml-2">User Activities</span>
                     </a>
                 </div>
             </div>

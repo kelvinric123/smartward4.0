@@ -477,44 +477,147 @@ class AdtApiController extends Controller
             $wardFound = $mappedWard !== null;
             $bedFound = $mappedBed !== null;
 
-            // If destination ward or bed is not found, mark as unmapped
+            // If destination ward or bed is not found, we treat this as a DISCHARGE
+            // User requirement: "if its not, it will be discharged"
             if (!$wardFound || !$bedFound) {
-                $unmappedDetails = [];
-                if (!$wardFound && $adtWardCode) {
-                    $unmappedDetails[] = "Ward '{$adtWardCode}' not found";
-                }
-                if (!$bedFound && $adtBedCode) {
-                    $unmappedDetails[] = "Bed '{$adtBedCode}' not found";
-                }
-
-                $messageLog->update([
-                    'status' => 'unmapped',
-                    'error_message' => implode('; ', $unmappedDetails),
-                    'action_taken' => [
-                        'reason' => 'Destination ward or bed not found in system',
-                        'adt_ward_code' => $adtWardCode,
-                        'adt_bed_code' => $adtBedCode,
-                        'ward_found' => $wardFound,
-                        'bed_found' => $bedFound,
-                        'mapped_ward_name' => $mappedWard?->ward_name,
-                        'mapped_bed_number' => $mappedBed?->bed_number,
-                    ],
-                    'unmapped_ward_code' => !$wardFound ? $adtWardCode : null,
-                    'unmapped_bed_code' => !$bedFound ? $adtBedCode : null,
-                ]);
-                DB::commit();
-
-                Log::warning("ADT A02 Transfer - DESTINATION NOT FOUND", [
+                Log::warning("ADT A02 Transfer - Destination NOT FOUND. Initiating DISCHARGE.", [
                     'adt_ward_code' => $adtWardCode,
                     'adt_bed_code' => $adtBedCode,
-                    'ward_found' => $wardFound,
-                    'bed_found' => $bedFound,
+                ]);
+
+                $mrn = $pid['mrn'] ?? null;
+                if (!$mrn) {
+                    throw new \Exception('MRN is required for transfer/discharge');
+                }
+
+                $patient = Patient::where('mrn', $mrn)->first();
+
+                if (!$patient) {
+                    // If patient doesn't exist AND we can't transfer them, it's an error
+                    $messageLog->update([
+                        'status' => 'failed',
+                        'error_message' => 'Patient not found for discharge (unmapped transfer)',
+                        'action_taken' => [
+                            'reason' => 'Unmapped transfer destination and patient not found',
+                        ],
+                    ]);
+                    DB::commit();
+                    return [
+                        'success' => false,
+                        'message' => 'Patient not found for unmapped transfer (discharge)',
+                        'actions' => ['failed'],
+                    ];
+                }
+
+                // Proceed with Discharge Logic (similar to handleA03Discharge)
+                // Release bed or activate pending prebook
+                $bed = Bed::where('patient_id', $patient->id)->first();
+                $pendingPrebookActivated = false;
+
+                // Store ward/bed info for logging before clearing
+                $dischargeWardId = $bed?->ward_id ?? $patient->ward_id;
+                $dischargeBedNumber = $bed?->bed_number ?? $patient->bed_number;
+                // If we still don't have ward ID/Bed Number, we might not be able to log fully, but we continue discharge
+
+                if ($bed) {
+                    // Check for pending prebook (prebook_pending) waiting for this bed
+                    $pendingPrebook = Patient::where('ward_id', $dischargeWardId)
+                        ->where('target_bed_number', $dischargeBedNumber)
+                        ->where('is_active', true)
+                        ->where('status', 'prebook_pending')
+                        ->first();
+
+                    if ($pendingPrebook) {
+                        // Activate the pending prebook - assign the bed and change status to prebook
+                        $pendingPrebook->update([
+                            'bed_number' => $dischargeBedNumber,
+                            'target_bed_number' => null,
+                            'status' => 'prebook',
+                        ]);
+
+                        // Update bed to reserved status with the prebook patient
+                        $bed->update([
+                            'patient_id' => $pendingPrebook->id,
+                            'status' => 'reserved',
+                        ]);
+
+                        $actions[] = 'pending_prebook_activated';
+                        $pendingPrebookActivated = true;
+
+                        AdmissionLog::create([
+                            'patient_id' => $pendingPrebook->id,
+                            'ward_id' => $dischargeWardId,
+                            'user_id' => null,
+                            'bed_number' => $dischargeBedNumber,
+                            'action' => 'prebook-activated',
+                            'patient_name' => $pendingPrebook->name,
+                            'mrn' => $pendingPrebook->mrn,
+                            'notes' => 'ADT A02 (Unmapped): Prebook activated after discharge of ' . $patient->name,
+                            'source' => 'adt',
+                        ]);
+
+                    } else {
+                        // No pending prebook - release bed normally
+                        $bed->update([
+                            'patient_id' => null,
+                            'status' => 'available',
+                        ]);
+                    }
+                    $actions[] = 'bed_released';
+                }
+
+                // Update patient status
+                $patient->status = Patient::STATUS_DISCHARGED;
+                $patient->ward_id = null;
+                $patient->bed_number = null;
+                $patient->is_active = false;
+                $patient->discharged_at = now();
+                $patient->pending_discharge_at = null;
+                $patient->save();
+                $actions[] = 'patient_discharged_unmapped_transfer';
+
+                $messageLog->update([
+                    'status' => 'processed',
+                    'action_taken' => array_merge($actions, [
+                        'reason' => 'Discharged due to unmapped transfer destination',
+                        'unmapped_ward' => $adtWardCode,
+                        'unmapped_bed' => $adtBedCode
+                    ]),
+                    'patient_id_ref' => $patient->id,
+                ]);
+
+                // Create admission log entry for ADT discharge
+                if ($dischargeWardId) {
+                    AdmissionLog::create([
+                        'patient_id' => $patient->id,
+                        'ward_id' => $dischargeWardId,
+                        'user_id' => null,
+                        'bed_number' => $dischargeBedNumber,
+                        'action' => 'discharge',
+                        'patient_name' => $patient->name,
+                        'mrn' => $patient->mrn,
+                        'consultant_name' => null, // Could fetch current consultant if needed
+                        'nurse_name' => null,
+                        'gender' => $patient->gender,
+                        'age' => $patient->age,
+                        'notes' => "ADT A02: External Transfer to Unmapped {$adtWardCode}/{$adtBedCode}. Treated as Discharge.",
+                        'source' => 'adt',
+                    ]);
+                }
+
+                DB::commit();
+
+                Log::info("ADT A02 Transfer - UNMAPPED DESTINATION -> DISCHARGED", [
+                    'patient_id' => $patient->id,
+                    'unmapped_ward' => $adtWardCode,
+                    'actions' => $actions,
                 ]);
 
                 return [
-                    'success' => false,
-                    'message' => 'Destination ward or bed not found: ' . implode('; ', $unmappedDetails),
-                    'actions' => ['unmapped'],
+                    'success' => true,
+                    'message' => 'Patient discharged (Unmapped transfer location)',
+                    'patient_id' => $patient->id,
+                    'actions' => $actions,
                 ];
             }
 

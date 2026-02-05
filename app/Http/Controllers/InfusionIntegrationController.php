@@ -18,11 +18,32 @@ class InfusionIntegrationController extends Controller
     /**
      * Display the Infusion Integration page.
      */
-    public function index(): View
+    /**
+     * Display the Infusion Integration page.
+     */
+    public function index(Request $request): View
     {
-        $hl7Logs = BbraunHl7Log::latest()
-            ->limit(50)
-            ->get();
+        $duration = $request->get('duration', 'all');
+
+        $query = BbraunHl7Log::latest();
+
+        if ($duration !== 'all') {
+            $hours = match ($duration) {
+                '30m' => 0.5,
+                '1h' => 1,
+                '2h' => 2,
+                '6h' => 6,
+                '12h' => 12,
+                '24h' => 24,
+                '48h' => 48,
+                '7d' => 168,
+                '30d' => 720,
+                default => 24,
+            };
+            $query->where('created_at', '>=', now()->subMinutes($hours * 60));
+        }
+
+        $hl7Logs = $query->limit(50)->get();
 
         $pumps = InfusionPump::with('ward')->latest()->get();
 
@@ -55,7 +76,89 @@ class InfusionIntegrationController extends Controller
             'error_messages' => BbraunHl7Log::where('status', 'error')->count(),
         ];
 
-        return view('integration.infusion.index', compact('hl7Logs', 'pumps', 'stats', 'mllpConfig', 'dbConfig'));
+        return view('integration.infusion.index', compact('hl7Logs', 'pumps', 'stats', 'mllpConfig', 'dbConfig', 'duration'));
+    }
+
+    /**
+     * Export HL7 logs to CSV.
+     */
+    public function export(Request $request)
+    {
+        $duration = $request->get('duration', 'all');
+        $fileName = 'hl7_logs_' . date('Y-m-d_H-i-s') . '.csv';
+
+        $headers = [
+            "Content-type" => "text/csv",
+            "Content-Disposition" => "attachment; filename=$fileName",
+            "Pragma" => "no-cache",
+            "Cache-Control" => "must-revalidate, post-check=0, pre-check=0",
+            "Expires" => "0"
+        ];
+
+        $callback = function () use ($duration) {
+            $file = fopen('php://output', 'w');
+
+            // BOM for Excel to read UTF-8 correctly
+            fprintf($file, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+            fputcsv($file, [
+                'Time',
+                'Message Type',
+                'Event',
+                'Device ID',
+                'Patient MRN',
+                'Medication',
+                'Pump Status',
+                'Status',
+                'Source IP',
+                'Raw Message',
+                'Error'
+            ]);
+
+            $query = BbraunHl7Log::latest();
+
+            if ($duration !== 'all') {
+                $hours = match ($duration) {
+                    '30m' => 0.5,
+                    '1h' => 1,
+                    '2h' => 2,
+                    '6h' => 6,
+                    '12h' => 12,
+                    '24h' => 24,
+                    '48h' => 48,
+                    '7d' => 168,
+                    '30d' => 720,
+                    default => 24,
+                };
+                $query->where('created_at', '>=', now()->subMinutes($hours * 60));
+            } else {
+                // Limit "all" to prevent memory issues or massive downloads, maybe 1000? 
+                // Or just chunks as expected. Using chunk for safety.
+                $query->limit(5000);
+            }
+
+            $query->chunk(100, function ($logs) use ($file) {
+                foreach ($logs as $log) {
+                    fputcsv($file, [
+                        $log->created_at->format('Y-m-d H:i:s'),
+                        $log->message_type,
+                        $log->event_type,
+                        $log->device_id,
+                        $log->patient_mrn,
+                        $log->medication_name,
+                        $log->pump_status,
+                        $log->status,
+                        $log->source_ip,
+                        $log->raw_message,
+                        $log->error_message
+                    ]);
+                }
+            });
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
     }
 
     /**

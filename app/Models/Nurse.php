@@ -14,6 +14,7 @@ class Nurse extends Model
         'STAFF NURSE I',
         'STAFF NURSE II',
         'GRADUATE NURSE',
+        'Student nurse',
         'Health Care Assistant',
         'Patient Care Assistant',
     ];

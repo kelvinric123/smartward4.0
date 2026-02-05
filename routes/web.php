@@ -21,6 +21,7 @@ use App\Http\Controllers\EkadController;
 use App\Http\Controllers\ShiftSettingController;
 use App\Http\Controllers\DietTypeController;
 use App\Http\Controllers\IsolationTypeController;
+use App\Http\Controllers\UserActivityController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -72,6 +73,8 @@ Route::middleware('auth')->group(function () {
     Route::resource('users', \App\Http\Controllers\UsersController::class)->except(['show']);
     Route::post('users/{user}/update-role', [\App\Http\Controllers\UsersController::class, 'updateRole'])->name('users.update-role');
     Route::post('users/{user}/toggle-status', [\App\Http\Controllers\UsersController::class, 'toggleStatus'])->name('users.toggle-status');
+    Route::get('user-activities', [UserActivityController::class, 'index'])->name('user-activities.index');
+    Route::get('user-activities/export', [UserActivityController::class, 'export'])->name('user-activities.export');
 
 
     // Patient Additional Field Routes (inside Admin Management)
@@ -157,6 +160,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/vital-sign-integration/api-user/{apiUser}/regenerate-token', [VitalSignIntegrationController::class, 'regenerateToken'])->name('vital-sign-integration.api-user.regenerate-token');
     Route::get('/vital-sign-integration/logs', [VitalSignIntegrationController::class, 'getLogs'])->name('vital-sign-integration.logs');
     Route::post('/vital-sign-integration/logs/clear', [VitalSignIntegrationController::class, 'clearLogs'])->name('vital-sign-integration.logs.clear');
+    Route::get('/vital-sign-integration/logs/export', [VitalSignIntegrationController::class, 'exportLogs'])->name('vital-sign-integration.logs.export');
+    Route::get('/vital-sign-integration/logs/print', [VitalSignIntegrationController::class, 'printLogs'])->name('vital-sign-integration.logs.print');
 
     // Qmed Gateway Routes
     Route::post('/vital-sign-integration/gateway', [VitalSignIntegrationController::class, 'storeGateway'])->name('vital-sign-integration.gateway.store');
@@ -169,6 +174,7 @@ Route::middleware('auth')->group(function () {
 
     // Infusion Integration Routes (B.Braun HL7/MLLP)
     Route::get('/infusion-integration', [InfusionIntegrationController::class, 'index'])->name('infusion-integration.index');
+    Route::get('/infusion-integration/export', [InfusionIntegrationController::class, 'export'])->name('infusion-integration.export');
     Route::post('/infusion-integration/pump', [InfusionIntegrationController::class, 'storePump'])->name('infusion-integration.pump.store');
     Route::put('/infusion-integration/pump/{pump}', [InfusionIntegrationController::class, 'updatePump'])->name('infusion-integration.pump.update');
     Route::delete('/infusion-integration/pump/{pump}', [InfusionIntegrationController::class, 'destroyPump'])->name('infusion-integration.pump.destroy');
@@ -188,19 +194,20 @@ Route::middleware('auth')->group(function () {
     Route::get('/ecg/pdf', [EcgController::class, 'servePdf'])->name('ecg.pdf');
     Route::get('/ecg/list', [EcgController::class, 'listFiles'])->name('ecg.list');
 
-    // EKad Integration Routes (SEEKINK E-Ink)
+    // EKad (SEEKINK E-Ink) Routes
     Route::get('/ekad', [EkadController::class, 'index'])->name('ekad.index');
-    Route::post('/ekad/login', [EkadController::class, 'testLogin'])->name('ekad.login');
-    Route::post('/ekad/push', [EkadController::class, 'pushPatientInfo'])->name('ekad.push');
-    Route::get('/ekad/configuration', [EkadController::class, 'getConfiguration'])->name('ekad.configuration');
-    Route::post('/ekad/configuration', [EkadController::class, 'saveConfiguration'])->name('ekad.configuration.save');
+    Route::get('/ekad/config', [EkadController::class, 'getConfiguration'])->name('ekad.configuration');
+    Route::post('/ekad/config', [EkadController::class, 'saveConfiguration'])->name('ekad.configuration.save');
+    Route::post('/ekad/test-login', [EkadController::class, 'testLogin'])->name('ekad.login');
     Route::get('/ekad/bed-mappings', [EkadController::class, 'getBedMappings'])->name('ekad.bed-mappings');
     Route::post('/ekad/bed-mappings', [EkadController::class, 'storeBedMapping'])->name('ekad.bed-mappings.store');
     Route::put('/ekad/bed-mappings/{mapping}', [EkadController::class, 'updateBedMapping'])->name('ekad.bed-mappings.update');
     Route::delete('/ekad/bed-mappings/{mapping}', [EkadController::class, 'destroyBedMapping'])->name('ekad.bed-mappings.destroy');
+    Route::post('/ekad/push-patient', [EkadController::class, 'pushPatientInfo'])->name('ekad.push');
     Route::post('/ekad/preview-masking', [EkadController::class, 'previewMasking'])->name('ekad.preview-masking');
     Route::get('/ekad/activity-logs', [EkadController::class, 'getActivityLogs'])->name('ekad.activity-logs');
     Route::get('/ekad/response-logs', [EkadController::class, 'getResponseLogs'])->name('ekad.response-logs');
+    Route::get('/ekad/response-logs/export', [EkadController::class, 'exportResponseLogs'])->name('ekad.response-logs.export');
     Route::post('/ekad/sync-all', [EkadController::class, 'syncAll'])->name('ekad.sync-all');
 
 

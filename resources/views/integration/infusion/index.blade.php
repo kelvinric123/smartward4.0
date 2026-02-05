@@ -1,4 +1,37 @@
 <x-app-layout>
+    <style>
+        @media print {
+            body { background: white !important; }
+            nav, header, footer, .no-print, #hl7InfoModal, [x-cloak] { display: none !important; }
+            .print-only-show { display: block !important; }
+            .bg-white\/90 { background-color: white !important; backdrop-filter: none !important; box-shadow: none !important; border: none !important; }
+            .shadow-lg, .shadow-md, .shadow { box-shadow: none !important; }
+            .rounded-2xl, .rounded-xl { border-radius: 0 !important; }
+            .max-w-7xl { max-width: 100% !important; padding: 0 !important; margin: 0 !important; }
+            .space-y-6 > * { margin-bottom: 2rem !important; }
+            
+            /* Hide other sections in print */
+            .grid-cols-2.md\:grid-cols-4, /* stats */
+            .border-purple-100, /* pump list */
+            .border-cyan-100 /* config */
+            { display: none !important; }
+
+            /* Ensure table fits */
+            table { width: 100% !important; font-size: 10pt !important; }
+            th, td { padding: 4px !important; }
+            
+            /* Show title clearly */
+            .print-title { display: block !important; margin-bottom: 20px; text-align: center; }
+        }
+        .print-only-show { display: none; }
+        .print-title { display: none; }
+    </style>
+    
+    <div class="print-title">
+        <h1 class="text-2xl font-bold">Infusion Integration - HL7 Logs</h1>
+        <p class="text-sm text-gray-500">Generated: {{ now()->format('Y-m-d H:i') }}</p>
+    </div>
+
     <x-slot name="header">
         <div class="flex justify-between items-center">
             <div>
@@ -498,15 +531,49 @@
                                 <p class="text-sm text-gray-500">Last 50 HL7 messages received from B.Braun pumps</p>
                             </div>
                         </div>
-                        <form action="{{ route('infusion-integration.logs.clear') }}" method="POST" onsubmit="return confirm('Are you sure you want to clear all HL7 message logs?');">
+                    <div class="flex items-center space-x-2">
+                        <!-- Duration Filter -->
+                        <form action="{{ route('infusion-integration.index') }}" method="GET" class="flex items-center no-print">
+                            <select name="duration" onchange="this.form.submit()" class="text-sm border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg shadow-sm mr-2">
+                                <option value="30m" {{ $duration == '30m' ? 'selected' : '' }}>Last 30 Minutes</option>
+                                <option value="1h" {{ $duration == '1h' ? 'selected' : '' }}>Last 1 Hour</option>
+                                <option value="2h" {{ $duration == '2h' ? 'selected' : '' }}>Last 2 Hours</option>
+                                <option value="6h" {{ $duration == '6h' ? 'selected' : '' }}>Last 6 Hours</option>
+                                <option value="12h" {{ $duration == '12h' ? 'selected' : '' }}>Last 12 Hours</option>
+                                <option value="24h" {{ $duration == '24h'  ? 'selected' : '' }}>Last 24 Hours</option>
+                                <option value="48h" {{ $duration == '48h'  ? 'selected' : '' }}>Last 48 Hours</option>
+                                <option value="7d" {{ $duration == '7d'  ? 'selected' : '' }}>Last 7 Days</option>
+                                <option value="30d" {{ $duration == '30d'  ? 'selected' : '' }}>Last 30 Days</option>
+                                <option value="all" {{ $duration == 'all' ? 'selected' : '' }}>All Time</option>
+                            </select>
+                        </form>
+
+                        <!-- Print Button -->
+                        <button onclick="window.print()" class="no-print inline-flex items-center px-3 py-1.5 bg-white border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-50 focus:outline-none transition-colors">
+                            <svg class="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+                            </svg>
+                            Print
+                        </button>
+
+                        <!-- Export Button -->
+                        <a href="{{ route('infusion-integration.export', ['duration' => $duration]) }}" class="no-print inline-flex items-center px-3 py-1.5 bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 rounded-lg transition-colors text-sm font-medium">
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                            </svg>
+                            Save to Excel
+                        </a>
+
+                        <form action="{{ route('infusion-integration.logs.clear') }}" method="POST" onsubmit="return confirm('Are you sure you want to clear all HL7 message logs?');" class="no-print">
                             @csrf
-                            <button type="submit" class="inline-flex items-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-sm font-medium">
+                            <button type="submit" class="inline-flex items-center px-3 py-1.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 rounded-lg transition-colors text-sm font-medium">
                                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                                 </svg>
                                 Clear Logs
                             </button>
                         </form>
+                    </div>
                     </div>
                 </div>
 

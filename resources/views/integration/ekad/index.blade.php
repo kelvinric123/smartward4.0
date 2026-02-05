@@ -1,4 +1,104 @@
 <x-app-layout>
+    <style>
+        @media print {
+            body {
+                background: white !important;
+            }
+
+            nav,
+            header,
+            footer,
+            .no-print,
+            [x-cloak] {
+                display: none !important;
+            }
+
+            .print-only-show {
+                display: block !important;
+            }
+
+            .bg-white\/90 {
+                background-color: white !important;
+                backdrop-filter: none !important;
+                box-shadow: none !important;
+                border: none !important;
+            }
+
+            .shadow-lg,
+            .shadow-md,
+            .shadow {
+                box-shadow: none !important;
+            }
+
+            .rounded-2xl,
+            .rounded-xl {
+                border-radius: 0 !important;
+            }
+
+            .max-w-7xl {
+                max-width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+
+            .space-y-6>* {
+                margin-bottom: 2rem !important;
+            }
+
+            /* Hide other sections in print */
+            .border-teal-100,
+            /* config */
+            .border-indigo-100,
+            /* bed mappings */
+            .border-green-100,
+            /* manual push */
+            .border-purple-100,
+            /* activity logs */
+            .border-gray-200
+
+            /* response log (debug) */
+                {
+                display: none !important;
+            }
+
+            /* Ensure table fits */
+            table {
+                width: 100% !important;
+                font-size: 9pt !important;
+            }
+
+            th,
+            td {
+                padding: 4px !important;
+            }
+
+            /* Show title clearly */
+            .print-title {
+                display: block !important;
+                margin-bottom: 20px;
+                text-align: center;
+            }
+
+            /* Ensure API Response Logs are visible */
+            .border-blue-100 {
+                display: block !important;
+            }
+        }
+
+        .print-only-show {
+            display: none;
+        }
+
+        .print-title {
+            display: none;
+        }
+    </style>
+
+    <div class="print-title">
+        <h1 class="text-2xl font-bold">EKad Integration - API Response Logs</h1>
+        <p class="text-sm text-gray-500">Generated: {{ now()->format('Y-m-d H:i') }}</p>
+    </div>
+
     <x-slot name="header">
         <div class="flex justify-between items-center">
             <div>
@@ -552,14 +652,53 @@
                             </div>
                         </div>
                         <div class="flex items-center space-x-2">
+                            <!-- Duration Filter -->
+                            <select x-model="apiLogsDuration" @change="loadApiResponseLogs()"
+                                class="text-sm rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500 no-print">
+                                <option value="all">All Time</option>
+                                <option value="30m">Last 30 Min</option>
+                                <option value="1h">Last 1 Hour</option>
+                                <option value="2h">Last 2 Hours</option>
+                                <option value="6h">Last 6 Hours</option>
+                                <option value="12h">Last 12 Hours</option>
+                                <option value="24h">Last 24 Hours</option>
+                                <option value="48h">Last 48 Hours</option>
+                                <option value="7d">Last 7 Days</option>
+                                <option value="30d">Last 30 Days</option>
+                            </select>
+
                             <select x-model="apiLogsFilter" @change="loadApiResponseLogs()"
-                                class="text-sm rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500">
-                                <option value="">All</option>
+                                class="text-sm rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500 no-print">
+                                <option value="">All Status</option>
                                 <option value="success">Success Only</option>
                                 <option value="failed">Failed Only</option>
                             </select>
+
+                            <!-- Print Button -->
+                            <button onclick="window.print()"
+                                class="no-print inline-flex items-center px-3 py-1.5 bg-white border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-50 focus:outline-none transition-colors">
+                                <svg class="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor"
+                                    viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z">
+                                    </path>
+                                </svg>
+                                Print
+                            </button>
+
+                            <!-- Export Button -->
+                            <a :href="'{{ route('ekad.response-logs.export') }}?duration=' + apiLogsDuration + '&success=' + (apiLogsFilter === 'success' ? 'true' : (apiLogsFilter === 'failed' ? 'false' : ''))"
+                                target="_blank"
+                                class="no-print inline-flex items-center px-3 py-1.5 bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 rounded-lg transition-colors text-sm font-medium">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                Export
+                            </a>
+
                             <button @click="loadApiResponseLogs()" :disabled="loadingApiLogs"
-                                class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-medium rounded-lg transition-colors">
+                                class="inline-flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-medium rounded-lg transition-colors no-print">
                                 <svg x-show="!loadingApiLogs" class="w-4 h-4 mr-1" fill="none" stroke="currentColor"
                                     viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -740,6 +879,7 @@
                 apiResponseLogs: [],
                 loadingApiLogs: false,
                 apiLogsFilter: '',
+                apiLogsDuration: 'all',
                 apiLogsPagination: {
                     current_page: 1,
                     last_page: 1,
@@ -1001,16 +1141,22 @@
                 async loadApiResponseLogs(page = 1) {
                     this.loadingApiLogs = true;
                     try {
-                        let url = '{{ route("ekad.response-logs") }}?page=' + page + '&per_page=20';
+                        let url = new URL('{{ route("ekad.response-logs") }}', window.location.origin);
+                        url.searchParams.append('page', page);
+                        url.searchParams.append('per_page', 20);
 
                         // Add filter if selected
                         if (this.apiLogsFilter === 'success') {
-                            url += '&success=1';
+                            url.searchParams.append('success', '1');
                         } else if (this.apiLogsFilter === 'failed') {
-                            url += '&success=0';
+                            url.searchParams.append('success', '0');
                         }
 
-                        const response = await fetch(url, {
+                        if (this.apiLogsDuration && this.apiLogsDuration !== 'all') {
+                            url.searchParams.append('duration', this.apiLogsDuration);
+                        }
+
+                        const response = await fetch(url.toString(), {
                             method: 'GET',
                             headers: {
                                 'X-CSRF-TOKEN': '{{ csrf_token() }}'

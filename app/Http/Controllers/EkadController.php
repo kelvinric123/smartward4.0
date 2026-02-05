@@ -366,8 +366,25 @@ class EkadController extends Controller
             ->orderBy('created_at', 'desc');
 
         // Apply filters
-        if ($request->has('success')) {
+        if ($request->has('success') && $request->input('success') !== '') {
             $query->where('success', $request->boolean('success'));
+        }
+
+        if ($request->has('duration') && $request->input('duration') !== 'all') {
+            $duration = $request->input('duration');
+            $minutes = match ($duration) {
+                '30m' => 30,
+                '1h' => 60,
+                '2h' => 120,
+                '6h' => 360,
+                '12h' => 720,
+                '24h' => 1440,
+                '48h' => 2880,
+                '7d' => 10080,
+                '30d' => 43200,
+                default => 1440,
+            };
+            $query->where('created_at', '>=', now()->subMinutes($minutes));
         }
 
         if ($request->has('bed_id')) {
@@ -397,6 +414,104 @@ class EkadController extends Controller
             'success' => true,
             'logs' => $logs,
         ]);
+    }
+
+    /**
+     * Export API response logs to CSV
+     */
+    public function exportResponseLogs(Request $request)
+    {
+        $fileName = 'ekad_response_logs_' . date('Y-m-d_H-i-s') . '.csv';
+
+        $headers = [
+            "Content-type" => "text/csv",
+            "Content-Disposition" => "attachment; filename=$fileName",
+            "Pragma" => "no-cache",
+            "Cache-Control" => "must-revalidate, post-check=0, pre-check=0",
+            "Expires" => "0"
+        ];
+
+        $callback = function () use ($request) {
+            $file = fopen('php://output', 'w');
+
+            // BOM for Excel
+            fprintf($file, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+            fputcsv($file, [
+                'Time',
+                'Action',
+                'Success',
+                'Message',
+                'Triggered By',
+                'MAC Address',
+                'Bed',
+                'Patient',
+                'HTTP Code',
+                'Error'
+            ]);
+
+            $query = EkadResponseLog::with(['bed', 'patient'])
+                ->orderBy('created_at', 'desc');
+
+            // Apply filters (same as getResponseLogs)
+            if ($request->has('success') && $request->input('success') !== '') {
+                // Handle 'true'/'false' strings properly if coming from query params
+                $successVal = $request->input('success');
+                if ($successVal === 'true' || $successVal === '1')
+                    $success = true;
+                else if ($successVal === 'false' || $successVal === '0')
+                    $success = false;
+                else
+                    $success = null;
+
+                if ($success !== null) {
+                    $query->where('success', $success);
+                }
+            }
+
+            if ($request->has('duration') && $request->input('duration') !== 'all') {
+                $duration = $request->input('duration');
+                $minutes = match ($duration) {
+                    '30m' => 30,
+                    '1h' => 60,
+                    '2h' => 120,
+                    '6h' => 360,
+                    '12h' => 720,
+                    '24h' => 1440,
+                    '48h' => 2880,
+                    '7d' => 10080,
+                    '30d' => 43200,
+                    default => 1440,
+                };
+                $query->where('created_at', '>=', now()->subMinutes($minutes));
+            }
+
+            // Limit for safety if no duration
+            if (!$request->has('duration') || $request->input('duration') === 'all') {
+                $query->limit(5000);
+            }
+
+            $query->chunk(100, function ($logs) use ($file) {
+                foreach ($logs as $log) {
+                    fputcsv($file, [
+                        $log->created_at->format('Y-m-d H:i:s'),
+                        $log->action,
+                        $log->success ? 'Yes' : 'No',
+                        $log->message,
+                        $log->triggered_by,
+                        $log->mac_address,
+                        $log->bed ? $log->bed->bed_number : '-',
+                        $log->patient ? $log->patient->name : '-',
+                        $log->response_code,
+                        $log->error_message
+                    ]);
+                }
+            });
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
     }
 
     /**

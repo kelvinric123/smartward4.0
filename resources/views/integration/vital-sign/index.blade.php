@@ -974,9 +974,9 @@ Content-Type: application/json</pre>
                                 active devices from the API. Make sure the following environment variables are set:</p>
                             <pre
                                 class="text-sm text-gray-300 font-mono overflow-x-auto"><span class="text-cyan-400">API_BASE_URL</span>=<span class="text-green-400">"http://{{ $gatewayConfig['server_ip'] }}:{{ $gatewayConfig['server_port'] }}/api/v1"</span>
-                                                            <span class="text-cyan-400">API_PASSPHRASE</span>=<span class="text-green-400">"{{ $gatewayConfig['passphrase'] }}"</span>
-                                                            <span class="text-cyan-400">API_USERNAME</span>=<span class="text-green-400">"your_api_user"</span>
-                                                            <span class="text-cyan-400">API_PASSWORD</span>=<span class="text-green-400">"your_password"</span></pre>
+                                                                <span class="text-cyan-400">API_PASSPHRASE</span>=<span class="text-green-400">"{{ $gatewayConfig['passphrase'] }}"</span>
+                                                                <span class="text-cyan-400">API_USERNAME</span>=<span class="text-green-400">"your_api_user"</span>
+                                                                <span class="text-cyan-400">API_PASSWORD</span>=<span class="text-green-400">"your_password"</span></pre>
                             <p class="text-xs text-gray-500 mt-3">Devices configured here will be fetched via <code
                                     class="text-cyan-300">GET /api/v1/monitor-devices</code></p>
                         </div>
@@ -1200,19 +1200,22 @@ Content-Type: application/json</pre>
                             </div>
                         </div>
                         <div class="flex items-center space-x-3">
-                            <!-- Category Filter -->
-                            <select x-model="categoryFilter"
-                                class="rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
-                                <option value="all">All Categories</option>
-                                <option value="vital-signs">Vital Signs</option>
-                                <option value="ping">Ping</option>
-                                <option value="login">Login</option>
-                                <option value="patients">Patients</option>
-                                <option value="monitor">Monitor/Device</option>
-                            </select>
+                            <!-- Category Filter (Original) - Hide when filtered -->
+                            @if(!isset($isFiltered) || !$isFiltered)
+                                <select x-model="categoryFilter"
+                                    class="rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                                    <option value="all">All Categories</option>
+                                    <option value="vital-signs">Vital Signs</option>
+                                    <option value="ping">Ping</option>
+                                    <option value="login">Login</option>
+                                    <option value="patients">Patients</option>
+                                    <option value="monitor">Monitor/Device</option>
+                                </select>
+                            @endif
                             <form action="{{ route('vital-sign-integration.logs.clear') }}" method="POST"
                                 onsubmit="return confirm('Are you sure you want to clear all API logs?');">
                                 @csrf
+                                <input type="hidden" name="api_user_id" value="{{ request('api_user_id') }}">
                                 <button type="submit"
                                     class="inline-flex items-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-sm font-medium">
                                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1227,9 +1230,74 @@ Content-Type: application/json</pre>
                 </div>
 
                 <div class="p-6">
+                    <div class="mb-6 bg-blue-50/50 rounded-xl p-4 border border-blue-100">
+                        <form action="{{ route('vital-sign-integration.index') }}" method="GET"
+                            class="flex flex-wrap items-end gap-4">
+                            <!-- User Filter -->
+                            <div class="flex-1 min-w-[200px]">
+                                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">API User</label>
+                                <select name="api_user_id"
+                                    class="w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500 text-sm">
+                                    <option value="all">All Users</option>
+                                    @foreach($apiUsers as $user)
+                                        <option value="{{ $user->id }}" {{ request('api_user_id') == $user->id ? 'selected' : '' }}>
+                                            {{ $user->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <!-- Duration Filter -->
+                            <div class="flex-1 min-w-[200px]">
+                                <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Duration</label>
+                                <select name="duration"
+                                    class="w-full rounded-lg border-gray-300 focus:border-blue-500 focus:ring-blue-500 text-sm">
+                                    <option value="" {{ request('duration') == '' ? 'selected' : '' }}>All Time</option>
+                                    <option value="24h" {{ request('duration') == '24h' ? 'selected' : '' }}>Last 24 Hours
+                                    </option>
+                                    <option value="7d" {{ request('duration') == '7d' ? 'selected' : '' }}>Last 7 Days
+                                    </option>
+                                    <option value="30d" {{ request('duration') == '30d' ? 'selected' : '' }}>Last 30 Days
+                                    </option>
+                                </select>
+                            </div>
+
+                            <!-- Buttons -->
+                            <div class="flex gap-2">
+                                <button type="submit"
+                                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition-colors text-sm flex items-center">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                                    </svg>
+                                    Filter
+                                </button>
+
+                                <a href="{{ route('vital-sign-integration.logs.export', request()->all()) }}"
+                                    class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-sm transition-colors text-sm flex items-center">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    Export CSV
+                                </a>
+
+                                <a href="{{ route('vital-sign-integration.logs.print', request()->all()) }}"
+                                    target="_blank"
+                                    class="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg shadow-sm transition-colors text-sm flex items-center">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                    </svg>
+                                    Print
+                                </a>
+                            </div>
+                        </form>
+                    </div>
+
                     @if($recentLogs->count() > 0)
                         <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200">
+                            <table class="min-w-full divide-y divide-gray-200 mb-4">
                                 <thead>
                                     <tr class="bg-gray-50">
                                         <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Time</th>
@@ -1247,8 +1315,8 @@ Content-Type: application/json</pre>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-100">
                                     @foreach($recentLogs as $log)
-                                                                <tr x-show="matchesFilter('{{ $log->endpoint }}')" @click="showLogDetails({{ json_encode([
-                                            'id' => $log->id,
+                                                                <tr @if(!isset($isFiltered) || !$isFiltered)
+                                                                x-show="matchesFilter('{{ $log->endpoint }}')" @endif @click="showLogDetails({{ json_encode([
                                             'created_at' => $log->created_at->format('M d, Y H:i:s'),
                                             'user' => $log->apiUser->name ?? 'Unknown',
                                             'endpoint' => $log->endpoint,
@@ -1296,6 +1364,12 @@ Content-Type: application/json</pre>
                                     @endforeach
                                 </tbody>
                             </table>
+
+                            @if(isset($isFiltered) && $isFiltered && $recentLogs instanceof \Illuminate\Pagination\LengthAwarePaginator)
+                                <div class="mt-4">
+                                    {{ $recentLogs->links() }}
+                                </div>
+                            @endif
                         </div>
                     @else
                         <div class="text-center py-8">
@@ -1304,8 +1378,7 @@ Content-Type: application/json</pre>
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
-                            <p class="text-gray-500">No API logs yet.</p>
-                            <p class="text-sm text-gray-400 mt-1">Logs will appear here when API requests are made.</p>
+                            <p class="text-gray-500">No API logs match your filter.</p>
                         </div>
                     @endif
                 </div>

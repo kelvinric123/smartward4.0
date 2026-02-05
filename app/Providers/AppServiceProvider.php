@@ -9,6 +9,13 @@ use App\Models\PatientCareProvider;
 use App\Observers\BedObserver;
 use App\Observers\PatientObserver;
 use App\Observers\PatientCareProviderObserver;
+use App\Listeners\UserActivityListener;
+use Illuminate\Support\Facades\Event;
+use App\Observers\ConfigObserver;
+use App\Models\LdapConfiguration;
+use App\Models\AdtConfiguration;
+use App\Models\WardDashboardSetting;
+use App\Models\ShiftSetting;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -50,5 +57,14 @@ class AppServiceProvider extends ServiceProvider
 
         // PatientCareProviderObserver: Triggers EKad push when care providers change (anaesthetist updates)
         PatientCareProvider::observe(PatientCareProviderObserver::class);
+
+        // Register User Activity Subscriber
+        Event::subscribe(UserActivityListener::class);
+
+        // Register Config Observers
+        LdapConfiguration::observe(ConfigObserver::class);
+        AdtConfiguration::observe(ConfigObserver::class);
+        WardDashboardSetting::observe(ConfigObserver::class);
+        ShiftSetting::observe(ConfigObserver::class);
     }
 }

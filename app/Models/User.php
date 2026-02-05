@@ -20,6 +20,7 @@ class User extends Authenticatable
     public const ROLE_WARD_DASHBOARD = 'ward_dashboard';
     public const ROLE_IT_ADMIN = 'it_admin';
     public const ROLE_NURSE = 'nurse';
+    public const ROLE_SIEM_AUDITOR = 'siem_auditor';
 
     public static function getRoles(): array
     {
