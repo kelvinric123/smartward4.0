@@ -107,6 +107,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/ward-schedule/download-template', [WardScheduleController::class, 'downloadTemplate'])->name('ward.schedule.download-template');
     Route::post('/ward-schedule/upload', [WardScheduleController::class, 'uploadRoster'])->name('ward.schedule.upload');
     Route::get('/ward-schedule/print', [WardScheduleController::class, 'printSchedule'])->name('ward.schedule.print');
+    Route::get('/ward-schedule/special-duty', [WardScheduleController::class, 'specialDutyFrame'])->name('ward.schedule.special-duty');
+    Route::post('/ward-schedule/special-duty', [WardScheduleController::class, 'saveSpecialDuty'])->name('ward.schedule.special-duty.save');
 
     // Shift Settings Routes
     Route::get('/ward-schedule/shift-settings', [ShiftSettingController::class, 'index'])->name('ward.shift-settings');

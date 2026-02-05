@@ -3078,60 +3078,184 @@
                                     d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
                             </svg>
                         </div>
-                        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
-                                Nurses & Their Patients
-                                @if(isset($currentShift))
-                                    <span class="text-sm font-normal text-gray-500">({{ $currentShift->shift_name }}
-                                        Shift)</span>
-                                @endif
-                            </h3>
-                            <div class="mt-4 max-h-[600px] overflow-y-auto">
-                                @if(isset($nursePatients) && count($nursePatients) > 0)
-                                    @foreach($nursePatients as $nurse)
-                                        <div class="mb-6 bg-gray-50 rounded-lg p-4 border border-gray-200">
-                                            <h4 class="font-semibold text-lg text-pink-700 mb-3 flex items-center cursor-pointer"
-                                                onclick='highlightAndFilterBeds(@json(collect($nurse["patients"])->pluck("bed_number")), "nurse")'>
-                                                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path
-                                                        d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
-                                                </svg>
-                                                {{ $nurse['name'] }}
-                                                <span
-                                                    class="ml-2 text-sm bg-pink-100 text-pink-800 px-2 py-1 rounded-full">{{ count($nurse['patients']) }}
-                                                    patient(s)</span>
-                                            </h4>
-                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                @foreach($nurse['patients'] as $patient)
-                                                    <div class="bg-white p-3 rounded border border-gray-300 hover:border-pink-500 cursor-pointer transition-all hover:shadow-md"
-                                                        onclick='highlightAndFilterBeds(@json([$patient["bed_number"]]), "bed")'>
-                                                        <div class="flex items-center justify-between">
-                                                            <div>
-                                                                <div class="font-medium text-gray-900">{{ $patient['name'] }}</div>
-                                                                <div class="text-sm text-gray-600">MRN: {{ $patient['mrn'] }}</div>
-                                                            </div>
-                                                            <div class="text-right">
-                                                                <div class="text-sm font-semibold text-pink-700">
-                                                                    {{ $patient['bed_number'] }}
+                        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1"
+                            x-data="{ activeTab: 'assignments' }">
+                            <div class="border-b border-gray-200 mb-4">
+                                <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                                    <button @click="activeTab = 'assignments'"
+                                        :class="activeTab === 'assignments' ? 'border-pink-500 text-pink-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200">
+                                        Patient Assignments
+                                    </button>
+                                    <button @click="activeTab = 'special_duty'"
+                                        :class="activeTab === 'special_duty' ? 'border-pink-500 text-pink-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors duration-200">
+                                        Special Duty
+                                    </button>
+                                </nav>
+                            </div>
+
+                            <!-- Tab: Patient Assignments -->
+                            <div x-show="activeTab === 'assignments'"
+                                x-transition:enter="transition ease-out duration-200"
+                                x-transition:enter-start="opacity-0 translate-y-2"
+                                x-transition:enter-end="opacity-100 translate-y-0">
+                                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
+                                    Nurses & Their Patients
+                                    @if(isset($currentShift))
+                                        <span class="text-sm font-normal text-gray-500">({{ $currentShift->shift_name }}
+                                            Shift)</span>
+                                    @endif
+                                </h3>
+                                <div class="mt-4 max-h-[600px] overflow-y-auto">
+                                    @if(isset($nursePatients) && count($nursePatients) > 0)
+                                        @foreach($nursePatients as $nurse)
+                                            <div class="mb-6 bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                                <h4 class="font-semibold text-lg text-pink-700 mb-3 flex items-center cursor-pointer"
+                                                    onclick='highlightAndFilterBeds(@json(collect($nurse["patients"])->pluck("bed_number")), "nurse")'>
+                                                    <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path
+                                                            d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                                                    </svg>
+                                                    {{ $nurse['name'] }}
+                                                    <span
+                                                        class="ml-2 text-sm bg-pink-100 text-pink-800 px-2 py-1 rounded-full">{{ count($nurse['patients']) }}
+                                                        patient(s)</span>
+                                                </h4>
+                                                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                    @foreach($nurse['patients'] as $patient)
+                                                        <div class="bg-white p-3 rounded border border-gray-300 hover:border-pink-500 cursor-pointer transition-all hover:shadow-md"
+                                                            onclick='highlightAndFilterBeds(@json([$patient["bed_number"]]), "bed")'>
+                                                            <div class="flex items-center justify-between">
+                                                                <div>
+                                                                    <div class="font-medium text-gray-900">{{ $patient['name'] }}
+                                                                    </div>
+                                                                    <div class="text-sm text-gray-600">MRN: {{ $patient['mrn'] }}
+                                                                    </div>
                                                                 </div>
-                                                                <div class="text-xs text-gray-500">Click to view</div>
+                                                                <div class="text-right">
+                                                                    <div class="text-sm font-semibold text-pink-700">
+                                                                        {{ $patient['bed_number'] }}
+                                                                    </div>
+                                                                    <div class="text-xs text-gray-500">Click to view</div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    @endforeach
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    @else
+                                        <div class="text-center text-gray-500 py-8">
+                                            <svg class="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none"
+                                                stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                                            </svg>
+                                            <p>No nurses assigned to patients yet.</p>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+
+                            <!-- Tab: Special Duty -->
+                            <div x-show="activeTab === 'special_duty'"
+                                x-transition:enter="transition ease-out duration-200"
+                                x-transition:enter-start="opacity-0 translate-y-2"
+                                x-transition:enter-end="opacity-100 translate-y-0" style="display: none;">
+
+                                <div class="bg-yellow-50 rounded-lg overflow-hidden border border-yellow-100">
+                                    <!-- Header -->
+                                    <div
+                                        class="px-6 py-3 border-b border-yellow-200 flex justify-between items-center bg-yellow-50">
+                                        <div class="text-xs font-bold text-yellow-800 tracking-wider uppercase">Duty
+                                            Type</div>
+                                        <div class="text-right">
+                                            <div class="text-xs font-bold text-yellow-800 tracking-wider uppercase">
+                                                {{ strtoupper(now()->format('D')) }}
+                                            </div>
+                                            <div class="text-[10px] font-bold text-yellow-700">TODAY,
+                                                {{ now()->format('d/m') }}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Duty List -->
+                                    <div class="divide-y divide-yellow-100">
+                                        @if(isset($dutyTypes))
+                                            @foreach($dutyTypes as $type)
+                                                <div class="flex items-stretch bg-white">
+                                                    <!-- Left Column: Duty Name -->
+                                                    <div
+                                                        class="w-1/3 px-4 py-4 bg-yellow-50/50 flex flex-col justify-center border-r border-yellow-100">
+                                                        <div class="flex items-start">
+                                                            <span
+                                                                class="w-2 h-2 rounded-full mt-1.5 mr-2 flex-shrink-0
+                                                                                {{ str_contains(strtolower($type['note']), 'night') ? 'bg-purple-500' : 'bg-orange-500' }}"></span>
+                                                            <div>
+                                                                <h4 class="text-sm font-bold text-gray-800 leading-tight">
+                                                                    {{ $type['label'] }}
+                                                                </h4>
+                                                                <span
+                                                                    class="text-[10px] font-semibold {{ str_contains(strtolower($type['note']), 'night') ? 'text-purple-600' : 'text-orange-600' }}">
+                                                                    {{ $type['note'] }}
+                                                                </span>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                @endforeach
+
+                                                    <!-- Right Column: Assignments -->
+                                                    <div class="w-2/3 px-4 py-3">
+                                                        <div class="space-y-2">
+                                                            @foreach($type['shifts'] as $shift)
+                                                                @php
+                                                                    // Find assignment for this specific shift
+                                                                    $assignment = isset($specialDuties)
+                                                                        ? $specialDuties->where('duty_type', $type['key'])->where('shift', $shift)->first()
+                                                                        : null;
+
+                                                                    $shiftLabel = $shift === 'ON' ? 'ON' : $shift;
+                                                                    $shiftColorClass = match ($shift) {
+                                                                        'AM' => 'bg-yellow-100 text-yellow-700 border-yellow-100',
+                                                                        'PM' => 'bg-blue-100 text-blue-700 border-blue-100',
+                                                                        'ON' => 'bg-purple-100 text-purple-700 border-purple-100',
+                                                                        default => 'bg-gray-100 text-gray-700',
+                                                                    };
+                                                                @endphp
+
+                                                                <div class="flex items-center">
+                                                                    <div class="w-10 flex-shrink-0">
+                                                                        <span
+                                                                            class="inline-block w-full text-center py-0.5 rounded text-[10px] font-bold border {{ $shiftColorClass }}">
+                                                                            {{ $shiftLabel }}
+                                                                        </span>
+                                                                    </div>
+                                                                    <div class="ml-3 flex-1">
+                                                                        @if($assignment && $assignment->nurse)
+                                                                            <span
+                                                                                class="text-xs font-bold text-gray-700 uppercase block truncate bg-white border border-gray-200 rounded px-2 py-1 shadow-sm">
+                                                                                {{ $assignment->nurse->name }}
+                                                                            </span>
+                                                                        @else
+                                                                            <span
+                                                                                class="text-xs text-gray-300 italic px-2 py-1 border border-transparent border-dashed rounded dashed-border-gray-200 block">
+                                                                                --
+                                                                            </span>
+                                                                        @endif
+                                                                    </div>
+                                                                </div>
+                                                            @endforeach
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            @endforeach
+                                        @else
+                                            <div class="p-4 text-center text-gray-500">
+                                                Configuration error: Duty types not loaded.
                                             </div>
-                                        </div>
-                                    @endforeach
-                                @else
-                                    <div class="text-center text-gray-500 py-8">
-                                        <svg class="w-16 h-16 mx-auto mb-4 text-gray-400" fill="none" stroke="currentColor"
-                                            viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-                                        </svg>
-                                        <p>No nurses assigned to patients yet.</p>
+                                        @endif
                                     </div>
-                                @endif
+                                </div>
                             </div>
                         </div>
                     </div>

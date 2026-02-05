@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use App\Services\EkadService;
+use App\Models\WardSpecialDuty;
 
 class WardDashboardController extends Controller
 {
@@ -124,6 +125,13 @@ class WardDashboardController extends Controller
 
         $currentShift = ShiftSetting::getCurrentShift($selectedWardId);
 
+        // Fetch all special duties for the day regardless of current shift
+        $specialDuties = WardSpecialDuty::where('ward_id', $selectedWardId)
+            ->where('date', now()->toDateString())
+            ->with('nurse')
+            ->orderByRaw("FIELD(shift, 'AM', 'PM', 'ON')") // Order by shift
+            ->get();
+
         // Debug logging
         Log::info('Ward Dashboard Data', [
             'ward_id' => $selectedWardId,
@@ -134,6 +142,15 @@ class WardDashboardController extends Controller
         $bedBoxConfig = $settings['bedBoxConfig'];
         $patientInfoConfig = $settings['patientInfoConfig'];
         $dashboardDisplay = $settings['dashboardDisplay'];
+
+        // Define duty types (keeping consistent with WardScheduleController)
+        $dutyTypes = [
+            ['key' => 'team_leader', 'label' => 'Team Leader', 'shifts' => ['AM', 'PM', 'ON'], 'note' => '(Daily)'],
+            ['key' => 'dda_mc_book', 'label' => 'DDA + MC book', 'shifts' => ['AM', 'PM', 'ON'], 'note' => '(Daily)'],
+            ['key' => 'medication_fridge', 'label' => 'Medication fridge', 'shifts' => ['AM', 'PM', 'ON'], 'note' => '(Daily)'],
+            ['key' => 'e_trolley', 'label' => 'E-trolley', 'shifts' => ['ON'], 'note' => '(Night Only)'],
+            ['key' => 'qc_checking', 'label' => 'QC checking', 'shifts' => ['ON'], 'note' => '(Night Only)'],
+        ];
 
         return view('wards.dashboard', compact(
             'wards',
@@ -148,7 +165,9 @@ class WardDashboardController extends Controller
             'dashboardDisplay',
             'bedBoxVitalsMode',
             'notificationCount',
-            'currentShift'
+            'currentShift',
+            'specialDuties',
+            'dutyTypes'
         ));
     }
 

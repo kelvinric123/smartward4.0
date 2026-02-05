@@ -346,6 +346,14 @@
                                     @click="clearSelection()" x-show="selected.length">Clear</button>
                             </div>
                             <div class="flex items-center gap-2">
+                                <button type="button" onclick="openSpecialDuty()"
+                                    class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white rounded-lg font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                    </svg>
+                                    Special Duty
+                                </button>
                                 <button type="button" @click="sectionAssignModal = true"
                                     class="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500">
                                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -899,6 +907,34 @@
         </div>
     </div>
 
+    <!-- Special Duty Modal -->
+    <div id="specialDutyModalContainer" style="display: none;" class="fixed inset-0 z-50 overflow-y-auto">
+        <div class="fixed inset-0 bg-black/40" onclick="closeSpecialDuty()"></div>
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-6xl p-0 max-h-[90vh] overflow-hidden"
+                onclick="event.stopPropagation()">
+                <div class="flex items-center justify-between p-4 border-b">
+                    <h3 class="text-lg font-semibold text-amber-800 flex items-center">
+                        <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                        </svg>
+                        Special Duty Assignment
+                    </h3>
+                    <button type="button" class="text-gray-400 hover:text-gray-600 transition-colors"
+                        onclick="closeSpecialDuty()">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <iframe id="specialDutyIframe" src="" class="w-full h-[600px] border-0" title="Special Duty Assignment">
+                </iframe>
+            </div>
+        </div>
+    </div>
+
     <!-- Download Template Modal -->
     <div id="downloadModal" style="display: none;" class="fixed inset-0 z-50 overflow-y-auto">
         <div class="fixed inset-0 bg-black/40" onclick="closeDownloadModal()"></div>
@@ -1020,11 +1056,30 @@
             document.body.style.overflow = '';
         }
 
+        function openSpecialDuty() {
+            const modal = document.getElementById('specialDutyModalContainer');
+            const iframe = document.getElementById('specialDutyIframe');
+            const wardId = document.getElementById('ward_id')?.value || '{{ $selectedWardId }}';
+            const date = document.getElementById('date')?.value || '{{ $selectedDate }}';
+            iframe.src = '{{ route("ward.schedule.special-duty") }}?ward_id=' + wardId + '&date=' + date;
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeSpecialDuty() {
+            const modal = document.getElementById('specialDutyModalContainer');
+            const iframe = document.getElementById('specialDutyIframe');
+            modal.style.display = 'none';
+            iframe.src = '';
+            document.body.style.overflow = '';
+        }
+
         // Close all modals on escape
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape') {
                 closeDownloadModal();
                 closeUploadModal();
+                closeSpecialDuty();
             }
         });
     </script>

@@ -7,6 +7,7 @@ use App\Models\Ward;
 use App\Models\Nurse;
 use App\Models\Patient;
 use App\Models\WardScheduleAssignment;
+use App\Models\WardSpecialDuty;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Carbon;
@@ -14,6 +15,7 @@ use Illuminate\Support\Str;
 use App\Services\EkadService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use App\Models\User;
 
 class WardScheduleController extends Controller
@@ -524,6 +526,121 @@ class WardScheduleController extends Controller
             return back()->with('error', 'Error parsing file: ' . $e->getMessage());
         }
     }
-}
 
+    /**
+     * Display Special Duty assignment iframe.
+     */
+    public function specialDutyFrame(Request $request)
+    {
+        $wardId = $request->input('ward_id');
+        $selectedDate = $request->input('date', now()->toDateString());
+
+        $ward = $wardId ? Ward::find($wardId) : null;
+
+        $nurses = Nurse::where('is_active', true)
+            ->orderBy('name')
+            ->get();
+
+        // Generate date range (7 days from selected date)
+        $dateRange = collect(range(0, 6))
+            ->map(fn(int $offset) => Carbon::parse($selectedDate)->addDays($offset));
+
+        // Define duty types with shift restrictions
+        $dutyTypes = [
+            ['key' => 'team_leader', 'label' => 'Team Leader', 'shifts' => ['AM', 'PM', 'ON']],
+            ['key' => 'dda_mc_book', 'label' => 'DDA + MC book', 'shifts' => ['AM', 'PM', 'ON']],
+            ['key' => 'medication_fridge', 'label' => 'Medication fridge', 'shifts' => ['AM', 'PM', 'ON']],
+            ['key' => 'e_trolley', 'label' => 'E-trolley', 'shifts' => ['ON']],
+            ['key' => 'qc_checking', 'label' => 'QC checking', 'shifts' => ['ON']],
+        ];
+
+        // Fetch existing assignments
+        $existingDuties = [];
+        if ($wardId) {
+            $duties = WardSpecialDuty::where('ward_id', $wardId)
+                ->whereBetween('date', [
+                    $dateRange->first()->toDateString(),
+                    $dateRange->last()->toDateString(),
+                ])
+                ->get();
+
+            foreach ($duties as $duty) {
+                $key = $duty->duty_type . '|' . $duty->date->format('Y-m-d') . '|' . $duty->shift;
+                $existingDuties[$key] = $duty->nurse_id;
+            }
+        }
+
+        return view('wards.special-duty-frame', [
+            'ward' => $ward,
+            'wardId' => $wardId,
+            'selectedDate' => $selectedDate,
+            'nurses' => $nurses,
+            'dateRange' => $dateRange,
+            'dutyTypes' => $dutyTypes,
+            'existingDuties' => $existingDuties,
+        ]);
+    }
+
+    /**
+     * Save Special Duty assignments.
+     */
+    public function saveSpecialDuty(Request $request)
+    {
+        $validated = $request->validate([
+            'ward_id' => 'required|exists:wards,id',
+            'duties' => 'nullable|array',
+            'duties.*.duty_type' => 'required|string',
+            'duties.*.date' => 'required|date',
+            'duties.*.shift' => 'required|in:AM,PM,ON',
+            'duties.*.nurse_id' => 'nullable|exists:nurses,id',
+        ]);
+
+        $wardId = $validated['ward_id'];
+        $duties = $validated['duties'] ?? [];
+
+        try {
+            DB::beginTransaction();
+            $count = 0;
+            foreach ($duties as $duty) {
+                // Skip if essential data is missing
+                if (empty($duty['duty_type']) || empty($duty['date']) || empty($duty['shift'])) {
+                    continue;
+                }
+
+                if (empty($duty['nurse_id'])) {
+                    // If nurse_id is empty, delete the assignment if exists
+                    WardSpecialDuty::where('ward_id', $wardId)
+                        ->where('duty_type', $duty['duty_type'])
+                        ->where('date', $duty['date'])
+                        ->where('shift', $duty['shift'])
+                        ->delete();
+                } else {
+                    WardSpecialDuty::updateOrCreate(
+                        [
+                            'ward_id' => $wardId,
+                            'duty_type' => $duty['duty_type'],
+                            'date' => $duty['date'],
+                            'shift' => $duty['shift'],
+                        ],
+                        [
+                            'nurse_id' => $duty['nurse_id'],
+                        ]
+                    );
+                    $count++;
+                }
+            }
+            DB::commit();
+            return redirect()->back()->with('success', "Special duties saved successfully ($count assignments).");
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Special Duty Save Error: ' . $e->getMessage(), [
+                'ward_id' => $wardId,
+                'user_id' => Auth::id(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return redirect()->back()->with('error', 'System Error: ' . $e->getMessage());
+        }
+    }
+}
 
