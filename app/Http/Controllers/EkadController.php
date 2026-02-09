@@ -585,5 +585,116 @@ class EkadController extends Controller
             'results' => $results,
         ]);
     }
+
+    /**
+     * Get preview data for Sync Modal
+     */
+    public function syncPreview()
+    {
+        $mappings = EkadBedMapping::with([
+            'bed.ward',
+            'bed.patient' => function ($query) {
+                $query->where('is_active', true);
+            },
+            'bed.patient.nurse',
+            'bed.patient.consultant',
+            'bed.patient.anaesthetist'
+        ])
+            ->where('is_active', true)
+            ->get();
+
+        $config = EkadConfiguration::getActive();
+        $service = new EkadService($config);
+
+        $previewData = $mappings->map(function ($mapping) use ($service) {
+            $bed = $mapping->bed;
+
+            if (!$bed) {
+                return null;
+            }
+
+            // Get payload using the service logic (handles occupied/vacant/prebook)
+            $payload = $service->getBedPayload($bed);
+
+            return [
+                'mapping_id' => $mapping->id,
+                'ward_name' => $bed->ward->ward_name ?? '-',
+                'bed_id' => $bed->id,
+                'bed_number' => $bed->bed_number, // Normalized in payload but kept raw here for display if needed
+                'mac_address' => $mapping->mac_address,
+                'payload' => $payload,
+                'status' => $payload['MRN'] === 'VACANT' ? 'Vacant' : 'Occupied',
+            ];
+        })->filter()->values();
+
+        return response()->json([
+            'success' => true,
+            'data' => $previewData
+        ]);
+    }
+
+    /**
+     * Sync selected beds
+     */
+    public function syncSelected(Request $request)
+    {
+        $validated = $request->validate([
+            'bed_ids' => 'required|array',
+            'bed_ids.*' => 'integer|exists:beds,id',
+        ]);
+
+        $bedIds = $validated['bed_ids'];
+        $results = [];
+        $successCount = 0;
+        $failCount = 0;
+
+        $config = EkadConfiguration::getActive();
+        $service = new EkadService($config);
+
+        // Login once
+        if (!$service->getToken()) {
+            $service->login();
+        }
+
+        foreach ($bedIds as $bedId) {
+            $bed = Bed::with([
+                'patient' => function ($q) {
+                    $q->where('is_active', true);
+                }
+            ])->find($bedId);
+
+            if (!$bed)
+                continue;
+
+            $result = [];
+
+            // Check occupancy and push appropriate data (prebook is treated as vacant)
+            $patient = $bed->patient;
+            if ($patient && $patient->is_active && $patient->isAdmitted()) {
+                // Pass 'Manual Sync' as event type
+                $result = $service->pushPatientInfo($patient, $bed, [], 'Manual Sync');
+            } else {
+                $result = $service->pushVacant($bed, 'Manual Sync');
+            }
+
+            $results[] = [
+                'bed_id' => $bedId,
+                'success' => $result['success'],
+                'message' => $result['message'] ?? '',
+            ];
+
+            if ($result['success']) {
+                $successCount++;
+            } else {
+                $failCount++;
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Sync completed: {$successCount} success, {$failCount} failed",
+            'results' => $results,
+        ]);
+    }
 }
 

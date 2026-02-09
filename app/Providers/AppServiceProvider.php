@@ -16,6 +16,8 @@ use App\Models\LdapConfiguration;
 use App\Models\AdtConfiguration;
 use App\Models\WardDashboardSetting;
 use App\Models\ShiftSetting;
+use App\Models\WardScheduleAssignment;
+use App\Observers\WardScheduleAssignmentObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -57,6 +59,9 @@ class AppServiceProvider extends ServiceProvider
 
         // PatientCareProviderObserver: Triggers EKad push when care providers change (anaesthetist updates)
         PatientCareProvider::observe(PatientCareProviderObserver::class);
+
+        // WardScheduleAssignmentObserver: Triggers EKad push when nurse schedule changes
+        WardScheduleAssignment::observe(WardScheduleAssignmentObserver::class);
 
         // Register User Activity Subscriber
         Event::subscribe(UserActivityListener::class);

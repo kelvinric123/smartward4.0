@@ -230,36 +230,7 @@ class WardScheduleController extends Controller
             );
 
             // Collect bed IDs for EKAD update if assignment is for today
-            if ($scheduledDate === now()->toDateString()) {
-                $bedsToUpdate[$assignment['bed_id']] = true;
-            }
-        }
-
-        // Trigger Ekad updates for affected beds (once per bed)
-        if (!empty($bedsToUpdate)) {
-            try {
-                $ekadService = new EkadService();
-                $bedIds = array_keys($bedsToUpdate);
-                $beds = Bed::with([
-                    'patient' => function ($q) {
-                        $q->where('is_active', true)
-                            ->whereIn('status', ['admitted', 'prebook', 'pending_discharge']);
-                    }
-                ])->whereIn('id', $bedIds)->get();
-
-                foreach ($beds as $bed) {
-                    if ($bed->patient) {
-                        // Push without override so EkadService calculates the correct nurse for the current time
-                        $ekadService->pushPatientInfo($bed->patient, $bed, [], 'Update Information');
-                        Log::info('EKad: Pushed nurse assignment update', [
-                            'bed_id' => $bed->id,
-                            'patient' => $bed->patient->name,
-                        ]);
-                    }
-                }
-            } catch (\Exception $e) {
-                Log::warning('EKad Nurse update push failed', ['error' => $e->getMessage()]);
-            }
+            // Note: Now handled by WardScheduleAssignmentObserver
         }
 
         return redirect()->route('ward.schedule', [
@@ -586,35 +557,53 @@ class WardScheduleController extends Controller
      */
     public function saveSpecialDuty(Request $request)
     {
-        $validated = $request->validate([
-            'ward_id' => 'required|exists:wards,id',
-            'duties' => 'nullable|array',
-            'duties.*.duty_type' => 'required|string',
-            'duties.*.date' => 'required|date',
-            'duties.*.shift' => 'required|in:AM,PM,ON',
-            'duties.*.nurse_id' => 'nullable|exists:nurses,id',
-        ]);
-
-        $wardId = $validated['ward_id'];
-        $duties = $validated['duties'] ?? [];
-
         try {
+            Log::info('SaveSpecialDuty called', [
+                'ward_id' => $request->input('ward_id'),
+                'duties_count' => is_array($request->input('duties')) ? count($request->input('duties')) : 'not_array',
+                'user_id' => Auth::id(),
+            ]);
+
+            $validated = $request->validate([
+                'ward_id' => 'required|exists:wards,id',
+                'duties' => 'nullable|array',
+                'duties.*.duty_type' => 'nullable|string',
+                'duties.*.date' => 'nullable|date',
+                'duties.*.shift' => 'nullable|in:AM,PM,ON',
+                'duties.*.nurse_id' => 'nullable',
+            ]);
+
+            $wardId = $validated['ward_id'];
+            $duties = $validated['duties'] ?? [];
+
             DB::beginTransaction();
             $count = 0;
-            foreach ($duties as $duty) {
+            $deleted = 0;
+
+            foreach ($duties as $key => $duty) {
                 // Skip if essential data is missing
                 if (empty($duty['duty_type']) || empty($duty['date']) || empty($duty['shift'])) {
                     continue;
                 }
 
-                if (empty($duty['nurse_id'])) {
+                // Validate nurse_id if provided (not empty string)
+                $nurseId = !empty($duty['nurse_id']) ? $duty['nurse_id'] : null;
+
+                if ($nurseId === null) {
                     // If nurse_id is empty, delete the assignment if exists
-                    WardSpecialDuty::where('ward_id', $wardId)
+                    $deletedRows = WardSpecialDuty::where('ward_id', $wardId)
                         ->where('duty_type', $duty['duty_type'])
                         ->where('date', $duty['date'])
                         ->where('shift', $duty['shift'])
                         ->delete();
+                    $deleted += $deletedRows;
                 } else {
+                    // Verify nurse exists before saving
+                    if (!Nurse::where('id', $nurseId)->exists()) {
+                        Log::warning('SaveSpecialDuty: Invalid nurse_id', ['nurse_id' => $nurseId, 'duty' => $duty]);
+                        continue;
+                    }
+
                     WardSpecialDuty::updateOrCreate(
                         [
                             'ward_id' => $wardId,
@@ -623,22 +612,42 @@ class WardScheduleController extends Controller
                             'shift' => $duty['shift'],
                         ],
                         [
-                            'nurse_id' => $duty['nurse_id'],
+                            'nurse_id' => $nurseId,
                         ]
                     );
                     $count++;
                 }
             }
             DB::commit();
+
+            Log::info('SaveSpecialDuty completed', ['saved' => $count, 'deleted' => $deleted]);
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => true, 'message' => "Special duties saved successfully ($count assignments, $deleted removed)."]);
+            }
             return redirect()->back()->with('success', "Special duties saved successfully ($count assignments).");
 
-        } catch (\Exception $e) {
-            DB::rollBack();
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('SaveSpecialDuty Validation Error', [
+                'errors' => $e->errors(),
+                'ward_id' => $request->input('ward_id'),
+            ]);
+            throw $e;
+        } catch (\Throwable $e) {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
             Log::error('Special Duty Save Error: ' . $e->getMessage(), [
-                'ward_id' => $wardId,
+                'ward_id' => $request->input('ward_id'),
                 'user_id' => Auth::id(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString()
             ]);
+
+            if ($request->expectsJson()) {
+                return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
+            }
             return redirect()->back()->with('error', 'System Error: ' . $e->getMessage());
         }
     }

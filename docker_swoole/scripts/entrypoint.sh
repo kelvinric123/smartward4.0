@@ -123,9 +123,21 @@ init_nginx() {
     
     # Ensure cache/lib directories exist
     mkdir -p /var/lib/nginx/logs
-    chown -R www:www /var/lib/nginx
     
-    log_info "Nginx directories initialized"
+    # Create nginx tmp directories for client body uploads and proxy buffering
+    # These are CRITICAL for POST requests with body data
+    mkdir -p /var/lib/nginx/tmp/client_body
+    mkdir -p /var/lib/nginx/tmp/proxy
+    mkdir -p /var/lib/nginx/tmp/fastcgi
+    mkdir -p /var/lib/nginx/tmp/uwsgi
+    mkdir -p /var/lib/nginx/tmp/scgi
+    
+    # Set ownership and permissions - must be writable by nginx worker processes
+    chown -R www:www /var/lib/nginx
+    chmod -R 755 /var/lib/nginx
+    chmod -R 777 /var/lib/nginx/tmp
+    
+    log_info "Nginx directories initialized (including tmp for client_body)"
 }
 
 # =============================================================================

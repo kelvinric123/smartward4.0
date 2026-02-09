@@ -244,6 +244,14 @@
                                 <p class="text-sm text-gray-500">Map beds to E-Ink device MAC addresses</p>
                             </div>
                         </div>
+                        <button @click="openSyncModal()"
+                            class="mr-2 inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Sync EKAD
+                        </button>
                         <button @click="syncAllEkad()" :disabled="syncingAll || bedMappings.length === 0"
                             class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-medium rounded-lg transition-colors">
                             <svg x-show="!syncingAll" class="w-4 h-4 mr-2" fill="none" stroke="currentColor"
@@ -830,6 +838,148 @@
                 </div>
             </div>
         </div>
+
+        <!-- Sync EKAD Modal -->
+        <div x-show="showSyncModal" class="fixed z-50 inset-0 overflow-y-auto" style="display: none;">
+            <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                <div x-show="showSyncModal" x-transition:enter="ease-out duration-300"
+                    x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                    x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100"
+                    x-transition:leave-end="opacity-0" class="fixed inset-0 transition-opacity" aria-hidden="true">
+                    <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
+                </div>
+
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+                <div x-show="showSyncModal" x-transition:enter="ease-out duration-300"
+                    x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave="ease-in duration-200"
+                    x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
+                    x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
+                    <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div class="sm:flex sm:items-start">
+                            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                                <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                                    Sync EKAD Devices
+                                </h3>
+                                <div class="mt-2">
+                                    <p class="text-sm text-gray-500 mb-4">
+                                        Select the devices you want to sync. The table shows a preview of the data to be
+                                        sent.
+                                    </p>
+
+                                    <div x-show="loadingSyncPreview" class="flex justify-center py-4">
+                                        <svg class="animate-spin h-8 w-8 text-indigo-600"
+                                            xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                                stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor"
+                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                        </svg>
+                                    </div>
+
+                                    <div x-show="!loadingSyncPreview && syncPreviewData.length === 0"
+                                        class="text-center py-4 text-gray-500">
+                                        No mapped devices found.
+                                    </div>
+
+                                    <div x-show="!loadingSyncPreview && syncPreviewData.length > 0"
+                                        class="overflow-x-auto max-h-96">
+                                        <table class="min-w-full divide-y divide-gray-200">
+                                            <thead class="bg-gray-50">
+                                                <tr>
+                                                    <th scope="col"
+                                                        class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                        <input type="checkbox" @click="toggleAllSyncSelection()"
+                                                            :checked="selectedSyncBeds.length === syncPreviewData.length && syncPreviewData.length > 0"
+                                                            class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                                                    </th>
+                                                    <th scope="col"
+                                                        class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                        Bed</th>
+                                                    <th scope="col"
+                                                        class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                        MAC Address</th>
+                                                    <th scope="col"
+                                                        class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                        Status</th>
+                                                    <th scope="col"
+                                                        class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                        Patient</th>
+                                                    <th scope="col"
+                                                        class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                        Data Preview</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="bg-white divide-y divide-gray-200">
+                                                <template x-for="item in syncPreviewData" :key="item.mapping_id">
+                                                    <tr>
+                                                        <td class="px-3 py-4 whitespace-nowrap">
+                                                            <input type="checkbox" :value="item.bed_id"
+                                                                :checked="selectedSyncBeds.includes(item.bed_id)"
+                                                                @click="toggleBedSelection(item.bed_id)"
+                                                                class="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                                                        </td>
+                                                        <td class="px-3 py-4 whitespace-nowrap text-sm text-gray-900"
+                                                            x-text="item.bed_number"></td>
+                                                        <td class="px-3 py-4 whitespace-nowrap text-sm text-gray-500 font-mono"
+                                                            x-text="item.mac_address"></td>
+                                                        <td class="px-3 py-4 whitespace-nowrap">
+                                                            <span
+                                                                class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                                                :class="item.status === 'Occupied' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
+                                                                x-text="item.status"></span>
+                                                        </td>
+                                                        <td class="px-3 py-4 whitespace-nowrap text-sm text-gray-500"
+                                                            x-text="item.payload.patient_name"></td>
+                                                        <td class="px-3 py-4 text-xs text-gray-500">
+                                                            <div class="grid grid-cols-2 gap-1 max-w-xs">
+                                                                <div>MRN: <span class="font-medium"
+                                                                        x-text="item.payload.MRN"></span></div>
+                                                                <div>Doc: <span class="font-medium"
+                                                                        x-text="item.payload.doctor.substring(0, 10) + (item.payload.doctor.length > 10 ? '...' : '')"></span>
+                                                                </div>
+                                                                <div>Nur: <span class="font-medium"
+                                                                        x-text="item.payload.nurse.substring(0, 10) + (item.payload.nurse.length > 10 ? '...' : '')"></span>
+                                                                </div>
+                                                                <div>Diet: <span class="font-medium"
+                                                                        x-text="item.payload.diet_type.substring(0, 10) + (item.payload.diet_type.length > 10 ? '...' : '')"></span>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                        <button type="button" @click="syncSelectedBeds()"
+                            :disabled="syncingSelected || selectedSyncBeds.length === 0"
+                            class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                            <svg x-show="syncingSelected" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                                xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                            </svg>
+                            <span
+                                x-text="syncingSelected ? 'Syncing...' : 'Sync Selected (' + selectedSyncBeds.length + ')'"></span>
+                        </button>
+                        <button type="button" @click="closeSyncModal()"
+                            class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -1185,6 +1335,87 @@
                         this.addLog('API LOGS', false, 'Request failed: ' + error.message);
                     }
                     this.loadingApiLogs = false;
+                },
+
+                // Sync Modal Logic
+                showSyncModal: false,
+                syncPreviewData: [],
+                selectedSyncBeds: [],
+                loadingSyncPreview: false,
+                syncingSelected: false,
+
+                async openSyncModal() {
+                    this.showSyncModal = true;
+                    this.loadingSyncPreview = true;
+                    this.syncPreviewData = [];
+                    this.selectedSyncBeds = [];
+
+                    try {
+                        const response = await fetch('{{ route("ekad.sync-preview") }}');
+                        const result = await response.json();
+
+                        if (result.success) {
+                            this.syncPreviewData = result.data;
+                            // Select all by default
+                            this.selectedSyncBeds = this.syncPreviewData.map(item => item.bed_id);
+                        } else {
+                            this.addLog('SYNC PREVIEW', false, 'Failed to load preview data');
+                        }
+                    } catch (error) {
+                        this.addLog('SYNC PREVIEW', false, 'Error: ' + error.message);
+                    } finally {
+                        this.loadingSyncPreview = false;
+                    }
+                },
+
+                closeSyncModal() {
+                    this.showSyncModal = false;
+                },
+
+                toggleBedSelection(bedId) {
+                    if (this.selectedSyncBeds.includes(bedId)) {
+                        this.selectedSyncBeds = this.selectedSyncBeds.filter(id => id !== bedId);
+                    } else {
+                        this.selectedSyncBeds.push(bedId);
+                    }
+                },
+
+                toggleAllSyncSelection() {
+                    if (this.selectedSyncBeds.length === this.syncPreviewData.length) {
+                        this.selectedSyncBeds = [];
+                    } else {
+                        this.selectedSyncBeds = this.syncPreviewData.map(item => item.bed_id);
+                    }
+                },
+
+                async syncSelectedBeds() {
+                    if (this.selectedSyncBeds.length === 0) return;
+
+                    this.syncingSelected = true;
+                    try {
+                        const response = await fetch('{{ route("ekad.sync-selected") }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            },
+                            body: JSON.stringify({ bed_ids: this.selectedSyncBeds })
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            this.addLog('SYNC SELECTED', true, result.message);
+                            this.loadApiResponseLogs();
+                            this.closeSyncModal();
+                        } else {
+                            this.addLog('SYNC SELECTED', false, result.message);
+                        }
+                    } catch (error) {
+                        this.addLog('SYNC SELECTED', false, 'Error: ' + error.message);
+                    } finally {
+                        this.syncingSelected = false;
+                    }
                 }
             }
         }

@@ -297,7 +297,8 @@
     <script>
         document.addEventListener('alpine:init', () => {
              Alpine.data('specialDutyApp', () => ({
-                nurses: @json($nurses),
+                // Prepend a "None" option for clearing assignments
+                nurses: [{ id: '', name: '— None (Unassigned) —' }, ...@json($nurses)],
             }));
 
             Alpine.data('searchableSelect', (config) => ({

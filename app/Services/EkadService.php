@@ -132,24 +132,10 @@ class EkadService
     }
 
     /**
-     * Push patient info to E-Ink device
-     * 
-     * @param Patient $patient
-     * @param Bed $bed
-     * @param array $overrides Optional array to override patient data (e.g. ['bed_no' => '-', 'mrn' => '-'])
-     * @param string $eventType Description of the event (e.g., 'Admission', 'Discharge')
+     * Get patient info payload (without pushing)
      */
-    public function pushPatientInfo(Patient $patient, Bed $bed, array $overrides = [], string $eventType = 'observer'): array
+    public function getPatientInfoPayload(Patient $patient, Bed $bed, array $overrides = []): array
     {
-        // Get mapping for this bed
-        $mapping = EkadBedMapping::getForBed($bed->id);
-        if (!$mapping) {
-            return [
-                'success' => false,
-                'message' => 'No E-Ink device mapped to this bed',
-            ];
-        }
-
         // Build patient data
         // Check for patient_name override first (e.g., 'vacant' for discharge)
         if (isset($overrides['patient_name'])) {
@@ -281,7 +267,7 @@ class EkadService
 
         // Build data array in the exact order and format required by E-Ink API
         // Order matches the "Update Card" payload from Ekad Real.postman_collection.json
-        $data = [
+        return [
             'bed no' => $bedNo,
             'MRN' => $mrn,
             'patient_name' => $patientName,
@@ -290,10 +276,57 @@ class EkadService
             'nurse' => $nurse,
             'anaesthetist' => $anaesthetist,
         ];
+    }
+
+    /**
+     * Get payload for a bed (handles admitted, vacant, prebook logic)
+     */
+    public function getBedPayload(Bed $bed): array
+    {
+        // Check if bed is occupied
+        $patient = $bed->patient;
+
+        if ($patient && $patient->is_active && $patient->isAdmitted()) {
+            // Bed Occupied - only real admissions (admitted/pending_discharge), not prebook
+            return $this->getPatientInfoPayload($patient, $bed);
+        } else {
+            // Bed Vacant
+            return [
+                'bed no' => $this->normalizeValue($bed->bed_number),
+                'MRN' => 'VACANT',
+                'patient_name' => '-',
+                'diet_type' => '-',
+                'doctor' => '-',
+                'nurse' => '-',
+                'anaesthetist' => '-',
+            ];
+        }
+    }
+
+    /**
+     * Push patient info to E-Ink device
+     * 
+     * @param Patient $patient
+     * @param Bed $bed
+     * @param array $overrides Optional array to override patient data (e.g. ['bed_no' => '-', 'mrn' => '-'])
+     * @param string $eventType Description of the event (e.g., 'Admission', 'Discharge')
+     */
+    public function pushPatientInfo(Patient $patient, Bed $bed, array $overrides = [], string $eventType = 'observer'): array
+    {
+        // Get mapping for this bed
+        $mapping = EkadBedMapping::getForBed($bed->id);
+        if (!$mapping) {
+            return [
+                'success' => false,
+                'message' => 'No E-Ink device mapped to this bed',
+            ];
+        }
+
+        // Generate payload using the extracted method
+        $data = $this->getPatientInfoPayload($patient, $bed, $overrides);
 
         return $this->pushToBed($mapping->mac_address, $data, $bed->id, $patient->id, $eventType);
     }
-
 
     /**
      * Push data to a specific MAC address

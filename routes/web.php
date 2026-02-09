@@ -211,6 +211,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/ekad/response-logs', [EkadController::class, 'getResponseLogs'])->name('ekad.response-logs');
     Route::get('/ekad/response-logs/export', [EkadController::class, 'exportResponseLogs'])->name('ekad.response-logs.export');
     Route::post('/ekad/sync-all', [EkadController::class, 'syncAll'])->name('ekad.sync-all');
+    Route::get('/ekad/sync-preview', [EkadController::class, 'syncPreview'])->name('ekad.sync-preview');
+    Route::post('/ekad/sync-selected', [EkadController::class, 'syncSelected'])->name('ekad.sync-selected');
 
 
     // ADT Integration Routes
