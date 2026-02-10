@@ -549,6 +549,10 @@ class EkadController extends Controller
                 continue;
             }
 
+            // Sync bed status first to ensure correct patient priority
+            $this->syncBedWithPatients($bed);
+            $bed->refresh();
+
             $patient = $bed->patient;
             if ($patient && $patient->isAdmitted()) {
                 // Push patient info
@@ -613,6 +617,10 @@ class EkadController extends Controller
                 return null;
             }
 
+            // Sync bed status first
+            $this->syncBedWithPatients($bed);
+            $bed->refresh();
+
             // Get payload using the service logic (handles occupied/vacant/prebook)
             $payload = $service->getBedPayload($bed);
 
@@ -666,6 +674,10 @@ class EkadController extends Controller
             if (!$bed)
                 continue;
 
+            // Sync bed status first to ensure correct patient priority
+            $this->syncBedWithPatients($bed);
+            $bed->refresh();
+
             $result = [];
 
             // Check occupancy and push appropriate data (prebook is treated as vacant)
@@ -695,6 +707,66 @@ class EkadController extends Controller
             'message' => "Sync completed: {$successCount} success, {$failCount} failed",
             'results' => $results,
         ]);
+    }
+
+    /**
+     * Sync single bed with its assigned patient (Local helper).
+     * Updates the bed's status and patient_id based on active patients.
+     * Prioritizes 'admitted' > 'pending_discharge' > 'prebook'.
+     */
+    private function syncBedWithPatients(Bed $bed)
+    {
+        // Check if bed has a patient assigned through the patient table
+        // Prioritize admitted > pending_discharge > prebook
+        $patient = \App\Models\Patient::where('ward_id', $bed->ward_id)
+            ->where('bed_number', $bed->bed_number)
+            ->where('is_active', true)
+            ->whereIn('status', ['admitted', 'pending_discharge', 'prebook'])
+            ->orderByRaw("FIELD(status, 'admitted', 'pending_discharge', 'prebook')")
+            ->first();
+
+        if ($patient) {
+            // Update bed status based on patient status
+            // pending_discharge is still considered occupied
+            $bedStatus = $patient->status === 'prebook' ? 'reserved' : 'occupied';
+
+            // Only update if changed to avoid unnecessary DB writes and Observer triggers
+            if ($bed->status !== $bedStatus || $bed->patient_id !== $patient->id) {
+                $bed->update([
+                    'status' => $bedStatus,
+                    'patient_id' => $patient->id,
+                ]);
+            }
+        } else {
+            // No ACTIVE patient assigned.
+            // Check if there is a PENDING PREBOOK waiting for this bed
+            $pendingPrebook = \App\Models\Patient::where('ward_id', $bed->ward_id)
+                ->where('target_bed_number', $bed->bed_number)
+                ->where('is_active', true)
+                ->where('status', 'prebook_pending')
+                ->first();
+
+            if ($pendingPrebook) {
+                // Activate the prebook!
+                $pendingPrebook->update([
+                    'status' => 'prebook',
+                    'bed_number' => $bed->bed_number,
+                ]);
+
+                $bed->update([
+                    'status' => 'reserved',
+                    'patient_id' => $pendingPrebook->id,
+                ]);
+            } else if ($bed->status !== 'maintenance') {
+                // No patient assigned and not maintenance, mark bed as available
+                if ($bed->status !== 'available' || $bed->patient_id !== null) {
+                    $bed->update([
+                        'status' => 'available',
+                        'patient_id' => null,
+                    ]);
+                }
+            }
+        }
     }
 }
 
