@@ -182,7 +182,8 @@ class WardDashboardController extends Controller
             $patient = Patient::where('ward_id', $wardId)
                 ->where('bed_number', $bed->bed_number)
                 ->where('is_active', true)
-                ->whereIn('status', ['admitted', 'prebook', 'pending_discharge'])
+                ->whereIn('status', ['admitted', 'pending_discharge', 'prebook']) // Changed order to make it explicit, though orderByRaw handles priority
+                ->orderByRaw("FIELD(status, 'admitted', 'pending_discharge', 'prebook')")
                 ->first();
 
             if ($patient) {
