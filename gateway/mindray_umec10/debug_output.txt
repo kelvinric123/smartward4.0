@@ -1,0 +1,16 @@
+Raw message length: 146
+Message parsed type: <class 'hl7.containers.Message'>
+Number of segments: 4
+Segment 0: MSH|^~\&|MINDRAY|uMEC10|LISTENER|GATEWAY|20231025103000||ORU^R01|10001|P|2.3
+  Type: <class 'hl7.containers.Segment'>
+  ID: MSH
+Segment 1: PID|||123456||Doe^John
+  Type: <class 'hl7.containers.Segment'>
+  ID: PID
+Segment 2: OBX|1|NM|8867-4||80|bpm
+  Type: <class 'hl7.containers.Segment'>
+  ID: OBX
+Segment 3: OBX|2|NM|2708-6||98|%
+  Type: <class 'hl7.containers.Segment'>
+  ID: OBX
+PID NOT found by key lookup

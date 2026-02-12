@@ -1,0 +1,3 @@
+python-dotenv
+hl7
+requests
