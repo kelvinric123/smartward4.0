@@ -23,6 +23,7 @@ class BbraunHl7Log extends Model
         'room',
         'bed',
         'device_id',
+        'serial_no',
         'device_uuid',
         'pump_model',
         'medication_name',

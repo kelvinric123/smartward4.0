@@ -14,6 +14,7 @@ class InfusionPump extends Model
     protected $fillable = [
         'device_id',
         'asset_no',
+        'serial_no',
         'device_name',
         'device_type',
         'device_uuid',
@@ -230,6 +231,9 @@ class InfusionPump extends Model
 
         if (!empty($data['pump_model'])) {
             $updateData['pump_model'] = $data['pump_model'];
+        }
+        if (!empty($data['serial_no'])) {
+            $updateData['serial_no'] = $data['serial_no'];
         }
         if (!empty($data['device_uuid'])) {
             $updateData['device_uuid'] = $data['device_uuid'];

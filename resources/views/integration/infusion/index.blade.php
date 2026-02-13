@@ -455,6 +455,7 @@
                             <table class="min-w-full divide-y divide-gray-200">
                                 <thead>
                                     <tr class="bg-gray-50">
+                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Serial No</th>
                                         <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Device ID</th>
                                         <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Asset No</th>
                                         <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Name</th>
@@ -469,7 +470,8 @@
                                 <tbody class="bg-white divide-y divide-gray-100">
                                     @foreach($pumps as $pump)
                                         <tr class="hover:bg-gray-50 transition-colors">
-                                            <td class="px-4 py-3 text-sm font-mono text-gray-800">{{ $pump->device_id }}</td>
+                                            <td class="px-4 py-3 text-sm font-bold text-gray-800">{{ $pump->serial_no ?? '-' }}</td>
+                                            <td class="px-4 py-3 text-sm font-mono text-gray-600">{{ $pump->device_id }}</td>
                                             <td class="px-4 py-3 text-sm text-gray-700">{{ $pump->asset_no ?? '-' }}</td>
                                             <td class="px-4 py-3 text-sm text-gray-700">{{ $pump->device_name ?? '-' }}</td>
                                             <td class="px-4 py-3 text-sm text-gray-600">{{ $pump->device_type ?? 'Unknown' }}</td>
@@ -528,12 +530,13 @@
                             </div>
                             <div>
                                 <h3 class="text-lg font-bold text-gray-800">Recent HL7 Messages</h3>
-                                <p class="text-sm text-gray-500">Last 50 HL7 messages received from B.Braun pumps</p>
+                                <p class="text-sm text-gray-500">HL7 messages received from B.Braun pumps</p>
                             </div>
                         </div>
                     <div class="flex items-center space-x-2">
                         <!-- Duration Filter -->
                         <form action="{{ route('infusion-integration.index') }}" method="GET" class="flex items-center no-print">
+                            <input type="hidden" name="status_filter" value="{{ $statusFilter }}">
                             <select name="duration" onchange="this.form.submit()" class="text-sm border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg shadow-sm mr-2">
                                 <option value="30m" {{ $duration == '30m' ? 'selected' : '' }}>Last 30 Minutes</option>
                                 <option value="1h" {{ $duration == '1h' ? 'selected' : '' }}>Last 1 Hour</option>
@@ -545,6 +548,16 @@
                                 <option value="7d" {{ $duration == '7d'  ? 'selected' : '' }}>Last 7 Days</option>
                                 <option value="30d" {{ $duration == '30d'  ? 'selected' : '' }}>Last 30 Days</option>
                                 <option value="all" {{ $duration == 'all' ? 'selected' : '' }}>All Time</option>
+                            </select>
+                        </form>
+
+                        <!-- Status Filter -->
+                        <form action="{{ route('infusion-integration.index') }}" method="GET" class="flex items-center no-print">
+                            <input type="hidden" name="duration" value="{{ $duration }}">
+                            <select name="status_filter" onchange="this.form.submit()" class="text-sm border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg shadow-sm mr-2">
+                                <option value="mapped" {{ $statusFilter == 'mapped' ? 'selected' : '' }}>Mapped Only</option>
+                                <option value="all" {{ $statusFilter == 'all' ? 'selected' : '' }}>All Messages</option>
+                                <option value="error" {{ $statusFilter == 'error' ? 'selected' : '' }}>Errors Only</option>
                             </select>
                         </form>
 
@@ -670,10 +683,18 @@
 
                         <div class="space-y-4">
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Device ID *</label>
-                                <input type="text" name="device_id" x-model="pumpFormData.device_id" required
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Serial No *</label>
+                                <input type="text" name="serial_no" x-model="pumpFormData.serial_no" required
                                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
-                                       placeholder="e.g., PUMP-001">
+                                       placeholder="e.g., I51541">
+                                <p class="mt-1 text-xs text-gray-500">Equipment serial number from the pump label (e.g., I51541, I51568)</p>
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Device ID</label>
+                                <input type="text" name="device_id" x-model="pumpFormData.device_id"
+                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
+                                       placeholder="e.g., PUMP-001 (auto-assigned if empty)">
                             </div>
 
                             <div>
@@ -857,6 +878,7 @@
                 pumpFormData: {
                     device_id: '',
                     asset_no: '',
+                    serial_no: '',
                     device_name: '',
                     device_type: '',
                     location: '',
@@ -874,6 +896,7 @@
                     this.pumpFormData = {
                         device_id: '',
                         asset_no: '',
+                        serial_no: '',
                         device_name: '',
                         device_type: '',
                         location: '',
@@ -888,6 +911,7 @@
                     this.pumpFormData = {
                         device_id: pump.device_id,
                         asset_no: pump.asset_no || '',
+                        serial_no: pump.serial_no || '',
                         device_name: pump.device_name || '',
                         device_type: pump.device_type || '',
                         location: pump.location || '',

@@ -385,6 +385,7 @@
                                     <tr>
                                         <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Device</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Asset No</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Serial No</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Bed</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Patient</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">MRN</th>
@@ -414,6 +415,9 @@
                                             </td>
                                             <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
                                                 {{ $pump->asset_no ?? '-' }}
+                                            </td>
+                                            <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-600">
+                                                {{ $pump->serial_no ?? '-' }}
                                             </td>
                                             <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                                                 @if($pump->patient && $pump->patient->bed_number)

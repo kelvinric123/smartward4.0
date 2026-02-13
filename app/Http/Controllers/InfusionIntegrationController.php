@@ -24,6 +24,7 @@ class InfusionIntegrationController extends Controller
     public function index(Request $request): View
     {
         $duration = $request->get('duration', 'all');
+        $statusFilter = $request->get('status_filter', 'mapped');
 
         $query = BbraunHl7Log::latest();
 
@@ -43,7 +44,20 @@ class InfusionIntegrationController extends Controller
             $query->where('created_at', '>=', now()->subMinutes($hours * 60));
         }
 
-        $hl7Logs = $query->limit(50)->get();
+        // Apply status filter
+        if ($statusFilter === 'mapped') {
+            $query->where(function ($q) {
+                $q->whereNotNull('patient_mrn')->where('patient_mrn', '!=', '')
+                    ->orWhere(function ($q2) {
+                        $q2->whereNotNull('pump_status')->where('pump_status', '!=', '');
+                    });
+            });
+        } elseif ($statusFilter === 'error') {
+            $query->where('status', 'error');
+        }
+        // 'all' shows everything
+
+        $hl7Logs = $query->limit(100)->get();
 
         $pumps = InfusionPump::with('ward')->latest()->get();
 
@@ -76,7 +90,7 @@ class InfusionIntegrationController extends Controller
             'error_messages' => BbraunHl7Log::where('status', 'error')->count(),
         ];
 
-        return view('integration.infusion.index', compact('hl7Logs', 'pumps', 'stats', 'mllpConfig', 'dbConfig', 'duration'));
+        return view('integration.infusion.index', compact('hl7Logs', 'pumps', 'stats', 'mllpConfig', 'dbConfig', 'duration', 'statusFilter'));
     }
 
     /**
@@ -167,8 +181,9 @@ class InfusionIntegrationController extends Controller
     public function storePump(Request $request)
     {
         $validated = $request->validate([
-            'device_id' => 'required|string|max:255|unique:infusion_pumps,device_id',
+            'device_id' => 'nullable|string|max:255|unique:infusion_pumps,device_id',
             'asset_no' => 'nullable|string|max:255',
+            'serial_no' => 'required|string|max:255|unique:infusion_pumps,serial_no',
             'device_name' => 'nullable|string|max:255',
             'device_type' => 'nullable|string|max:255',
             'location' => 'nullable|string|max:255',
@@ -189,8 +204,9 @@ class InfusionIntegrationController extends Controller
     public function updatePump(Request $request, InfusionPump $pump)
     {
         $validated = $request->validate([
-            'device_id' => 'required|string|max:255|unique:infusion_pumps,device_id,' . $pump->id,
+            'device_id' => 'nullable|string|max:255|unique:infusion_pumps,device_id,' . $pump->id,
             'asset_no' => 'nullable|string|max:255',
+            'serial_no' => 'required|string|max:255|unique:infusion_pumps,serial_no,' . $pump->id,
             'device_name' => 'nullable|string|max:255',
             'device_type' => 'nullable|string|max:255',
             'location' => 'nullable|string|max:255',

@@ -309,7 +309,7 @@ class DatabaseManager:
                     message_control_id, message_type, event_type,
                     sending_application, sending_facility,
                     patient_mrn, patient_name, ward, room, bed,
-                    device_id, device_uuid, pump_model, medication_name,
+                    device_id, serial_no, device_uuid, pump_model, medication_name,
                     flow_rate, total_volume, infused_volume, remaining_volume,
                     remaining_minutes, drug_concentration, dose_rate, dose_unit,
                     syringe_size, delivery_mode,
@@ -323,7 +323,7 @@ class DatabaseManager:
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
             """
             
@@ -341,6 +341,7 @@ class DatabaseManager:
                 pv1.get('room', ''),
                 pv1.get('bed', ''),
                 infusion_data.get('device_id', ''),
+                infusion_data.get('serial_no', ''),
                 infusion_data.get('device_uuid', ''),
                 infusion_data.get('pump_model', ''),
                 infusion_data.get('medication_name', ''),
@@ -427,9 +428,10 @@ class DatabaseManager:
                             last_seen_at = NOW(), 
                             is_active = 1,
                             pump_model = COALESCE(%s, pump_model),
+                            serial_no = COALESCE(%s, serial_no),
                             device_uuid = COALESCE(%s, device_uuid)
                            WHERE id = %s""",
-                        (infusion_data.get('pump_model'), infusion_data.get('device_uuid'), pump_id)
+                        (infusion_data.get('pump_model'), infusion_data.get('serial_no'), infusion_data.get('device_uuid'), pump_id)
                     )
                     
                     # If pump is linked to a patient, use that patient
@@ -457,15 +459,16 @@ class DatabaseManager:
                 if device_id and not pump_id:
                     # At least create/update the pump record so it can be linked later
                     cursor.execute(
-                        """INSERT INTO infusion_pumps (device_id, device_name, device_type, pump_model, device_uuid, is_active, last_seen_at, created_at, updated_at)
-                           VALUES (%s, %s, %s, %s, %s, 1, NOW(), NOW(), NOW())
+                        """INSERT INTO infusion_pumps (device_id, device_name, device_type, pump_model, serial_no, device_uuid, is_active, last_seen_at, created_at, updated_at)
+                           VALUES (%s, %s, %s, %s, %s, %s, 1, NOW(), NOW(), NOW())
                            ON DUPLICATE KEY UPDATE 
                                last_seen_at = NOW(), 
                                is_active = 1,
                                pump_model = COALESCE(VALUES(pump_model), pump_model),
+                               serial_no = COALESCE(VALUES(serial_no), serial_no),
                                device_uuid = COALESCE(VALUES(device_uuid), device_uuid)""",
                         (device_id, infusion_data.get('pump_model', device_id), 'B.Braun Syringe Pump', 
-                         infusion_data.get('pump_model'), infusion_data.get('device_uuid'))
+                         infusion_data.get('pump_model'), infusion_data.get('serial_no'), infusion_data.get('device_uuid'))
                     )
                     self.logger.info(f"Pump {device_id} registered/updated, waiting to be linked to a patient")
                 else:
@@ -476,10 +479,10 @@ class DatabaseManager:
             # Create pump if it doesn't exist
             if not pump_id and device_id:
                 cursor.execute(
-                    """INSERT INTO infusion_pumps (device_id, device_name, device_type, pump_model, device_uuid, ward_id, is_active, last_seen_at, created_at, updated_at)
-                       VALUES (%s, %s, %s, %s, %s, %s, 1, NOW(), NOW(), NOW())""",
+                    """INSERT INTO infusion_pumps (device_id, device_name, device_type, pump_model, serial_no, device_uuid, ward_id, is_active, last_seen_at, created_at, updated_at)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, 1, NOW(), NOW(), NOW())""",
                     (device_id, infusion_data.get('pump_model', device_id), 'B.Braun Syringe Pump',
-                     infusion_data.get('pump_model'), infusion_data.get('device_uuid'), ward_id)
+                     infusion_data.get('pump_model'), infusion_data.get('serial_no'), infusion_data.get('device_uuid'), ward_id)
                 )
                 pump_id = cursor.lastrowid
             
@@ -805,6 +808,7 @@ class BbraunHL7Parser:
             'abnormal_flags': self._get_field(obx, 8),
             'observation_status': self._get_field(obx, 11),
             'observation_datetime': self._get_field(obx, 14),
+            'equipment_id': (self._get_field(obx, 18).split('^')[0] if self._get_field(obx, 18) else ''),
         }
     
     def _parse_rxe(self, rxe: list) -> dict:
@@ -861,6 +865,7 @@ class BbraunHL7Parser:
         infusion_data = {
             # Device Info
             'device_id': '',
+            'serial_no': '',
             'device_uuid': '',
             'pump_model': '',
             'firmware_version': '',
@@ -1214,6 +1219,13 @@ class BbraunHL7Parser:
                     # Clean up status value: strip leading ^, convert to uppercase, replace remaining ^ with -
                     raw_status = obs_value.upper().lstrip('^').replace('^', '-')
                     infusion_data['pump_status'] = INFUSION_STATUS_MAP.get(raw_status, obs_value.lower().lstrip('^'))
+        
+        # Extract serial_no from first OBX with equipment_id
+        for obx in obx_list:
+            eq_id = obx.get('equipment_id', '')
+            if eq_id:
+                infusion_data['serial_no'] = eq_id
+                break
         
         # Derive status from alarm state if needed
         if infusion_data['alarm_state'] == 'active' and not infusion_data['pump_status']:

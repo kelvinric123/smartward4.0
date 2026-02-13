@@ -6,7 +6,7 @@ load_dotenv()
 
 # Server Configuration
 HOST = os.getenv('HL7_LISTENER_HOST', '0.0.0.0')
-PORT = int(os.getenv('HL7_LISTENER_PORT', 2575))
+PORT = int(os.getenv('HL7_LISTENER_PORT', 4601))
 BUFFER_SIZE = int(os.getenv('BUFFER_SIZE', 4096))
 
 # API Configuration
