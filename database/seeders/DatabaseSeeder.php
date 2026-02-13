@@ -45,6 +45,7 @@ class DatabaseSeeder extends Seeder
             AnaesthetistSeeder::class,
             NurseSeeder::class,
             EkadBedMappingD6Seeder::class,
+            InfusionPumpSeeder::class,
         ]);
     }
 }
