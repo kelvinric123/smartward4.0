@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-B.Braun HL7 Sample Sender
+B.Braun HL7 Sample Sender 2
 Sends sample HL7 messages to the B.Braun HL7 listener for testing different scenarios
+Allows manual entry of Serial Number
 """
 
 import socket
@@ -64,8 +65,9 @@ DESTINATIONS = {
 def print_header():
     """Print the application header"""
     print("\n" + "=" * 60)
-    print("    B.Braun HL7 Sample Sender")
+    print("    B.Braun HL7 Sample Sender 2")
     print("    Sends test HL7 messages to the listener")
+    print("    Allows overriding Serial Number")
     print("=" * 60 + "\n")
 
 
@@ -119,6 +121,18 @@ def get_destination():
             print("Invalid choice. Please enter 1, 2, or 3.")
 
 
+def get_serial_number():
+    """Get the serial number from user input"""
+    print("\nSelect Serial Number:")
+    print("-" * 40)
+    print("  Enter new Serial No to override the one in the sample file.")
+    print("  Leave empty to keep the original Serial No.")
+    print()
+    
+    serial_no = input("Enter Serial No: ").strip()
+    return serial_no
+
+
 def get_sample():
     """Get the sample file from user input"""
     print_menu("Select Sample Message:", SAMPLES)
@@ -165,6 +179,44 @@ def extract_hl7_messages(content):
     return messages
 
 
+def update_message_serial_no(message, new_serial_no):
+    """Update the Serial Number in the HL7 message"""
+    if not new_serial_no:
+        return message
+        
+    segments = message.split('\r')
+    updated_segments = []
+    
+    for segment in segments:
+        if segment.startswith('OBX|'):
+            fields = segment.split('|')
+            # Check if this OBX segment has field 18 (Equipment Identifier)
+            # OBX field index 18 corresponds to index 18 (0-indexed split) because split includes 'OBX' as 0
+            # Wait: OBX|1|ST|...
+            # 0: OBX
+            # 1: Set ID
+            # 2: Value Type
+            # ...
+            # 18: Equipment Instance Identifier
+            
+            if len(fields) > 18:
+                equipment_field = fields[18]
+                # If field is not empty, replace the first component with new serial no
+                if equipment_field:
+                    parts = equipment_field.split('^')
+                    parts[0] = new_serial_no
+                    fields[18] = '^'.join(parts)
+                    segment = '|'.join(fields)
+                elif len(fields) >= 19: # If field is empty but segment is long enough
+                    # Construct a basic equipment ID
+                    fields[18] = f"{new_serial_no}^^0000000000000000^EUI-64"
+                    segment = '|'.join(fields)
+            
+        updated_segments.append(segment)
+    
+    return '\r'.join(updated_segments)
+
+
 def send_mllp_message(host, port, message):
     """Send a single HL7 message using MLLP protocol"""
     try:
@@ -205,7 +257,7 @@ def send_mllp_message(host, port, message):
         return False
 
 
-def send_sample(host, port, sample_key):
+def send_sample(host, port, sample_key, serial_no=None):
     """Send a sample file to the HL7 listener"""
     sample = SAMPLES[sample_key]
     sample_file = os.path.join(SAMPLES_DIR, sample['file'])
@@ -213,6 +265,8 @@ def send_sample(host, port, sample_key):
     print(f"\n{'='*50}")
     print(f"Sending: {sample['name']}")
     print(f"File: {sample['file']}")
+    if serial_no:
+        print(f"Overriding Serial No: {serial_no}")
     print(f"{'='*50}")
     
     # Check if file exists
@@ -238,10 +292,23 @@ def send_sample(host, port, sample_key):
     for i, message in enumerate(messages, 1):
         print(f"\n  Message {i}/{len(messages)}:")
         
+        # Update Serial Number if provided
+        if serial_no:
+            message = update_message_serial_no(message, serial_no)
+        
         # Show first line of message (MSH segment) for context
         first_line = message.split('\r')[0][:80]
         print(f"    {first_line}...")
         
+        # Show updated serial no if applicable
+        if serial_no:
+             # Find OBX with serial no for confirmation
+             lines = message.split('\r')
+             for line in lines:
+                 if line.startswith('OBX|') and serial_no in line:
+                     print(f"    Updated OBX: {line[:80]}...")
+                     break
+
         if send_mllp_message(host, port, message):
             success_count += 1
         
@@ -261,11 +328,21 @@ def main():
     host, port = get_destination()
     print(f"\nDestination: {host}:{port}")
     
+    # Get Serial Number
+    serial_no = get_serial_number()
+    if serial_no:
+        print(f"Using Serial No: {serial_no}")
+    else:
+        print("Using default Serial No from file")
+    
     # Get sample(s) to send
     sample_keys = get_sample()
     
     # Confirm before sending
     print(f"\nReady to send {len(sample_keys)} sample(s) to {host}:{port}")
+    if serial_no:
+        print(f"With Serial No override: {serial_no}")
+        
     confirm = input("Proceed? (y/n): ").strip().lower()
     
     if confirm != 'y':
@@ -279,7 +356,7 @@ def main():
     
     total_success = 0
     for sample_key in sample_keys:
-        if send_sample(host, port, sample_key):
+        if send_sample(host, port, sample_key, serial_no):
             total_success += 1
         time.sleep(1)  # Delay between samples
     

@@ -407,8 +407,26 @@ class DatabaseManager:
             ward_id = None
             pump_id = None
             
-            # First, check if the pump is linked to a patient (via device_id)
-            if device_id:
+            # First, try to find pump by Serial No (Preferred)
+            serial_no = infusion_data.get('serial_no')
+            pump_record = None
+            
+            if serial_no:
+                cursor.execute(
+                    """SELECT ip.id as pump_id, ip.patient_id, ip.ward_id as pump_ward_id,
+                              p.id as linked_patient_id, p.ward_id as patient_ward_id, p.name as patient_name
+                       FROM infusion_pumps ip
+                       LEFT JOIN patients p ON ip.patient_id = p.id
+                       WHERE ip.serial_no = %s
+                       LIMIT 1""",
+                    (serial_no,)
+                )
+                pump_record = cursor.fetchone()
+                if pump_record:
+                    self.logger.info(f"Identified pump by Serial No: {serial_no}")
+            
+            # If not found by Serial No, try Device ID
+            if not pump_record and device_id:
                 cursor.execute(
                     """SELECT ip.id as pump_id, ip.patient_id, ip.ward_id as pump_ward_id,
                               p.id as linked_patient_id, p.ward_id as patient_ward_id, p.name as patient_name
@@ -419,6 +437,8 @@ class DatabaseManager:
                     (device_id,)
                 )
                 pump_record = cursor.fetchone()
+                if pump_record:
+                    self.logger.info(f"Identified pump by Device ID: {device_id}")
                 
                 if pump_record:
                     pump_id = pump_record['pump_id']
@@ -1227,6 +1247,12 @@ class BbraunHL7Parser:
                 infusion_data['serial_no'] = eq_id
                 break
         
+        # NOTE: We do NOT override device_id with serial_no anymore.
+        # We want to keep device_id as the MSH-3 ID (technical identifier)
+        # and use serial_no for the primary lookup in _update_infusion_record.
+        # if infusion_data['serial_no']:
+        #     infusion_data['device_id'] = infusion_data['serial_no']
+        
         # Derive status from alarm state if needed
         if infusion_data['alarm_state'] == 'active' and not infusion_data['pump_status']:
             infusion_data['pump_status'] = 'alarming'
@@ -1537,15 +1563,15 @@ class BbraunHL7Listener:
 def main():
     """Main entry point"""
     print("""
-    ╔═══════════════════════════════════════════════════════════╗
-    ║       B.Braun HL7 Infusion Pump Listener v1.0             ║
-    ║           SmartWard Healthcare Integration                ║
-    ╠═══════════════════════════════════════════════════════════╣
-    ║  Protocol: MLLP over TCP/IP (HL7 v2.x)                    ║
-    ║  Default Port: 5001                                       ║
-    ║  Supported: ORU, ORM, RAS, RDE, RGV messages              ║
-    ║  Features: Real-time pump status, alarms, volume tracking ║
-    ╚═══════════════════════════════════════════════════════════╝
+    ===========================================================
+           B.Braun HL7 Infusion Pump Listener v1.0             
+               SmartWard Healthcare Integration                
+    -----------------------------------------------------------
+       Protocol: MLLP over TCP/IP (HL7 v2.x)                    
+       Default Port: 5001                                       
+       Supported: ORU, ORM, RAS, RDE, RGV messages              
+       Features: Real-time pump status, alarms, volume tracking 
+    ===========================================================
     """)
     
     # Get configuration from environment or use defaults
