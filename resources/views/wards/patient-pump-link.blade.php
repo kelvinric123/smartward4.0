@@ -60,9 +60,9 @@
                                             </svg>
                                         </div>
                                         <div>
-                                            <p class="font-bold text-gray-800">{{ $pump->device_id }}</p>
+                                            <p class="font-bold text-gray-800">{{ $pump->device_name ?? 'Unnamed Pump' }}</p>
                                             <p class="text-xs text-gray-600">
-                                                {{ $pump->device_name ?? 'Unnamed Pump' }}
+                                                ID: {{ $pump->device_id }}
                                                 @if($pump->device_type) • {{ ucfirst(str_replace('_', ' ', $pump->device_type)) }} @endif
                                             </p>
                                             @if($pump->linked_at)
@@ -139,9 +139,9 @@
                                             </svg>
                                         </div>
                                         <div>
-                                            <p class="font-bold text-gray-800">{{ $pump->device_id }}</p>
+                                            <p class="font-bold text-gray-800">{{ $pump->device_name ?? 'Unnamed Pump' }}</p>
                                             <p class="text-xs text-gray-600">
-                                                {{ $pump->device_name ?? 'Unnamed Pump' }}
+                                                ID: {{ $pump->device_id }}
                                                 @if($pump->device_type) | {{ ucfirst(str_replace('_', ' ', $pump->device_type)) }} @endif
                                                 @if($pump->location) | {{ $pump->location }} @endif
                                             </p>
