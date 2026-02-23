@@ -139,44 +139,93 @@ def get_sample():
     
     # Add option to send all samples
     print("  [A] Send ALL samples (one by one)")
+    print("  [R] Paste RAW HL7 message")
     print()
     
     while True:
-        choice = input("Enter choice (1-6 or A): ").strip().upper()
+        choice = input("Enter choice (1-6, A, or R): ").strip().upper()
         
         if choice in SAMPLES:
             return [choice]
         elif choice == 'A':
             return list(SAMPLES.keys())
+        elif choice == 'R':
+            return ['RAW']
         else:
-            print("Invalid choice. Please enter 1-6 or A.")
+            print("Invalid choice. Please enter 1-6, A, or R.")
 
 
 def extract_hl7_messages(content):
-    """Extract HL7 messages from sample file content"""
+    """Extract HL7 messages from sample file content.
+    
+    Handles both properly formatted (one segment per line) and 
+    concatenated single-line HL7 messages by splitting on known segment identifiers.
+    """
+    import re
+    
     messages = []
     lines = content.split('\n')
-    current_message = []
     
+    # Known HL7 segment identifiers
+    SEGMENT_IDS = ('MSH|', 'PID|', 'PV1|', 'OBR|', 'OBX|', 'RXE|', 'RXG|', 'RXR|', 'NTE|', 'PD1|', 'EVN|', 'ORC|')
+    
+    # Pre-process: split concatenated segments within each line
+    # e.g. "MSH|...|YOBR|...|OBX|..." -> ["MSH|...|Y", "OBR|...|", "OBX|..."]
+    expanded_lines = []
     for line in lines:
         line = line.strip()
+        if not line:
+            expanded_lines.append('')
+            continue
         
+        # Use regex to split before known segment identifiers
+        # This handles cases where segments are concatenated without \r separators
+        parts = re.split(r'(?=(?:MSH|PID|PV1|OBR|OBX|RXE|RXG|RXR|NTE|PD1|EVN|ORC)\|)', line)
+        for part in parts:
+            part = part.strip()
+            if part:
+                expanded_lines.append(part)
+    
+    current_message = []
+    
+    for line in expanded_lines:
         # HL7 message segments start with these standard segment identifiers
-        if line.startswith(('MSH|', 'PID|', 'PV1|', 'OBR|', 'OBX|', 'RXE|', 'RXG|', 'RXR|', 'NTE|', 'PD1|', 'EVN|', 'ORC|')):
+        if line.startswith(SEGMENT_IDS):
+            if line.startswith('MSH|') and current_message:
+                # Start of new message - save the previous one
+                messages.append('\r'.join(current_message))
+                current_message = []
             current_message.append(line)
-        elif line.startswith('MSH|') or (current_message and not line):
-            # Start of new message or empty line after a message
+        elif current_message and not line:
+            # Empty line after a message
             if current_message:
                 messages.append('\r'.join(current_message))
                 current_message = []
-            if line.startswith('MSH|'):
-                current_message.append(line)
     
     # Don't forget the last message
     if current_message:
         messages.append('\r'.join(current_message))
     
     return messages
+
+
+def get_raw_hl7_input():
+    """Get raw HL7 message input from the user"""
+    print("\nPaste your raw HL7 message below.")
+    print("To finish, enter an empty line (press Enter twice).")
+    print("-" * 40)
+    
+    lines = []
+    while True:
+        try:
+            line = input()
+            if not line:
+                break
+            lines.append(line)
+        except EOFError:
+            break
+            
+    return '\n'.join(lines)
 
 
 def update_message_serial_no(message, new_serial_no):
@@ -320,6 +369,47 @@ def send_sample(host, port, sample_key, serial_no=None):
     return success_count == len(messages)
 
 
+def send_raw_input(host, port, serial_no=None):
+    """Get raw input and send it"""
+    raw_content = get_raw_hl7_input()
+    
+    if not raw_content:
+        print("  No message entered. Aborting.")
+        return False
+        
+    messages = extract_hl7_messages(raw_content)
+    
+    if not messages:
+        print("  No valid HL7 segments found. Aborting.")
+        return False
+        
+    print(f"\n{'='*50}")
+    print(f"Sending RAW Message")
+    if serial_no:
+        print(f"Overriding Serial No: {serial_no}")
+    print(f"{'='*50}")
+    print(f"  Found {len(messages)} HL7 message(s)")
+    
+    success_count = 0
+    for i, message in enumerate(messages, 1):
+        print(f"\n  Message {i}/{len(messages)}:")
+        
+        if serial_no:
+            message = update_message_serial_no(message, serial_no)
+            
+        first_line = message.split('\r')[0][:80]
+        print(f"    {first_line}...")
+        
+        if send_mllp_message(host, port, message):
+            success_count += 1
+            
+        if i < len(messages):
+            time.sleep(0.5)
+            
+    print(f"\n  Result: {success_count}/{len(messages)} messages sent successfully")
+    return success_count == len(messages)
+
+
 def main():
     """Main function"""
     print_header()
@@ -356,7 +446,10 @@ def main():
     
     total_success = 0
     for sample_key in sample_keys:
-        if send_sample(host, port, sample_key, serial_no):
+        if sample_key == 'RAW':
+            if send_raw_input(host, port, serial_no):
+                total_success += 1
+        elif send_sample(host, port, sample_key, serial_no):
             total_success += 1
         time.sleep(1)  # Delay between samples
     

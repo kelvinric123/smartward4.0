@@ -439,31 +439,29 @@ class DatabaseManager:
                 pump_record = cursor.fetchone()
                 if pump_record:
                     self.logger.info(f"Identified pump by Device ID: {device_id}")
+            
+            # Process pump_record regardless of how it was found (serial_no or device_id)
+            if pump_record:
+                pump_id = pump_record['pump_id']
+                # Update pump last_seen and device info
+                cursor.execute(
+                    """UPDATE infusion_pumps SET 
+                        last_seen_at = NOW(), 
+                        is_active = 1,
+                        pump_model = COALESCE(%s, pump_model),
+                        serial_no = COALESCE(%s, serial_no),
+                        device_uuid = COALESCE(%s, device_uuid)
+                       WHERE id = %s""",
+                    (infusion_data.get('pump_model'), infusion_data.get('serial_no'), infusion_data.get('device_uuid'), pump_id)
+                )
                 
-                if pump_record:
-                    pump_id = pump_record['pump_id']
-                    # Update pump last_seen and device info
-                    cursor.execute(
-                        """UPDATE infusion_pumps SET 
-                            last_seen_at = NOW(), 
-                            is_active = 1,
-                            pump_model = COALESCE(%s, pump_model),
-                            serial_no = COALESCE(%s, serial_no),
-                            device_uuid = COALESCE(%s, device_uuid)
-                           WHERE id = %s""",
-                        (infusion_data.get('pump_model'), infusion_data.get('serial_no'), infusion_data.get('device_uuid'), pump_id)
-                    )
-                    
-                    # If pump is linked to a patient, use that patient
-                    if pump_record['linked_patient_id']:
-                        patient_id = pump_record['linked_patient_id']
-                        ward_id = pump_record['patient_ward_id']
-                        self.logger.info(f"Using linked patient: {pump_record['patient_name']} (ID: {patient_id}) for pump {device_id}")
-                    else:
-                        ward_id = pump_record['pump_ward_id']
+                # If pump is linked to a patient, use that patient
+                if pump_record['linked_patient_id']:
+                    patient_id = pump_record['linked_patient_id']
+                    ward_id = pump_record['patient_ward_id']
+                    self.logger.info(f"Using linked patient: {pump_record['patient_name']} (ID: {patient_id}) for pump {device_id}")
                 else:
-                    # Pump not found, will create later if we have a patient
-                    pass
+                    ward_id = pump_record['pump_ward_id']
             
             # If no patient from pump link, try to find by MRN (if it's a valid MRN)
             if not patient_id and patient_mrn and patient_mrn.lower() not in ['unknown patient', 'unknown', '']:
@@ -1247,11 +1245,10 @@ class BbraunHL7Parser:
                 infusion_data['serial_no'] = eq_id
                 break
         
-        # NOTE: We do NOT override device_id with serial_no anymore.
-        # We want to keep device_id as the MSH-3 ID (technical identifier)
-        # and use serial_no for the primary lookup in _update_infusion_record.
-        # if infusion_data['serial_no']:
-        #     infusion_data['device_id'] = infusion_data['serial_no']
+        # Use the Equipment Instance Identifier (OBX-18) as the device_id
+        # This gives us the actual pump serial (e.g., I51340) instead of the MSH-3 EUI-64
+        if infusion_data['serial_no']:
+            infusion_data['device_id'] = infusion_data['serial_no']
         
         # Derive status from alarm state if needed
         if infusion_data['alarm_state'] == 'active' and not infusion_data['pump_status']:
