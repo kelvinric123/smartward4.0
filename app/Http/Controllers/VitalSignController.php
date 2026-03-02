@@ -369,6 +369,26 @@ class VitalSignController extends Controller
             'timestamp' => now()->toIso8601String(),
         ]);
     }
+
+    /**
+     * Remove the specified vital sign from storage (soft delete).
+     */
+    public function destroy(VitalSign $vitalSign)
+    {
+        // Record who deleted it before soft deleting
+        $vitalSign->deleted_by = Auth::id();
+        $vitalSign->save();
+
+        $vitalSign->delete();
+
+        Log::info('Vital sign deleted', [
+            'vital_sign_id' => $vitalSign->id,
+            'patient_id' => $vitalSign->patient_id,
+            'deleted_by' => Auth::id(),
+        ]);
+
+        return back()->with('success', 'Vital sign record removed successfully.');
+    }
 }
 
 

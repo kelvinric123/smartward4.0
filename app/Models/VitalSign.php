@@ -4,9 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class VitalSign extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'patient_id',
         'admission_id',
@@ -21,6 +24,7 @@ class VitalSign extends Model
         'notes',
         'recorded_at',
         'operator_id',
+        'deleted_by',
     ];
 
     protected $casts = [
@@ -46,6 +50,11 @@ class VitalSign extends Model
     public function operator(): BelongsTo
     {
         return $this->belongsTo(Nurse::class, 'operator_id');
+    }
+
+    public function deletedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'deleted_by');
     }
 
     /**

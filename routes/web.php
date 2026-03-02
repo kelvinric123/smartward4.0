@@ -143,6 +143,7 @@ Route::middleware('auth')->group(function () {
     // Vital Signs Routes
     Route::get('/vital-signs', [VitalSignController::class, 'index'])->name('vital-signs.index');
     Route::post('/vital-signs', [VitalSignController::class, 'store'])->name('vital-signs.store');
+    Route::delete('/vital-signs/{vitalSign}', [VitalSignController::class, 'destroy'])->name('vital-signs.destroy');
     Route::get('/vital-signs/patient', [VitalSignController::class, 'patientVitals'])->name('vital-signs.patient');
     Route::get('/vital-signs/latest', [VitalSignController::class, 'latestVitals'])->name('vital-signs.latest');
     Route::get('/vital-signs/check-new', [VitalSignController::class, 'checkNewVitalSigns'])->name('vital-signs.check-new');

@@ -423,6 +423,7 @@
     <x-slot name="header">
         <div class="flex items-center justify-between" x-data="{ 
             customFullscreen: localStorage.getItem('wardDashboardFullscreen') === 'true' @if(auth()->check() && auth()->user()->hasRole('ward_dashboard')) || true @endif,
+            countdown: 60,
             init() {
                 // Dispatch initial state on load if fullscreen is saved
                 if (this.customFullscreen) {
@@ -432,6 +433,15 @@
                         }));
                     });
                 }
+
+                // Auto-refresh countdown
+                setInterval(() => {
+                    if (this.countdown > 0) {
+                        this.countdown--;
+                    } else {
+                        window.location.reload();
+                    }
+                }, 1000);
             }
         }">
             <!-- Left: Title and Ward Selector -->
@@ -444,7 +454,17 @@
                             class="font-bold text-xl text-gray-800 leading-tight group-hover:text-blue-600 transition-colors cursor-pointer">
                             Ward Dashboard
                         </h2>
-                        <svg class="w-4 h-4 ml-1 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none"
+                        <span
+                            class="ml-3 px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-700 rounded-full flex items-center border border-gray-300 shadow-sm"
+                            title="Auto-refreshing in">
+                            <svg class="w-3.5 h-3.5 mr-1 text-gray-500" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span x-text="countdown"></span>s
+                        </span>
+                        <svg class="w-4 h-4 ml-2 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none"
                             stroke="currentColor" viewBox="0 0 24 24" title="Refresh">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -3191,7 +3211,7 @@
                                                         <div class="flex items-start">
                                                             <span
                                                                 class="w-2 h-2 rounded-full mt-1.5 mr-2 flex-shrink-0
-                                                                                {{ str_contains(strtolower($type['note']), 'night') ? 'bg-purple-500' : 'bg-orange-500' }}"></span>
+                                                                                        {{ str_contains(strtolower($type['note']), 'night') ? 'bg-purple-500' : 'bg-orange-500' }}"></span>
                                                             <div>
                                                                 <h4 class="text-sm font-bold text-gray-800 leading-tight">
                                                                     {{ $type['label'] }}

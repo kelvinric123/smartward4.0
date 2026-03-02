@@ -148,7 +148,11 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                             </svg>
-                            <span class="font-medium text-sm">ECG Viewer</span>
+                            <span class="font-medium text-sm">ECG Viewer <span class="text-gray-400 mx-2">|</span>
+                                {{ $patient->name }} <span class="text-gray-400 mx-2">•</span> <span
+                                    class="text-xs text-gray-500">IC: {{ $patient->ic_passport ?? 'N/A' }}</span> <span
+                                    class="text-gray-400 text-xs mx-1">•</span> <span class="text-xs text-gray-500">MRN:
+                                    {{ $patient->mrn }}</span></span>
                             <span id="currentEcgDate" class="ml-2 text-xs text-gray-400">
                                 @if($latestEcg && $latestEcg['recorded_at'])
                                     {{ \Carbon\Carbon::parse($latestEcg['recorded_at'])->format('d M Y H:i') }}
@@ -202,6 +206,7 @@
                                 d="M3 12h4l3-9 4 18 3-9h4" />
                         </svg>
                         <span class="font-medium">ECG - {{ $patient->name }}</span>
+                        <span class="ml-3 text-gray-400 text-sm">IC: {{ $patient->ic_passport ?? 'N/A' }}</span>
                         <span class="ml-3 text-gray-400 text-sm">MRN: {{ $patient->mrn }}</span>
                         <span id="fullscreenEcgDate" class="ml-3 text-emerald-400 text-sm"></span>
                     </div>
