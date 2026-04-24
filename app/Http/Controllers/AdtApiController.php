@@ -645,7 +645,23 @@ class AdtApiController extends Controller
             } else {
                 // Update existing patient info
                 $this->updatePatientFromPid($patient, $pid, $pv1);
-                $actions[] = 'patient_updated';
+
+                // Check if patient is NOT currently admitted (discharged, cancelled, etc.)
+                // This happens when A01 (Admit) failed (e.g., unmapped ward/bed) but A02 (Transfer)
+                // arrives with a valid mapped destination. We treat this as an admission.
+                if (!$patient->isAdmitted() && !in_array($patient->status, [Patient::STATUS_PREBOOK, Patient::STATUS_PREBOOK_PENDING])) {
+                    Log::info("ADT A02 Transfer - Patient exists but NOT admitted, treating as admission", [
+                        'mrn' => $mrn,
+                        'current_status' => $patient->status,
+                    ]);
+                    $patient->admitted_at = now();
+                    $patient->discharged_at = null;
+                    $patient->pending_discharge_at = null;
+                    $patient->is_active = true;
+                    $actions[] = 'patient_readmitted_on_transfer';
+                } else {
+                    $actions[] = 'patient_updated';
+                }
             }
 
             // Release old bed if patient has one
@@ -712,19 +728,23 @@ class AdtApiController extends Controller
 
             // Create admission log entry for ADT transfer (only if bed was successfully assigned)
             if ($newBed && $newBed->ward_id) {
+                $isReadmission = in_array('patient_readmitted_on_transfer', $actions) || in_array('patient_created_on_transfer', $actions);
                 AdmissionLog::create([
                     'patient_id' => $patient->id,
                     'ward_id' => $newBed->ward_id,
                     'user_id' => null, // No user for ADT-triggered events
                     'bed_number' => $newBed->bed_number,
-                    'action' => 'transfer',
+                    'action' => $isReadmission ? 'admit' : 'transfer',
                     'patient_name' => $patient->name,
                     'mrn' => $patient->mrn,
                     'consultant_name' => null,
                     'nurse_name' => null,
                     'gender' => $patient->gender,
                     'age' => $patient->age,
-                    'notes' => 'ADT A02: Transfer from ' . ($oldWardName ? ($oldWardName . '/' . $oldBedNumber) : 'unknown'),
+                    'admitted_at' => $isReadmission ? $patient->admitted_at : null,
+                    'notes' => $isReadmission
+                        ? 'ADT A02: Admission via transfer (previous A01 was unmapped/failed)'
+                        : 'ADT A02: Transfer from ' . ($oldWardName ? ($oldWardName . '/' . $oldBedNumber) : 'unknown'),
                     'source' => 'adt',
                 ]);
             }
