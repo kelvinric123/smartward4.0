@@ -37,4 +37,9 @@ class Ward extends Model
     {
         return $this->hasMany(Patient::class);
     }
+
+    public function slideshows()
+    {
+        return $this->hasMany(Slideshow::class);
+    }
 }

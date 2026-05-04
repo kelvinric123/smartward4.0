@@ -3128,5 +3128,65 @@ class WardDashboardController extends Controller
             'dashboardDisplay' => $dashboardDisplay
         ];
     }
+
+    public function slideshowViewer(Request $request)
+    {
+        $wardId = $request->query('ward_id');
+        $ward = Ward::find($wardId);
+        
+        if (!$ward) {
+            // fallback if no ward provided
+            return response('No ward selected for slideshow.', 404);
+        }
+
+        $hospitalId = $ward->hospital_id;
+
+        $slideshows = \App\Models\Slideshow::where('hospital_id', $hospitalId)
+            ->where(function ($query) use ($wardId) {
+                $query->whereNull('ward_id')
+                      ->orWhere('ward_id', $wardId);
+            })
+            ->where('is_active', true)
+            ->orderBy('order', 'asc')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Build a clean slides array for JSON encoding
+        $allSlides = [];
+
+        // Database-managed slides
+        foreach ($slideshows as $slide) {
+            $allSlides[] = [
+                'url' => \Illuminate\Support\Facades\Storage::url($slide->file_path),
+                'name' => pathinfo($slide->file_path, PATHINFO_FILENAME),
+                'type' => str_contains($slide->file_type, 'pdf') ? 'pdf' : 'image',
+                'scale250' => false,
+            ];
+        }
+
+        // Static files from base_path('picture') as hospital-wide slides
+        $pictureDir = base_path('picture');
+        $scale250Files = ['Hosp Org Chart.jpeg', 'Clinical Governance Chart.jpeg'];
+
+        if (\Illuminate\Support\Facades\File::exists($pictureDir)) {
+            $files = \Illuminate\Support\Facades\File::files($pictureDir);
+            foreach ($files as $file) {
+                $ext = strtolower($file->getExtension());
+                if (!in_array($ext, ['jpg', 'jpeg', 'png', 'pdf'])) {
+                    continue;
+                }
+                
+                $filename = $file->getFilename();
+                $allSlides[] = [
+                    'url' => route('picture.serve', ['filename' => $filename]),
+                    'name' => pathinfo($filename, PATHINFO_FILENAME),
+                    'type' => $ext === 'pdf' ? 'pdf' : 'image',
+                    'scale250' => in_array($filename, $scale250Files),
+                ];
+            }
+        }
+
+        return view('wards.slideshow-viewer', compact('allSlides', 'ward'));
+    }
 }
 

@@ -423,8 +423,12 @@
     <x-slot name="header">
         <div class="flex items-center justify-between" x-data="{ 
             customFullscreen: localStorage.getItem('wardDashboardFullscreen') === 'true' @if(auth()->check() && auth()->user()->hasRole('ward_dashboard')) || true @endif,
-            countdown: 60,
+            countdown: {{ $dashboardDisplay['refresh_interval'] ?? 60 }},
+            isPaused: false,
             init() {
+                window.addEventListener('pause-timer', () => { this.isPaused = true; });
+                window.addEventListener('resume-timer', () => { this.isPaused = false; });
+
                 // Dispatch initial state on load if fullscreen is saved
                 if (this.customFullscreen) {
                     this.$nextTick(() => {
@@ -436,10 +440,20 @@
 
                 // Auto-refresh countdown
                 setInterval(() => {
-                    if (this.countdown > 0) {
-                        this.countdown--;
-                    } else {
-                        window.location.reload();
+                    // Check if any modal is currently visible
+                    let anyModalOpen = false;
+                    document.querySelectorAll('.fixed.inset-0.z-50').forEach(el => {
+                        if (window.getComputedStyle(el).display !== 'none') {
+                            anyModalOpen = true;
+                        }
+                    });
+
+                    if (!this.isPaused && !anyModalOpen) {
+                        if (this.countdown > 0) {
+                            this.countdown--;
+                        } else {
+                            window.location.reload();
+                        }
                     }
                 }, 1000);
             }
@@ -450,21 +464,22 @@
                     <a href="{{ route('ward.dashboard', request()->query()) }}"
                         onclick="window.location.reload(); return false;" title="Click to refresh"
                         class="inline-flex items-center group">
+                        <img src="{{ asset('phkl_new.png') }}" alt="PHKL Logo" class="h-10 w-auto mr-3 cursor-pointer hover:opacity-80 transition-opacity" onclick="event.preventDefault(); event.stopPropagation(); window.dispatchEvent(new CustomEvent('open-slideshow-modal'))" title="View Slideshow">
                         <h2
-                            class="font-bold text-xl text-gray-800 leading-tight group-hover:text-blue-600 transition-colors cursor-pointer">
+                            class="font-bold text-xl text-white leading-tight transition-colors cursor-pointer">
                             Ward Dashboard
                         </h2>
                         <span
-                            class="ml-3 px-2 py-0.5 text-xs font-semibold bg-gray-100 text-gray-700 rounded-full flex items-center border border-gray-300 shadow-sm"
+                            class="ml-3 px-2 py-0.5 text-xs font-semibold bg-white/20 text-white rounded-full flex items-center border border-white/30 shadow-sm"
                             title="Auto-refreshing in">
-                            <svg class="w-3.5 h-3.5 mr-1 text-gray-500" fill="none" stroke="currentColor"
+                            <svg class="w-3.5 h-3.5 mr-1 text-white/70" fill="none" stroke="currentColor"
                                 viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                             <span x-text="countdown"></span>s
                         </span>
-                        <svg class="w-4 h-4 ml-2 text-gray-400 group-hover:text-blue-500 transition-colors" fill="none"
+                        <svg class="w-4 h-4 ml-2 text-white/70 group-hover:text-white transition-colors" fill="none"
                             stroke="currentColor" viewBox="0 0 24 24" title="Refresh">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                 d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -562,7 +577,7 @@
 
             <!-- Right: Date/Time and Fullscreen Toggle -->
             <div class="flex items-center space-x-3">
-                <div class="text-sm text-gray-500">
+                <div class="text-sm text-white/90 font-medium">
                     {{ date('l, F j, Y \a\t g:i A') }}
                 </div>
                 <!-- Custom Fullscreen Toggle Button -->
@@ -572,14 +587,14 @@
                     window.dispatchEvent(new CustomEvent('toggle-custom-fullscreen', { 
                         detail: { enabled: customFullscreen } 
                     }));"
-                    class="p-2 bg-white hover:bg-gray-100 rounded-lg border border-gray-300 shadow-sm transition-colors"
+                    class="p-2 bg-white/20 hover:bg-white/30 text-white rounded-lg border border-white/30 shadow-sm transition-colors"
                     :title="customFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'">
-                    <svg x-show="!customFullscreen" class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor"
+                    <svg x-show="!customFullscreen" class="w-5 h-5 text-white" fill="none" stroke="currentColor"
                         viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
                     </svg>
-                    <svg x-show="customFullscreen" class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor"
+                    <svg x-show="customFullscreen" class="w-5 h-5 text-white" fill="none" stroke="currentColor"
                         viewBox="0 0 24 24" style="display: none;">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M6 18L18 6M6 6l12 12" />
@@ -2448,9 +2463,48 @@
         </div>
     </div>
 
+    <!-- Slideshow Modal -->
+    <div x-data="{ open: false }" 
+         x-init="$watch('open', value => window.dispatchEvent(new CustomEvent(value ? 'pause-timer' : 'resume-timer')))"
+         @open-slideshow-modal.window="open = true" x-show="open"
+         class="fixed inset-0 z-50 overflow-hidden" style="display: none;">
+        <div class="flex items-center justify-center min-h-screen p-0 text-center">
+            <div x-show="open" @click="open = false" x-transition:enter="ease-out duration-300"
+                x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100"
+                x-transition:leave-end="opacity-0" class="fixed inset-0 transition-opacity" aria-hidden="true">
+                <div class="absolute inset-0 bg-black opacity-100"></div>
+            </div>
+
+            <div x-show="open" x-transition:enter="ease-out duration-300"
+                x-transition:enter-start="opacity-0 scale-95"
+                x-transition:enter-end="opacity-100 scale-100"
+                x-transition:leave="ease-in duration-200"
+                x-transition:leave-start="opacity-100 scale-100"
+                x-transition:leave-end="opacity-0 scale-95"
+                class="inline-block align-middle bg-black text-left overflow-hidden transform transition-all w-screen h-screen max-w-none m-0 p-0">
+                
+                <button @click="open = false" class="absolute top-4 right-4 z-10 p-2 bg-white/20 hover:bg-white/40 rounded-full text-white transition-colors">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+
+                <div class="w-full h-full bg-black">
+                    <template x-if="open">
+                        <iframe src="{{ route('ward.slideshow-viewer', ['ward_id' => $selectedWard->id ?? '']) }}"
+                            class="w-full h-full border-0" allowfullscreen></iframe>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Settings Modal -->
-    <div x-data="{ open: false }" @open-settings-modal.window="open = true" x-show="open"
-        class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
+    <div x-data="{ open: false }" 
+         x-init="$watch('open', value => window.dispatchEvent(new CustomEvent(value ? 'pause-timer' : 'resume-timer')))"
+         @open-settings-modal.window="open = true" x-show="open"
+         class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
         <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
             <div x-show="open" @click="open = false" x-transition:enter="ease-out duration-300"
                 x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"

@@ -31,7 +31,7 @@
         <div class="flex-1 flex flex-col overflow-hidden min-h-0">
             <!-- Page Heading -->
             @isset($header)
-                <header class="bg-white/80 backdrop-blur-sm shadow-sm border-b border-blue-100">
+                <header class="{{ request()->routeIs('ward.dashboard') ? 'bg-gradient-to-br from-blue-600 to-cyan-500 shadow-sm border-b border-blue-400' : 'bg-white/80 backdrop-blur-sm shadow-sm border-b border-blue-100' }}">
                     <div class="w-full px-4 sm:px-6 lg:px-8 py-4">
                         {{ $header }}
                     </div>

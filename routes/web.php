@@ -48,6 +48,11 @@ Route::middleware('auth')->group(function () {
     Route::resource('hospitals', HospitalController::class)->except(['show']);
     Route::post('hospitals/{hospital}/deactivate', [HospitalController::class, 'deactivate'])->name('hospitals.deactivate');
 
+    // Slideshow Management Routes
+    Route::get('hospitals/{hospital}/slideshows', [\App\Http\Controllers\SlideshowController::class, 'index'])->name('hospitals.slideshows.index');
+    Route::post('hospitals/{hospital}/slideshows', [\App\Http\Controllers\SlideshowController::class, 'store'])->name('hospitals.slideshows.store');
+    Route::delete('hospitals/{hospital}/slideshows/{slideshow}', [\App\Http\Controllers\SlideshowController::class, 'destroy'])->name('hospitals.slideshows.destroy');
+
     Route::resource('specialties', SpecialtyController::class)->except(['show']);
     Route::post('specialties/{specialty}/deactivate', [SpecialtyController::class, 'deactivate'])->name('specialties.deactivate');
 
@@ -135,6 +140,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/ward-dashboard/update-patient-clinical', [WardDashboardController::class, 'updatePatientClinical'])->name('ward.update-patient-clinical');
     Route::post('/ward-dashboard/save-sugar-reading', [WardDashboardController::class, 'saveSugarReading'])->name('ward.save-sugar-reading');
     Route::post('/ward-dashboard/settings/clinical-options', [WardDashboardController::class, 'updateClinicalIndicatorOptions'])->name('ward.settings.clinical-options');
+    Route::get('/ward-dashboard/slideshow-viewer', [WardDashboardController::class, 'slideshowViewer'])->name('ward.slideshow-viewer');
 
     // Ward Notification Routes
     Route::get('/ward-dashboard/notifications', [WardDashboardController::class, 'getNotifications'])->name('ward.notifications');
@@ -277,5 +283,16 @@ Route::prefix('api/v1')->group(function () {
     // Monitor status log endpoint
     Route::post('/monitor/status', [VitalSignIntegrationController::class, 'apiReceiveMonitorStatus']);
 });
+
+// Route to serve static slideshow pictures from base_path('picture')
+Route::get('/picture-slides/{filename}', function ($filename) {
+    $path = base_path('picture/' . $filename);
+    if (!\Illuminate\Support\Facades\File::exists($path)) {
+        abort(404);
+    }
+    $file = \Illuminate\Support\Facades\File::get($path);
+    $type = \Illuminate\Support\Facades\File::mimeType($path);
+    return response($file, 200)->header("Content-Type", $type);
+})->name('picture.serve');
 
 require __DIR__ . '/auth.php';

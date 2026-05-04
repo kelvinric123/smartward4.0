@@ -23,4 +23,9 @@ class Hospital extends Model
     {
         return $this->hasMany(Ward::class);
     }
+
+    public function slideshows()
+    {
+        return $this->hasMany(Slideshow::class);
+    }
 }
