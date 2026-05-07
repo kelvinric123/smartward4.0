@@ -22,6 +22,7 @@ use App\Http\Controllers\ShiftSettingController;
 use App\Http\Controllers\DietTypeController;
 use App\Http\Controllers\IsolationTypeController;
 use App\Http\Controllers\UserActivityController;
+use App\Http\Controllers\PatientFlowCommandCentreController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -34,6 +35,13 @@ Route::post('/login/ldap', [LdapConfigurationController::class, 'ldapLogin'])->n
 
 // Public ECG PDF Route (for PDF viewer in iframes - authentication handled by signed URL or session)
 Route::get('/ecg/pdf/view', [EcgController::class, 'servePdf'])->name('ecg.pdf.public');
+
+// Public Command Centre Routes (session-based auth, no Laravel auth)
+Route::get('/command-centre/login', [PatientFlowCommandCentreController::class, 'showLogin'])->name('command-centre.login');
+Route::post('/command-centre/login', [PatientFlowCommandCentreController::class, 'login'])->name('command-centre.login.submit');
+Route::post('/command-centre/logout', [PatientFlowCommandCentreController::class, 'logout'])->name('command-centre.logout');
+Route::get('/command-centre/{id}/view', [PatientFlowCommandCentreController::class, 'publicDashboard'])->name('command-centre.view');
+Route::get('/command-centre/{id}/data', [PatientFlowCommandCentreController::class, 'publicDashboardData'])->name('command-centre.view.data');
 
 Route::get('/dashboard', function () {
     return view('dashboard');
@@ -81,6 +89,13 @@ Route::middleware('auth')->group(function () {
     Route::get('user-activities', [UserActivityController::class, 'index'])->name('user-activities.index');
     Route::get('user-activities/export', [UserActivityController::class, 'export'])->name('user-activities.export');
 
+    // Patient Flow Command Centre Routes
+    Route::resource('patient-flow-command-centres', PatientFlowCommandCentreController::class)->except(['show', 'destroy']);
+    Route::post('patient-flow-command-centres/{commandCentre}/toggle-active', [PatientFlowCommandCentreController::class, 'toggleActive'])->name('patient-flow-command-centres.toggle-active');
+    Route::get('patient-flow-command-centres/{commandCentre}/dashboard', [PatientFlowCommandCentreController::class, 'dashboard'])->name('patient-flow-command-centres.dashboard');
+    Route::get('patient-flow-command-centres/{commandCentre}/dashboard-data', [PatientFlowCommandCentreController::class, 'dashboardData'])->name('patient-flow-command-centres.dashboard-data');
+    Route::get('patient-flow-command-centres/{commandCentre}/settings', [PatientFlowCommandCentreController::class, 'settings'])->name('patient-flow-command-centres.settings');
+    Route::post('patient-flow-command-centres/{commandCentre}/settings', [PatientFlowCommandCentreController::class, 'updateSettings'])->name('patient-flow-command-centres.settings.update');
 
     // Patient Additional Field Routes (inside Admin Management)
     Route::resource('diet-types', DietTypeController::class)->except(['show']);
