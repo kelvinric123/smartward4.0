@@ -8,7 +8,9 @@ use App\Models\Ward;
 use App\Models\AdtMessageLog;
 use App\Models\AdtConfiguration;
 use App\Models\AdmissionLog;
+use App\Http\Controllers\AdtApiController;
 use Illuminate\Console\Command;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -18,15 +20,21 @@ class RestoreWardData extends Command
                             {--diagnose : Show orphaned patients and missing data (safe, no changes)}
                             {--fix : Actually perform the restoration (will modify data)}
                             {--fix-auto : Auto-detect wards from bed numbers and restore all orphaned patients}
-                            {--fix-from-adt : Replay ADT messages to restore admissions with full patient data}
+                            {--fix-from-adt : Scan ADT logs to find and fix patient/bed mismatches}
+                            {--replay-adt : Replay ALL ADT messages from the past N days through the pipeline}
+                            {--days=2 : Number of days to look back for --replay-adt (default: 2)}
                             {--ward-id= : Target ward ID to restore patients into}
-                            {--dry-run : Show what --fix would do without actually doing it}
+                            {--dry-run : Show what would happen without making changes}
                             {--create-beds-for-ward= : Create missing beds for a specific ward up to capacity}';
 
     protected $description = 'Diagnose and restore ward data after accidental ward deletion';
 
     public function handle()
     {
+        if ($this->option('replay-adt')) {
+            return $this->replayAdt();
+        }
+
         if ($this->option('fix-from-adt')) {
             return $this->fixFromAdt();
         }
@@ -47,7 +55,7 @@ class RestoreWardData extends Command
             return $this->fix();
         }
 
-        $this->error('Please specify --diagnose, --fix, --fix-auto, or --fix-from-adt');
+        $this->error('Please specify --diagnose, --fix, --fix-auto, --fix-from-adt, or --replay-adt');
         return 1;
     }
 
@@ -1017,5 +1025,200 @@ class RestoreWardData extends Command
         }
 
         return null;
+    }
+
+    /**
+     * Replay ALL ADT messages from the past N days through the ADT pipeline.
+     * 
+     * This re-feeds stored ADT messages through AdtApiController::receiveMessage()
+     * in chronological order. Each replay creates a NEW log entry (audit trail).
+     * The existing handlers are idempotent, so already-processed admissions
+     * will just update patient info without creating duplicates.
+     */
+    private function replayAdt()
+    {
+        $dryRun = $this->option('dry-run');
+        $days = (int) $this->option('days') ?: 2;
+
+        $this->info("=== REPLAY ADT MESSAGES (past {$days} days) ===");
+        if ($dryRun) {
+            $this->warn('🔍 DRY RUN MODE - No messages will be replayed');
+        }
+        $this->newLine();
+
+        // Fetch ALL ADT messages from the past N days, chronological order
+        $since = now()->subDays($days);
+        $adtMessages = AdtMessageLog::where('created_at', '>=', $since)
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        if ($adtMessages->isEmpty()) {
+            $this->warn("No ADT messages found in the past {$days} days.");
+            return 0;
+        }
+
+        $this->info("Found {$adtMessages->count()} ADT message(s) from {$since->format('Y-m-d H:i')} to now.");
+        $this->newLine();
+
+        // Summary by event type and status
+        $this->info('📊 Summary by Event Type:');
+        $byEvent = $adtMessages->groupBy('event_type');
+        $summaryHeaders = ['Event', 'Description', 'Total', 'Processed', 'Failed', 'Unmapped', 'Ignored'];
+        $summaryRows = [];
+        foreach ($byEvent as $event => $logs) {
+            $summaryRows[] = [
+                $event,
+                AdtMessageLog::EVENT_TYPES[$event] ?? 'Unknown',
+                $logs->count(),
+                $logs->where('status', 'processed')->count(),
+                $logs->where('status', 'failed')->count(),
+                $logs->where('status', 'unmapped')->count(),
+                $logs->where('status', 'ignored')->count(),
+            ];
+        }
+        $this->table($summaryHeaders, $summaryRows);
+
+        // Show failed/unmapped messages that will benefit most from replay
+        $failedOrUnmapped = $adtMessages->whereIn('status', ['failed', 'unmapped']);
+        $this->newLine();
+        $this->info("🔄 Messages that will benefit from replay: {$failedOrUnmapped->count()} (failed/unmapped)");
+        $this->info("   Already processed: {$adtMessages->where('status', 'processed')->count()} (will be re-checked, idempotent)");
+        $this->info("   Ignored: {$adtMessages->where('status', 'ignored')->count()} (will stay ignored if auto-admit still off)");
+        
+        // Show some sample failed messages
+        if ($failedOrUnmapped->count() > 0) {
+            $this->newLine();
+            $this->info('📋 Sample failed/unmapped messages (first 20):');
+            $sampleHeaders = ['ID', 'Event', 'MRN', 'Patient', 'Location', 'Status', 'Error', 'Time'];
+            $sampleRows = [];
+            foreach ($failedOrUnmapped->take(20) as $log) {
+                $sampleRows[] = [
+                    $log->id,
+                    $log->event_type,
+                    $log->patient_mrn,
+                    substr($log->patient_name ?? '', 0, 30),
+                    $log->assigned_location,
+                    $log->status,
+                    substr($log->error_message ?? '', 0, 30),
+                    $log->created_at->format('m-d H:i'),
+                ];
+            }
+            $this->table($sampleHeaders, $sampleRows);
+        }
+
+        $this->newLine();
+
+        if ($dryRun) {
+            $this->warn("🔍 DRY RUN: Would replay {$adtMessages->count()} messages chronologically.");
+            $this->info("   Run without --dry-run to actually replay.");
+            return 0;
+        }
+
+        if (!$this->confirm("Replay all {$adtMessages->count()} ADT messages? (chronological order)", true)) {
+            $this->info('Aborted.');
+            return 0;
+        }
+
+        $this->newLine();
+        $this->info('🔄 Replaying ADT messages...');
+        $this->newLine();
+
+        $controller = app(AdtApiController::class);
+        $processed = 0;
+        $failed = 0;
+        $skipped = 0;
+        $errors = [];
+
+        $bar = $this->output->createProgressBar($adtMessages->count());
+        $bar->start();
+
+        foreach ($adtMessages as $originalLog) {
+            $parsedData = $originalLog->parsed_data;
+
+            if (empty($parsedData)) {
+                $skipped++;
+                $bar->advance();
+                continue;
+            }
+
+            // Build a synthetic Request from the stored parsed_data
+            $requestData = [
+                'msh' => $parsedData['msh'] ?? [],
+                'evn' => $parsedData['evn'] ?? [],
+                'pid' => $parsedData['pid'] ?? [],
+                'pv1' => $parsedData['pv1'] ?? [],
+                'pv2' => $parsedData['pv2'] ?? [],
+                'allergies' => $parsedData['allergies'] ?? [],
+                'custom' => $parsedData['custom'] ?? [],
+                'raw_message' => $originalLog->raw_message ?? '',
+                'source_ip' => 'REPLAY-' . ($originalLog->source_ip ?? '127.0.0.1'),
+            ];
+
+            // Add replay marker to MSH so we can identify replayed messages
+            $requestData['msh']['message_control_id'] = 'REPLAY-' . ($originalLog->id ?? '') . '-' . ($requestData['msh']['message_control_id'] ?? '');
+
+            $request = new Request($requestData);
+
+            try {
+                $response = $controller->receiveMessage($request);
+                $responseData = $response->getData(true);
+
+                if ($responseData['success'] ?? false) {
+                    $processed++;
+                } else {
+                    $failed++;
+                    $errors[] = [
+                        'original_id' => $originalLog->id,
+                        'event' => $originalLog->event_type,
+                        'mrn' => $originalLog->patient_mrn,
+                        'error' => $responseData['message'] ?? 'Unknown error',
+                    ];
+                }
+            } catch (\Exception $e) {
+                $failed++;
+                $errors[] = [
+                    'original_id' => $originalLog->id,
+                    'event' => $originalLog->event_type,
+                    'mrn' => $originalLog->patient_mrn,
+                    'error' => $e->getMessage(),
+                ];
+            }
+
+            $bar->advance();
+        }
+
+        $bar->finish();
+        $this->newLine();
+        $this->newLine();
+
+        // Results
+        $this->info('=== REPLAY RESULTS ===');
+        $this->info("  ✅ Processed successfully: {$processed}");
+        $this->info("  ❌ Failed: {$failed}");
+        $this->info("  ⏭️  Skipped (no data): {$skipped}");
+        $this->info("  📊 Total: {$adtMessages->count()}");
+
+        if (!empty($errors)) {
+            $this->newLine();
+            $this->warn('❌ Failed messages:');
+            $errHeaders = ['Original Log ID', 'Event', 'MRN', 'Error'];
+            $errRows = array_map(fn($e) => [
+                $e['original_id'],
+                $e['event'],
+                $e['mrn'],
+                substr($e['error'], 0, 60),
+            ], array_slice($errors, 0, 20));
+            $this->table($errHeaders, $errRows);
+
+            if (count($errors) > 20) {
+                $this->warn('  ... and ' . (count($errors) - 20) . ' more errors');
+            }
+        }
+
+        $this->newLine();
+        $this->info('All replayed messages have been logged with "REPLAY-" prefix in message_control_id.');
+        $this->info('The ward dashboard should now reflect the correct patient assignments.');
+
+        return 0;
     }
 }
