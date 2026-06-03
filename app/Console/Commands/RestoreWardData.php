@@ -639,8 +639,15 @@ class RestoreWardData extends Command
 
     /**
      * Restore admissions using ADT message logs.
-     * For each orphaned patient, find the last successful ADT A01/A02/A08 message
-     * and replay the admission to properly restore ward/bed assignments.
+     * 
+     * Approach: Instead of looking at orphaned patients, we scan the ADT logs directly.
+     * We find ALL processed A01 (admit) and A02 (transfer) messages for our ward codes,
+     * get the latest one per MRN, and check if those patients are properly assigned.
+     * 
+     * This handles cases where:
+     * - Patients have ward_id set but beds are vacant
+     * - Patients were discharged/deactivated accidentally  
+     * - Bed records exist but have no patient_id assigned
      */
     private function fixFromAdt()
     {
@@ -652,87 +659,205 @@ class RestoreWardData extends Command
         }
         $this->newLine();
 
-        // Get orphaned patients (admitted/pending but no ward)
-        $orphanedPatients = Patient::whereNull('ward_id')
-            ->where('is_active', true)
-            ->whereIn('status', ['admitted', 'pending_discharge', 'prebook', 'prebook_pending'])
-            ->whereNotNull('bed_number')
+        // Get all current ward codes
+        $wards = Ward::where('is_active', true)->get();
+        $wardCodes = $wards->pluck('ward_code')->toArray();
+
+        $this->info("Current active wards: " . implode(', ', $wards->map(fn($w) => "{$w->ward_name} ({$w->ward_code}, ID:{$w->id})")->toArray()));
+        $this->newLine();
+
+        // Step 1: Find the last processed ADT admission/transfer for each unique MRN
+        // that was assigned to one of our wards
+        $this->info('📨 Scanning ADT logs for admitted patients...');
+
+        // Get all unique patient MRNs from processed ADT records where bed was assigned
+        $adtLogs = AdtMessageLog::where('status', 'processed')
+            ->whereIn('event_type', ['A01', 'A02', 'A08'])
+            ->whereNotNull('patient_id_ref')
+            ->orderBy('created_at', 'desc')
             ->get();
 
-        if ($orphanedPatients->isEmpty()) {
-            $this->info('✅ No orphaned patients with bed numbers found.');
-            return 0;
-        }
-
-        $this->info("Found {$orphanedPatients->count()} orphaned patient(s) with bed assignments.");
-        $this->newLine();
-
-        // Collect all orphaned MRNs
-        $orphanedMrns = $orphanedPatients->pluck('mrn')->filter()->unique()->values();
-
-        $this->info("Looking up ADT records for {$orphanedMrns->count()} unique MRN(s)...");
-        $this->newLine();
-
-        // For each orphaned patient MRN, find the LAST successfully processed ADT message
-        // Priority: A01 (admit) > A02 (transfer) > A08 (update) - most recent first
-        $adtRecords = [];
-        foreach ($orphanedMrns as $mrn) {
-            $adtLog = AdtMessageLog::where('patient_mrn', $mrn)
-                ->where('status', 'processed')
-                ->whereIn('event_type', ['A01', 'A02', 'A08'])
-                ->whereNotNull('assigned_location')
-                ->orderBy('created_at', 'desc')
-                ->first();
-
-            if ($adtLog) {
-                $adtRecords[$mrn] = $adtLog;
+        // Group by patient MRN, take latest record per MRN
+        $latestAdtPerMrn = [];
+        foreach ($adtLogs as $log) {
+            $mrn = $log->patient_mrn;
+            if (!$mrn) continue;
+            if (!isset($latestAdtPerMrn[$mrn])) {
+                $latestAdtPerMrn[$mrn] = $log;
             }
         }
 
-        $this->info("Found ADT records for " . count($adtRecords) . " / {$orphanedMrns->count()} MRN(s).");
+        $this->info("Found " . count($latestAdtPerMrn) . " unique patients with processed ADT records.");
         $this->newLine();
 
-        // Show the plan
-        $this->info('📋 Restoration Plan from ADT:');
-        $headers = ['Patient ID', 'Name', 'MRN', 'Bed', 'ADT Event', 'ADT Location', 'ADT Date', 'Source Ward'];
-        $planRows = [];
+        // Step 2: Check which of these patients are NOT properly in the system
+        $this->info('🔍 Checking current patient status vs ADT records...');
+        $this->newLine();
 
-        foreach ($orphanedPatients as $patient) {
-            $adtLog = $adtRecords[$patient->mrn] ?? null;
-            if ($adtLog) {
-                $parsedData = $adtLog->parsed_data ?? [];
-                $pv1 = $parsedData['pv1'] ?? [];
-                $wardCode = $pv1['ward'] ?? 'N/A';
-                
-                $planRows[] = [
-                    $patient->id,
-                    substr($patient->name, 0, 35),
-                    $patient->mrn,
-                    $patient->bed_number,
-                    $adtLog->event_type,
-                    $adtLog->assigned_location,
-                    $adtLog->created_at->format('Y-m-d H:i'),
-                    $wardCode,
+        $missingPatients = [];
+        $mismatchedBeds = [];
+        $inactivePatients = [];
+
+        foreach ($latestAdtPerMrn as $mrn => $adtLog) {
+            // Skip if the last ADT event was a discharge (A03)
+            $lastEvent = AdtMessageLog::where('patient_mrn', $mrn)
+                ->where('status', 'processed')
+                ->orderBy('created_at', 'desc')
+                ->first();
+            
+            if ($lastEvent && $lastEvent->event_type === 'A03') {
+                continue; // Patient was properly discharged
+            }
+
+            $parsedData = $adtLog->parsed_data ?? [];
+            $pv1 = $parsedData['pv1'] ?? [];
+            $actionTaken = $adtLog->action_taken ?? [];
+            
+            // Get the bed that was assigned in ADT
+            $adtBedNumber = $actionTaken['assigned_bed'] ?? $actionTaken['adt_bed_code'] ?? $pv1['bed'] ?? null;
+            $adtWardName = $actionTaken['assigned_ward'] ?? $actionTaken['adt_ward_code'] ?? $pv1['ward'] ?? null;
+            
+            if (!$adtBedNumber) continue;
+
+            // Find the patient in our system
+            $patient = Patient::where('mrn', $mrn)->first();
+            if (!$patient) continue;
+
+            // Check 1: Patient is not active or not admitted
+            if (!$patient->is_active || !in_array($patient->status, ['admitted', 'pending_discharge', 'prebook', 'prebook_pending'])) {
+                // Check if they were discharged AFTER the ADT admission
+                if ($patient->discharged_at && $patient->discharged_at > $adtLog->created_at) {
+                    continue; // Legitimate discharge after ADT
+                }
+                $inactivePatients[] = [
+                    'patient' => $patient,
+                    'adt_log' => $adtLog,
+                    'bed_number' => $adtBedNumber,
+                    'ward_name' => $adtWardName,
+                ];
+                continue;
+            }
+
+            // Check 2: Patient has no ward_id
+            if (!$patient->ward_id) {
+                $missingPatients[] = [
+                    'patient' => $patient,
+                    'adt_log' => $adtLog,
+                    'bed_number' => $adtBedNumber,
+                    'ward_name' => $adtWardName,
+                    'issue' => 'no_ward',
+                ];
+                continue;
+            }
+
+            // Check 3: Patient has ward_id but bed is not properly assigned
+            $bed = Bed::where('ward_id', $patient->ward_id)
+                ->where('bed_number', $patient->bed_number)
+                ->first();
+
+            if ($bed && $bed->patient_id != $patient->id) {
+                $mismatchedBeds[] = [
+                    'patient' => $patient,
+                    'adt_log' => $adtLog,
+                    'bed' => $bed,
+                    'bed_number' => $patient->bed_number,
+                    'issue' => 'bed_not_assigned',
+                ];
+            } elseif (!$bed && $patient->bed_number) {
+                $mismatchedBeds[] = [
+                    'patient' => $patient,
+                    'adt_log' => $adtLog,
+                    'bed' => null,
+                    'bed_number' => $patient->bed_number,
+                    'issue' => 'bed_not_found',
                 ];
             }
         }
 
-        if (!empty($planRows)) {
-            $this->table($headers, $planRows);
-        }
+        // Also check: beds that are "available" but have patients that think they're in that bed
+        $this->info('🛏️  Checking for vacant beds that should have patients...');
+        $vacantBeds = Bed::whereNull('patient_id')
+            ->where('status', 'available')
+            ->where('is_active', true)
+            ->get();
 
-        // Show patients without ADT records
-        $noAdtPatients = $orphanedPatients->filter(fn($p) => !isset($adtRecords[$p->mrn]));
-        if ($noAdtPatients->isNotEmpty()) {
-            $this->newLine();
-            $this->warn("⚠️  {$noAdtPatients->count()} patient(s) have NO matching ADT records:");
-            foreach ($noAdtPatients as $p) {
-                $this->warn("  - #{$p->id} {$p->name} (MRN: {$p->mrn}, Bed: {$p->bed_number})");
+        foreach ($vacantBeds as $bed) {
+            // Is there an active patient who thinks they're in this bed?
+            $patientInBed = Patient::where('ward_id', $bed->ward_id)
+                ->where('bed_number', $bed->bed_number)
+                ->where('is_active', true)
+                ->whereIn('status', ['admitted', 'pending_discharge'])
+                ->first();
+
+            if ($patientInBed && !collect($mismatchedBeds)->contains(fn($m) => $m['patient']->id === $patientInBed->id)) {
+                $mismatchedBeds[] = [
+                    'patient' => $patientInBed,
+                    'adt_log' => $latestAdtPerMrn[$patientInBed->mrn] ?? null,
+                    'bed' => $bed,
+                    'bed_number' => $bed->bed_number,
+                    'issue' => 'bed_vacant_but_patient_assigned',
+                ];
             }
-            $this->info("  These will be restored using bed-number-prefix auto-detection instead.");
         }
 
-        if (!$dryRun && !$this->confirm('Proceed with ADT-based restoration?', true)) {
+        // Report findings
+        $this->info('=== FINDINGS ===');
+        $this->newLine();
+
+        if (empty($missingPatients) && empty($mismatchedBeds) && empty($inactivePatients)) {
+            $this->info('✅ All ADT-admitted patients are properly assigned. No issues found.');
+            return 0;
+        }
+
+        if (!empty($missingPatients)) {
+            $this->warn("📋 Patients with NO ward assignment: " . count($missingPatients));
+            $headers = ['ID', 'Name', 'MRN', 'Status', 'ADT Bed', 'ADT Ward', 'ADT Date'];
+            $rows = array_map(fn($m) => [
+                $m['patient']->id,
+                substr($m['patient']->name, 0, 35),
+                $m['patient']->mrn,
+                $m['patient']->status,
+                $m['bed_number'],
+                $m['ward_name'],
+                $m['adt_log']->created_at->format('Y-m-d H:i'),
+            ], $missingPatients);
+            $this->table($headers, $rows);
+        }
+
+        if (!empty($mismatchedBeds)) {
+            $this->warn("📋 Bed assignment mismatches: " . count($mismatchedBeds));
+            $headers = ['Patient ID', 'Name', 'MRN', 'Bed', 'Issue', 'Current Bed Patient'];
+            $rows = array_map(fn($m) => [
+                $m['patient']->id,
+                substr($m['patient']->name, 0, 35),
+                $m['patient']->mrn,
+                $m['bed_number'],
+                $m['issue'],
+                $m['bed'] ? ($m['bed']->patient_id ?? 'null') : 'bed missing',
+            ], $mismatchedBeds);
+            $this->table($headers, $rows);
+        }
+
+        if (!empty($inactivePatients)) {
+            $this->warn("📋 Patients deactivated but ADT says admitted: " . count($inactivePatients));
+            $headers = ['ID', 'Name', 'MRN', 'Current Status', 'is_active', 'ADT Bed', 'ADT Date'];
+            $rows = array_map(fn($m) => [
+                $m['patient']->id,
+                substr($m['patient']->name, 0, 35),
+                $m['patient']->mrn,
+                $m['patient']->status,
+                $m['patient']->is_active ? 'Yes' : 'No',
+                $m['bed_number'],
+                $m['adt_log']->created_at->format('Y-m-d H:i'),
+            ], $inactivePatients);
+            $this->table($headers, $rows);
+        }
+
+        $totalIssues = count($missingPatients) + count($mismatchedBeds) + count($inactivePatients);
+        $this->newLine();
+        $this->info("Total issues to fix: {$totalIssues}");
+
+        if (!$dryRun && !$this->confirm('Proceed with fixing all issues?', true)) {
             $this->info('Aborted.');
             return 0;
         }
@@ -742,177 +867,84 @@ class RestoreWardData extends Command
         DB::beginTransaction();
 
         try {
-            $totalRestored = 0;
-            $totalBedsCreated = 0;
-            $totalBedsUpdated = 0;
-            $totalFallback = 0;
+            $fixed = 0;
 
-            // --- Phase 1: Restore using ADT records ---
-            $this->info('--- Phase 1: Restoring from ADT records ---');
-
-            foreach ($orphanedPatients as $patient) {
-                $adtLog = $adtRecords[$patient->mrn] ?? null;
-
-                if (!$adtLog) {
-                    continue; // Will handle in Phase 2
-                }
-
-                $parsedData = $adtLog->parsed_data ?? [];
-                $pv1 = $parsedData['pv1'] ?? [];
-                $wardCode = $pv1['ward'] ?? null;
-                $bedCode = $patient->bed_number; // Use current bed_number (it's still correct)
-
-                // Find the ward by code
-                $ward = null;
-                if ($wardCode) {
-                    // Try direct match
-                    $ward = Ward::where('ward_code', $wardCode)->where('is_active', true)->first();
-                    
-                    // Try ADT configuration mapping
-                    if (!$ward) {
-                        $config = AdtConfiguration::getActive();
-                        if ($config) {
-                            $ward = $config->findWardByAdtCode($wardCode);
-                        }
-                    }
-                }
-
-                // Fallback: detect ward from bed number prefix
-                if (!$ward && $bedCode) {
-                    $ward = $this->detectWardFromBedNumber($bedCode);
-                }
+            // Fix 1: Patients with no ward
+            foreach ($missingPatients as $item) {
+                $patient = $item['patient'];
+                $bedNumber = $item['bed_number'];
+                $ward = $this->detectWardFromBedNumber($bedNumber);
 
                 if (!$ward) {
-                    $this->warn("  ⚠️  Cannot find ward for patient #{$patient->id} ({$patient->name}) — Ward code: {$wardCode}, Bed: {$bedCode}");
+                    $this->warn("  ⚠️  Cannot detect ward for bed {$bedNumber}, skipping patient #{$patient->id}");
                     continue;
                 }
 
-                // Re-link patient to ward
-                $this->info("  🔗 Patient #{$patient->id} ({$patient->name}) → Ward {$ward->ward_name} [ADT {$adtLog->event_type} from {$adtLog->created_at->format('Y-m-d H:i')}]");
-
+                $this->info("  🔗 #{$patient->id} ({$patient->name}) → Ward {$ward->ward_name}, Bed {$bedNumber}");
                 if (!$dryRun) {
-                    $patient->update(['ward_id' => $ward->id]);
+                    $patient->update(['ward_id' => $ward->id, 'bed_number' => $bedNumber]);
                 }
-                $totalRestored++;
 
-                // Ensure bed exists and assign patient
-                $existingBed = Bed::where('ward_id', $ward->id)
-                    ->where('bed_number', $bedCode)
-                    ->first();
-
-                if (!$existingBed) {
-                    $bedIndex = intval(preg_replace('/[^0-9]/', '', substr($bedCode, 2)));
-                    $displayName = 'Bed ' . $bedIndex;
-
-                    $this->info("    🛏️  Creating bed: {$bedCode} ({$displayName})");
-
-                    if (!$dryRun) {
-                        $existingBed = Bed::create([
-                            'ward_id' => $ward->id,
-                            'bed_number' => $bedCode,
-                            'bed_id' => $bedCode,
-                            'bed_display_name' => $displayName,
-                            'status' => in_array($patient->status, ['prebook', 'prebook_pending']) ? 'reserved' : 'occupied',
-                            'patient_id' => $patient->id,
-                            'is_active' => true,
-                        ]);
-                    }
-                    $totalBedsCreated++;
-                } else {
-                    $bedStatus = in_array($patient->status, ['prebook', 'prebook_pending']) ? 'reserved' : 'occupied';
-
-                    if ($existingBed->patient_id != $patient->id) {
-                        $this->info("    ✅ Bed {$bedCode} exists → assigning patient [status: {$bedStatus}]");
-                        if (!$dryRun) {
-                            $existingBed->update([
-                                'status' => $bedStatus,
-                                'patient_id' => $patient->id,
-                            ]);
-                        }
-                        $totalBedsUpdated++;
-                    } else {
-                        $this->info("    ✅ Bed {$bedCode} already correctly assigned");
-                    }
-                }
+                $this->ensureBedAssignment($ward, $bedNumber, $patient, $dryRun);
+                $fixed++;
             }
 
-            // --- Phase 2: Fallback for patients without ADT records ---
-            if ($noAdtPatients->isNotEmpty()) {
-                $this->newLine();
-                $this->info('--- Phase 2: Fallback (auto-detect from bed number prefix) ---');
+            // Fix 2: Bed mismatches
+            foreach ($mismatchedBeds as $item) {
+                $patient = $item['patient'];
+                $bedNumber = $item['bed_number'];
+                $ward = Ward::find($patient->ward_id);
 
-                foreach ($noAdtPatients as $patient) {
-                    $bedCode = $patient->bed_number;
-                    if (!$bedCode) continue;
-
-                    $ward = $this->detectWardFromBedNumber($bedCode);
-
-                    if (!$ward) {
-                        $this->warn("  ⚠️  Skipping patient #{$patient->id} ({$patient->name}) — cannot detect ward from bed {$bedCode}");
-                        continue;
-                    }
-
-                    $this->info("  🔗 Patient #{$patient->id} ({$patient->name}) → Ward {$ward->ward_name} (auto-detected from {$bedCode})");
-
-                    if (!$dryRun) {
+                if (!$ward) {
+                    $ward = $this->detectWardFromBedNumber($bedNumber);
+                    if ($ward && !$dryRun) {
                         $patient->update(['ward_id' => $ward->id]);
                     }
-                    $totalFallback++;
-
-                    // Ensure bed
-                    $existingBed = Bed::where('ward_id', $ward->id)
-                        ->where('bed_number', $bedCode)
-                        ->first();
-
-                    if (!$existingBed) {
-                        $bedIndex = intval(preg_replace('/[^0-9]/', '', substr($bedCode, 2)));
-                        $displayName = 'Bed ' . $bedIndex;
-
-                        $this->info("    🛏️  Creating bed: {$bedCode} ({$displayName})");
-                        if (!$dryRun) {
-                            Bed::create([
-                                'ward_id' => $ward->id,
-                                'bed_number' => $bedCode,
-                                'bed_id' => $bedCode,
-                                'bed_display_name' => $displayName,
-                                'status' => in_array($patient->status, ['prebook', 'prebook_pending']) ? 'reserved' : 'occupied',
-                                'patient_id' => $patient->id,
-                                'is_active' => true,
-                            ]);
-                        }
-                        $totalBedsCreated++;
-                    } else {
-                        $bedStatus = in_array($patient->status, ['prebook', 'prebook_pending']) ? 'reserved' : 'occupied';
-                        if ($existingBed->patient_id != $patient->id) {
-                            $this->info("    ✅ Bed {$bedCode} exists → assigning patient");
-                            if (!$dryRun) {
-                                $existingBed->update([
-                                    'status' => $bedStatus,
-                                    'patient_id' => $patient->id,
-                                ]);
-                            }
-                            $totalBedsUpdated++;
-                        }
-                    }
                 }
+
+                if (!$ward) continue;
+
+                $this->info("  🛏️  Fixing bed {$bedNumber} for #{$patient->id} ({$patient->name}) [{$item['issue']}]");
+                $this->ensureBedAssignment($ward, $bedNumber, $patient, $dryRun);
+                $fixed++;
+            }
+
+            // Fix 3: Inactive patients that should be active
+            foreach ($inactivePatients as $item) {
+                $patient = $item['patient'];
+                $bedNumber = $item['bed_number'];
+                $ward = $this->detectWardFromBedNumber($bedNumber);
+
+                if (!$ward) {
+                    $this->warn("  ⚠️  Cannot detect ward for bed {$bedNumber}, skipping patient #{$patient->id}");
+                    continue;
+                }
+
+                $this->info("  🔄 Reactivating #{$patient->id} ({$patient->name}) → Ward {$ward->ward_name}, Bed {$bedNumber}");
+                if (!$dryRun) {
+                    $patient->update([
+                        'ward_id' => $ward->id,
+                        'bed_number' => $bedNumber,
+                        'status' => 'admitted',
+                        'is_active' => true,
+                        'discharged_at' => null,
+                        'pending_discharge_at' => null,
+                    ]);
+                }
+
+                $this->ensureBedAssignment($ward, $bedNumber, $patient, $dryRun);
+                $fixed++;
             }
 
             if ($dryRun) {
                 DB::rollBack();
                 $this->newLine();
-                $this->warn('🔍 DRY RUN COMPLETE - No changes were made.');
+                $this->warn("🔍 DRY RUN COMPLETE - No changes were made. Would fix {$fixed} issue(s).");
             } else {
                 DB::commit();
                 $this->newLine();
-                $this->info('✅ RESTORATION COMPLETE!');
+                $this->info("✅ RESTORATION COMPLETE! Fixed {$fixed} issue(s).");
             }
-
-            $this->info("  Patients restored from ADT: {$totalRestored}");
-            $this->info("  Patients restored by fallback: {$totalFallback}");
-            $this->info("  New beds created: {$totalBedsCreated}");
-            $this->info("  Existing beds updated: {$totalBedsUpdated}");
-            $this->newLine();
-            $this->info('The ward dashboard should now show the correct patient assignments.');
 
             return 0;
         } catch (\Exception $e) {
@@ -920,6 +952,46 @@ class RestoreWardData extends Command
             $this->error('❌ Restoration failed: ' . $e->getMessage());
             $this->error($e->getTraceAsString());
             return 1;
+        }
+    }
+
+    /**
+     * Ensure a bed exists and is properly assigned to a patient.
+     */
+    private function ensureBedAssignment(Ward $ward, string $bedNumber, Patient $patient, bool $dryRun): void
+    {
+        $bed = Bed::where('ward_id', $ward->id)
+            ->where('bed_number', $bedNumber)
+            ->first();
+
+        $bedStatus = in_array($patient->status, ['prebook', 'prebook_pending']) ? 'reserved' : 'occupied';
+
+        if (!$bed) {
+            $bedIndex = intval(preg_replace('/[^0-9]/', '', substr($bedNumber, 2)));
+            $displayName = 'Bed ' . $bedIndex;
+
+            $this->info("    🛏️  Creating bed: {$bedNumber} ({$displayName})");
+            if (!$dryRun) {
+                Bed::create([
+                    'ward_id' => $ward->id,
+                    'bed_number' => $bedNumber,
+                    'bed_id' => $bedNumber,
+                    'bed_display_name' => $displayName,
+                    'status' => $bedStatus,
+                    'patient_id' => $patient->id,
+                    'is_active' => true,
+                ]);
+            }
+        } elseif ($bed->patient_id != $patient->id || $bed->status !== $bedStatus) {
+            $this->info("    ✅ Updating bed {$bedNumber} → patient #{$patient->id} [status: {$bedStatus}]");
+            if (!$dryRun) {
+                $bed->update([
+                    'status' => $bedStatus,
+                    'patient_id' => $patient->id,
+                ]);
+            }
+        } else {
+            $this->info("    ✅ Bed {$bedNumber} already correct");
         }
     }
 
