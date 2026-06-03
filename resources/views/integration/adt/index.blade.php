@@ -8,6 +8,13 @@
                 <p class="text-sm text-gray-500 mt-1">Configure HL7 ADT message handling for patient Admit, Discharge, and Transfer</p>
             </div>
             <div class="flex space-x-2">
+                <button onclick="window.dispatchEvent(new CustomEvent('open-rerun-modal'))" 
+                        class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Rerun ADT
+                </button>
                 <button onclick="document.getElementById('adtInfoModal').classList.remove('hidden')" 
                         class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all">
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -118,7 +125,229 @@
         </div>
     </div>
 
-    <div class="py-8" x-data="adtManager()">
+    <div class="py-8" x-data="adtManager()" @open-rerun-modal.window="showRerunModal = true">
+        <!-- Rerun ADT Modal -->
+        <div x-show="showRerunModal" x-cloak class="fixed inset-0 z-50 overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+                <div class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" @click="showRerunModal = false; rerunUnlocked = false; rerunPassphrase = ''; rerunPassphraseError = ''"></div>
+
+                <div class="relative inline-block w-full max-w-2xl p-0 my-8 text-left align-middle transition-all transform bg-white shadow-2xl rounded-2xl border border-gray-200 overflow-hidden">
+                    <!-- Header -->
+                    <div class="px-6 py-4 bg-gradient-to-r from-amber-500 to-orange-600 flex items-center justify-between">
+                        <div class="flex items-center">
+                            <div class="p-2 bg-white/20 rounded-lg mr-3">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-white">Rerun ADT Messages</h3>
+                                <p class="text-xs text-amber-100">Replay stored ADT messages through the pipeline</p>
+                            </div>
+                        </div>
+                        <button @click="showRerunModal = false; rerunUnlocked = false; rerunPassphrase = ''; rerunPassphraseError = ''" class="text-white/80 hover:text-white transition-colors">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+
+                    <!-- Passphrase Gate -->
+                    <div x-show="!rerunUnlocked" class="p-8">
+                        <div class="text-center mb-6">
+                            <div class="mx-auto w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-4">
+                                <svg class="w-8 h-8 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                </svg>
+                            </div>
+                            <h4 class="text-lg font-bold text-gray-800">Authentication Required</h4>
+                            <p class="text-sm text-gray-500 mt-1">Enter the passphrase to access ADT replay</p>
+                        </div>
+                        <div class="max-w-sm mx-auto">
+                            <input type="password" x-model="rerunPassphrase" 
+                                   @keydown.enter="checkRerunPassphrase()"
+                                   placeholder="Enter passphrase..." 
+                                   class="w-full rounded-lg border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 text-center text-lg tracking-widest">
+                            <p x-show="rerunPassphraseError" x-text="rerunPassphraseError" class="text-red-500 text-sm text-center mt-2"></p>
+                            <button @click="checkRerunPassphrase()" 
+                                    class="mt-4 w-full px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-semibold rounded-lg shadow-md transition-all">
+                                Unlock
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Filter & Execute Panel (unlocked) -->
+                    <div x-show="rerunUnlocked" class="p-6">
+                        <!-- Filters -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1.5">Ward</label>
+                                <select x-model="rerunWardCode" @change="rerunPreview()" 
+                                        class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500">
+                                    <option value="all">All Wards</option>
+                                    @foreach($wards as $ward)
+                                        <option value="{{ $ward->ward_code }}">{{ $ward->ward_name }} ({{ $ward->ward_code }})</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1.5">Duration (Days)</label>
+                                <select x-model="rerunDays" @change="rerunPreview()" 
+                                        class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500">
+                                    <option value="1">Last 1 day</option>
+                                    <option value="2" selected>Last 2 days</option>
+                                    <option value="3">Last 3 days</option>
+                                    <option value="5">Last 5 days</option>
+                                    <option value="7">Last 7 days</option>
+                                    <option value="14">Last 14 days</option>
+                                    <option value="30">Last 30 days</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-gray-600 mb-1.5">Message Status</label>
+                                <select x-model="rerunStatus" @change="rerunPreview()" 
+                                        class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500">
+                                    <option value="all">All Status</option>
+                                    <option value="processed">Processed</option>
+                                    <option value="failed">Failed</option>
+                                    <option value="unmapped">Unmapped</option>
+                                    <option value="ignored">Ignored</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Preview Section -->
+                        <div class="bg-gray-50 rounded-xl border border-gray-200 p-4 mb-5">
+                            <div class="flex items-center justify-between mb-3">
+                                <h5 class="text-sm font-bold text-gray-700 flex items-center">
+                                    <svg class="w-4 h-4 mr-1.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                                    </svg>
+                                    Preview
+                                </h5>
+                                <button @click="rerunPreview()" class="text-xs text-amber-600 hover:text-amber-700 font-medium flex items-center">
+                                    <svg class="w-3.5 h-3.5 mr-1" :class="{ 'animate-spin': rerunLoadingPreview }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                    </svg>
+                                    Refresh
+                                </button>
+                            </div>
+
+                            <!-- Loading State -->
+                            <div x-show="rerunLoadingPreview" class="text-center py-4">
+                                <svg class="w-6 h-6 mx-auto animate-spin text-amber-500" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                </svg>
+                                <p class="text-xs text-gray-500 mt-2">Loading preview...</p>
+                            </div>
+
+                            <!-- Preview Data -->
+                            <div x-show="!rerunLoadingPreview && rerunPreviewData">
+                                <div class="flex items-center justify-between mb-3 px-1">
+                                    <span class="text-xs text-gray-500">Since: <span class="font-medium text-gray-700" x-text="rerunPreviewData?.since"></span></span>
+                                    <span class="text-sm font-bold" :class="rerunPreviewData?.total > 0 ? 'text-amber-600' : 'text-gray-400'" x-text="(rerunPreviewData?.total || 0) + ' message(s)'"></span>
+                                </div>
+                                <template x-if="rerunPreviewData?.by_event?.length > 0">
+                                    <div class="overflow-hidden rounded-lg border border-gray-200">
+                                        <table class="min-w-full divide-y divide-gray-200 text-xs">
+                                            <thead class="bg-gray-100">
+                                                <tr>
+                                                    <th class="px-3 py-2 text-left font-semibold text-gray-600">Event</th>
+                                                    <th class="px-3 py-2 text-center font-semibold text-gray-600">Total</th>
+                                                    <th class="px-3 py-2 text-center font-semibold text-green-600">Processed</th>
+                                                    <th class="px-3 py-2 text-center font-semibold text-red-600">Failed</th>
+                                                    <th class="px-3 py-2 text-center font-semibold text-yellow-600">Unmapped</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-gray-100 bg-white">
+                                                <template x-for="row in rerunPreviewData.by_event" :key="row.event">
+                                                    <tr>
+                                                        <td class="px-3 py-2 font-medium text-gray-800">
+                                                            <span x-text="row.event"></span>
+                                                            <span class="text-gray-400 ml-1" x-text="'- ' + row.description"></span>
+                                                        </td>
+                                                        <td class="px-3 py-2 text-center font-bold text-gray-700" x-text="row.total"></td>
+                                                        <td class="px-3 py-2 text-center text-green-600" x-text="row.processed"></td>
+                                                        <td class="px-3 py-2 text-center text-red-600" x-text="row.failed"></td>
+                                                        <td class="px-3 py-2 text-center text-yellow-600" x-text="row.unmapped"></td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </template>
+                                <div x-show="!rerunPreviewData?.by_event?.length" class="text-center py-3 text-gray-400 text-sm">
+                                    No messages found for the selected filters.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Results Section -->
+                        <div x-show="rerunResults" class="mb-5 rounded-xl border p-4" :class="rerunResults?.failed > 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'">
+                            <h5 class="text-sm font-bold mb-2" :class="rerunResults?.failed > 0 ? 'text-red-700' : 'text-green-700'">Replay Results</h5>
+                            <div class="grid grid-cols-4 gap-3 text-center text-xs">
+                                <div class="bg-white rounded-lg p-2 shadow-sm">
+                                    <p class="font-bold text-lg text-gray-800" x-text="rerunResults?.total || 0"></p>
+                                    <p class="text-gray-500">Total</p>
+                                </div>
+                                <div class="bg-white rounded-lg p-2 shadow-sm">
+                                    <p class="font-bold text-lg text-green-600" x-text="rerunResults?.processed || 0"></p>
+                                    <p class="text-gray-500">Processed</p>
+                                </div>
+                                <div class="bg-white rounded-lg p-2 shadow-sm">
+                                    <p class="font-bold text-lg text-red-600" x-text="rerunResults?.failed || 0"></p>
+                                    <p class="text-gray-500">Failed</p>
+                                </div>
+                                <div class="bg-white rounded-lg p-2 shadow-sm">
+                                    <p class="font-bold text-lg text-gray-500" x-text="rerunResults?.skipped || 0"></p>
+                                    <p class="text-gray-500">Skipped</p>
+                                </div>
+                            </div>
+                            <!-- Error details -->
+                            <template x-if="rerunResults?.errors?.length > 0">
+                                <div class="mt-3">
+                                    <p class="text-xs font-semibold text-red-600 mb-1">Errors:</p>
+                                    <div class="max-h-32 overflow-y-auto text-xs space-y-1">
+                                        <template x-for="err in rerunResults.errors" :key="err.id">
+                                            <div class="bg-white rounded px-2 py-1 border border-red-100 flex justify-between">
+                                                <span class="text-gray-700"><span class="font-medium" x-text="err.event"></span> MRN:<span x-text="err.mrn"></span></span>
+                                                <span class="text-red-500 truncate ml-2" x-text="err.error" style="max-width: 250px"></span>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="flex items-center justify-between">
+                            <p class="text-xs text-gray-400">Messages will be replayed in chronological order.</p>
+                            <div class="flex space-x-2">
+                                <button @click="showRerunModal = false; rerunUnlocked = false; rerunPassphrase = ''; rerunResults = null" 
+                                        class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors text-sm">
+                                    Close
+                                </button>
+                                <button @click="rerunExecute()" 
+                                        :disabled="rerunExecuting || !rerunPreviewData?.total"
+                                        class="inline-flex items-center px-5 py-2 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg shadow-md transition-all text-sm">
+                                    <svg x-show="!rerunExecuting" class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                    <svg x-show="rerunExecuting" class="w-4 h-4 mr-1.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                    </svg>
+                                    <span x-text="rerunExecuting ? 'Replaying...' : 'Execute Replay'"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
             
             @if (session('success'))
@@ -637,6 +866,19 @@
                     message: ''
                 },
 
+                // Rerun ADT state
+                showRerunModal: false,
+                rerunUnlocked: false,
+                rerunPassphrase: '',
+                rerunPassphraseError: '',
+                rerunWardCode: 'all',
+                rerunDays: '2',
+                rerunStatus: 'all',
+                rerunLoadingPreview: false,
+                rerunPreviewData: null,
+                rerunExecuting: false,
+                rerunResults: null,
+
                 init() {
                     this.testConnection();
                 },
@@ -670,8 +912,74 @@
 
                 async refreshLogs() {
                     this.loadingLogs = true;
-                    // Simply reload the page for now
                     window.location.reload();
+                },
+
+                // Rerun ADT methods
+                checkRerunPassphrase() {
+                    if (this.rerunPassphrase === 'askdrtai') {
+                        this.rerunUnlocked = true;
+                        this.rerunPassphraseError = '';
+                        this.rerunResults = null;
+                        this.rerunPreview();
+                    } else {
+                        this.rerunPassphraseError = 'Incorrect passphrase. Please try again.';
+                    }
+                },
+
+                async rerunPreview() {
+                    this.rerunLoadingPreview = true;
+                    this.rerunResults = null;
+                    try {
+                        const params = new URLSearchParams({
+                            ward_code: this.rerunWardCode,
+                            days: this.rerunDays,
+                            status: this.rerunStatus
+                        });
+                        const response = await fetch(`{{ route('adt.replay-preview') }}?${params}`);
+                        this.rerunPreviewData = await response.json();
+                    } catch (error) {
+                        this.showToast(false, 'Failed to load replay preview');
+                    } finally {
+                        this.rerunLoadingPreview = false;
+                    }
+                },
+
+                async rerunExecute() {
+                    if (!confirm(`Are you sure you want to replay ${this.rerunPreviewData?.total || 0} ADT message(s)? This will re-process them through the pipeline.`)) {
+                        return;
+                    }
+                    this.rerunExecuting = true;
+                    this.rerunResults = null;
+                    try {
+                        const response = await fetch('{{ route('adt.replay-execute') }}', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                            },
+                            body: JSON.stringify({
+                                passphrase: this.rerunPassphrase,
+                                ward_code: this.rerunWardCode,
+                                days: this.rerunDays,
+                                status: this.rerunStatus
+                            })
+                        });
+                        const data = await response.json();
+                        if (response.status === 403) {
+                            this.rerunUnlocked = false;
+                            this.rerunPassphraseError = data.message || 'Session expired. Please re-enter passphrase.';
+                            return;
+                        }
+                        this.rerunResults = data;
+                        this.showToast(data.success, data.message || 'Replay complete');
+                        // Refresh preview to show updated counts
+                        this.rerunPreview();
+                    } catch (error) {
+                        this.showToast(false, 'Replay request failed: ' + error.message);
+                    } finally {
+                        this.rerunExecuting = false;
+                    }
                 },
 
                 showToast(success, message) {

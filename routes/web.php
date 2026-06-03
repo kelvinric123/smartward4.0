@@ -258,6 +258,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/adt/isolation-mapping', [AdtConfigurationController::class, 'storeIsolationMapping'])->name('adt.isolation-mapping.store');
     Route::delete('/adt/isolation-mapping/{isolationMapping}', [AdtConfigurationController::class, 'destroyIsolationMapping'])->name('adt.isolation-mapping.destroy');
     Route::get('/adt/mappings-frame', [AdtConfigurationController::class, 'mappingsFrame'])->name('adt.mappings.frame');
+    Route::get('/adt/replay-preview', [AdtConfigurationController::class, 'replayAdtPreview'])->name('adt.replay-preview');
+    Route::post('/adt/replay-execute', [AdtConfigurationController::class, 'replayAdtExecute'])->name('adt.replay-execute');
     Route::get('/adt-test', [AdtConfigurationController::class, 'testPage'])->name('adt.test');
     Route::post('/adt-test/send', [AdtConfigurationController::class, 'sendTestMessage'])->name('adt.test.send');
 });

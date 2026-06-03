@@ -897,6 +897,165 @@ class AdtConfigurationController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Preview ADT messages that would be replayed, grouped by event type and status.
+     */
+    public function replayAdtPreview(Request $request)
+    {
+        $days = max(1, min(30, (int) ($request->days ?: 2)));
+        $wardCode = $request->ward_code;
+        $status = $request->status;
+
+        $since = now()->subDays($days);
+        $query = AdtMessageLog::where('created_at', '>=', $since);
+
+        if ($wardCode && $wardCode !== 'all') {
+            $query->where('assigned_location', 'like', "%{$wardCode}%");
+        }
+
+        if ($status && $status !== 'all') {
+            $query->where('status', $status);
+        }
+
+        $messages = $query->get();
+
+        // Group by event type
+        $byEvent = [];
+        foreach ($messages->groupBy('event_type') as $event => $logs) {
+            $byEvent[] = [
+                'event' => $event,
+                'description' => AdtMessageLog::EVENT_TYPES[$event] ?? 'Unknown',
+                'total' => $logs->count(),
+                'processed' => $logs->where('status', 'processed')->count(),
+                'failed' => $logs->where('status', 'failed')->count(),
+                'unmapped' => $logs->where('status', 'unmapped')->count(),
+                'ignored' => $logs->where('status', 'ignored')->count(),
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'total' => $messages->count(),
+            'days' => $days,
+            'ward_code' => $wardCode ?: 'all',
+            'status_filter' => $status ?: 'all',
+            'since' => $since->format('Y-m-d H:i'),
+            'by_event' => $byEvent,
+        ]);
+    }
+
+    /**
+     * Execute ADT message replay after passphrase verification.
+     */
+    public function replayAdtExecute(Request $request)
+    {
+        // Validate passphrase
+        $passphrase = $request->input('passphrase');
+        if ($passphrase !== 'askdrtai') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid passphrase.',
+            ], 403);
+        }
+
+        $days = max(1, min(30, (int) ($request->days ?: 2)));
+        $wardCode = $request->ward_code;
+        $status = $request->status;
+
+        $since = now()->subDays($days);
+        $query = AdtMessageLog::where('created_at', '>=', $since);
+
+        if ($wardCode && $wardCode !== 'all') {
+            $query->where('assigned_location', 'like', "%{$wardCode}%");
+        }
+
+        if ($status && $status !== 'all') {
+            $query->where('status', $status);
+        }
+
+        $adtMessages = $query->orderBy('created_at', 'asc')->get();
+
+        if ($adtMessages->isEmpty()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'No ADT messages found matching the filters.',
+                'processed' => 0,
+                'failed' => 0,
+                'skipped' => 0,
+                'total' => 0,
+                'errors' => [],
+            ]);
+        }
+
+        $controller = app(\App\Http\Controllers\AdtApiController::class);
+        $processed = 0;
+        $failed = 0;
+        $skipped = 0;
+        $errors = [];
+
+        foreach ($adtMessages as $originalLog) {
+            $parsedData = $originalLog->parsed_data;
+
+            if (empty($parsedData)) {
+                $skipped++;
+                continue;
+            }
+
+            // Build a synthetic Request from the stored parsed_data
+            $requestData = [
+                'msh' => $parsedData['msh'] ?? [],
+                'evn' => $parsedData['evn'] ?? [],
+                'pid' => $parsedData['pid'] ?? [],
+                'pv1' => $parsedData['pv1'] ?? [],
+                'pv2' => $parsedData['pv2'] ?? [],
+                'allergies' => $parsedData['allergies'] ?? [],
+                'custom' => $parsedData['custom'] ?? [],
+                'raw_message' => $originalLog->raw_message ?? '',
+                'source_ip' => 'REPLAY-UI-' . ($originalLog->source_ip ?? '127.0.0.1'),
+            ];
+
+            // Add replay marker to MSH
+            $requestData['msh']['message_control_id'] = 'REPLAY-UI-' . ($originalLog->id ?? '') . '-' . ($requestData['msh']['message_control_id'] ?? '');
+
+            $syntheticRequest = new Request($requestData);
+
+            try {
+                $response = $controller->receiveMessage($syntheticRequest);
+                $responseData = $response->getData(true);
+
+                if ($responseData['success'] ?? false) {
+                    $processed++;
+                } else {
+                    $failed++;
+                    $errors[] = [
+                        'id' => $originalLog->id,
+                        'event' => $originalLog->event_type,
+                        'mrn' => $originalLog->patient_mrn,
+                        'error' => $responseData['message'] ?? 'Unknown error',
+                    ];
+                }
+            } catch (\Exception $e) {
+                $failed++;
+                $errors[] = [
+                    'id' => $originalLog->id,
+                    'event' => $originalLog->event_type,
+                    'mrn' => $originalLog->patient_mrn,
+                    'error' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Replay complete. Processed: {$processed}, Failed: {$failed}, Skipped: {$skipped}",
+            'processed' => $processed,
+            'failed' => $failed,
+            'skipped' => $skipped,
+            'total' => $adtMessages->count(),
+            'errors' => array_slice($errors, 0, 20),
+        ]);
+    }
 }
 
 

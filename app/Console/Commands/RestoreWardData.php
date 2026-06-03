@@ -25,7 +25,8 @@ class RestoreWardData extends Command
                             {--days=2 : Number of days to look back for --replay-adt (default: 2)}
                             {--ward-id= : Target ward ID to restore patients into}
                             {--dry-run : Show what would happen without making changes}
-                            {--create-beds-for-ward= : Create missing beds for a specific ward up to capacity}';
+                            {--create-beds-for-ward= : Create missing beds for a specific ward up to capacity}
+                            {--ward-code= : Filter ADT messages to replay for a specific ward code (e.g. WWD3)}';
 
     protected $description = 'Diagnose and restore ward data after accidental ward deletion';
 
@@ -1048,9 +1049,16 @@ class RestoreWardData extends Command
 
         // Fetch ALL ADT messages from the past N days, chronological order
         $since = now()->subDays($days);
-        $adtMessages = AdtMessageLog::where('created_at', '>=', $since)
-            ->orderBy('created_at', 'asc')
-            ->get();
+        $query = AdtMessageLog::where('created_at', '>=', $since);
+        
+        $wardCode = $this->option('ward-code');
+        if ($wardCode) {
+            $this->info("Filtering by ward code: {$wardCode}");
+            // Use LIKE %wardCode% in case the assigned_location is stored with additional data
+            $query->where('assigned_location', 'like', "%{$wardCode}%");
+        }
+
+        $adtMessages = $query->orderBy('created_at', 'asc')->get();
 
         if ($adtMessages->isEmpty()) {
             $this->warn("No ADT messages found in the past {$days} days.");
