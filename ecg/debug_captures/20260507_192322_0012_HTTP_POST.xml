@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<Dashboard>
+	<TaskRequest>
+		<Function>ModalityIdentification</Function>
+		<Modality_Type>TC20</Modality_Type>
+		<Modality_Name>PageWriterTC</Modality_Name>
+		<Serial_Number>CN92223980</Serial_Number>
+		<Software_Version>A.07.07.07</Software_Version>
+		<ConfigFile_Version>06.04</ConfigFile_Version>
+		<Hardware_Version>CFWifiBoard</Hardware_Version>
+		<Software_Option>D03,D06,D12,D20</Software_Option>
+		<LAN_IP_Address>192.168.1.100</LAN_IP_Address>
+		<LAN_MAC>00-09-5C-20-64-29</LAN_MAC>
+		<WLAN_IP_Address></WLAN_IP_Address>
+		<WLAN_MAC></WLAN_MAC>
+		<WLAN_AP />
+		<WIFI_Driver_Version>v00.00.00</WIFI_Driver_Version>
+		<OS_Version>NonD50</OS_Version>
+		<Battery_Name>T508</Battery_Name>
+		<Battery_Serial_Number>0601</Battery_Serial_Number>
+		<Battery_Manufacturer>TOTEX</Battery_Manufacturer>
+		<Battery_SOH>91% (Full Capacity/Design Capacity)</Battery_SOH>
+		<Battery_Manufact_Date>20220307</Battery_Manufact_Date>
+		<Battery_Max_Error>1%</Battery_Max_Error>
+		<Battery_Charge>26%</Battery_Charge>
+		<Battery_Remain_Capacity>1928(mAh)</Battery_Remain_Capacity>
+		<Battery_Charging_Voltage>12600(mV)</Battery_Charging_Voltage>
+		<Battery_Charging_Current>4000(mA)</Battery_Charging_Current>
+		<Battery_Voltage>11002(mV)</Battery_Voltage>
+		<Battery_Current>-533(mA)</Battery_Current>
+		<Battery_Average_Current>-534(mA)</Battery_Average_Current>
+		<Battery_Temperature>82 (F) 28 (C)</Battery_Temperature>
+		<Battery_Full_Capacity>7141(mAh)</Battery_Full_Capacity>
+		<Battery_Design_Capacity>7800(mAh)</Battery_Design_Capacity>
+		<Battery_Cycle_Count>83</Battery_Cycle_Count>
+		<Battery_Mode_Register>0x4201</Battery_Mode_Register>
+		<Battery_Flag>0x1</Battery_Flag>
+		<Battery_State_Register>0x0</Battery_State_Register>
+		<Battery_Calibration_Required>No</Battery_Calibration_Required>
+		<Battery_Charger_Status>Enabled</Battery_Charger_Status>
+		<Modality_Status>Active</Modality_Status>
+		<LCD_Usage_Hours>N/A</LCD_Usage_Hours>
+		<Institution></Institution>
+		<Facility></Facility>
+		<Department></Department>
+		<Update_Interval>180</Update_Interval>
+		<Error_Count>0</Error_Count>
+		<Time>2026-05-07 19:11:55</Time>
+		<Import_Settings />
+		<Upgrade_Software />
+		<Import_NetworkSettings />
+		<Comments />
+	</TaskRequest>
+</Dashboard>

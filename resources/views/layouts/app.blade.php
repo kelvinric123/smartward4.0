@@ -63,6 +63,7 @@
             </footer>
         </div>
     </div>
+    @include('components.delete-passphrase-modal')
 </body>
 
 </html>

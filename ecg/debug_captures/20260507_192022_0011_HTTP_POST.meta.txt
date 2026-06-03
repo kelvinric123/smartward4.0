@@ -1,0 +1,15 @@
+Request #11
+Time: 2026-05-07T19:20:22.712353
+Source: 192.168.1.100:1050
+Method: POST
+Path: /api/dashboard
+Body Size: 2267 bytes
+Detected Type: XML
+
+--- Headers ---
+Content-Type: application/x-www-form-urlencoded;
+Host: 192.168.1.50
+Content-Length: 2267
+Connection: Keep-Alive
+Cache-Control: no-cache
+Cookie: CRC=4E974F10
