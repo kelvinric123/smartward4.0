@@ -360,7 +360,7 @@
                                 </svg>
                                 Refresh
                             </button>
-                            <form action="{{ route('adt.logs.clear') }}" method="POST" class="inline" onsubmit="return confirm('Clear all logs?')">
+                            <form action="{{ route('adt.logs.clear') }}" method="POST" class="inline" onsubmit="return confirm('Are you sure you want to clear all logs?')">
                                 @csrf
                                 <button type="submit" class="inline-flex items-center px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-medium rounded-lg transition-colors">
                                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">

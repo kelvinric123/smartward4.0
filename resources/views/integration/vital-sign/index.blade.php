@@ -784,10 +784,10 @@ Content-Type: application/json</pre>
                                             </button>
                                             <form action="{{ route('vital-sign-integration.api-user.destroy', $user) }}"
                                                 method="POST" class="inline"
-                                                onsubmit="return confirm('Are you sure you want to delete this API user?');">
+                                                >
                                                 @csrf
                                                 @method('DELETE')
-                                                <button type="submit"
+                                                <button type="button" onclick="confirmDelete(event, 'Are you sure you want to delete this item?')"
                                                     class="inline-flex items-center px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors text-sm font-medium">
                                                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor"
                                                         viewBox="0 0 24 24">
@@ -939,10 +939,10 @@ Content-Type: application/json</pre>
                                             </button>
                                             <form action="{{ route('vital-sign-integration.gateway.destroy', $gateway) }}"
                                                 method="POST" class="inline"
-                                                onsubmit="return confirm('Are you sure you want to delete this gateway?');">
+                                                >
                                                 @csrf
                                                 @method('DELETE')
-                                                <button type="submit"
+                                                <button type="button" onclick="confirmDelete(event, 'Are you sure you want to delete this item?')"
                                                     class="inline-flex items-center px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors text-sm font-medium">
                                                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor"
                                                         viewBox="0 0 24 24">
@@ -1213,7 +1213,7 @@ Content-Type: application/json</pre>
                                 </select>
                             @endif
                             <form action="{{ route('vital-sign-integration.logs.clear') }}" method="POST"
-                                onsubmit="return confirm('Are you sure you want to clear all API logs?');">
+                                onsubmit="return confirm('Are you sure you want to clear all API logs?')">
                                 @csrf
                                 <input type="hidden" name="api_user_id" value="{{ request('api_user_id') }}">
                                 <button type="submit"

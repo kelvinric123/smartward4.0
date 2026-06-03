@@ -163,10 +163,10 @@
                                             </form>
                                             <form action="{{ route('nurses.destroy', $nurse) }}" method="POST"
                                                 class="inline"
-                                                onsubmit="return confirm('Are you sure you want to delete this nurse?');">
+                                                >
                                                 @csrf
                                                 @method('DELETE')
-                                                <button type="submit"
+                                                <button type="button" onclick="confirmDelete(event, 'Are you sure you want to delete this item?')"
                                                     class="inline-flex items-center px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors">
                                                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor"
                                                         viewBox="0 0 24 24">

@@ -179,10 +179,10 @@
                                                                         </form>
 
                                                                         <form action="{{ route('users.destroy', $user) }}" method="POST"
-                                                                            class="inline-block" onsubmit="return confirm('Are you sure?')">
+                                                                            class="inline-block" >
                                                                             @csrf
                                                                             @method('DELETE')
-                                                                            <button type="submit"
+                                                                            <button type="button" onclick="confirmDelete(event, 'Are you sure you want to delete this item?')"
                                                                                 class="text-red-600 hover:text-red-900">Delete</button>
                                                                         </form>
                                                                     @endif

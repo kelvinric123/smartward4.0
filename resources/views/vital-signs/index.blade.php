@@ -74,10 +74,10 @@
                                                 </div>
                                                 <form action="{{ route('vital-sign-integration.unbind', $binding) }}"
                                                     method="POST" class="inline"
-                                                    onsubmit="return confirm('Unbind this gateway?');">
+                                                    >
                                                     @csrf
                                                     @method('DELETE')
-                                                    <button type="submit" class="ml-2 p-1 hover:bg-white/20 rounded transition"
+                                                    <button type="button" onclick="confirmDelete(event, 'Are you sure you want to delete this item?')" class="ml-2 p-1 hover:bg-white/20 rounded transition"
                                                         title="Unbind">
                                                         <svg class="w-4 h-4 text-white/80 hover:text-white" fill="none"
                                                             stroke="currentColor" viewBox="0 0 24 24">
@@ -605,10 +605,10 @@
                                             </td>
                                             <td class="px-4 py-3 text-center">
                                                 <form action="{{ route('vital-signs.destroy', $vital) }}" method="POST"
-                                                    onsubmit="return confirm('Are you sure you want to delete this vital sign record? This action is NON-REVERSIBLE.');">
+                                                    >
                                                     @csrf
                                                     @method('DELETE')
-                                                    <button type="submit" class="text-red-500 hover:text-red-700 transition"
+                                                    <button type="button" onclick="confirmDelete(event, 'Are you sure you want to delete this item?')" class="text-red-500 hover:text-red-700 transition"
                                                         title="Delete Vital Sign">
                                                         <svg class="w-5 h-5 mx-auto" fill="none" stroke="currentColor"
                                                             viewBox="0 0 24 24">

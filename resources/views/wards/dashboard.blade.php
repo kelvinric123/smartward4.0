@@ -1476,7 +1476,7 @@
                                             Edit
                                         </button>
                                         <form method="POST" action="{{ route('ward.cancel-prebook', $bed['patient_id']) }}"
-                                            onsubmit="return confirm('Are you sure you want to cancel this prebook?')">
+                                            >
                                             @csrf
                                             <button type="submit"
                                                 class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-bold transition-all shadow-md hover:shadow-lg flex items-center justify-center"
