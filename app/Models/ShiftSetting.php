@@ -65,8 +65,12 @@ class ShiftSetting extends Model
     /**
      * Determine the current shift based on time.
      */
-    public static function getCurrentShift(int $wardId, ?\Carbon\Carbon $time = null): ?self
+    public static function getCurrentShift(?int $wardId, ?\Carbon\Carbon $time = null): ?self
     {
+        if (!$wardId) {
+            return null;
+        }
+
         $time = $time ?? now();
         $currentTime = $time->format('H:i:s');
 
