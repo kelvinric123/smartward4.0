@@ -589,15 +589,12 @@
                                 </svg>
                                 Refresh
                             </button>
-                            <form action="{{ route('adt.logs.clear') }}" method="POST" class="inline" onsubmit="return confirm('Are you sure you want to clear all logs?')">
-                                @csrf
-                                <button type="submit" class="inline-flex items-center px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-medium rounded-lg transition-colors">
-                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                    </svg>
-                                    Clear Logs
-                                </button>
-                            </form>
+                            <button type="button" @click="showClearLogsModal = true" class="inline-flex items-center px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 font-medium rounded-lg transition-colors">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                                Clear Logs
+                            </button>
                         </div>
                     </div>
                     
@@ -626,7 +623,7 @@
                         </div>
                         <div class="flex-1 min-w-[180px]">
                             <label class="block text-xs font-medium text-gray-500 mb-1">Search (MRN/Name)</label>
-                            <input type="text" name="search" value="{{ request('search') }}" placeholder="Search patient..." 
+                            <input type="text" name="search" value="{{ request('search') }}" placeholder="Search patient..." autocomplete="off"
                                    class="w-full text-sm rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500">
                         </div>
                         <div class="flex-1 min-w-[140px]">
@@ -829,6 +826,65 @@
             </div>
         </div>
 
+        <!-- Clear Logs Modal -->
+        <div x-show="showClearLogsModal" x-cloak class="fixed inset-0 z-[9998] overflow-y-auto">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+                <div class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" @click="showClearLogsModal = false; clearLogsPassphrase = ''"></div>
+
+                <div class="relative inline-block w-full max-w-md p-0 my-8 text-left align-middle transition-all transform bg-white shadow-2xl rounded-2xl border border-gray-200 overflow-hidden">
+                    <div class="bg-gradient-to-r from-red-500 to-pink-500 px-6 py-4">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center mr-3">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-white">Clear Logs</h3>
+                                <p class="text-red-100 text-sm">Select date range and enter passphrase</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <form action="{{ route('adt.logs.clear') }}" method="POST" class="p-6 space-y-4">
+                        @csrf
+                        @method('DELETE')
+                        
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Date From</label>
+                                <input type="date" name="clear_date_from" required class="w-full rounded-lg border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 text-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Date To</label>
+                                <input type="date" name="clear_date_to" required class="w-full rounded-lg border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 text-sm">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Passphrase <span class="text-red-500">*</span>
+                            </label>
+                            <input type="password" name="delete_passphrase" required x-model="clearLogsPassphrase" placeholder="Enter passphrase to delete" autocomplete="off" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 text-sm">
+                            <p class="mt-1.5 text-xs text-gray-400">Contact your administrator if you don't know the passphrase.</p>
+                        </div>
+
+                        <div class="mt-6 flex justify-end space-x-3">
+                            <button type="button" @click="showClearLogsModal = false; clearLogsPassphrase = ''" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                                Cancel
+                            </button>
+                            <button type="submit" class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-red-600 to-pink-600 rounded-lg hover:from-red-700 hover:to-pink-700 transition-all shadow-md hover:shadow-lg">
+                                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                                Confirm Clear
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
         <!-- Toast Notification -->
         <div x-show="toast.show" x-cloak
              x-transition:enter="transition ease-out duration-300"
@@ -860,6 +916,8 @@
                 testing: false,
                 connectionStatus: null,
                 loadingLogs: false,
+                showClearLogsModal: false,
+                clearLogsPassphrase: '',
                 toast: {
                     show: false,
                     success: true,

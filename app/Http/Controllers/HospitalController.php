@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Hospital;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class HospitalController extends Controller
 {
@@ -26,7 +27,12 @@ class HospitalController extends Controller
             'phone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
             'description' => 'nullable|string',
+            'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
         ]);
+
+        if ($request->hasFile('logo')) {
+            $validated['logo_path'] = $request->file('logo')->store('hospitals', 'public');
+        }
 
         $validated['is_active'] = true;
         Hospital::create($validated);
@@ -47,7 +53,15 @@ class HospitalController extends Controller
             'phone' => 'nullable|string|max:20',
             'email' => 'nullable|email|max:255',
             'description' => 'nullable|string',
+            'logo' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
         ]);
+
+        if ($request->hasFile('logo')) {
+            if ($hospital->logo_path) {
+                Storage::disk('public')->delete($hospital->logo_path);
+            }
+            $validated['logo_path'] = $request->file('logo')->store('hospitals', 'public');
+        }
 
         $hospital->update($validated);
 

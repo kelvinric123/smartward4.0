@@ -388,7 +388,7 @@
                             <div class="flex-1 min-w-[200px]">
                                 <input type="text" name="search" value="{{ $search }}"
                                     class="w-full rounded-lg border-gray-300 shadow-sm focus:border-rose-500 focus:ring-rose-500 text-sm"
-                                    placeholder="Search by patient name or MRN...">
+                                    placeholder="Search by patient name or MRN..." autocomplete="off">
                             </div>
                             <div class="w-48">
                                 <select name="patient_id"

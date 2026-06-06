@@ -125,10 +125,10 @@
                 @endforeach
             </select>
 
-            <input type="text" name="bed_number" value="{{ request('bed_number') }}" placeholder="Bed #"
+            <input type="text" name="bed_number" value="{{ request('bed_number') }}" placeholder="Bed #" autocomplete="off"
                 class="px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm w-28">
 
-            <input type="text" name="search" value="{{ request('search') }}" placeholder="MRN / Patient"
+            <input type="text" name="search" value="{{ request('search') }}" placeholder="MRN / Patient" autocomplete="off"
                 class="px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm w-40">
 
             <input type="date" name="from_date" value="{{ request('from_date') }}"

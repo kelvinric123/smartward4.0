@@ -514,6 +514,15 @@ class AdtConfigurationController extends Controller
     {
         $query = AdtMessageLog::query();
 
+        if ($request->filled('clear_date_from')) {
+            $query->whereDate('created_at', '>=', $request->clear_date_from);
+        }
+
+        if ($request->filled('clear_date_to')) {
+            $query->whereDate('created_at', '<=', $request->clear_date_to);
+        }
+
+        // Support for old parameter if still used anywhere else
         if ($request->older_than_days) {
             $query->where('created_at', '<', now()->subDays($request->older_than_days));
         }

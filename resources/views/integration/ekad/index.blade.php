@@ -349,7 +349,7 @@
                                                 x-text="mapping.is_active ? 'Active' : 'Inactive'"></span>
                                         </td>
                                         <td class="px-4 py-3 text-right">
-                                            <button @click="deleteBedMapping(mapping.id)"
+                                            <button @click="confirmDeleteMapping(mapping.id)"
                                                 class="text-red-600 hover:text-red-800 text-sm font-medium">Delete</button>
                                         </td>
                                     </tr>
@@ -980,6 +980,52 @@
                 </div>
             </div>
         </div>
+
+        <!-- Delete Mapping Modal -->
+        <div x-show="showDeleteMappingModal" x-cloak class="fixed inset-0 z-[9998] overflow-y-auto" style="display: none;">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+                <div class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" @click="showDeleteMappingModal = false; deleteMappingPassphrase = ''"></div>
+
+                <div class="relative inline-block w-full max-w-md p-0 my-8 text-left align-middle transition-all transform bg-white shadow-2xl rounded-2xl border border-gray-200 overflow-hidden">
+                    <div class="bg-gradient-to-r from-red-500 to-pink-500 px-6 py-4">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center mr-3">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-white">Delete Mapping</h3>
+                                <p class="text-red-100 text-sm">Enter passphrase to confirm deletion</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-6 space-y-4">
+                        <p class="text-sm text-gray-700">Are you sure you want to delete this bed mapping? This action cannot be undone.</p>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">
+                                Passphrase <span class="text-red-500">*</span>
+                            </label>
+                            <input type="password" required x-model="deleteMappingPassphrase" placeholder="Enter passphrase to delete" autocomplete="off" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 text-sm">
+                            <p class="mt-1.5 text-xs text-gray-400">Contact your administrator if you don't know the passphrase.</p>
+                        </div>
+
+                        <div class="mt-6 flex justify-end space-x-3">
+                            <button type="button" @click="showDeleteMappingModal = false; deleteMappingPassphrase = ''" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                                Cancel
+                            </button>
+                            <button type="button" @click="executeDeleteMapping" class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-red-600 to-pink-600 rounded-lg hover:from-red-700 hover:to-pink-700 transition-all shadow-md hover:shadow-lg">
+                                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -1005,6 +1051,9 @@
                 newMacAddress: '',
                 addingMapping: false,
                 syncingAll: false,
+                showDeleteMappingModal: false,
+                deleteMappingPassphrase: '',
+                mappingToDelete: null,
 
                 // Push Patient Info
                 macList: [],
@@ -1183,24 +1232,41 @@
                     this.addingMapping = false;
                 },
 
-                async deleteBedMapping(id) {
-                    if (!confirm('Are you sure you want to delete this mapping?')) return;
+                confirmDeleteMapping(id) {
+                    this.mappingToDelete = id;
+                    this.deleteMappingPassphrase = '';
+                    this.showDeleteMappingModal = true;
+                },
+
+                async executeDeleteMapping() {
+                    if (!this.deleteMappingPassphrase) {
+                        alert('Please enter a passphrase.');
+                        return;
+                    }
                     try {
-                        const response = await fetch(`/ekad/bed-mappings/${id}`, {
+                        const response = await fetch(`{{ url('ekad/bed-mappings') }}/${this.mappingToDelete}`, {
                             method: 'DELETE',
                             headers: {
+                                'Content-Type': 'application/json',
                                 'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                            }
+                            },
+                            body: JSON.stringify({
+                                delete_passphrase: this.deleteMappingPassphrase
+                            })
                         });
                         const data = await response.json();
-                        if (data.success) {
-                            this.bedMappings = this.bedMappings.filter(m => m.id !== id);
+                        if (response.ok && data.success) {
+                            this.bedMappings = this.bedMappings.filter(m => m.id !== this.mappingToDelete);
                             this.addLog('DELETE MAPPING', true, data.message);
+                            this.showDeleteMappingModal = false;
+                            this.deleteMappingPassphrase = '';
                         } else {
-                            this.addLog('DELETE MAPPING', false, data.message, data);
+                            this.addLog('DELETE MAPPING', false, data.message || 'Validation failed', data);
+                            alert(data.message || 'Validation failed');
                         }
                     } catch (error) {
                         this.addLog('DELETE MAPPING', false, 'Request failed: ' + error.message);
+                        alert('Request failed: ' + error.message);
                     }
                 },
 

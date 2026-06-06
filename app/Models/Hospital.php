@@ -13,6 +13,7 @@ class Hospital extends Model
         'email',
         'description',
         'is_active',
+        'logo_path',
     ];
 
     protected $casts = [

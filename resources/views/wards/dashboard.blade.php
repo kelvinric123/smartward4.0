@@ -5,6 +5,9 @@
         /** @var array $patientInfoConfig */
         $bedBoxConfig = $bedBoxConfig ?? [];
         $patientInfoConfig = $patientInfoConfig ?? [];
+        
+        $hospital = \App\Models\Hospital::first();
+        $logoUrl = $hospital && $hospital->logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->logo_path) : asset('phkl_new.png');
     @endphp
     <style>
         @keyframes pulse-subtle {
@@ -464,7 +467,7 @@
                     <a href="{{ route('ward.dashboard', request()->query()) }}"
                         onclick="window.location.reload(); return false;" title="Click to refresh"
                         class="inline-flex items-center group">
-                        <img src="{{ asset('phkl_new.png') }}" alt="PHKL Logo" class="h-10 w-auto mr-3 cursor-pointer hover:opacity-80 transition-opacity" onclick="event.preventDefault(); event.stopPropagation(); window.dispatchEvent(new CustomEvent('open-slideshow-modal'))" title="View Slideshow">
+                        <img src="{{ $logoUrl }}" alt="Hospital Logo" class="h-10 w-auto mr-3 cursor-pointer hover:opacity-80 transition-opacity" onclick="event.preventDefault(); event.stopPropagation(); window.dispatchEvent(new CustomEvent('open-slideshow-modal'))" title="View Slideshow">
                         <h2
                             class="font-bold text-xl text-white leading-tight transition-colors cursor-pointer">
                             Ward Dashboard
@@ -1994,7 +1997,7 @@
                                             <input type="text" x-model="patientSearch"
                                                 @focus="patientDropdownOpen = true" @click="patientDropdownOpen = true"
                                                 @input="patientDropdownOpen = true; selectedPatient = null"
-                                                placeholder="Search by name or MRN..."
+                                                placeholder="Search by name or MRN..." autocomplete="off"
                                                 class="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 pr-10"
                                                 :class="{'border-red-300': !selectedPatient && patientSearch}" required>
                                             <button type="button" x-show="patientSearch" @click="clearPatient()"
@@ -2032,7 +2035,7 @@
                                                 @focus="consultantDropdownOpen = true"
                                                 @click="consultantDropdownOpen = true"
                                                 @input="consultantDropdownOpen = true; selectedConsultant = null"
-                                                placeholder="Search consultant..."
+                                                placeholder="Search consultant..." autocomplete="off"
                                                 class="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 pr-10">
                                             <button type="button" x-show="consultantSearch" @click="clearConsultant()"
                                                 class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
@@ -2063,7 +2066,7 @@
                                             <input type="text" x-model="nurseSearch" @focus="nurseDropdownOpen = true"
                                                 @click="nurseDropdownOpen = true"
                                                 @input="nurseDropdownOpen = true; selectedNurse = null"
-                                                placeholder="Search nurse..."
+                                                placeholder="Search nurse..." autocomplete="off"
                                                 class="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 pr-10">
                                             <button type="button" x-show="nurseSearch" @click="clearNurse()"
                                                 class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
@@ -2096,7 +2099,7 @@
                                                 @focus="anaesthetistDropdownOpen = true"
                                                 @click="anaesthetistDropdownOpen = true"
                                                 @input="anaesthetistDropdownOpen = true; selectedAnaesthetist = null"
-                                                placeholder="Search anaesthetist..."
+                                                placeholder="Search anaesthetist..." autocomplete="off"
                                                 class="block w-full rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 pr-10">
                                             <button type="button" x-show="anaesthetistSearch"
                                                 @click="clearAnaesthetist()"
@@ -2196,7 +2199,7 @@
                                             <input type="text" x-model="patientSearch"
                                                 @focus="patientDropdownOpen = true" @click="patientDropdownOpen = true"
                                                 @input="patientDropdownOpen = true; selectedPatient = null"
-                                                placeholder="Search by name or MRN..."
+                                                placeholder="Search by name or MRN..." autocomplete="off"
                                                 class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-10">
                                             <button type="button" x-show="patientSearch" @click="clearPatient()"
                                                 class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600">
@@ -2233,7 +2236,7 @@
                                                     @focus="consultantDropdownOpen = true"
                                                     @click="consultantDropdownOpen = true"
                                                     @input="consultantDropdownOpen = true; selectedConsultant = null"
-                                                    placeholder="Search..."
+                                                    placeholder="Search..." autocomplete="off"
                                                     class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-8 text-sm">
                                                 <button type="button" x-show="consultantSearch"
                                                     @click="clearConsultant()"
@@ -2267,7 +2270,7 @@
                                                 <input type="text" x-model="nurseSearch"
                                                     @focus="nurseDropdownOpen = true" @click="nurseDropdownOpen = true"
                                                     @input="nurseDropdownOpen = true; selectedNurse = null"
-                                                    placeholder="Search..."
+                                                    placeholder="Search..." autocomplete="off"
                                                     class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-8 text-sm">
                                                 <button type="button" x-show="nurseSearch" @click="clearNurse()"
                                                     class="absolute inset-y-0 right-0 pr-2 flex items-center text-gray-400 hover:text-gray-600">
@@ -2301,7 +2304,7 @@
                                                 @focus="anaesthetistDropdownOpen = true"
                                                 @click="anaesthetistDropdownOpen = true"
                                                 @input="anaesthetistDropdownOpen = true; selectedAnaesthetist = null"
-                                                placeholder="Search anaesthetist..."
+                                                placeholder="Search anaesthetist..." autocomplete="off"
                                                 class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-10">
                                             <button type="button" x-show="anaesthetistSearch"
                                                 @click="clearAnaesthetist()"
@@ -3034,7 +3037,7 @@
                                         </svg>
                                     </div>
                                     <input type="text" x-model="searchQuery"
-                                        placeholder="Search consultant, patient, MRN, bed..."
+                                        placeholder="Search consultant, patient, MRN, bed..." autocomplete="off"
                                         class="block w-full pl-8 pr-8 py-1.5 border border-gray-300 rounded-md text-sm placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500">
                                     <button x-show="searchQuery" @click="searchQuery = ''"
                                         class="absolute inset-y-0 right-0 pr-2.5 flex items-center text-gray-400 hover:text-gray-600">

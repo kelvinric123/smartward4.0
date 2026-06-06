@@ -32,7 +32,7 @@
                     <input type="hidden" name="ward_id" value="{{ $wardId }}">
                 @endif
                 <div class="relative">
-                    <input type="text" name="search" value="{{ $search }}" placeholder="Search by MRN or name..."
+                    <input type="text" name="search" value="{{ $search }}" placeholder="Search by MRN or name..." autocomplete="off"
                         class="pl-9 pr-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm min-w-[240px]">
                     <span class="absolute inset-y-0 left-0 pl-2 flex items-center text-gray-400">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

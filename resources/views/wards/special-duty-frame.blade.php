@@ -168,6 +168,7 @@
                                                                     @keydown.down.prevent="focusNext()"
                                                                     @keydown.up.prevent="focusPrev()"
                                                                     @keydown.enter.prevent="selectFocused()"
+                                                                    autocomplete="off"
                                                                     class="w-full text-xs border-gray-200 rounded-md focus:border-amber-400 focus:ring-amber-400 py-1.5 pl-2 pr-6"
                                                                     :placeholder="selectedName || placeholder">
                                                                 
@@ -234,6 +235,7 @@
                                                                             @keydown.down.prevent="focusNext()"
                                                                             @keydown.up.prevent="focusPrev()"
                                                                             @keydown.enter.prevent="selectFocused()"
+                                                                            autocomplete="off"
                                                                             class="w-full text-xs border-gray-200 rounded-md focus:border-purple-400 focus:ring-purple-400 py-1 pl-2 pr-6"
                                                                             :placeholder="selectedName || placeholder">
                                                                         <div class="absolute inset-y-0 right-0 flex items-center pr-1 pointer-events-none">

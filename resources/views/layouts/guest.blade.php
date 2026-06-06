@@ -19,7 +19,11 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 
-<body class="font-sans text-gray-900 antialiased">
+<body class="font-sans text-gray-900 antialiased bg-gray-50 dark:bg-gray-900">
+    @php
+        $hospital = \App\Models\Hospital::first();
+        $logoUrl = $hospital && $hospital->logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->logo_path) : asset('phkl_new.png');
+    @endphp
     <div
         class="min-h-screen flex flex-col sm:justify-center items-center pt-6 sm:pt-0 bg-gradient-to-br from-blue-500 via-cyan-500 to-teal-500 relative overflow-hidden">
         <!-- Decorative elements -->
@@ -32,7 +36,7 @@
         <div class="relative z-10">
             <div class="text-center mb-8">
                 <div class="bg-blue-600 rounded-xl p-3 inline-block mb-4">
-                    <img src="{{ asset('phkl_new.png') }}" alt="PHKL Logo" class="h-24 w-auto mx-auto">
+                    <img src="{{ $logoUrl }}" alt="Hospital Logo" class="h-24 w-auto mx-auto">
                 </div>
                 <h1 class="text-3xl font-bold text-white mb-2">PHKL Hospital</h1>
                 <p class="text-blue-100">Management System</p>

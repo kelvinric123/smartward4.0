@@ -1,4 +1,8 @@
 <x-app-layout>
+    @php
+        $hospital = \App\Models\Hospital::first();
+        $logoUrl = $hospital && $hospital->logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->logo_path) : asset('phkl_new.png');
+    @endphp
     <x-slot name="header">
         <div class="flex items-center justify-between">
             <div>
@@ -136,7 +140,7 @@
                             @if($hospital)
                                 <div class="text-center mb-4">
                                     <div class="bg-blue-600 rounded-xl p-2 inline-block mb-3">
-                                        <img src="{{ asset('phkl_new.png') }}" alt="PHKL Logo" class="h-16 w-auto mx-auto">
+                                        <img src="{{ $logoUrl }}" alt="Hospital Logo" class="h-16 w-auto mx-auto">
                                     </div>
                                     <h4 class="font-bold text-gray-800">{{ $hospital->name }}</h4>
                                 </div>

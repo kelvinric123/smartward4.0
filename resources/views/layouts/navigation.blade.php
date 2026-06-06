@@ -1,5 +1,7 @@
 @php
     $openSection = null;
+    $hospital = \App\Models\Hospital::first();
+    $logoUrl = $hospital && $hospital->logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->logo_path) : asset('phkl_new.png');
 
     if (request()->routeIs('patients.*')) {
         $openSection = 'patient';
@@ -30,7 +32,7 @@
     <div
         class="shrink-0 flex items-center justify-between px-4 py-4 border-b border-blue-400/30 h-16 backdrop-blur-sm bg-white/10">
         <a href="{{ route('dashboard') }}" x-show="sidebarOpen" x-transition class="flex items-center">
-            <img src="{{ asset('phkl_new.png') }}" alt="PHKL Logo" class="h-10 w-auto">
+            <img src="{{ $logoUrl }}" alt="Hospital Logo" class="h-10 w-auto">
         </a>
         <button @click="sidebarOpen = !sidebarOpen"
             class="p-2 rounded-lg hover:bg-white/20 transition-colors text-white">
@@ -255,36 +257,34 @@
 
 
         <!-- Schedule Section -->
-        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD))
-            <div class="pt-2">
-                <button @click="toggleSection('schedule')"
-                    class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ward.schedule') ? 'bg-white/20' : '' }}">
-                    <div class="flex items-center">
-                        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M8 7V5a3 3 0 013-3h2a3 3 0 013 3v2m4 0H4a2 2 0 00-2 2v9a3 3 0 003 3h14a3 3 0 003-3v-9a2 2 0 00-2-2z" />
-                        </svg>
-                        <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Schedule</span>
-                    </div>
-                    <svg x-show="sidebarOpen" :class="{'rotate-180': isSectionOpen('schedule')}"
-                        class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+        <div class="pt-2">
+            <button @click="toggleSection('schedule')"
+                class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ward.schedule') ? 'bg-white/20' : '' }}">
+                <div class="flex items-center">
+                    <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M8 7V5a3 3 0 013-3h2a3 3 0 013 3v2m4 0H4a2 2 0 00-2 2v9a3 3 0 003 3h14a3 3 0 003-3v-9a2 2 0 00-2-2z" />
                     </svg>
-                </button>
-
-                <div x-show="isSectionOpen('schedule') && sidebarOpen" x-transition
-                    class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
-                    <a href="{{ route('ward.schedule') }}"
-                        class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ward.schedule') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M3 7h18M3 12h18M3 17h18" />
-                        </svg>
-                        <span class="ml-2">Ward Schedule</span>
-                    </a>
+                    <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Schedule</span>
                 </div>
+                <svg x-show="sidebarOpen" :class="{'rotate-180': isSectionOpen('schedule')}"
+                    class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+
+            <div x-show="isSectionOpen('schedule') && sidebarOpen" x-transition
+                class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
+                <a href="{{ route('ward.schedule') }}"
+                    class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ward.schedule') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M3 7h18M3 12h18M3 17h18" />
+                    </svg>
+                    <span class="ml-2">Ward Schedule</span>
+                </a>
             </div>
-        @endif
+        </div>
 
 
         <!-- Vital Sign Section -->

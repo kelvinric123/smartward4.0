@@ -243,7 +243,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/adt/test-connection', [AdtConfigurationController::class, 'testConnection'])->name('adt.test-connection');
     Route::get('/adt/logs', [AdtConfigurationController::class, 'getLogs'])->name('adt.logs');
     Route::get('/adt/logs/{log}', [AdtConfigurationController::class, 'viewLog'])->name('adt.logs.view');
-    Route::post('/adt/logs/clear', [AdtConfigurationController::class, 'clearLogs'])->name('adt.logs.clear');
+    Route::delete('/adt/logs/clear', [AdtConfigurationController::class, 'clearLogs'])->name('adt.logs.clear');
     Route::get('/adt/log-files', [AdtConfigurationController::class, 'readLogFiles'])->name('adt.log-files');
     Route::post('/adt/hospital-mapping', [AdtConfigurationController::class, 'storeHospitalMapping'])->name('adt.hospital-mapping.store');
     Route::delete('/adt/hospital-mapping/{hospitalMapping}', [AdtConfigurationController::class, 'destroyHospitalMapping'])->name('adt.hospital-mapping.destroy');
