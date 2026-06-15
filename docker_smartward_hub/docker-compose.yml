@@ -1,0 +1,336 @@
+# =============================================================================
+# Docker Compose - Laravel Swoole Production
+# Single container with PHP-Swoole, MySQL, Redis + ADT Listener + ECG Server
+# =============================================================================
+
+services:
+  # LDAP Sync Service Container
+  ldap:
+    image: kelvinric/smartward4-ldap:latest
+    container_name: smartward4-ldap
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      DB_HOST: "smartward4"
+      DB_PORT: "3306"
+      DB_DATABASE: "${DB_DATABASE:-smartward}"
+      DB_PASSWORD: "${DB_PASSWORD:-smartward_secret}"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "128M"
+        reservations:
+          cpus: "0.1"
+          memory: "32M"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  smartward:
+    image: ${SMARTWARD_IMAGE:-kelvinric/smartward4:latest}
+    container_name: smartward4
+    restart: unless-stopped
+    # Environment variables are loaded automatically from .env if present
+    ports:
+      - "${HTTP_PORT:-18080}:80"
+      - "${HTTPS_PORT:-18443}:443"
+      - "${APP_PORT:-8888}:88"
+      - "${DB_PORT:-3307}:3306"
+      - "${REDIS_PORT:-6380}:6379"
+    environment:
+      # Timezone (default: Asia/Kuala_Lumpur - GMT+8)
+      TZ: "${TZ:-Asia/Kuala_Lumpur}"
+
+      # Application (APP_KEY comes from env_file)
+      APP_NAME: "${APP_NAME:-SmartWard}"
+      APP_ENV: "${APP_ENV:-local}"
+      APP_DEBUG: "${APP_DEBUG:-true}"
+      APP_URL: "${APP_URL:-http://192.168.0.23:18080}"
+      ASSET_URL: "${ASSET_URL:-http://192.168.0.23:18080}"
+      APP_TIMEZONE: "${APP_TIMEZONE:-Asia/Kuala_Lumpur}"
+
+      # Octane/Swoole (Aggressive settings)
+      OCTANE_SERVER: "swoole"
+      OCTANE_WORKERS: "${OCTANE_WORKERS:-16}"
+      OCTANE_TASK_WORKERS: "${OCTANE_TASK_WORKERS:-16}"
+      OCTANE_MAX_REQUESTS: "${OCTANE_MAX_REQUESTS:-500}"
+
+      # Database (internal MySQL)
+      DB_CONNECTION: "mysql"
+      DB_HOST: "127.0.0.1"
+      DB_PORT: "3306"
+      DB_DATABASE: "${DB_DATABASE:-smartward}"
+      DB_USERNAME: "${DB_USERNAME:-root}"
+      DB_PASSWORD: "${DB_PASSWORD:-smartward_secret}"
+
+      # Redis (internal)
+      REDIS_HOST: "127.0.0.1"
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-null}"
+
+      # Session & Cache via Redis
+      SESSION_DRIVER: "redis"
+      SESSION_LIFETIME: "120"
+      CACHE_STORE: "redis"
+      QUEUE_CONNECTION: "redis"
+
+      # Logging
+      LOG_CHANNEL: "stack"
+      LOG_LEVEL: "${LOG_LEVEL:-warning}"
+
+      # ADT HL7 Listener (Docker service name for inter-container communication)
+      ADT_HOST: "adt"
+      ADT_PORT: "3000"
+      # Extra CA certificates for Node.js
+      NODE_EXTRA_CA_CERTS: "/usr/local/share/ca-certificates/IntermediateCA.crt"
+    depends_on:
+      - adt
+      - ecg
+    volumes:
+      # Persistent data
+      - smartward_mysql:/var/lib/mysql
+      - smartward_redis:/var/lib/redis
+      - smartward_storage:/app/storage
+      # Optional: mount logs for debugging
+      - smartward_logs:/var/log
+      # ECG files - shared with ECG container (Laravel reads from ecg/store)
+      - ecg_data:/app/ecg/store:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:88/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: "${DOCKER_CPU_LIMIT:-2}"
+          memory: "${DOCKER_MEMORY_LIMIT:-4G}"
+        reservations:
+          cpus: "2"
+          memory: "2G"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    extra_hosts:
+      - "phklsmartward.ppl.ihh.com:${PHKL_RESOLVE_IP:-127.0.0.1}"
+
+  # HL7 ADT Listener Container
+  adt:
+    image: kelvinric/smartward4-adt:latest
+    container_name: smartward4-adt
+    restart: unless-stopped
+    ports:
+      - "${HL7_PORT:-3000}:3000"
+    environment:
+      HL7_HOST: "0.0.0.0"
+      HL7_PORT: "3000"
+      # Connect to smartward container via internal network
+      LARAVEL_API_URL: "http://smartward:88/api/adt/message"
+      LARAVEL_API_KEY: "${LARAVEL_API_KEY:-}"
+    volumes:
+      # Persist logs and received messages
+      - adt_logs:/app/HL7/logs
+      - adt_messages:/app/HL7/received_messages
+    healthcheck:
+      test: [ "CMD", "nc", "-z", "localhost", "3000" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: "256M"
+        reservations:
+          cpus: "0.25"
+          memory: "64M"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ECG HTTP Upload Server Container
+  ecg:
+    image: kelvinric/smartward4-ecg:latest
+    container_name: smartward4-ecg
+    restart: unless-stopped
+    ports:
+      - "${ECG_PORT:-3050}:3050"
+    environment:
+      # Server Configuration
+      ECG_HOST: "0.0.0.0"
+      ECG_PORT: "3050"
+      ECG_USERNAME: "${ECG_USERNAME:-admin}"
+      ECG_PASSWORD: "${ECG_PASSWORD:-admin123}"
+      # Timezone
+      TZ: "${TZ:-Asia/Kuala_Lumpur}"
+      # Python unbuffered for real-time logs
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      # Persist uploaded ECG files
+      - ecg_data:/app/ecg/ftp_data
+      - ecg_store:/app/ecg/store
+      - ecg_logs:/app/ecg/logs
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:3050/" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: "256M"
+        reservations:
+          cpus: "0.25"
+          memory: "64M"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        tag: "smartward4-ecg"
+
+  # MP5sc Vital Sign Monitor Listener Container
+  # mp5sc:
+  #   build:
+  #     context: ..
+  #     dockerfile: mp5sc_listener/Dockerfile
+  #   container_name: smartward4-mp5sc
+  #   restart: unless-stopped
+  #   # No ports exposed - this is an outbound UDP client
+  #   network_mode: "host"  # Required for UDP communication with medical devices on local network
+  #   environment:
+  #     # API Server Configuration (connects to smartward container)
+  #     API_BASE_URL: "${MP5SC_API_BASE_URL:-http://127.0.0.1:88/api/v1}"
+  #     API_PASSPHRASE: "${MP5SC_API_PASSPHRASE:-qmedno1}"
+  #     API_USERNAME: "${MP5SC_API_USERNAME:-api@qmed.asia}"
+  #     API_PASSWORD: "${MP5SC_API_PASSWORD:-88888888}"
+  #     # Monitor Device Configuration
+  #     # Legacy single device mode (used when USE_API_DEVICES=false)
+  #     MONITOR_IP: "${MP5SC_MONITOR_IP:-192.168.0.5}"
+  #     # Multi-device mode (fetch devices from API)
+  #     USE_API_DEVICES: "${MP5SC_USE_API_DEVICES:-true}"
+  #     DEVICE_FETCH_INTERVAL: "${MP5SC_DEVICE_FETCH_INTERVAL:-60}"
+  #     # Polling Configuration
+  #     POLL_INTERVAL: "${MP5SC_POLL_INTERVAL:-2}"
+  #     REFRESH_INTERVAL: "${MP5SC_REFRESH_INTERVAL:-10}"
+  #     # Debug Mode - enabled by default for detailed logging
+  #     DEBUG_MODE: "${MP5SC_DEBUG_MODE:-true}"
+  #     # Python unbuffered for real-time logs
+  #     PYTHONUNBUFFERED: "1"
+  #   volumes:
+  #     # Persist logs
+  #     - mp5sc_logs:/app/mp5sc_listener/logs
+  #   healthcheck:
+  #     test: ["CMD", "pgrep", "-f", "python.*vital_sign_listener"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #     start_period: 15s
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: "0.5"
+  #         memory: "128M"
+  #       reservations:
+  #         cpus: "0.1"
+  #         memory: "32M"
+  #   logging:
+  #     driver: "json-file"
+  #     options:
+  #       max-size: "50m"
+  #       max-file: "5"
+  #       tag: "smartward4-mp5sc"
+
+  # B.Braun HL7 Infusion Pump Listener Container
+  bbraun:
+    image: kelvinric/smartward4-bbraun:latest
+    container_name: smartward4-bbraun
+    restart: unless-stopped
+    ports:
+      - "${BBRAUN_PORT:-5001}:5001"
+    environment:
+      # Listener Configuration
+      BBRAUN_HOST: "0.0.0.0"
+      BBRAUN_PORT: "5001"
+      # Database Configuration (connects directly to smartward container on internal network)
+      DB_HOST: "smartward"
+      DB_PORT: "3306"
+      DB_NAME: "${DB_DATABASE:-smartward}"
+      DB_USER: "${DB_USERNAME:-root}"
+      DB_PASSWORD: "${DB_PASSWORD:-smartward_secret}"
+      # Development Mode (disabled by default)
+      DEV_MODE: "${BBRAUN_DEV_MODE:-false}"
+      DEV_ASSIGN_MRN: "${BBRAUN_DEV_ASSIGN_MRN:-}"
+      # Python unbuffered for real-time logs
+      PYTHONUNBUFFERED: "1"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - smartward
+    volumes:
+      # Persist logs
+      - bbraun_logs:/app/bbraun/logs
+    healthcheck:
+      test: [ "CMD", "nc", "-z", "localhost", "5001" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: "256M"
+        reservations:
+          cpus: "0.25"
+          memory: "64M"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        tag: "smartward4-bbraun"
+  # NOTE: Seekink E-Ink Display is managed separately from ./seekink/docker-compose.yml
+  # Run: cd seekink && docker compose up -d
+
+volumes:
+  smartward_mysql:
+    driver: local
+  smartward_redis:
+    driver: local
+  smartward_storage:
+    driver: local
+  smartward_logs:
+    driver: local
+  adt_logs:
+    driver: local
+  adt_messages:
+    driver: local
+  ecg_data:
+    driver: local
+  ecg_store:
+    driver: local
+  ecg_logs:
+    driver: local
+  mp5sc_logs:
+    driver: local
+  bbraun_logs:
+    driver: local
+
+networks:
+  default:
+    name: smartward-network
+    driver: bridge

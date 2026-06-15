@@ -22,7 +22,7 @@
 <body class="font-sans text-gray-900 antialiased bg-gray-50 dark:bg-gray-900">
     @php
         $hospital = \App\Models\Hospital::first();
-        $logoUrl = $hospital && $hospital->logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->logo_path) : asset('phkl_new.png');
+        $logoUrl = $hospital && $hospital->login_logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->login_logo_path) : ($hospital && $hospital->logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->logo_path) : asset('phkl_new.png'));
     @endphp
     <div
         class="min-h-screen flex flex-col sm:justify-center items-center pt-6 sm:pt-0 bg-gradient-to-br from-blue-500 via-cyan-500 to-teal-500 relative overflow-hidden">
@@ -38,8 +38,8 @@
                 <div class="bg-blue-600 rounded-xl p-3 inline-block mb-4">
                     <img src="{{ $logoUrl }}" alt="Hospital Logo" class="h-24 w-auto mx-auto">
                 </div>
-                <h1 class="text-3xl font-bold text-white mb-2">PHKL Hospital</h1>
-                <p class="text-blue-100">Management System</p>
+                <h1 class="text-3xl font-bold text-white mb-2">{{ $hospital ? $hospital->name : 'PHKL Hospital' }}</h1>
+                <p class="text-blue-100">{{ $hospital && $hospital->description ? $hospital->description : 'Management System' }}</p>
             </div>
 
             <div

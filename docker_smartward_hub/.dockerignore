@@ -1,0 +1,112 @@
+# =============================================================================
+# Docker Ignore File
+# =============================================================================
+
+# Version Control
+.git
+.gitignore
+.gitattributes
+
+# IDE & Editors
+.idea
+.vscode
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Dependencies (will be installed fresh)
+/node_modules
+/vendor
+
+# Build artifacts
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+/coverage
+.phpunit.result.cache
+phpunit.xml
+
+# Local Environment
+# .env  # Removed - Laravel needs .env file, docker-compose env_file alone is not enough
+.env.local
+.env.*.local
+.env.backup
+
+# Docker env file - NOT ignored (needed for build)
+!docker.env
+
+# Docker (avoid recursion)
+/docker_swoole
+
+# Laravel Development Files
+/storage/logs/*
+!/storage/logs/.gitignore
+/storage/framework/cache/*
+!/storage/framework/cache/.gitignore
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitignore
+/storage/framework/views/*
+!/storage/framework/views/.gitignore
+/storage/debugbar
+/storage/app/public/*
+!/storage/app/public/.gitignore
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+
+# Compiled assets
+/public/hot
+# /public/build  # Keep pre-built assets to avoid npm build in container (saves memory)
+
+# Documentation
+*.md
+!README.md
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Testing Tools
+tests
+phpunit.xml
+.php-cs-fixer.cache
+phpstan.neon
+psalm.xml
+
+# =============================================================================
+# MP5sc Listener - Keep these files (NOT ignored)
+# =============================================================================
+!mp5sc_listener/
+!mp5sc_listener/Dockerfile
+!mp5sc_listener/listener/
+!mp5sc_listener/listener/requirements.txt
+!mp5sc_listener/listener/vital_sign_listener.py
+!mp5sc_listener/listener/src/
+
+# Ignore MP5sc development/test files
+mp5sc_listener/listener/plotting_example/
+mp5sc_listener/listener/*.png
+mp5sc_listener/listener/LICENSE
+mp5sc_listener/listener/README.md
+mp5sc_listener/listener/env.example
+mp5sc_listener/.git/
+
+# =============================================================================
+# B.Braun HL7 Listener - Keep these files (NOT ignored)
+# =============================================================================
+!bbraun/
+!bbraun/Dockerfile
+!bbraun/requirements.txt
+!bbraun/bbraun_hl7_listener.py
+!bbraun/.env.example
+
+# Ignore B.Braun development/runtime files
+bbraun/.env
+bbraun/venv/
+bbraun/logs/
+bbraun/__pycache__/

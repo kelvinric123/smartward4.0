@@ -1,7 +1,7 @@
 @php
     $openSection = null;
     $hospital = \App\Models\Hospital::first();
-    $logoUrl = $hospital && $hospital->logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->logo_path) : asset('phkl_new.png');
+    $logoUrl = $hospital && $hospital->navbar_logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->navbar_logo_path) : ($hospital && $hospital->logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->logo_path) : asset('phkl_new.png'));
 
     if (request()->routeIs('patients.*')) {
         $openSection = 'patient';
@@ -13,7 +13,7 @@
         $openSection = 'schedule';
     } elseif (request()->routeIs('vital-signs.*')) {
         $openSection = 'vitalSign';
-    } elseif (request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*') || request()->routeIs('ecg.index') || request()->routeIs('ekad.*')) {
+    } elseif (request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*') || request()->routeIs('ecg.index') || request()->routeIs('ekad.*') || request()->routeIs('integration.demo.*')) {
         $openSection = 'integration';
     } elseif (request()->routeIs('user-activities.*')) {
         $openSection = 'appLogs';
@@ -337,7 +337,7 @@
         @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE_HEAD) && !Auth::user()->hasRole(App\Models\User::ROLE_USER))
             <div class="pt-2">
                 <button @click="toggleSection('integration')"
-                    class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*') || request()->routeIs('ecg.index') || request()->routeIs('ekad.*') ? 'bg-white/20' : '' }}">
+                    class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*') || request()->routeIs('ecg.index') || request()->routeIs('ekad.*') || request()->routeIs('integration.demo.*') ? 'bg-white/20' : '' }}">
                     <div class="flex items-center">
                         <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -415,6 +415,15 @@
                                 d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                         </svg>
                         <span class="ml-2">EKad (E-Ink)</span>
+                    </a>
+
+                    <a href="{{ route('integration.demo.index') }}"
+                        class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('integration.demo.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                        </svg>
+                        <span class="ml-2">Demo</span>
                     </a>
                 </div>
             </div>

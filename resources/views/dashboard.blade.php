@@ -1,7 +1,7 @@
 <x-app-layout>
     @php
         $hospital = \App\Models\Hospital::first();
-        $logoUrl = $hospital && $hospital->logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->logo_path) : asset('phkl_new.png');
+        $logoUrl = $hospital && $hospital->navbar_logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->navbar_logo_path) : ($hospital && $hospital->logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->logo_path) : asset('phkl_new.png'));
     @endphp
     <x-slot name="header">
         <div class="flex items-center justify-between">

@@ -57,4 +57,51 @@ class ProfileController extends Controller
 
         return Redirect::to('/');
     }
+
+    /**
+     * Update the application settings and logos (Super Admin only).
+     */
+    public function updateLogos(Request $request): RedirectResponse
+    {
+        if (!$request->user()->isSuperadmin()) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:255'],
+            'login_logo' => ['nullable', 'image', 'max:2048'],
+            'navbar_logo' => ['nullable', 'image', 'max:2048'],
+        ]);
+
+        $hospital = \App\Models\Hospital::first();
+        if (!$hospital) {
+            $hospital = \App\Models\Hospital::create([
+                'name' => $request->input('name'),
+                'description' => $request->input('description'),
+                'is_active' => true,
+            ]);
+        } else {
+            $hospital->name = $request->input('name');
+            $hospital->description = $request->input('description');
+        }
+
+        if ($request->hasFile('login_logo')) {
+            if ($hospital->login_logo_path) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($hospital->login_logo_path);
+            }
+            $hospital->login_logo_path = $request->file('login_logo')->store('logos', 'public');
+        }
+
+        if ($request->hasFile('navbar_logo')) {
+            if ($hospital->navbar_logo_path) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($hospital->navbar_logo_path);
+            }
+            $hospital->navbar_logo_path = $request->file('navbar_logo')->store('logos', 'public');
+        }
+
+        $hospital->save();
+
+        return Redirect::route('profile.edit')->with('status', 'logos-updated');
+    }
 }

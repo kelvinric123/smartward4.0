@@ -1,0 +1,441 @@
+#!/bin/bash
+# =============================================================================
+# Laravel Swoole Docker Entrypoint
+# Initializes MySQL, Redis, and Laravel before starting supervisor
+# =============================================================================
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# =============================================================================
+# Environment Defaults (Aggressive settings for high-performance servers)
+# =============================================================================
+# Timezone configuration (default: Asia/Kuala_Lumpur - GMT+8)
+export TZ=${TZ:-Asia/Kuala_Lumpur}
+if [ -f "/usr/share/zoneinfo/${TZ}" ]; then
+    cp /usr/share/zoneinfo/${TZ} /etc/localtime 2>/dev/null || true
+    echo "${TZ}" > /etc/timezone 2>/dev/null || true
+    log_info "Timezone set to: ${TZ}"
+fi
+
+# Auto-detect CPU cores for worker count
+CPU_CORES=$(nproc 2>/dev/null || echo 4)
+# Use 2x CPU cores for workers (aggressive)
+DEFAULT_WORKERS=$((CPU_CORES * 2))
+DEFAULT_TASK_WORKERS=$((CPU_CORES * 2))
+
+export OCTANE_WORKERS=${OCTANE_WORKERS:-$DEFAULT_WORKERS}
+export OCTANE_TASK_WORKERS=${OCTANE_TASK_WORKERS:-$DEFAULT_TASK_WORKERS}
+export OCTANE_MAX_REQUESTS=${OCTANE_MAX_REQUESTS:-500}
+export DB_DATABASE=${DB_DATABASE:-smartward}
+export DB_USERNAME=${DB_USERNAME:-root}
+export DB_PASSWORD=${DB_PASSWORD:-smartward_secret}
+export APP_TIMEZONE=${APP_TIMEZONE:-Asia/Kuala_Lumpur}
+
+# =============================================================================
+# Initialize MySQL (MariaDB on Alpine)
+# =============================================================================
+init_mysql() {
+    log_info "Initializing MySQL (MariaDB)..."
+    
+    # Create required directories
+    mkdir -p /var/run/mysqld /var/lib/mysql /var/log/mysql
+    chown -R mysql:mysql /var/run/mysqld /var/lib/mysql /var/log/mysql
+    chmod 755 /var/run/mysqld
+    
+    # Clean up any stale pid/socket files
+    rm -f /var/run/mysqld/mysqld.pid /var/run/mysqld/mysqld.sock 2>/dev/null || true
+    
+    # Initialize database if not exists
+    if [ ! -d "/var/lib/mysql/mysql" ]; then
+        log_info "MySQL data directory is empty. Initializing..."
+        mysql_install_db --user=mysql --datadir=/var/lib/mysql
+        
+        # Start MariaDB temporarily
+        /usr/bin/mariadbd --user=mysql --datadir=/var/lib/mysql --socket=/var/run/mysqld/mysqld.sock --skip-grant-tables &
+        MYSQL_PID=$!
+        sleep 5
+        
+        # Secure installation and create database
+        mysql -u root --socket=/var/run/mysqld/mysqld.sock <<-EOSQL
+            FLUSH PRIVILEGES;
+            ALTER USER 'root'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
+            CREATE USER IF NOT EXISTS 'root'@'%' IDENTIFIED BY '${DB_PASSWORD}';
+            GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
+            FLUSH PRIVILEGES;
+            CREATE DATABASE IF NOT EXISTS ${DB_DATABASE};
+EOSQL
+        
+        # Stop temporary MariaDB
+        kill $MYSQL_PID 2>/dev/null || pkill -f mariadbd || true
+        sleep 3
+        
+        log_info "MySQL initialized successfully"
+    else
+        log_info "MySQL data directory exists. Skipping initialization."
+    fi
+}
+
+# =============================================================================
+# Initialize Redis
+# =============================================================================
+init_redis() {
+    log_info "Initializing Redis..."
+    
+    mkdir -p /var/run/redis /var/lib/redis /var/log/redis
+    chown -R redis:redis /var/run/redis /var/lib/redis /var/log/redis
+    chmod 755 /var/run/redis
+    
+    log_info "Redis directories initialized"
+}
+
+# =============================================================================
+# Initialize Nginx
+# =============================================================================
+init_nginx() {
+    log_info "Initializing Nginx directories..."
+    
+    # Ensure log directory exists (in case /var/log is mounted as volume)
+    mkdir -p /var/log/nginx
+    chown -R www:www /var/log/nginx
+    chmod 755 /var/log/nginx
+    
+    # Ensure run directory exists
+    mkdir -p /var/run/nginx
+    chown -R www:www /var/run/nginx
+    
+    # Ensure cache/lib directories exist
+    mkdir -p /var/lib/nginx/logs
+    
+    # Create nginx tmp directories for client body uploads and proxy buffering
+    # These are CRITICAL for POST requests with body data
+    mkdir -p /var/lib/nginx/tmp/client_body
+    mkdir -p /var/lib/nginx/tmp/proxy
+    mkdir -p /var/lib/nginx/tmp/fastcgi
+    mkdir -p /var/lib/nginx/tmp/uwsgi
+    mkdir -p /var/lib/nginx/tmp/scgi
+    
+    # Set ownership and permissions - must be writable by nginx worker processes
+    chown -R www:www /var/lib/nginx
+    chmod -R 755 /var/lib/nginx
+    chmod -R 777 /var/lib/nginx/tmp
+    
+    log_info "Nginx directories initialized (including tmp for client_body)"
+}
+
+# =============================================================================
+# Initialize CA Certificates
+# =============================================================================
+init_ca_certificates() {
+    log_info "Updating CA certificates..."
+    
+    # Check if we have any mounted certificates
+    if [ -d "/usr/local/share/ca-certificates" ]; then
+        update-ca-certificates 2>/dev/null || true
+        log_info "CA certificates updated"
+    fi
+}
+
+# =============================================================================
+# Wait for service to be ready
+# =============================================================================
+wait_for_service() {
+    local host=$1
+    local port=$2
+    local service=$3
+    local max_attempts=30
+    local attempt=1
+    
+    log_info "Waiting for $service to be ready..."
+    
+    while ! nc -z "$host" "$port" 2>/dev/null; do
+        if [ $attempt -ge $max_attempts ]; then
+            log_error "$service did not become ready in time"
+            return 1
+        fi
+        log_info "Waiting for $service... (attempt $attempt/$max_attempts)"
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+    
+    log_info "$service is ready!"
+    return 0
+}
+
+# =============================================================================
+# Initialize Laravel
+# =============================================================================
+init_laravel() {
+    log_info "Initializing Laravel..."
+    
+    cd /app
+    
+    # Ensure storage directories exist with correct permissions
+    mkdir -p storage/framework/{sessions,views,cache}
+    mkdir -p storage/logs
+    mkdir -p bootstrap/cache
+    chown -R www:www storage bootstrap/cache
+    chmod -R 775 storage bootstrap/cache
+    
+    # Create OPCache preload file if it doesn't exist
+    if [ ! -f "bootstrap/cache/opcache-preload.php" ]; then
+        cat > bootstrap/cache/opcache-preload.php <<'PRELOAD'
+<?php
+
+// OPCache Preload Script for Laravel
+// This file is automatically generated
+
+// Skip preloading in CLI mode without Swoole
+if (PHP_SAPI === 'cli' && !extension_loaded('swoole')) {
+    return;
+}
+
+// Preload core Laravel files
+$files = [
+    __DIR__ . '/../../vendor/autoload.php',
+];
+
+foreach ($files as $file) {
+    if (file_exists($file)) {
+        require_once $file;
+    }
+}
+PRELOAD
+        chown www:www bootstrap/cache/opcache-preload.php
+    fi
+    
+    # Ensure .env exists with Docker-compatible values
+    if [ ! -f ".env" ]; then
+        log_info "No .env found, creating Docker-compatible .env..."
+        
+        # Use docker.env as base if available, otherwise create from scratch
+        if [ -f "/app/docker.env" ]; then
+            log_info "Using docker.env as base configuration..."
+            cp /app/docker.env .env
+            # Override with runtime environment variables
+            sed -i "s/^APP_NAME=.*/APP_NAME=${APP_NAME:-SmartWard}/" .env
+            sed -i "s/^APP_ENV=.*/APP_ENV=${APP_ENV:-production}/" .env
+            sed -i "s/^APP_DEBUG=.*/APP_DEBUG=${APP_DEBUG:-false}/" .env
+            sed -i "s/^APP_URL=.*/APP_URL=${APP_URL:-http:\/\/localhost}/" .env
+            sed -i "s/^LOG_LEVEL=.*/LOG_LEVEL=${LOG_LEVEL:-warning}/" .env
+            sed -i "s/^DB_DATABASE=.*/DB_DATABASE=${DB_DATABASE:-smartward}/" .env
+            sed -i "s/^DB_USERNAME=.*/DB_USERNAME=${DB_USERNAME:-root}/" .env
+            sed -i "s/^DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD:-smartward_secret}/" .env
+            sed -i "s/^REDIS_PASSWORD=.*/REDIS_PASSWORD=${REDIS_PASSWORD:-null}/" .env
+            sed -i "s/^OCTANE_WORKERS=.*/OCTANE_WORKERS=${OCTANE_WORKERS}/" .env
+            sed -i "s/^OCTANE_TASK_WORKERS=.*/OCTANE_TASK_WORKERS=${OCTANE_TASK_WORKERS}/" .env
+            sed -i "s/^OCTANE_MAX_REQUESTS=.*/OCTANE_MAX_REQUESTS=${OCTANE_MAX_REQUESTS}/" .env
+        else
+            cat > .env <<ENVFILE
+APP_NAME=${APP_NAME:-SmartWard}
+APP_ENV=${APP_ENV:-production}
+APP_KEY=${APP_KEY:-}
+APP_DEBUG=${APP_DEBUG:-false}
+APP_URL=${APP_URL:-http://localhost}
+
+APP_LOCALE=en
+APP_FALLBACK_LOCALE=en
+APP_FAKER_LOCALE=en_US
+
+BCRYPT_ROUNDS=12
+
+LOG_CHANNEL=stack
+LOG_STACK=single
+LOG_LEVEL=${LOG_LEVEL:-warning}
+
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=${DB_DATABASE:-smartward}
+DB_USERNAME=${DB_USERNAME:-root}
+DB_PASSWORD=${DB_PASSWORD:-smartward_secret}
+
+SESSION_DRIVER=redis
+SESSION_LIFETIME=120
+SESSION_ENCRYPT=false
+SESSION_PATH=/
+SESSION_DOMAIN=null
+
+BROADCAST_CONNECTION=log
+FILESYSTEM_DISK=local
+QUEUE_CONNECTION=redis
+
+CACHE_STORE=redis
+
+REDIS_CLIENT=phpredis
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=${REDIS_PASSWORD:-null}
+REDIS_PORT=6379
+
+MAIL_MAILER=log
+
+OCTANE_SERVER=swoole
+OCTANE_WORKERS=${OCTANE_WORKERS}
+OCTANE_TASK_WORKERS=${OCTANE_TASK_WORKERS}
+OCTANE_MAX_REQUESTS=${OCTANE_MAX_REQUESTS}
+ENVFILE
+        fi
+        chown www:www .env || true
+        log_info ".env created with Docker-compatible settings"
+    else
+        log_info ".env file exists, using existing configuration"
+    fi
+
+    # Generate APP_KEY if not set
+    if [ -z "$APP_KEY" ] || [ "$APP_KEY" = "base64:" ]; then
+        log_info "Generating application key..."
+        php artisan key:generate --force
+    fi
+    
+    # Wait for MySQL to be ready
+    wait_for_service 127.0.0.1 3306 "MySQL"
+    
+    # Wait for Redis to be ready
+    wait_for_service 127.0.0.1 6379 "Redis"
+    
+    # Migrations are run during docker build with migrate --seed
+    # Check if database has tables (in case volume was reset/empty)
+    TABLE_COUNT=$(mysql -u root -p"${DB_PASSWORD}" -h 127.0.0.1 -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='${DB_DATABASE}';" 2>/dev/null || echo "0")
+    
+    if [ "$TABLE_COUNT" -eq "0" ] || [ "$TABLE_COUNT" = "0" ]; then
+        log_warn "Database is empty - running migrations and seeders..."
+        php artisan migrate --force || log_warn "Migrations failed"
+    else
+        log_info "Database already has $TABLE_COUNT tables - skipping migrations (already run during Docker build)"
+    fi
+    
+    # Run the SuperAdminSeeder to ensure the default admin user exists
+    log_info "Ensuring SuperAdmin user exists..."
+    php artisan db:seed --class=SuperAdminSeeder --force || log_warn "SuperAdminSeeder failed"
+    
+    # Clear all caches first to ensure clean state
+    log_info "Clearing all caches..."
+    php artisan config:clear
+    php artisan cache:clear
+    php artisan route:clear
+    php artisan view:clear
+    php artisan event:clear
+    
+    # Cache configurations for production
+    if [ "$APP_ENV" = "production" ]; then
+        log_info "Caching Laravel configurations for production..."
+        php artisan config:cache
+        php artisan route:cache
+        php artisan view:cache
+        php artisan event:cache
+    else
+        log_info "Development mode - caches cleared and not rebuilt"
+    fi
+    
+    # Create storage link if it doesn't exist
+    if [ ! -L "public/storage" ]; then
+        php artisan storage:link || true
+    fi
+    
+    log_info "Laravel initialization complete"
+}
+
+# =============================================================================
+# Create health check endpoint
+# =============================================================================
+setup_health_check() {
+    # Add health check route if not exists
+    if ! grep -q "health" /app/routes/web.php 2>/dev/null; then
+        cat >> /app/routes/web.php <<'HEALTH'
+
+// Health check endpoint for Docker
+Route::get('/health', function () {
+    try {
+        // Check database connection
+        \DB::connection()->getPdo();
+        
+        // Check Redis connection
+        \Illuminate\Support\Facades\Redis::ping();
+        
+        return response()->json([
+            'status' => 'healthy',
+            'timestamp' => now()->toIso8601String(),
+            'services' => [
+                'database' => 'connected',
+                'redis' => 'connected',
+                'octane' => 'running'
+            ]
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'status' => 'unhealthy',
+            'error' => $e->getMessage()
+        ], 503);
+    }
+});
+HEALTH
+        log_info "Health check endpoint added"
+    fi
+}
+
+# =============================================================================
+# Main Execution
+# =============================================================================
+main() {
+    log_info "=========================================="
+    log_info "SmartWard Laravel Swoole Container"
+    log_info "=========================================="
+    
+    # Initialize services
+    init_ca_certificates
+    init_mysql
+    init_redis
+    init_nginx
+    
+    # Clean up any stale pid/socket files before starting services
+    rm -f /var/run/mysqld/mysqld.pid /var/run/mysqld/mysqld.sock 2>/dev/null || true
+    rm -f /var/run/redis/redis.pid /var/run/redis/redis.sock 2>/dev/null || true
+    
+    # Start MariaDB and Redis in background for Laravel init
+    /usr/bin/mariadbd --user=mysql --datadir=/var/lib/mysql --socket=/var/run/mysqld/mysqld.sock --port=3306 &
+    MYSQL_PID=$!
+    /usr/bin/redis-server /etc/redis.conf &
+    REDIS_PID=$!
+    sleep 5
+    
+    # Initialize Laravel
+    init_laravel
+    setup_health_check
+    
+    # Stop temporary services (supervisor will restart them)
+    kill $MYSQL_PID 2>/dev/null || pkill -f mariadbd 2>/dev/null || true
+    kill $REDIS_PID 2>/dev/null || pkill redis-server 2>/dev/null || true
+    sleep 2
+    
+    # Clean up pid/socket files again before supervisor takes over
+    rm -f /var/run/mysqld/mysqld.pid /var/run/mysqld/mysqld.sock 2>/dev/null || true
+    rm -f /var/run/redis/redis.pid /var/run/redis/redis.sock 2>/dev/null || true
+    
+    log_info "=========================================="
+    log_info "Starting Supervisor..."
+    log_info "=========================================="
+    
+    # Execute the main command
+    exec "$@"
+}
+
+# Run main function
+main "$@"
+

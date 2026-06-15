@@ -7,17 +7,32 @@
 .gitignore
 .gitattributes
 
-# IDE and editors
+# IDE, editors, and AI agents
 .idea
 .vscode
+.cursor
+.agent
 *.swp
 *.swo
 
+# Sub-projects not needed for main image
+electron
+gateway
+
 # Node modules (we rebuild in Docker)
 node_modules
+ecg/node_modules
+gateway/node_modules
+HL7/node_modules
 
 # Vendor (we rebuild in Docker)
 vendor
+bbraun/venv
+mp5sc6_7/venv
+ecg/venv
+gateway/mindray_umec10/venv
+bbraun/__pycache__
+bbraun/logs
 
 # Testing
 tests
@@ -63,9 +78,10 @@ Thumbs.db
 rr.exe
 *.bat
 
-# Build artifacts
+# Build artifacts and symlinks
 public/build
 public/hot
+public/storage
 
 # Misc
 stderr

@@ -13,11 +13,11 @@ class SuperAdminSeeder extends Seeder
      */
     public function run(): void
     {
-        User::updateOrCreate(
-            ['email' => 'ihh_support_manager@ihh.com'],
+        User::firstOrCreate(
+            ['email' => 'drtai@qmed.asia'],
             [
-                'name' => 'IHH Support Manager',
-                'password' => Hash::make('C@mplexPassw0rd'),
+                'name' => 'Dr. Tai',
+                'password' => Hash::make('88888888'),
                 'role' => User::ROLE_SUPERADMIN,
                 'email_verified_at' => now(),
             ]

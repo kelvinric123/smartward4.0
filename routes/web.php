@@ -23,6 +23,7 @@ use App\Http\Controllers\DietTypeController;
 use App\Http\Controllers\IsolationTypeController;
 use App\Http\Controllers\UserActivityController;
 use App\Http\Controllers\PatientFlowCommandCentreController;
+use App\Http\Controllers\IntegrationDemoController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -51,6 +52,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+    Route::post('/profile/logos', [ProfileController::class, 'updateLogos'])->name('profile.logos.update');
 
     // Admin Management Routes
     Route::resource('hospitals', HospitalController::class)->except(['show']);
@@ -262,6 +264,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/adt/replay-execute', [AdtConfigurationController::class, 'replayAdtExecute'])->name('adt.replay-execute');
     Route::get('/adt-test', [AdtConfigurationController::class, 'testPage'])->name('adt.test');
     Route::post('/adt-test/send', [AdtConfigurationController::class, 'sendTestMessage'])->name('adt.test.send');
+
+    // Demo Integration Routes
+    Route::get('/integration/demo', [IntegrationDemoController::class, 'index'])->name('integration.demo.index');
+    Route::post('/integration/demo/seed-patients', [IntegrationDemoController::class, 'seedPatients'])->name('integration.demo.seed-patients');
+    Route::post('/integration/demo/seed-vital-signs', [IntegrationDemoController::class, 'seedVitalSigns'])->name('integration.demo.seed-vital-signs');
+    Route::post('/integration/demo/seed-infusion', [IntegrationDemoController::class, 'seedInfusion'])->name('integration.demo.seed-infusion');
 });
 
 // Public API Routes for Vital Sign Gateway (no CSRF, no auth)

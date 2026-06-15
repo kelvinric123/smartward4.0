@@ -14,6 +14,8 @@ class Hospital extends Model
         'description',
         'is_active',
         'logo_path',
+        'login_logo_path',
+        'navbar_logo_path',
     ];
 
     protected $casts = [
