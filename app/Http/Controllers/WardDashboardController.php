@@ -171,6 +171,155 @@ class WardDashboardController extends Controller
         ));
     }
 
+    public function nurseDashboard(Request $request, Nurse $nurse): View
+    {
+        $wards = Ward::where('is_active', true)->orderBy('ward_name')->get();
+        $todaysAssignments = WardScheduleAssignment::where('nurse_id', $nurse->id)
+            ->where('scheduled_date', now()->toDateString())
+            ->get();
+
+        $selectedWardId = $request->integer('ward_id')
+            ?: $nurse->ward_id
+            ?: $todaysAssignments->pluck('ward_id')->filter()->first()
+            ?: ($wards->first()->id ?? null);
+
+        $selectedWard = $selectedWardId ? Ward::find($selectedWardId) : null;
+        $userSettings = WardDashboardSetting::where('user_id', Auth::id())->first();
+        $settings = $this->resolveDashboardSettings($userSettings);
+
+        if (!$selectedWard) {
+            return view('wards.nurse-dashboard', [
+                'nurse' => $nurse,
+                'wards' => $wards,
+                'selectedWard' => null,
+                'assignedBeds' => collect(),
+                'currentShift' => null,
+                'latestVitalsByPatient' => collect(),
+                'infusionsByPatient' => collect(),
+                'summary' => [
+                    'assigned_beds' => 0,
+                    'occupied_beds' => 0,
+                    'critical_patients' => 0,
+                    'active_infusions' => 0,
+                    'infusion_alerts' => 0,
+                    'ward_occupancy' => 0,
+                ],
+                'wardStatistics' => [
+                    'patients' => 0,
+                    'available' => 0,
+                    'occupancy' => 0,
+                    'infusion_alarms' => 0,
+                    'infusion_warnings' => 0,
+                ],
+                'dashboardDisplay' => $settings['dashboardDisplay'],
+            ]);
+        }
+
+        $this->syncBedsWithPatients($selectedWard->id);
+
+        $wardPatients = Patient::where('ward_id', $selectedWard->id)
+            ->where('is_active', true)
+            ->with([
+                'consultant',
+                'nurse',
+                'anaesthetist',
+                'activeCareProviders.consultant',
+                'activeCareProviders.anaesthetist',
+                'latestSugarReading',
+            ])
+            ->get();
+
+        $movementsByPatient = PatientMovement::whereIn('patient_id', $wardPatients->pluck('id'))
+            ->orderBy('scheduled_at', 'desc')
+            ->get()
+            ->groupBy('patient_id');
+
+        $consultants = Consultant::where('is_active', true)->get();
+        $nurses = Nurse::where('is_active', true)->get();
+
+        $clinicalSettings = $userSettings && is_array($userSettings->clinical_settings)
+            ? array_merge(['ews_system' => 'ews_ihh'], $userSettings->clinical_settings)
+            : ['ews_system' => 'ews_ihh'];
+
+        $allBeds = collect($this->generateBedData(
+            $selectedWard,
+            $wardPatients,
+            $consultants,
+            $nurses,
+            $movementsByPatient,
+            $clinicalSettings['ews_system'] ?? 'ews_ihh'
+        ));
+
+        $currentShift = ShiftSetting::getCurrentShift($selectedWard->id);
+
+        $assignmentQuery = WardScheduleAssignment::where('nurse_id', $nurse->id)
+            ->where('ward_id', $selectedWard->id)
+            ->where('scheduled_date', now()->toDateString())
+            ->with('bed');
+
+        if ($currentShift) {
+            $assignmentQuery->where('shift', $currentShift->shift_code);
+        }
+
+        $assignments = $assignmentQuery->get();
+        $assignedBedIds = $assignments->pluck('bed_id')->filter()->unique()->values();
+        $assignedBedNumbers = $assignments->pluck('bed.bed_number')->filter()->unique()->values();
+
+        $assignedBeds = $allBeds
+            ->filter(function (array $bed) use ($assignedBedIds, $assignedBedNumbers) {
+                return $assignedBedIds->contains($bed['bed_id'])
+                    || $assignedBedNumbers->contains($bed['number']);
+            })
+            ->sortBy('number')
+            ->values();
+
+        $patientIds = $assignedBeds->pluck('patient_id')->filter()->unique()->values();
+
+        $latestVitalsByPatient = VitalSign::whereIn('patient_id', $patientIds)
+            ->orderBy('recorded_at', 'desc')
+            ->get()
+            ->unique('patient_id')
+            ->keyBy('patient_id');
+
+        $infusionsByPatient = Infusion::with('infusionPump')
+            ->whereIn('patient_id', $patientIds)
+            ->active()
+            ->latest('last_updated_at')
+            ->get()
+            ->groupBy('patient_id');
+
+        $admittedPatients = Patient::where('ward_id', $selectedWard->id)
+            ->where('is_active', true)
+            ->where('status', 'admitted')
+            ->get();
+
+        $wardStatistics = $this->calculateWardStatistics($selectedWard->id, $allBeds, $admittedPatients);
+        $activeInfusionItems = $infusionsByPatient->flatten(1);
+
+        $summary = [
+            'assigned_beds' => $assignedBeds->count(),
+            'occupied_beds' => $assignedBeds->whereIn('status', ['occupied', 'reserved'])->count(),
+            'critical_patients' => $assignedBeds->where('ews_is_abnormal', true)->count(),
+            'active_infusions' => $activeInfusionItems->count(),
+            'infusion_alerts' => $activeInfusionItems->where('is_warning', true)->count()
+                + $activeInfusionItems->where('status', Infusion::STATUS_ALARMING)->count(),
+            'ward_occupancy' => $wardStatistics['occupancy'] ?? 0,
+        ];
+
+        return view('wards.nurse-dashboard', [
+            'nurse' => $nurse,
+            'wards' => $wards,
+            'selectedWard' => $selectedWard,
+            'assignedBeds' => $assignedBeds,
+            'currentShift' => $currentShift,
+            'latestVitalsByPatient' => $latestVitalsByPatient,
+            'infusionsByPatient' => $infusionsByPatient,
+            'summary' => $summary,
+            'wardStatistics' => $wardStatistics,
+            'dashboardDisplay' => $settings['dashboardDisplay'],
+        ]);
+    }
+
     private function syncBedsWithPatients($wardId)
     {
         // Sync bed records in the Bed table with patient assignments
@@ -2979,6 +3128,10 @@ class WardDashboardController extends Controller
     }
     private function calculateWardStatistics($wardId, $beds, $admittedPatients)
     {
+        if ($beds instanceof \Illuminate\Support\Collection) {
+            $beds = $beds->values()->all();
+        }
+
         // Count unique staff assigned to admitted patients
         $uniqueConsultantIds = collect();
         $uniqueNurseIds = collect();
@@ -3189,4 +3342,3 @@ class WardDashboardController extends Controller
         return view('wards.slideshow-viewer', compact('allSlides', 'ward'));
     }
 }
-

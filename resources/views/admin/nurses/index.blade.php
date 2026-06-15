@@ -147,6 +147,15 @@
                                                 </svg>
                                                 Edit
                                             </a>
+                                            <a href="{{ route('nurses.dashboard', $nurse) }}" target="_blank" rel="noopener"
+                                                class="inline-flex items-center px-3 py-1.5 bg-cyan-100 hover:bg-cyan-200 text-cyan-800 rounded-lg transition-colors mr-2">
+                                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor"
+                                                    viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                        d="M9.75 3v5.25m4.5-5.25v5.25M4.5 9.75h15m-13.5 3h3m-3 3h5.25m5.742 2.258A7.5 7.5 0 1016.5 6a7.5 7.5 0 00.742 12.008zm0 0L21 21" />
+                                                </svg>
+                                                Nurse Dashboard
+                                            </a>
                                             <form action="{{ route('nurses.deactivate', $nurse) }}" method="POST"
                                                 class="inline">
                                                 @csrf

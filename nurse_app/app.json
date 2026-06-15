@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Nurse Dashboard",
+    "slug": "nurse-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.smartward.nurseapp"
+    },
+    "android": {
+      "package": "com.smartward.nurseapp",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#0b2435",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
