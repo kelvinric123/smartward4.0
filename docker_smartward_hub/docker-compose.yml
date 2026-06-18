@@ -7,13 +7,13 @@ services:
   # LDAP Sync Service Container
   ldap:
     image: kelvinric/smartward4-ldap:latest
-    container_name: smartward4-ldap
+    container_name: hub-smartward4-ldap
     restart: unless-stopped
     ports:
       - "5000:5000"
     environment:
       PYTHONUNBUFFERED: "1"
-      DB_HOST: "smartward4"
+      DB_HOST: "hub-smartward4"
       DB_PORT: "3306"
       DB_DATABASE: "${DB_DATABASE:-smartward}"
       DB_PASSWORD: "${DB_PASSWORD:-smartward_secret}"
@@ -33,7 +33,7 @@ services:
 
   smartward:
     image: ${SMARTWARD_IMAGE:-kelvinric/smartward4:latest}
-    container_name: smartward4
+    container_name: hub-smartward4
     restart: unless-stopped
     # Environment variables are loaded automatically from .env if present
     ports:
@@ -50,8 +50,8 @@ services:
       APP_NAME: "${APP_NAME:-SmartWard}"
       APP_ENV: "${APP_ENV:-local}"
       APP_DEBUG: "${APP_DEBUG:-true}"
-      APP_URL: "${APP_URL:-http://192.168.0.23:18080}"
-      ASSET_URL: "${ASSET_URL:-http://192.168.0.23:18080}"
+      APP_URL: "${APP_URL:-http://localhost:18080}"
+      ASSET_URL: "${ASSET_URL:-http://localhost:18080}"
       APP_TIMEZONE: "${APP_TIMEZONE:-Asia/Kuala_Lumpur}"
 
       # Octane/Swoole (Aggressive settings)
@@ -125,7 +125,7 @@ services:
   # HL7 ADT Listener Container
   adt:
     image: kelvinric/smartward4-adt:latest
-    container_name: smartward4-adt
+    container_name: hub-smartward4-adt
     restart: unless-stopped
     ports:
       - "${HL7_PORT:-3000}:3000"
@@ -162,10 +162,10 @@ services:
   # ECG HTTP Upload Server Container
   ecg:
     image: kelvinric/smartward4-ecg:latest
-    container_name: smartward4-ecg
+    container_name: hub-smartward4-ecg
     restart: unless-stopped
     ports:
-      - "${ECG_PORT:-3050}:3050"
+      - "${ECG_PORT:-3051}:3050"
     environment:
       # Server Configuration
       ECG_HOST: "0.0.0.0"
@@ -257,7 +257,7 @@ services:
   # B.Braun HL7 Infusion Pump Listener Container
   bbraun:
     image: kelvinric/smartward4-bbraun:latest
-    container_name: smartward4-bbraun
+    container_name: hub-smartward4-bbraun
     restart: unless-stopped
     ports:
       - "${BBRAUN_PORT:-5001}:5001"

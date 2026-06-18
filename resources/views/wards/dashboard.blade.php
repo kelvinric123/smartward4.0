@@ -1478,7 +1478,7 @@
                                             </svg>
                                             Edit
                                         </button>
-                                        <form method="POST" action="{{ route('ward.cancel-prebook', $bed['patient_id']) }}"
+                                        <form method="POST" action="{{ route('ward.cancel-prebook', $bed['patient_id'] ?? 0) }}"
                                             >
                                             @csrf
                                             <button type="submit"
