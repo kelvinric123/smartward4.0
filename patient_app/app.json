@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "SmartWard Patient",
+    "slug": "patient-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.smartward.patientapp"
+    },
+    "android": {
+      "package": "com.smartward.patientapp",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#0b3b6f",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
