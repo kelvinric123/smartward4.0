@@ -97,11 +97,26 @@ echo ""
 echo -e "${CYAN}[Step 2/5] Fixing Docker-UFW Bypass...${NC}"
 AFTER_RULES="/etc/ufw/after.rules"
 
+# Always rebuild the Docker-UFW section to ensure config changes are applied
+# Remove existing block if present
 if grep -q "BEGIN UFW AND DOCKER" "$AFTER_RULES" 2>/dev/null; then
-    echo "  DOCKER-USER chain already exists. Skipping patch."
-else
-    echo "  Patching $AFTER_RULES..."
-    cat << 'EOF' >> "$AFTER_RULES"
+    echo "  Removing existing DOCKER-USER patch (will re-apply with latest config)..."
+    sed -i '/# BEGIN UFW AND DOCKER/,/# END UFW AND DOCKER/d' "$AFTER_RULES"
+fi
+
+echo "  Patching $AFTER_RULES..."
+
+# Build the hospital VLAN RETURN rules dynamically
+HOSPITAL_RETURN_RULES=""
+if [ -n "$HOSPITAL_VLANS" ]; then
+    for VLAN in $HOSPITAL_VLANS; do
+        HOSPITAL_RETURN_RULES="${HOSPITAL_RETURN_RULES}
+-A DOCKER-USER -j RETURN -s ${VLAN}"
+    done
+    echo -e "  ${GREEN}✔ Including hospital VLANs: ${HOSPITAL_VLANS}${NC}"
+fi
+
+cat >> "$AFTER_RULES" << EOFBLOCK
 
 # BEGIN UFW AND DOCKER
 *filter
@@ -113,6 +128,7 @@ else
 -A DOCKER-USER -j RETURN -s 10.0.0.0/8
 -A DOCKER-USER -j RETURN -s 172.16.0.0/12
 -A DOCKER-USER -j RETURN -s 192.168.0.0/16
+${HOSPITAL_RETURN_RULES}
 
 -A DOCKER-USER -p udp -m udp --sport 53 --dport 1024:65535 -j RETURN
 
@@ -129,9 +145,8 @@ else
 -A ufw-docker-logging-deny -j DROP
 COMMIT
 # END UFW AND DOCKER
-EOF
-    echo "  Patch applied successfully."
-fi
+EOFBLOCK
+echo "  Patch applied successfully."
 
 # -----------------------------------------------
 # Step 3: Set Defaults
