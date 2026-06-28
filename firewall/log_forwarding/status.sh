@@ -74,8 +74,8 @@ if [ -f "$LOCAL_CONF" ]; then
         LOG_SIZE=$(du -h "$OCTANE_LOG_PATH" | awk '{print $1}')
         echo -e "  Laravel Log: ${GREEN}FOUND ($LOG_SIZE)${NC} at $OCTANE_LOG_PATH"
     else
-        echo -e "  Laravel Log: ${RED}NOT FOUND${NC} at $OCTANE_LOG_PATH"
-        echo "               (This is normal if no Laravel errors have occurred yet)"
+        echo -e "  Laravel Log: ${GREEN}HEALTHY (No error logs generated yet)${NC}"
+        echo "               at $OCTANE_LOG_PATH"
     fi
     
     # Check MySQL logs
@@ -83,8 +83,8 @@ if [ -f "$LOCAL_CONF" ]; then
         DB_SIZE=$(du -h "$MYSQL_LOG_PATH" | awk '{print $1}')
         echo -e "  MySQL Log:   ${GREEN}FOUND ($DB_SIZE)${NC} at $MYSQL_LOG_PATH"
     else
-        echo -e "  MySQL Log:   ${RED}NOT FOUND${NC} at $MYSQL_LOG_PATH"
-        echo "               (This is normal if no database errors have occurred yet)"
+        echo -e "  MySQL Log:   ${GREEN}HEALTHY (No error logs generated yet)${NC}"
+        echo "               at $MYSQL_LOG_PATH"
     fi
 else
     echo -e "  ${RED}Warning: Local forwarding.conf missing, cannot check log files.${NC}"
