@@ -144,6 +144,29 @@ fi
 
 echo ""
 echo "================================================="
-echo " Status Check Complete"
+echo " Security Audit Logging Summary"
+echo "================================================="
+
+# 1) OS Layer Status
+if systemctl is-active --quiet rsyslog; then
+    echo -e "  1) OS Logging:          [ ${GREEN}ACTIVE${NC} ] (SSH auth & UFW blocks)"
+else
+    echo -e "  1) OS Logging:          [ ${RED}INACTIVE${NC} ]"
+fi
+
+# 2) DB Layer Status
+if [ -f "$CONF_FILE" ] && grep -q "smartward-db" "$CONF_FILE" 2>/dev/null && systemctl is-active --quiet rsyslog; then
+    echo -e "  2) Database Logging:    [ ${GREEN}ACTIVE${NC} ] (MySQL logs)"
+else
+    echo -e "  2) Database Logging:    [ ${RED}INACTIVE${NC} ]"
+fi
+
+# 3) APP Layer Status
+if [ -f "$CONF_FILE" ] && grep -q "smartward-app" "$CONF_FILE" 2>/dev/null && systemctl is-active --quiet rsyslog; then
+    echo -e "  3) Application Logging: [ ${GREEN}ACTIVE${NC} ] (Qmed Smart Ward logs)"
+else
+    echo -e "  3) Application Logging: [ ${RED}INACTIVE${NC} ]"
+fi
+
 echo "================================================="
 echo ""
