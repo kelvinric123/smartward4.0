@@ -84,15 +84,33 @@ class VitalSignApiV1Controller extends Controller
             }
             $debugData['processing_steps'][] = 'User authenticated: ' . $apiUser->name;
 
+            // Idempotency: if this gateway event was already recorded, acknowledge
+            // it again instead of inserting a duplicate. Makes Pi-side retries safe
+            // when a write succeeded but the ACK was lost over flaky Wi-Fi.
+            $eventId = $request->header('X-Idempotency-Key') ?: $request->input('gateway_event_id');
+            if ($eventId) {
+                $existing = VitalSign::withTrashed()->where('gateway_event_id', $eventId)->first();
+                if ($existing) {
+                    $debugData['processing_steps'][] = 'Idempotent replay of event ' . $eventId;
+                    return $this->ackDuplicate($apiUser, $request, $startTime, $debugData, $existing, $eventId);
+                }
+            }
+
             // Validate vital signs data
             $validator = Validator::make($request->all(), [
                 'patient_code' => 'required|string',
+                'gateway_event_id' => 'nullable|string|max:64',
+                'gateway_id' => 'nullable|string|max:255',
                 'measured_at' => 'nullable|date',
                 'blood_pressure_systolic' => 'nullable|numeric|min:0|max:300',
                 'blood_pressure_diastolic' => 'nullable|numeric|min:0|max:200',
                 'pulse_rate' => 'nullable|numeric|min:0|max:300',
+                'pulse_rate_min' => 'nullable|numeric|min:0|max:300',
+                'pulse_rate_max' => 'nullable|numeric|min:0|max:300',
                 'heart_rate' => 'nullable|numeric|min:0|max:300',
                 'spo2' => 'nullable|numeric|min:0|max:100',
+                'spo2_min' => 'nullable|numeric|min:0|max:100',
+                'spo2_max' => 'nullable|numeric|min:0|max:100',
                 'temperature' => 'nullable|numeric|min:20|max:50',
                 'respiratory_rate' => 'nullable|numeric|min:0|max:100',
                 'weight' => 'nullable|numeric|min:0|max:500',
@@ -290,13 +308,19 @@ class VitalSignApiV1Controller extends Controller
             $vitalSignData = [
                 'patient_id' => $patient->id,
                 'admission_id' => $patient->id, // Using patient ID as admission reference
+                'gateway_event_id' => $eventId ?: null,
+                'gateway_id' => $request->input('gateway_id') ?: null,
                 'recorded_by' => null, // Gateway submission
                 'operator_id' => $activeBinding?->nurse_id, // Link to bound nurse
                 'systolic_bp' => $parsedValues['systolic_bp'],
                 'diastolic_bp' => $parsedValues['diastolic_bp'],
                 'pulse_rate' => $parsedValues['pulse_rate'],
+                'pulse_rate_min' => $request->pulse_rate_min !== null ? (int) round($request->pulse_rate_min) : null,
+                'pulse_rate_max' => $request->pulse_rate_max !== null ? (int) round($request->pulse_rate_max) : null,
                 'temperature' => $parsedValues['temperature'],
                 'spo2' => $parsedValues['spo2'],
+                'spo2_min' => $request->spo2_min !== null ? (int) round($request->spo2_min) : null,
+                'spo2_max' => $request->spo2_max !== null ? (int) round($request->spo2_max) : null,
                 'respiratory_rate' => $parsedValues['respiratory_rate'],
                 'reading_type' => 'single', // 'single' or 'full' - 'gateway' tracked in notes
                 'notes' => 'Gateway API v1' . (count($notes) > 0 ? '; ' . implode('; ', $notes) : ''),
@@ -306,7 +330,17 @@ class VitalSignApiV1Controller extends Controller
             $debugData['vital_sign_creation']['input_data'] = $vitalSignData;
             $debugData['processing_steps'][] = 'Creating vital sign record...';
 
-            $vitalSign = VitalSign::create($vitalSignData);
+            try {
+                $vitalSign = VitalSign::create($vitalSignData);
+            } catch (\Illuminate\Database\QueryException $e) {
+                // Unique-constraint race: a concurrent retry inserted the same
+                // event between our check above and this insert. Treat as duplicate.
+                if ($eventId && ($existing = VitalSign::withTrashed()->where('gateway_event_id', $eventId)->first())) {
+                    $debugData['processing_steps'][] = 'Idempotent replay (insert race) for event ' . $eventId;
+                    return $this->ackDuplicate($apiUser, $request, $startTime, $debugData, $existing, $eventId);
+                }
+                throw $e;
+            }
 
             $debugData['vital_sign_creation']['created'] = true;
             $debugData['vital_sign_creation']['vital_sign_id'] = $vitalSign->id;
@@ -443,8 +477,233 @@ class VitalSignApiV1Controller extends Controller
     }
 
     /**
+     * List active wards so setup.sh can offer a ward choice during provisioning.
+     * GET with X-Passphrase header + username/password (query or body).
+     */
+    public function wards(Request $request)
+    {
+        $passphraseError = $this->validatePassphrase($request);
+        if ($passphraseError) {
+            return $passphraseError;
+        }
+        $apiUser = $this->authenticateUser($request);
+        if (!$apiUser) {
+            return response()->json(['success' => false, 'message' => 'Invalid credentials'], 401);
+        }
+
+        $wards = \App\Models\Ward::where('is_active', true)
+            ->orderBy('ward_name')
+            ->get(['id', 'ward_code', 'ward_name']);
+
+        return response()->json([
+            'success' => true,
+            'data' => ['wards' => $wards],
+        ], 200);
+    }
+
+    /**
+     * Register a gateway and obtain a server-assigned name.
+     *
+     * The Pi calls this once during setup with its hardware fingerprint. Laravel
+     * is the master of naming: the same board always maps to the same gateway_id
+     * (idempotent), and a fresh board is assigned the next sequential name. This
+     * is what makes SD-card cloning safe — identity is tied to hardware and issued
+     * by the server, not baked into the image.
+     *
+     * Body: { username, password, cpu_serial, mac_address?, hostname? }
+     * Returns: { data: { gateway_id, name, assigned } }
+     */
+    public function registerGateway(Request $request)
+    {
+        $startTime = microtime(true);
+
+        $passphraseError = $this->validatePassphrase($request);
+        if ($passphraseError) {
+            return $passphraseError;
+        }
+        $apiUser = $this->authenticateUser($request);
+        if (!$apiUser) {
+            return response()->json(['success' => false, 'message' => 'Invalid credentials'], 401);
+        }
+
+        $cpuSerial = trim((string) $request->input('cpu_serial'));
+        if ($cpuSerial === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'cpu_serial is required to register a gateway',
+            ], 422);
+        }
+        $mac = trim((string) $request->input('mac_address')) ?: null;
+        $hostname = trim((string) $request->input('hostname')) ?: null;
+        $prefix = config('services.vital_sign_api.gateway_prefix', 'GW-');
+
+        // Resolve the ward chosen during setup (ignored if it doesn't exist).
+        $wardId = $request->input('ward_id');
+        $wardId = ($wardId !== null && $wardId !== '' && \App\Models\Ward::whereKey($wardId)->exists())
+            ? (int) $wardId : null;
+
+        $result = \Illuminate\Support\Facades\DB::transaction(function () use ($cpuSerial, $mac, $hostname, $prefix, $wardId) {
+            // Same board re-provisioned -> keep its name; allow ward/mac to update.
+            $existing = \App\Models\QmedGateway::where('cpu_serial', $cpuSerial)->first();
+            if ($existing) {
+                $dirty = false;
+                if ($mac && !$existing->mac_address) { $existing->mac_address = $mac; $dirty = true; }
+                if ($wardId !== null && $existing->ward_id !== $wardId) { $existing->ward_id = $wardId; $dirty = true; }
+                if ($dirty) { $existing->save(); }
+                return [$existing, false];
+            }
+
+            // New board -> create, then derive the sequential name from its id.
+            $gateway = new \App\Models\QmedGateway();
+            $gateway->cpu_serial = $cpuSerial;
+            $gateway->mac_address = $mac;
+            $gateway->location = $hostname;
+            $gateway->ward_id = $wardId;
+            $gateway->is_active = true;
+            $gateway->name = 'pending';
+            $gateway->save();
+
+            $gateway->gateway_id = sprintf('%s%04d', $prefix, $gateway->id);
+            $gateway->name = $gateway->gateway_id;
+            $gateway->save();
+
+            return [$gateway, true];
+        });
+
+        [$gateway, $assigned] = $result;
+        // Link the registering API user so the gateway shows it on the dashboard.
+        $gateway->apiUsers()->syncWithoutDetaching([$apiUser->id]);
+        $apiUser->incrementRequestCount();
+
+        $responseData = [
+            'success' => true,
+            'status' => 'success',
+            'message' => $assigned ? 'Gateway registered' : 'Gateway already registered',
+            'data' => [
+                'gateway_id' => $gateway->gateway_id,
+                'name' => $gateway->name,
+                'assigned' => $assigned,
+                'ward_id' => $gateway->ward_id,
+                'ward' => $gateway->ward?->ward_name,
+            ],
+        ];
+
+        $this->logApiRequest(
+            $apiUser,
+            '/api/v1/gateway/register',
+            'POST',
+            $this->maskSensitiveData($request->all()),
+            $responseData,
+            200,
+            $startTime
+        );
+
+        return response()->json($responseData, 200);
+    }
+
+    /**
+     * Receive a gateway heartbeat from a Raspberry Pi cart.
+     *
+     * Body: {
+     *   "username", "password", "gateway_id", "cpu_serial", "app_version",
+     *   "uptime_s", "ip", "monitor": {...}, "queue": {...}, "power": {...},
+     *   "clock_synced": bool, "disk_free_pct": int
+     * }
+     */
+    public function heartbeat(Request $request)
+    {
+        $startTime = microtime(true);
+
+        $passphraseError = $this->validatePassphrase($request);
+        if ($passphraseError) {
+            return $passphraseError;
+        }
+
+        $apiUser = $this->authenticateUser($request);
+        if (!$apiUser) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid credentials',
+            ], 401);
+        }
+
+        $gatewayId = trim((string) $request->input('gateway_id'));
+        if ($gatewayId === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'gateway_id is required',
+            ], 422);
+        }
+
+        // Only the telemetry belongs in storage; never persist creds. The heavy
+        // "stats" block is stored separately so it survives between the frequent
+        // live beats and the ~30-minute extended sends.
+        $stats = $request->input('stats');
+        $payload = $request->except(['username', 'password', 'stats']);
+        $ip = $request->input('ip') ?: $request->ip();
+        $incomingSerial = trim((string) $request->input('cpu_serial')) ?: null;
+
+        $gateway = \App\Models\QmedGateway::firstOrNew(['gateway_id' => $gatewayId]);
+        if (!$gateway->exists) {
+            $gateway->name = $request->input('name', $gatewayId);
+            $gateway->is_active = true;
+        }
+
+        // Detect a cloned / mis-provisioned Pi: this gateway_id is being used by
+        // different hardware than it was registered to. Flag it (critical) and
+        // tell the Pi to re-register instead of clobbering the real cart's serial.
+        $conflict = false;
+        if ($incomingSerial) {
+            $ownerOfSerial = \App\Models\QmedGateway::where('cpu_serial', $incomingSerial)->first();
+            if ($gateway->cpu_serial && $gateway->cpu_serial !== $incomingSerial) {
+                $conflict = true;
+            } elseif ($ownerOfSerial && $ownerOfSerial->gateway_id !== $gatewayId) {
+                $conflict = true;
+            } elseif (!$gateway->cpu_serial) {
+                $gateway->cpu_serial = $incomingSerial;
+            }
+        }
+        if ($request->filled('mac_address') && !$conflict && !$gateway->mac_address) {
+            $gateway->mac_address = $request->input('mac_address');
+        }
+        if ($conflict) {
+            $payload['identity_conflict'] = true;
+        }
+        if (is_array($stats)) {
+            $gateway->last_stats = $stats;
+            $gateway->last_stats_at = now();
+        }
+
+        $gateway->recordHeartbeat($payload, $ip);
+        $apiUser->incrementRequestCount();
+
+        $responseData = [
+            'success' => true,
+            'status' => 'success',
+            'message' => $conflict ? 'Heartbeat received (identity conflict)' : 'Heartbeat received',
+            'data' => [
+                'gateway_id' => $gatewayId,
+                'health_status' => $gateway->health_status,
+                'action' => $conflict ? 'reregister' : null,
+            ],
+        ];
+
+        $this->logApiRequest(
+            $apiUser,
+            '/api/v1/gateway/heartbeat',
+            'POST',
+            $this->maskSensitiveData($request->all()),
+            $responseData,
+            200,
+            $startTime
+        );
+
+        return response()->json($responseData, 200);
+    }
+
+    /**
      * Search for patient by patient_code.
-     * 
+     *
      * Expected request format from Python client:
      * Headers: X-Passphrase: <passphrase>
      * Query params: username, password
@@ -566,6 +825,39 @@ class VitalSignApiV1Controller extends Controller
             $responseData,
             200,
             $startTime
+        );
+
+        return response()->json($responseData, 200);
+    }
+
+    /**
+     * Acknowledge an idempotent replay: the reading already exists, so return a
+     * success response referencing the original record instead of inserting again.
+     */
+    private function ackDuplicate($apiUser, Request $request, float $startTime, array $debugData, $existing, string $eventId)
+    {
+        $responseData = [
+            'success' => true,
+            'status' => 'success',
+            'ack' => true,
+            'duplicate' => true,
+            'message' => 'Vital sign already recorded (idempotent replay)',
+            'data' => [
+                'vital_sign_id' => $existing->id,
+                'gateway_event_id' => $eventId,
+                'recorded_at' => $existing->recorded_at?->toIso8601String(),
+            ],
+        ];
+
+        $this->logApiRequest(
+            $apiUser,
+            '/api/v1/vital-signs',
+            'POST',
+            $this->maskSensitiveData($request->all()),
+            $responseData,
+            200,
+            $startTime,
+            $debugData
         );
 
         return response()->json($responseData, 200);

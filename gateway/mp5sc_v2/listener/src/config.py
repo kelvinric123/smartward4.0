@@ -1,4 +1,5 @@
 import os
+import socket
 from dataclasses import dataclass
 
 
@@ -19,10 +20,43 @@ class Settings:
     use_api_devices: bool
     device_fetch_interval: int
     legacy_monitor_ip: str
+    # Identity
+    gateway_id: str
+    # Queue lifecycle / retention (FIFO)
+    retention_sent_hours: int
+    retention_dead_days: int
+    max_db_rows: int
+    max_db_mb: int
+    # Failure policy caps
+    max_age_transient_hours: int
+    max_age_404_minutes: int
+    max_attempts_auth: int
+    # Patient safety
+    vital_staleness_seconds: int
+    identity_settle_seconds: int
+    # Range capture bounds (values outside these are treated as extreme/artifact
+    # and excluded from both the point value and the min/max range).
+    spo2_range_min: int
+    spo2_range_max: int
+    pr_range_min: int
+    pr_range_max: int
+    # Heartbeat
+    heartbeat_interval: int
+    heartbeat_enabled: bool
+    # Extended stats (DB + network details) sent less frequently
+    extended_interval: int
 
 
 def _get_bool(name: str, default: str) -> bool:
     return os.getenv(name, default).strip().lower() == "true"
+
+
+def _default_gateway_id() -> str:
+    """Stable-ish fallback identity when GATEWAY_ID is not provisioned."""
+    try:
+        return socket.gethostname()
+    except Exception:
+        return "mp5sc-gateway"
 
 
 def load_settings() -> Settings:
@@ -42,4 +76,21 @@ def load_settings() -> Settings:
         use_api_devices=_get_bool("USE_API_DEVICES", "true"),
         device_fetch_interval=int(os.getenv("DEVICE_FETCH_INTERVAL", "60")),
         legacy_monitor_ip=os.getenv("MONITOR_IP", "").strip(),
+        gateway_id=os.getenv("GATEWAY_ID", "").strip() or _default_gateway_id(),
+        retention_sent_hours=int(os.getenv("RETENTION_SENT_HOURS", "72")),
+        retention_dead_days=int(os.getenv("RETENTION_DEAD_DAYS", "14")),
+        max_db_rows=int(os.getenv("MAX_DB_ROWS", "100000")),
+        max_db_mb=int(os.getenv("MAX_DB_MB", "200")),
+        max_age_transient_hours=int(os.getenv("MAX_AGE_TRANSIENT_HOURS", "168")),
+        max_age_404_minutes=int(os.getenv("MAX_AGE_404_MINUTES", "120")),
+        max_attempts_auth=int(os.getenv("MAX_ATTEMPTS_AUTH", "3")),
+        vital_staleness_seconds=int(os.getenv("VITAL_STALENESS_SECONDS", "60")),
+        identity_settle_seconds=int(os.getenv("IDENTITY_SETTLE_SECONDS", "5")),
+        spo2_range_min=int(os.getenv("SPO2_RANGE_MIN", "50")),
+        spo2_range_max=int(os.getenv("SPO2_RANGE_MAX", "100")),
+        pr_range_min=int(os.getenv("PR_RANGE_MIN", "30")),
+        pr_range_max=int(os.getenv("PR_RANGE_MAX", "220")),
+        heartbeat_interval=int(os.getenv("HEARTBEAT_INTERVAL", "30")),
+        heartbeat_enabled=_get_bool("HEARTBEAT_ENABLED", "true"),
+        extended_interval=int(os.getenv("EXTENDED_INTERVAL", "1800")),
     )

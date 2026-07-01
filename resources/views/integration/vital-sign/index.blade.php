@@ -856,61 +856,138 @@ Content-Type: application/json</pre>
 
                 <div class="p-6">
                     @if($gateways->count() > 0)
+                        @php
+                            // Traffic-light colours (inline so they render regardless of the Tailwind build).
+                            $connColors = [
+                                'green'  => ['dot' => '#22c55e', 'bg' => '#dcfce7', 'text' => '#15803d'],
+                                'yellow' => ['dot' => '#eab308', 'bg' => '#fef9c3', 'text' => '#854d0e'],
+                                'red'    => ['dot' => '#ef4444', 'bg' => '#fee2e2', 'text' => '#b91c1c'],
+                            ];
+                        @endphp
+                        <!-- Status legend -->
+                        <div class="flex flex-wrap items-center gap-x-5 gap-y-1 mb-4 text-xs text-gray-500">
+                            <span class="font-medium text-gray-600">Status:</span>
+                            <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full mr-1.5" style="background-color:#22c55e"></span>Online (heartbeat &lt; 1h)</span>
+                            <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full mr-1.5" style="background-color:#eab308"></span>No heartbeat &ge; 1h</span>
+                            <span class="flex items-center"><span class="w-2.5 h-2.5 rounded-full mr-1.5" style="background-color:#ef4444"></span>No heartbeat &ge; 2h</span>
+                        </div>
                         <div class="grid gap-4">
                             @foreach($gateways as $gateway)
                                 @php
-                                    $lastPing = $gateway->last_ping_at;
-                                    $statusColor = 'bg-red-100 text-red-700'; // Default Red (> 60 mins or never)
-                                    $statusText = 'Offline';
+                                    // mp5sc carts report via heartbeat; legacy gateways via ping.
+                                    $hb = $gateway->last_heartbeat ?? [];
+                                    $usingHeartbeat = (bool) $gateway->last_heartbeat_at;
+                                    $lastSeen = $gateway->last_heartbeat_at ?? $gateway->last_ping_at;
 
-                                    if ($lastPing) {
-                                        $minutesAgo = $lastPing->diffInMinutes(now());
-                                        if ($minutesAgo <= 10) {
-                                            $statusColor = 'bg-green-100 text-green-700';
-                                            $statusText = 'Online';
-                                        } elseif ($minutesAgo <= 60) {
-                                            $statusColor = 'bg-orange-100 text-orange-700';
-                                            $statusText = 'Warning';
-                                        }
-                                    }
+                                    // Traffic-light indicator from heartbeat recency.
+                                    $conn = $gateway->connection_status; // green | yellow | red
+                                    $cc = $connColors[$conn];
+                                    $connLabel = ['green' => 'Online', 'yellow' => 'No heartbeat > 1h', 'red' => ($lastSeen ? 'No heartbeat > 2h' : 'Never seen')][$conn];
                                 @endphp
                                 <div
-                                    class="border border-gray-200 rounded-xl p-5 hover:border-emerald-300 hover:shadow-md transition-all bg-white">
+                                    class="border border-gray-200 rounded-xl p-5 hover:border-emerald-300 hover:shadow-md transition-all bg-white"
+                                    style="border-left:5px solid {{ $cc['dot'] }}">
                                     <div class="flex justify-between items-start">
                                         <div class="flex-1">
-                                            <div class="flex items-center mb-2">
+                                            <div class="flex items-center flex-wrap gap-2 mb-2">
                                                 <h4 class="text-lg font-bold text-gray-800">{{ $gateway->name }}</h4>
+                                                @if($gateway->gateway_id)
+                                                    <code class="px-2 py-0.5 text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 rounded">{{ $gateway->gateway_id }}</code>
+                                                @endif
                                                 <span
-                                                    class="ml-2 px-2 py-0.5 text-xs font-medium {{ $gateway->is_active ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700' }} rounded-full">
+                                                    class="px-2 py-0.5 text-xs font-medium {{ $gateway->is_active ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700' }} rounded-full">
                                                     {{ $gateway->is_active ? 'Active' : 'Inactive' }}
                                                 </span>
                                                 <span
-                                                    class="ml-2 px-2 py-0.5 text-xs font-medium {{ $statusColor }} rounded-full flex items-center">
-                                                    <span
-                                                        class="w-2 h-2 rounded-full mr-1 {{ str_replace(['bg-', 'text-'], 'bg-', explode(' ', $statusColor)[1]) }}"></span>
-                                                    {{ $statusText }}
+                                                    class="px-2.5 py-0.5 text-xs font-semibold rounded-full flex items-center"
+                                                    style="background-color:{{ $cc['bg'] }};color:{{ $cc['text'] }}"
+                                                    title="Last heartbeat: {{ $lastSeen ? $lastSeen->diffForHumans() : 'never' }}">
+                                                    <span class="w-2.5 h-2.5 rounded-full mr-1.5" style="background-color:{{ $cc['dot'] }}"></span>
+                                                    {{ $connLabel }}
                                                 </span>
                                             </div>
                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-6 text-sm text-gray-600">
+                                                <div>
+                                                    <span class="font-medium text-gray-500">Ward:</span>
+                                                    {{ $gateway->ward?->ward_name ?? 'Unassigned' }}
+                                                </div>
                                                 <div>
                                                     <span class="font-medium text-gray-500">Location:</span>
                                                     {{ $gateway->location ?? 'N/A' }}
                                                 </div>
                                                 <div>
-                                                    <span class="font-medium text-gray-500">MAC Address:</span>
-                                                    <code
-                                                        class="bg-gray-100 px-1.5 py-0.5 rounded">{{ $gateway->mac_address ?? 'N/A' }}</code>
-                                                </div>
-                                                <div>
-                                                    <span class="font-medium text-gray-500">Last Ping:</span>
-                                                    {{ $gateway->last_ping_at ? $gateway->last_ping_at->diffForHumans() : 'Never' }}
+                                                    <span class="font-medium text-gray-500">{{ $usingHeartbeat ? 'Last Heartbeat' : 'Last Ping' }}:</span>
+                                                    {{ $lastSeen ? $lastSeen->diffForHumans() : 'Never' }}
                                                 </div>
                                                 <div>
                                                     <span class="font-medium text-gray-500">Last IP:</span>
                                                     <code
                                                         class="bg-gray-100 px-1.5 py-0.5 rounded">{{ $gateway->last_ping_ip ?? 'N/A' }}</code>
                                                 </div>
+                                                <div>
+                                                    <span class="font-medium text-gray-500">MAC Address:</span>
+                                                    <code
+                                                        class="bg-gray-100 px-1.5 py-0.5 rounded">{{ $gateway->mac_address ?? 'N/A' }}</code>
+                                                </div>
+                                                @if($usingHeartbeat)
+                                                    @php
+                                                        $mConn = data_get($hb, 'monitor.connected');
+                                                        $mCount = data_get($hb, 'monitor.count');
+                                                        $qPending = data_get($hb, 'queue.pending', 0);
+                                                        $qDead = data_get($hb, 'queue.dead', 0);
+                                                        $uvNow = data_get($hb, 'power.undervoltage_now');
+                                                        $uvSeen = data_get($hb, 'power.undervoltage_seen');
+                                                    @endphp
+                                                    <div>
+                                                        <span class="font-medium text-gray-500">Monitor:</span>
+                                                        @if($mConn !== null)
+                                                            <span class="{{ $mConn > 0 ? 'text-green-600' : 'text-red-600' }}">{{ $mConn }}/{{ $mCount }} connected</span>
+                                                        @else N/A @endif
+                                                    </div>
+                                                    <div>
+                                                        <span class="font-medium text-gray-500">Queue:</span>
+                                                        {{ $qPending }} pending{!! $qDead > 0 ? ', <span class="text-red-600 font-semibold">' . e($qDead) . ' dead-lettered</span>' : '' !!}
+                                                    </div>
+                                                    <div>
+                                                        <span class="font-medium text-gray-500">Power:</span>
+                                                        @if($uvNow)<span class="text-red-600 font-semibold">under-voltage now</span>
+                                                        @elseif($uvSeen)<span class="text-orange-600">under-voltage seen</span>
+                                                        @elseif($uvNow === false)<span class="text-green-600">OK</span>
+                                                        @else N/A @endif
+                                                    </div>
+                                                    <div>
+                                                        <span class="font-medium text-gray-500">App / Disk:</span>
+                                                        {{ data_get($hb, 'app_version', '?') }}@if(data_get($hb, 'disk_free_pct') !== null) &middot; {{ data_get($hb, 'disk_free_pct') }}% free @endif
+                                                    </div>
+                                                    @if(!empty($hb['identity_conflict']))
+                                                        <div class="md:col-span-2 text-red-700 font-semibold">
+                                                            ⚠ Identity conflict — this gateway_id is reporting from different hardware (cloned SD card?). Re-run <code>setup.sh</code> on that Pi.
+                                                        </div>
+                                                    @endif
+                                                @endif
                                             </div>
+
+                                            @if($usingHeartbeat && $gateway->last_stats)
+                                                @php $st = $gateway->last_stats; @endphp
+                                                <div class="mt-3 rounded-lg bg-gray-50 border border-gray-100 p-3 text-xs text-gray-600">
+                                                    <div class="font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                                                        Details
+                                                        <span class="normal-case font-normal text-gray-400">· updated {{ $gateway->last_stats_at?->diffForHumans() }}</span>
+                                                    </div>
+                                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-y-1 gap-x-6">
+                                                        <div><span class="text-gray-500">DB records:</span>
+                                                            {{ data_get($st, 'db.total_records', '—') }}
+                                                            (sent {{ data_get($st, 'db.sent', 0) }}, dead {{ data_get($st, 'db.dead', 0) }})</div>
+                                                        <div><span class="text-gray-500">DB size:</span> {{ data_get($st, 'db.db_size_mb', '—') }} MB</div>
+                                                        <div class="md:col-span-2"><span class="text-gray-500">Record range:</span>
+                                                            {{ data_get($st, 'db.oldest_record_at', '—') }} &rarr; {{ data_get($st, 'db.newest_record_at', '—') }} (UTC)</div>
+                                                        <div><span class="text-gray-500">Last sent:</span> {{ data_get($st, 'db.last_sent_at', '—') ?? 'never' }}</div>
+                                                        <div><span class="text-gray-500">Wi-Fi:</span>
+                                                            {{ data_get($st, 'network.ssid', '—') ?? '—' }}{{ data_get($st, 'network.wifi_signal') !== null ? ' (' . data_get($st, 'network.wifi_signal') . '%)' : '' }}</div>
+                                                        <div><span class="text-gray-500">Uplink:</span> {{ data_get($st, 'network.uplink_if', '—') ?? '—' }}</div>
+                                                    </div>
+                                                </div>
+                                            @endif
 
                                             <div class="mt-3">
                                                 <span class="text-xs font-medium text-gray-500 uppercase tracking-wider">Linked
@@ -982,14 +1059,62 @@ Content-Type: application/json</pre>
                         </div>
 
                     @else
-                        <div class="text-center py-12">
+                        <!-- Sample data: shows how a registered MP5SC cart will appear. -->
+                        <div class="mb-6">
+                            <div class="flex items-center gap-2 mb-2">
+                                <span class="px-2 py-0.5 text-xs font-semibold bg-amber-100 text-amber-800 rounded">SAMPLE</span>
+                                <span class="text-xs text-gray-500">Example only — replaced automatically once your first Pi runs
+                                    <code class="bg-gray-100 px-1 rounded">setup.sh</code> and registers.</span>
+                            </div>
+                            <div class="border border-dashed border-emerald-300 rounded-xl p-5 bg-emerald-50/30" style="border-left:5px solid #22c55e">
+                                <div class="flex items-center flex-wrap gap-2 mb-2">
+                                    <h4 class="text-lg font-bold text-gray-800">GW-0007</h4>
+                                    <code class="px-2 py-0.5 text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 rounded">GW-0007</code>
+                                    <span class="px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">Active</span>
+                                    <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full flex items-center" style="background-color:#dcfce7;color:#15803d">
+                                        <span class="w-2.5 h-2.5 rounded-full mr-1.5" style="background-color:#22c55e"></span>Online
+                                    </span>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-6 text-sm text-gray-600">
+                                    <div><span class="font-medium text-gray-500">Ward:</span> Ward A (General Medical)</div>
+                                    <div><span class="font-medium text-gray-500">Location:</span> Cart 7</div>
+                                    <div><span class="font-medium text-gray-500">Last Heartbeat:</span> a few seconds ago</div>
+                                    <div><span class="font-medium text-gray-500">Last IP:</span> <code class="bg-gray-100 px-1.5 py-0.5 rounded">10.20.0.51</code></div>
+                                    <div><span class="font-medium text-gray-500">MAC Address:</span> <code class="bg-gray-100 px-1.5 py-0.5 rounded">b8:27:eb:12:34:56</code></div>
+                                    <div><span class="font-medium text-gray-500">Monitor:</span> <span class="text-green-600">1/1 connected</span></div>
+                                    <div><span class="font-medium text-gray-500">Queue:</span> 2 pending</div>
+                                    <div><span class="font-medium text-gray-500">Power:</span> <span class="text-green-600">OK</span></div>
+                                    <div><span class="font-medium text-gray-500">App / Disk:</span> v2.1.0 &middot; 74% free</div>
+                                </div>
+                                <div class="mt-3 rounded-lg bg-gray-50 border border-gray-100 p-3 text-xs text-gray-600">
+                                    <div class="font-semibold text-gray-500 uppercase tracking-wider mb-2">Details
+                                        <span class="normal-case font-normal text-gray-400">· updated 12 minutes ago</span></div>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-y-1 gap-x-6">
+                                        <div><span class="text-gray-500">DB records:</span> 1,284 (sent 1,201, dead 0)</div>
+                                        <div><span class="text-gray-500">DB size:</span> 3.4 MB</div>
+                                        <div class="md:col-span-2"><span class="text-gray-500">Record range:</span> 2026-06-24 08:12:03 &rarr; 2026-07-02 10:41:55 (UTC)</div>
+                                        <div><span class="text-gray-500">Last sent:</span> 2026-07-02 10:41:57</div>
+                                        <div><span class="text-gray-500">Wi-Fi:</span> WARD-ENTERPRISE (74%)</div>
+                                        <div><span class="text-gray-500">Uplink:</span> wlan0</div>
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <span class="text-xs font-medium text-gray-500 uppercase tracking-wider">Linked API Users</span>
+                                    <div class="flex flex-wrap gap-2 mt-1">
+                                        <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100">api@qmed.asia</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="text-center py-8 border-t border-gray-100">
                             <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor"
                                 viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
                             </svg>
-                            <h4 class="text-lg font-medium text-gray-600 mb-2">No Qmed Gateways</h4>
-                            <p class="text-gray-500 mb-4">Add a Qmed Gateway to start collecting vital signs.</p>
+                            <h4 class="text-lg font-medium text-gray-600 mb-2">No Qmed Gateways yet</h4>
+                            <p class="text-gray-500 mb-4">Run <code class="bg-gray-100 px-1 rounded">setup.sh</code> on a Pi to auto-register one, or add it manually.</p>
                             <button @click="openAddGatewayModal()"
                                 class="inline-flex items-center px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors">
                                 <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

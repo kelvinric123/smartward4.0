@@ -77,7 +77,7 @@ class VitalSignIntegrationController extends Controller
         }
 
         // Get Qmed gateways
-        $gateways = QmedGateway::with('apiUsers')->latest()->get();
+        $gateways = QmedGateway::with('apiUsers', 'ward')->latest()->get();
 
         // Get gateway configuration for display
         $serverInfo = $this->getServerInfo();

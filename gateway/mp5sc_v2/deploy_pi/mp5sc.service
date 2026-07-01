@@ -1,0 +1,36 @@
+[Unit]
+Description=MP5SC v2 vital-sign gateway (store-and-forward listener)
+Documentation=file:///opt/mp5sc/mp5sc_v2.md
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mp5sc
+Group=mp5sc
+
+# All configuration (creds, IPs, tuning) comes from this file so it is the
+# single source of truth and lives on writable storage, not in the code image.
+EnvironmentFile=/var/lib/mp5sc/mp5sc.env
+
+WorkingDirectory=/opt/mp5sc/listener
+ExecStart=/opt/mp5sc/venv/bin/python main.py
+
+# Self-heal: always come back after a crash, a monitor drop, or a power blip.
+Restart=always
+RestartSec=5
+
+# Logs go to journald (volatile on a read-only rootfs) and are shipped in the
+# heartbeat; we do not write log files to the SD card.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mp5sc
+
+# Light hardening (safe on a single-purpose appliance).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mp5sc
+
+[Install]
+WantedBy=multi-user.target

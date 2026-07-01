@@ -47,6 +47,8 @@ return [
     */
     'vital_sign_api' => [
         'passphrase' => env('VITAL_SIGN_API_PASSPHRASE', 'qmedno1'),
+        // Prefix for server-assigned gateway names, e.g. "GW-0007".
+        'gateway_prefix' => env('VITAL_SIGN_GATEWAY_PREFIX', 'GW-'),
     ],
 
     /*

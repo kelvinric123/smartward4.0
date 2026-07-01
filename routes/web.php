@@ -306,6 +306,11 @@ Route::prefix('api/v1')->group(function () {
     Route::get('/patients/{patientCode}', [\App\Http\Controllers\VitalSignApiV1Controller::class, 'searchPatient']);
     Route::post('/device/login', [\App\Http\Controllers\VitalSignApiV1Controller::class, 'deviceLogin']);
     Route::post('/ping', [\App\Http\Controllers\VitalSignApiV1Controller::class, 'ping']);
+    // Ward list (for setup.sh ward selection)
+    Route::get('/wards', [\App\Http\Controllers\VitalSignApiV1Controller::class, 'wards']);
+    // Gateway registration (server-assigned name) + heartbeat / health telemetry (mp5sc_v2)
+    Route::post('/gateway/register', [\App\Http\Controllers\VitalSignApiV1Controller::class, 'registerGateway']);
+    Route::post('/gateway/heartbeat', [\App\Http\Controllers\VitalSignApiV1Controller::class, 'heartbeat']);
     // Monitor devices list for mp5sc listener
     Route::get('/monitor-devices', [VitalSignIntegrationController::class, 'apiGetDevices']);
     Route::post('/monitor-devices/{device}/status', [VitalSignIntegrationController::class, 'apiUpdateDeviceStatus']);

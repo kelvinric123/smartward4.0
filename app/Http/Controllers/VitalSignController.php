@@ -27,7 +27,7 @@ class VitalSignController extends Controller
             ->get(['id', 'name', 'mrn', 'rn', 'status', 'admitted_at']);
 
         // Query vital signs with patient relationship
-        $query = VitalSign::with(['patient', 'recordedBy', 'operator'])
+        $query = VitalSign::with(['patient', 'recordedBy', 'operator', 'gatewayDevice.ward'])
             ->orderBy('recorded_at', 'desc');
 
         // Filter by search term

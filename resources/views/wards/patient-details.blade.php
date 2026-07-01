@@ -1035,12 +1035,12 @@
                                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                                             <div class="bg-blue-50 border border-blue-100 rounded-lg p-3">
                                                 <div class="text-xs text-blue-600 font-semibold mb-1">Heart Rate</div>
-                                                <div class="text-2xl font-bold text-gray-900">{{ $latestVital->pulse_rate ?? '-' }}</div>
+                                                <div class="text-2xl font-bold text-gray-900">{{ $latestVital->pulse_rate_display ?? '-' }}</div>
                                                 <div class="text-xs text-gray-500 mt-1">bpm</div>
                                             </div>
                                             <div class="bg-green-50 border border-green-100 rounded-lg p-3">
                                                 <div class="text-xs text-green-600 font-semibold mb-1">SpO₂</div>
-                                                <div class="text-2xl font-bold text-gray-900">{{ $latestVital->spo2 ? $latestVital->spo2 . '%' : '-' }}</div>
+                                                <div class="text-2xl font-bold text-gray-900">{{ $latestVital->spo2_display ? $latestVital->spo2_display . '%' : '-' }}</div>
                                                 <div class="text-xs text-gray-500 mt-1">{{ $latestVital->oxygen_therapy ?? 'room air' }}</div>
                                             </div>
                                             <div class="bg-red-50 border border-red-100 rounded-lg p-3">
@@ -1073,9 +1073,9 @@
                                                         @foreach($recentVitals as $vital)
                                                             <tr class="hover:bg-gray-50">
                                                                 <td class="px-2 py-2 border-b">{{ $vital->recorded_at->format('M d H:i') }}</td>
-                                                                <td class="px-2 py-2 border-b">{{ $vital->pulse_rate ? $vital->pulse_rate . ' bpm' : '-' }}</td>
+                                                                <td class="px-2 py-2 border-b">{{ $vital->pulse_rate_display ? $vital->pulse_rate_display . ' bpm' : '-' }}</td>
                                                                 <td class="px-2 py-2 border-b">{{ ($vital->systolic_bp && $vital->diastolic_bp) ? $vital->systolic_bp . '/' . $vital->diastolic_bp : '-' }}</td>
-                                                                <td class="px-2 py-2 border-b">{{ $vital->spo2 ? $vital->spo2 . '%' : '-' }}</td>
+                                                                <td class="px-2 py-2 border-b">{{ $vital->spo2_display ? $vital->spo2_display . '%' : '-' }}</td>
                                                                 <td class="px-2 py-2 border-b">{{ $vital->temperature ? $vital->temperature . '°C' : '-' }}</td>
                                                                 <td class="px-2 py-2 border-b">{{ $vital->respiratory_rate ?? '-' }}</td>
                                                             </tr>

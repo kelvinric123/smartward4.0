@@ -19,6 +19,7 @@ if SRC_DIR not in sys.path:
 
 from api_client import ApiClient
 from config import load_settings
+from heartbeat import HeartbeatSender
 from reliable_ipv_data_source import ReliableIpvDataSource
 from storage import OutboxStorage
 
@@ -41,36 +42,109 @@ class OutboxSender(threading.Thread, LoggerMixin):
         self.api_client = api_client
         self.device_name = "Sender"
         self.running = True
+        self.last_gc_at = 0
 
     def compute_retry_delay(self, retry_count: int) -> int:
         delay = self.settings.retry_base_seconds * (2 ** max(retry_count - 1, 0))
         return min(delay, self.settings.retry_max_seconds)
 
+    @staticmethod
+    def _age_seconds(created_at: str) -> float:
+        try:
+            created = datetime.strptime(created_at, "%Y-%m-%d %H:%M:%S")
+            return max((datetime.utcnow() - created).total_seconds(), 0)
+        except (ValueError, TypeError):
+            return 0
+
+    def handle_failure(self, event, failure_class, http_status, detail):
+        """Decide retry vs dead-letter based on failure class and configured caps."""
+        row_id = event["id"]
+        retry_count = int(event["retry_count"]) + 1
+        age = self._age_seconds(event["created_at"])
+
+        dead = False
+        reason = None
+        if failure_class == "hard":
+            dead, reason = True, f"invalid payload (HTTP {http_status})"
+        elif failure_class == "soft":  # 404 patient not found
+            if age > self.settings.max_age_404_minutes * 60:
+                dead, reason = True, f"patient not found for > {self.settings.max_age_404_minutes}m"
+        elif failure_class == "auth":
+            if retry_count > self.settings.max_attempts_auth:
+                dead, reason = True, f"auth rejected after {retry_count} attempts"
+        else:  # transient
+            if age > self.settings.max_age_transient_hours * 3600:
+                dead, reason = True, f"undeliverable for > {self.settings.max_age_transient_hours}h"
+
+        if dead:
+            self.storage.mark_dead(row_id, reason, http_status, failure_class, detail)
+            level = "ERROR" if failure_class in ("hard", "auth") else "WARNING"
+            self.log(f"Dead-letter {event['event_id']} [{failure_class}]: {reason}: {detail}", level)
+        else:
+            delay = self.compute_retry_delay(retry_count)
+            self.storage.mark_retry(row_id, retry_count, delay, detail, http_status, failure_class)
+            self.log(
+                f"Send failed {event['event_id']} [{failure_class}], retry {retry_count} in {delay}s: {detail}",
+                "WARNING",
+            )
+
+    def maybe_run_janitor(self):
+        now = time.time()
+        if now - self.last_gc_at < 60:
+            return
+        self.last_gc_at = now
+        try:
+            r = self.storage.run_maintenance(
+                self.settings.retention_sent_hours,
+                self.settings.retention_dead_days,
+                self.settings.max_db_rows,
+                self.settings.max_db_mb,
+            )
+        except Exception as exc:
+            self.log(f"Janitor error: {exc}", "ERROR")
+            return
+        if any(r.values()):
+            self.log(
+                "Janitor purged sent={purged_sent} dead={purged_dead}; "
+                "evicted sent={evicted_sent} dead={evicted_dead} pending={evicted_pending}".format(**r)
+            )
+        if r["evicted_pending"]:
+            self.log(
+                f"ALARM: evicted {r['evicted_pending']} UNSENT reading(s) to stay under size cap "
+                f"(max_rows={self.settings.max_db_rows}, max_mb={self.settings.max_db_mb}) - data lost",
+                "ERROR",
+            )
+
     def run(self):
         self.log(f"Sender started with queue DB: {self.storage.db_path}")
         while self.running:
             try:
+                self.maybe_run_janitor()
                 events = self.storage.fetch_due_events(self.settings.send_batch_size)
                 if not events:
                     time.sleep(self.settings.send_interval)
                     continue
 
                 for event in events:
-                    payload = json.loads(event["payload_json"])
-                    ok, result = self.api_client.send_vital_signs(payload, event["event_id"])
+                    # Per-row isolation: a poison row is dead-lettered, not left
+                    # to stall the whole batch.
+                    try:
+                        payload = json.loads(event["payload_json"])
+                    except Exception as exc:
+                        self.storage.mark_dead(event["id"], "corrupt payload", None, "hard", str(exc))
+                        self.log(f"Dead-letter corrupt row {event['event_id']}: {exc}", "ERROR")
+                        continue
+
+                    ok, failure_class, http_status, detail = self.api_client.send_vital_signs(
+                        payload, event["event_id"]
+                    )
                     if ok:
                         self.storage.mark_sent(event["id"])
                         self.log(
-                            f"Sent queued event {event['event_id']} for patient {payload.get('patient_code', '')}"
+                            f"Sent {event['event_id']} for patient {payload.get('patient_code', '')}"
                         )
                     else:
-                        retry_count = int(event["retry_count"]) + 1
-                        delay = self.compute_retry_delay(retry_count)
-                        self.storage.mark_retry(event["id"], retry_count, delay, result)
-                        self.log(
-                            f"Send failed for {event['event_id']}, retry in {delay}s: {result}",
-                            "WARNING",
-                        )
+                        self.handle_failure(event, failure_class, http_status, detail)
 
                 time.sleep(1)
             except Exception as exc:
@@ -94,11 +168,38 @@ class VitalSignListener(threading.Thread, LoggerMixin):
 
         self.last_patient_name = ""
         self.last_patient_id = ""
+        self.patient_id_changed_at = 0
         self.last_valid_heart_rate = 0
         self.last_valid_oxygen = 0
         self.last_valid_temp = 0
         self.last_valid_resp_rate = 0
+        # Capture timestamps so stale continuous vitals are not attached to a BP.
+        self.hr_at = 0
+        self.oxygen_at = 0
+        self.temp_at = 0
+        self.resp_rate_at = 0
+        # Min/max observed for SpO2 and PR during the current capture window, so
+        # we can report a range (e.g. "95-96") instead of a single sample.
+        self.spo2_min = None
+        self.spo2_max = None
+        self.hr_min = None
+        self.hr_max = None
         self.last_status_report_at = 0
+
+    def reset_ranges(self):
+        """Start a fresh SpO2/PR range window (after a capture)."""
+        self.spo2_min = self.spo2_max = None
+        self.hr_min = self.hr_max = None
+
+    def reset_vital_cache(self):
+        """Drop cached continuous vitals so one patient's values never ride
+        along on the next patient's BP snapshot."""
+        self.last_valid_heart_rate = 0
+        self.last_valid_oxygen = 0
+        self.last_valid_temp = 0
+        self.last_valid_resp_rate = 0
+        self.hr_at = self.oxygen_at = self.temp_at = self.resp_rate_at = 0
+        self.reset_ranges()
 
     def update_status(self, status, connected=False):
         try:
@@ -107,26 +208,41 @@ class VitalSignListener(threading.Thread, LoggerMixin):
             if self.settings.debug_mode:
                 self.log(f"Status update failed: {exc}", "DEBUG")
 
-    def build_payload(self, patient_id, timestamp, bp_sys, bp_dias):
+    def _fresh(self, captured_at):
+        """True if a cached continuous value is recent enough to attach to a BP."""
+        return captured_at > 0 and (time.time() - captured_at) <= self.settings.vital_staleness_seconds
+
+    def build_payload(self, patient_id, timestamp, bp_sys, bp_dias, patient_name=""):
+        # Credentials are NOT stored here; they are attached by the API client at
+        # send time so the queue on disk never contains passwords.
         payload = {
-            "username": self.settings.api_username,
-            "password": self.settings.api_password,
             "patient_code": patient_id,
             "measured_at": timestamp.strftime("%Y-%m-%d %H:%M:%S"),
             "gateway_event_id": self.compute_event_id(patient_id, timestamp, bp_sys, bp_dias),
+            "gateway_id": self.settings.gateway_id,
         }
+        if patient_name:
+            payload["patient_name"] = patient_name
 
         if bp_sys > 0 and bp_sys < 300:
             payload["blood_pressure_systolic"] = int(bp_sys)
         if bp_dias > 0 and bp_dias < 200:
             payload["blood_pressure_diastolic"] = int(bp_dias)
-        if self.last_valid_heart_rate > 0 and self.last_valid_heart_rate < 300:
+        # Continuous vitals only ride along if captured within the staleness window.
+        # SpO2 and PR also carry the min/max observed during the capture window.
+        if self._fresh(self.hr_at) and 0 < self.last_valid_heart_rate < 300:
             payload["pulse_rate"] = int(self.last_valid_heart_rate)
-        if self.last_valid_oxygen > 0 and self.last_valid_oxygen <= 100:
+            if self.hr_min is not None and self.hr_max is not None:
+                payload["pulse_rate_min"] = int(round(self.hr_min))
+                payload["pulse_rate_max"] = int(round(self.hr_max))
+        if self._fresh(self.oxygen_at) and 0 < self.last_valid_oxygen <= 100:
             payload["spo2"] = round(self.last_valid_oxygen, 1)
-        if self.last_valid_temp > 20 and self.last_valid_temp < 50:
+            if self.spo2_min is not None and self.spo2_max is not None:
+                payload["spo2_min"] = int(round(self.spo2_min))
+                payload["spo2_max"] = int(round(self.spo2_max))
+        if self._fresh(self.temp_at) and 20 < self.last_valid_temp < 50:
             payload["temperature"] = round(self.last_valid_temp, 1)
-        if self.last_valid_resp_rate > 0 and self.last_valid_resp_rate < 100:
+        if self._fresh(self.resp_rate_at) and 0 < self.last_valid_resp_rate < 100:
             payload["respiratory_rate"] = int(self.last_valid_resp_rate)
         return payload
 
@@ -158,6 +274,17 @@ class VitalSignListener(threading.Thread, LoggerMixin):
         except Exception:
             pass
 
+        # A confirmed patient change clears cached vitals and starts the settle
+        # timer so a BP taken mid-switch cannot be attributed to the wrong person.
+        if patient_id and patient_id != self.last_patient_id:
+            if self.last_patient_id:
+                self.log(
+                    f"Patient changed {self.last_patient_id} -> {patient_id}; clearing cached vitals",
+                    "WARNING",
+                )
+                self.reset_vital_cache()
+            self.patient_id_changed_at = time.time()
+
         if full_name != self.last_patient_name or patient_id != self.last_patient_id:
             if patient_id:
                 if full_name:
@@ -180,14 +307,27 @@ class VitalSignListener(threading.Thread, LoggerMixin):
             current_temp = 0
             current_resp_rate = 0
 
-        if current_heart_rate < 300 and current_heart_rate != 8388607:
+        now = time.time()
+        # PR: keep the latest as the point value and track the window min/max.
+        if self.settings.pr_range_min <= current_heart_rate <= self.settings.pr_range_max \
+                and current_heart_rate != 8388607:
             self.last_valid_heart_rate = current_heart_rate
-        if current_oxygen <= 100 and current_oxygen != 8388607:
+            self.hr_at = now
+            self.hr_min = current_heart_rate if self.hr_min is None else min(self.hr_min, current_heart_rate)
+            self.hr_max = current_heart_rate if self.hr_max is None else max(self.hr_max, current_heart_rate)
+        # SpO2: same treatment.
+        if self.settings.spo2_range_min <= current_oxygen <= self.settings.spo2_range_max \
+                and current_oxygen != 8388607:
             self.last_valid_oxygen = current_oxygen
+            self.oxygen_at = now
+            self.spo2_min = current_oxygen if self.spo2_min is None else min(self.spo2_min, current_oxygen)
+            self.spo2_max = current_oxygen if self.spo2_max is None else max(self.spo2_max, current_oxygen)
         if 20 < current_temp < 50 and current_temp != 8388607:
             self.last_valid_temp = current_temp
+            self.temp_at = now
         if 0 < current_resp_rate < 100 and current_resp_rate != 8388607:
             self.last_valid_resp_rate = current_resp_rate
+            self.resp_rate_at = now
 
         if self.settings.debug_mode:
             self.log(
@@ -202,9 +342,12 @@ class VitalSignListener(threading.Thread, LoggerMixin):
         if now - self.last_status_report_at < 60:
             return
         stats = self.storage.get_stats()
+        level = "WARNING" if stats["dead"] else "INFO"
         self.log(
-            f"Queue pending={stats['pending_count']} oldest={stats['oldest_pending_at']}",
-            "INFO",
+            f"Queue pending={stats['pending']} retry={stats['retry']} "
+            f"dead={stats['dead']} oldest_age={stats['oldest_pending_age_s']}s "
+            f"db={stats['db_size_mb']}MB",
+            level,
         )
         self.last_status_report_at = now
 
@@ -249,22 +392,43 @@ class VitalSignListener(threading.Thread, LoggerMixin):
                     bp_sys = float(temp_l[0][1])
                     bp_dias = float(temp_l[1][1])
 
+                    # Pull the freshest identity right before attributing this
+                    # reading, instead of trusting the periodic refresh window.
+                    dev.refresh_patient_data()
+                    patient_id, full_name = self.refresh_patient_context(dev)
+
                     if not patient_id:
-                        self.log("Skipping capture because patient ID is missing", "WARNING")
+                        self.log("Skipping BP capture: patient ID missing", "WARNING")
                         last_nbp_time = v
                         time.sleep(self.settings.poll_interval)
                         continue
 
-                    payload = self.build_payload(patient_id, v, bp_sys, bp_dias)
+                    # Identity just changed => this BP is ambiguous (could be the
+                    # previous patient's). Drop it rather than risk a wrong-patient
+                    # record; a settled reading will be captured on the next cuff.
+                    if (time.time() - self.patient_id_changed_at) < self.settings.identity_settle_seconds:
+                        self.log(
+                            f"Dropping BP {int(bp_sys)}/{int(bp_dias)}: identity unsettled "
+                            f"(<{self.settings.identity_settle_seconds}s since patient change)",
+                            "WARNING",
+                        )
+                        last_nbp_time = v
+                        time.sleep(self.settings.poll_interval)
+                        continue
+
+                    payload = self.build_payload(patient_id, v, bp_sys, bp_dias, full_name)
                     event_id = payload["gateway_event_id"]
                     inserted = self.storage.enqueue(event_id, payload, self.device_name, self.monitor_ip)
                     state = "queued" if inserted else "duplicate ignored"
                     self.log(
                         f"BP captured for {full_name or patient_id}: "
-                        f"{int(bp_sys)}/{int(bp_dias)} HR={int(self.last_valid_heart_rate)} "
-                        f"SpO2={self.last_valid_oxygen:.1f} [{state}]"
+                        f"{int(bp_sys)}/{int(bp_dias)} "
+                        f"PR={payload.get('pulse_rate_min', '?')}-{payload.get('pulse_rate_max', '?')} "
+                        f"SpO2={payload.get('spo2_min', '?')}-{payload.get('spo2_max', '?')} [{state}]"
                     )
                     last_nbp_time = v
+                    # New capture window for the next reading.
+                    self.reset_ranges()
 
                 self.maybe_report_queue_state()
                 time.sleep(self.settings.poll_interval)
@@ -290,6 +454,11 @@ class MultiDeviceManager(LoggerMixin):
         self.storage = OutboxStorage(self.settings.queue_db_path)
         self.api_client = ApiClient(self.settings)
         self.sender = OutboxSender(self.settings, self.storage, self.api_client)
+        self.heartbeat = (
+            HeartbeatSender(self.settings, self.storage, self.api_client, self)
+            if self.settings.heartbeat_enabled
+            else None
+        )
         self.listeners = {}
         self.running = True
 
@@ -333,6 +502,8 @@ class MultiDeviceManager(LoggerMixin):
         self.log("Starting MP5SC v2 manager")
         self.log(f"Queue DB: {self.storage.db_path}")
         self.sender.start()
+        if self.heartbeat:
+            self.heartbeat.start()
 
         if self.settings.use_api_devices:
             self.log("Device source: SmartWard API")
@@ -371,6 +542,9 @@ class MultiDeviceManager(LoggerMixin):
             self.running = False
             for ip in list(self.listeners.keys()):
                 self.stop_listener(ip)
+            if self.heartbeat:
+                self.heartbeat.stop()
+                self.heartbeat.join(timeout=5)
             self.sender.stop()
             self.sender.join(timeout=10)
             self.log("Manager stopped")

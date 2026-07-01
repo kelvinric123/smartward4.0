@@ -365,7 +365,7 @@
                                             <div class="mt-2.5 grid grid-cols-3 gap-2">
                                                 <div class="rounded-lg bg-white/8 p-2">
                                                     <p class="text-[9px] uppercase tracking-[0.16em] text-slate-300">Pulse</p>
-                                                    <p class="mt-1 text-sm font-semibold">{{ $vitals?->pulse_rate ?? '--' }}</p>
+                                                    <p class="mt-1 text-sm font-semibold">{{ $vitals?->pulse_rate_display ?? '--' }}</p>
                                                 </div>
                                                 <div class="rounded-lg bg-white/8 p-2">
                                                     <p class="text-[9px] uppercase tracking-[0.16em] text-slate-300">BP</p>
@@ -375,7 +375,7 @@
                                                 </div>
                                                 <div class="rounded-lg bg-white/8 p-2">
                                                     <p class="text-[9px] uppercase tracking-[0.16em] text-slate-300">SpO2</p>
-                                                    <p class="mt-1 text-sm font-semibold">{{ $vitals?->spo2 ? $vitals->spo2 . '%' : '--' }}</p>
+                                                    <p class="mt-1 text-sm font-semibold">{{ $vitals?->spo2_display ? $vitals->spo2_display . '%' : '--' }}</p>
                                                 </div>
                                                 <div class="rounded-lg bg-white/8 p-2">
                                                     <p class="text-[9px] uppercase tracking-[0.16em] text-slate-300">Resp</p>

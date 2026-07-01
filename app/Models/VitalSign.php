@@ -13,12 +13,18 @@ class VitalSign extends Model
     protected $fillable = [
         'patient_id',
         'admission_id',
+        'gateway_event_id',
+        'gateway_id',
         'recorded_by',
         'systolic_bp',
         'diastolic_bp',
         'pulse_rate',
+        'pulse_rate_min',
+        'pulse_rate_max',
         'temperature',
         'spo2',
+        'spo2_min',
+        'spo2_max',
         'respiratory_rate',
         'reading_type',
         'notes',
@@ -31,8 +37,12 @@ class VitalSign extends Model
         'systolic_bp' => 'integer',
         'diastolic_bp' => 'integer',
         'pulse_rate' => 'integer',
+        'pulse_rate_min' => 'integer',
+        'pulse_rate_max' => 'integer',
         'temperature' => 'decimal:1',
         'spo2' => 'integer',
+        'spo2_min' => 'integer',
+        'spo2_max' => 'integer',
         'respiratory_rate' => 'integer',
         'recorded_at' => 'datetime',
     ];
@@ -52,6 +62,14 @@ class VitalSign extends Model
         return $this->belongsTo(Nurse::class, 'operator_id');
     }
 
+    /**
+     * The gateway (cart) that submitted this reading, matched by gateway_id.
+     */
+    public function gatewayDevice(): BelongsTo
+    {
+        return $this->belongsTo(QmedGateway::class, 'gateway_id', 'gateway_id');
+    }
+
     public function deletedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'deleted_by');
@@ -66,6 +84,34 @@ class VitalSign extends Model
             return "{$this->systolic_bp}/{$this->diastolic_bp}";
         }
         return null;
+    }
+
+    /**
+     * Format a value as a range ("95-96") when min/max differ, else the single
+     * value ("95"), else the point fallback. Returns null when nothing is set.
+     */
+    private function rangeDisplay($min, $max, $point): ?string
+    {
+        if ($min !== null && $max !== null) {
+            return ((int) $min === (int) $max) ? (string) (int) $min : ((int) $min) . '-' . ((int) $max);
+        }
+        return $point !== null ? (string) $point : null;
+    }
+
+    /**
+     * SpO2 for display: "95-96" when a range was captured, else "95".
+     */
+    public function getSpo2DisplayAttribute(): ?string
+    {
+        return $this->rangeDisplay($this->spo2_min, $this->spo2_max, $this->spo2);
+    }
+
+    /**
+     * Pulse rate for display: "80-85" when a range was captured, else "80".
+     */
+    public function getPulseRateDisplayAttribute(): ?string
+    {
+        return $this->rangeDisplay($this->pulse_rate_min, $this->pulse_rate_max, $this->pulse_rate);
     }
 
     /**

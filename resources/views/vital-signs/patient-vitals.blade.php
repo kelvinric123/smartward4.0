@@ -249,7 +249,7 @@
                     </div>
                     <div class="bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200 rounded-lg p-3 text-center">
                         <div class="text-xs text-blue-600 font-semibold mb-1">Pulse Rate</div>
-                        <div class="text-xl font-bold text-gray-900">{{ $latest->pulse_rate ?? '-' }}</div>
+                        <div class="text-xl font-bold text-gray-900">{{ $latest->pulse_rate_display ?? '-' }}</div>
                         <div class="text-xs text-gray-500">bpm</div>
                     </div>
                     <div class="bg-gradient-to-br from-orange-50 to-orange-100 border border-orange-200 rounded-lg p-3 text-center">
@@ -262,7 +262,7 @@
                     <div class="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-3 text-center">
                         <div class="text-xs text-green-600 font-semibold mb-1">SpO2</div>
                         <div class="text-xl font-bold {{ $latest->spo2 && $latest->spo2 < 95 ? 'text-red-600' : 'text-gray-900' }}">
-                            {{ $latest->spo2 ? $latest->spo2 . '%' : '-' }}
+                            {{ $latest->spo2_display ? $latest->spo2_display . '%' : '-' }}
                         </div>
                         <div class="text-xs text-gray-500">Oxygen</div>
                     </div>
@@ -317,13 +317,13 @@
                                             {{ $vital->blood_pressure ?? '-' }}
                                         </td>
                                         <td class="px-3 py-2 text-center font-bold text-blue-600">
-                                            {{ $vital->pulse_rate ?? '-' }}
+                                            {{ $vital->pulse_rate_display ?? '-' }}
                                         </td>
                                         <td class="px-3 py-2 text-center font-bold text-orange-600">
                                             {{ $vital->temperature ? number_format($vital->temperature, 1) : '-' }}
                                         </td>
                                         <td class="px-3 py-2 text-center font-bold {{ $vital->spo2 && $vital->spo2 < 95 ? 'text-red-600' : 'text-green-600' }}">
-                                            {{ $vital->spo2 ? $vital->spo2 . '%' : '-' }}
+                                            {{ $vital->spo2_display ? $vital->spo2_display . '%' : '-' }}
                                         </td>
                                         <td class="px-3 py-2 text-center font-bold text-cyan-600">
                                             {{ $vital->respiratory_rate ?? '-' }}
