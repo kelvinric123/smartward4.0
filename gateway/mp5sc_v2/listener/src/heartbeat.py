@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import socket
@@ -87,6 +88,46 @@ def disk_free_pct(path):
         return None
 
 
+def read_netwatch(db_path):
+    """State written by the network self-healing watchdog (netwatch.sh) - how
+    many times it reconnected the Wi-Fi and whether the link is currently down."""
+    path = os.path.join(os.path.dirname(os.path.abspath(db_path)), "netwatch.state")
+    try:
+        with open(path, "r") as fh:
+            return json.load(fh)
+    except Exception:
+        return None
+
+
+def read_service_status(name):
+    """systemd unit state for the listener: active/sub state, restart count, and
+    when it last (re)started. Confirms the service is healthy and surfaces
+    crash-loops (rising NRestarts). Empty off-systemd."""
+    st = {"unit": name, "active_state": None, "sub_state": None,
+          "n_restarts": None, "active_since": None}
+    out = _run(["systemctl", "show", name, "--no-pager",
+                "--property=ActiveState,SubState,NRestarts,ActiveEnterTimestamp"])
+    if not out:
+        return st
+    for line in out.splitlines():
+        if "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        val = val.strip()
+        if key == "ActiveState":
+            st["active_state"] = val or None
+        elif key == "SubState":
+            st["sub_state"] = val or None
+        elif key == "NRestarts":
+            try:
+                st["n_restarts"] = int(val)
+            except ValueError:
+                pass
+        elif key == "ActiveEnterTimestamp":
+            st["active_since"] = val or None
+    return st
+
+
 def read_network():
     """Uplink details for the extended heartbeat: which interface holds the
     default route, and the active Wi-Fi SSID + signal. Nones off-Pi."""
@@ -170,6 +211,8 @@ class HeartbeatSender(threading.Thread):
             "power": read_power(),
             "clock_synced": clock_synced(),
             "disk_free_pct": disk_free_pct(self.storage.db_path),
+            "service": read_service_status(self.settings.service_name),
+            "netwatch": read_netwatch(self.storage.db_path),
         }
 
     def build_stats(self):

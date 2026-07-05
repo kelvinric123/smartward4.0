@@ -1,7 +1,9 @@
 #!/bin/bash
 # =============================================================================
 # Smartward Log Forwarding Installer / Activator
-# Installs rsyslog, configures file-based SIEM log forwarding, and adjusts firewall.
+# Installs rsyslog, resolves the real Docker log paths, grants read access,
+# configures file-based SIEM forwarding, adjusts firewall, and VALIDATES that
+# a log line actually leaves the host toward the SIEM.
 # =============================================================================
 
 # Ensure script is run as root
@@ -38,145 +40,225 @@ echo ""
 # -----------------------------------------------
 # Step 1: Pre-flight checks & dependencies
 # -----------------------------------------------
-echo -e "${CYAN}[Step 1/5] Checking dependencies...${NC}"
+echo -e "${CYAN}[Step 1/7] Checking dependencies...${NC}"
 
-# Check if rsyslog is installed (checking path and command)
+install_pkg() {
+    # $1 = friendly name, $2 = apt pkg, $3 = dnf/yum pkg
+    local name="$1" apt_pkg="$2" rpm_pkg="$3"
+    if command -v apt-get &> /dev/null; then
+        apt-get update -y > /dev/null 2>&1 && apt-get install -y "$apt_pkg" > /dev/null 2>&1
+    elif command -v dnf &> /dev/null; then
+        dnf install -y "$rpm_pkg" > /dev/null 2>&1
+    elif command -v yum &> /dev/null; then
+        yum install -y "$rpm_pkg" > /dev/null 2>&1
+    else
+        echo -e "  ${RED}ERROR: Unsupported package manager. Please install $name manually.${NC}"
+        return 1
+    fi
+}
+
+# rsyslog
 if ! command -v rsyslogd &> /dev/null && [ ! -f /usr/sbin/rsyslogd ]; then
     echo "  rsyslog is not installed. Attempting auto-installation..."
-    if command -v apt-get &> /dev/null; then
-        apt-get update -y && apt-get install -y rsyslog
-    elif command -v dnf &> /dev/null; then
-        dnf install -y rsyslog
-    elif command -v yum &> /dev/null; then
-        yum install -y rsyslog
-    else
-        echo -e "  ${RED}ERROR: Unsupported package manager. Please install rsyslog manually.${NC}"
-        exit 1
-    fi
-    echo -e "  ${GREEN}✔ rsyslog installed successfully${NC}"
+    install_pkg "rsyslog" "rsyslog" "rsyslog" || exit 1
+    echo -e "  ${GREEN}✔ rsyslog installed${NC}"
 else
     echo -e "  ${GREEN}✔ rsyslog is already installed${NC}"
 fi
 
-# Auto-install netcat (nc) if missing to support connectivity testing
+# acl (setfacl) - required to let the unprivileged rsyslog user read Docker logs
+if ! command -v setfacl &> /dev/null; then
+    echo "  acl (setfacl) not installed. Attempting auto-installation..."
+    install_pkg "acl" "acl" "acl"
+fi
+
+# netcat - for connectivity testing
 if ! command -v nc &> /dev/null; then
-    echo "  netcat (nc) is not installed. Attempting auto-installation..."
-    if command -v apt-get &> /dev/null; then
-        apt-get install -y netcat-openbsd > /dev/null 2>&1
-    elif command -v dnf &> /dev/null; then
-        dnf install -y nc > /dev/null 2>&1
-    elif command -v yum &> /dev/null; then
-        yum install -y nc > /dev/null 2>&1
-    fi
+    echo "  netcat (nc) not installed. Attempting auto-installation..."
+    install_pkg "netcat" "netcat-openbsd" "nc"
+fi
+
+# tcpdump - required for the live delivery self-test in Step 7
+if ! command -v tcpdump &> /dev/null; then
+    echo "  tcpdump not installed. Attempting auto-installation..."
+    install_pkg "tcpdump" "tcpdump" "tcpdump"
 fi
 
 # -----------------------------------------------
-# Step 2: Test network connectivity to SIEM
+# Step 2: Resolve REAL log paths from the Docker volume
 # -----------------------------------------------
 echo ""
-echo -e "${CYAN}[Step 2/5] Testing connectivity to SIEM ($SIEM_IP:$SIEM_PORT)...${NC}"
+echo -e "${CYAN}[Step 2/7] Resolving log source paths...${NC}"
 
-if [ -z "$SIEM_IP" ]; then
-    echo -e "${RED}ERROR: SIEM_IP is not set in forwarding.conf. Please configure it first.${NC}"
+if [ -z "$LOG_VOLUME_NAME" ]; then
+    echo -e "  ${RED}ERROR: LOG_VOLUME_NAME is not set in forwarding.conf.${NC}"
     exit 1
 fi
 
-# Try to check connectivity
-NC_OPTS="-vnz"
-if [ "$SIEM_PROTOCOL" = "udp" ]; then
-    NC_OPTS="-vnzu"
+VOL_MOUNT=""
+if command -v docker &> /dev/null; then
+    VOL_MOUNT=$(docker volume inspect -f '{{ .Mountpoint }}' "$LOG_VOLUME_NAME" 2>/dev/null)
+fi
+if [ -z "$VOL_MOUNT" ]; then
+    # Fallback to the conventional path if docker is unavailable
+    VOL_MOUNT="/var/lib/docker/volumes/$LOG_VOLUME_NAME/_data"
+    echo -e "  ${YELLOW}Could not query docker; falling back to conventional path.${NC}"
 fi
 
-if command -v nc &> /dev/null; then
-    echo "  Running: nc $NC_OPTS $SIEM_IP $SIEM_PORT"
-    # Netcat might print to stderr
-    nc $NC_OPTS $SIEM_IP $SIEM_PORT 2>&1
-    echo -e "  ${YELLOW}Note: If UDP is used, verify with network admins that port 514 UDP is open.${NC}"
-else
-    echo -e "  ${YELLOW}Warning: 'nc' (netcat) is not installed. Skipping direct connection check.${NC}"
+if [ ! -d "$VOL_MOUNT" ]; then
+    echo -e "  ${RED}ERROR: Log volume path does not exist: $VOL_MOUNT${NC}"
+    echo -e "  ${RED}       Check LOG_VOLUME_NAME. Available volumes:${NC}"
+    docker volume ls 2>/dev/null | awk 'NR>1{print "         - "$2}'
+    exit 1
 fi
+
+OCTANE_LOG_PATH="$VOL_MOUNT/$APP_LOG_REL"
+MYSQL_LOG_PATH="$VOL_MOUNT/$DB_LOG_REL"
+
+echo -e "  Volume mount: ${CYAN}$VOL_MOUNT${NC}"
+echo -e "  App log:      $OCTANE_LOG_PATH"
+echo -e "  DB log:       $MYSQL_LOG_PATH"
+
+for f in "$OCTANE_LOG_PATH" "$MYSQL_LOG_PATH"; do
+    if [ ! -f "$f" ]; then
+        echo -e "  ${YELLOW}Warning: log file not found yet: $f${NC}"
+        echo    "           (imfile will pick it up automatically once created)"
+    elif [ ! -s "$f" ]; then
+        echo -e "  ${YELLOW}Note: $f exists but is currently EMPTY (0 bytes).${NC}"
+    fi
+done
 
 # -----------------------------------------------
-# Step 3: Write rsyslog config
+# Step 3: Grant the rsyslog user read access (ACLs)
 # -----------------------------------------------
 echo ""
-echo -e "${CYAN}[Step 3/5] Writing rsyslog forwarding rules...${NC}"
+echo -e "${CYAN}[Step 3/7] Granting log read access to the rsyslog user...${NC}"
+
+# Determine the user rsyslog drops privileges to (Debian/Ubuntu = syslog; RHEL = root)
+if id syslog &> /dev/null; then
+    RSYSLOG_USER="syslog"
+else
+    RSYSLOG_USER="root"
+fi
+
+if [ "$RSYSLOG_USER" = "root" ]; then
+    echo "  rsyslog runs as root; no ACLs required."
+elif command -v setfacl &> /dev/null; then
+    # Traverse into /var/lib/docker (usually mode 710 = no 'other' execute)
+    setfacl -m u:${RSYSLOG_USER}:x /var/lib/docker 2>/dev/null
+    # Read + traverse across the whole log volume, and inherit for new files
+    setfacl -R  -m u:${RSYSLOG_USER}:rX "$VOL_MOUNT" 2>/dev/null
+    setfacl -R -d -m u:${RSYSLOG_USER}:rX "$VOL_MOUNT" 2>/dev/null
+    echo -e "  ${GREEN}✔ Read access granted to user '${RSYSLOG_USER}' on $VOL_MOUNT${NC}"
+
+    # Verify the user can actually read each target file
+    for f in "$OCTANE_LOG_PATH" "$MYSQL_LOG_PATH"; do
+        if [ -f "$f" ]; then
+            if sudo -u "$RSYSLOG_USER" test -r "$f"; then
+                echo -e "  ${GREEN}✔ '${RSYSLOG_USER}' can read $(basename "$f")${NC}"
+            else
+                echo -e "  ${RED}✖ '${RSYSLOG_USER}' still cannot read $f${NC}"
+            fi
+        fi
+    done
+else
+    echo -e "  ${RED}Warning: setfacl unavailable; rsyslog user may not be able to read Docker logs.${NC}"
+fi
+
+# -----------------------------------------------
+# Step 4: Test network connectivity to SIEM
+# -----------------------------------------------
+echo ""
+echo -e "${CYAN}[Step 4/7] Testing connectivity to SIEM ($SIEM_IP:$SIEM_PORT)...${NC}"
+
+if [ -z "$SIEM_IP" ]; then
+    echo -e "${RED}ERROR: SIEM_IP is not set in forwarding.conf.${NC}"
+    exit 1
+fi
+
+NC_OPTS="-vnz"
+[ "$SIEM_PROTOCOL" = "udp" ] && NC_OPTS="-vnzu"
+if command -v nc &> /dev/null; then
+    echo "  Running: nc -w 3 $NC_OPTS $SIEM_IP $SIEM_PORT"
+    nc -w 3 $NC_OPTS "$SIEM_IP" "$SIEM_PORT" 2>&1
+    echo -e "  ${YELLOW}Note: For UDP, 'nc' cannot truly confirm delivery. Step 7 self-test is authoritative.${NC}"
+else
+    echo -e "  ${YELLOW}Warning: 'nc' not installed. Skipping connection check.${NC}"
+fi
+
+# -----------------------------------------------
+# Step 5: Write rsyslog config
+# -----------------------------------------------
+echo ""
+echo -e "${CYAN}[Step 5/7] Writing rsyslog forwarding rules...${NC}"
 
 RSYSLOG_TARGET="@$SIEM_IP:$SIEM_PORT"
-if [ "$SIEM_PROTOCOL" = "tcp" ]; then
-    RSYSLOG_TARGET="@@$SIEM_IP:$SIEM_PORT"
-fi
+[ "$SIEM_PROTOCOL" = "tcp" ] && RSYSLOG_TARGET="@@$SIEM_IP:$SIEM_PORT"
 
-# Verify log file targets exist on the host (print warning if not yet created by Docker)
-if [ ! -f "$OCTANE_LOG_PATH" ]; then
-    echo -e "  ${YELLOW}Warning: Octane error log file does not exist yet at: $OCTANE_LOG_PATH${NC}"
-    echo "           (This is normal if Docker has not been started yet)"
-fi
-if [ ! -f "$MYSQL_LOG_PATH" ]; then
-    echo -e "  ${YELLOW}Warning: MySQL error log file does not exist yet at: $MYSQL_LOG_PATH${NC}"
-    echo "           (This is normal if Docker has not been started yet)"
-fi
-
-# Generate configuration file
 FORWARDER_CONF="/etc/rsyslog.d/smartward-forwarder.conf"
 
 cat > "$FORWARDER_CONF" << EOF
 # =============================================================================
-# Smartward Log Forwarding - AUTO GENERATED
+# Smartward Log Forwarding - AUTO GENERATED (do not edit by hand)
+# Regenerate with: sudo ./log_forwarding.sh
 # =============================================================================
 
 # Load text-file input module (polling interval in seconds)
 module(load="imfile" PollingInterval="5")
 
-# Laravel Application Logs
+# Laravel / Octane application log
 input(type="imfile"
       File="$OCTANE_LOG_PATH"
       Tag="smartward-app:"
-      Severity="error"
+      Severity="info"
       Facility="local7")
 
-# MySQL Database Logs
+# MySQL / MariaDB error log
 input(type="imfile"
       File="$MYSQL_LOG_PATH"
       Tag="smartward-db:"
       Severity="error"
       Facility="local7")
 
-# Forward local7 logs to designated security SIEM server
+# Forward local7 logs to the designated SIEM server
 local7.* $RSYSLOG_TARGET
 EOF
 
 echo -e "  ${GREEN}✔ Configuration written to $FORWARDER_CONF${NC}"
 
-# -----------------------------------------------
-# Step 4: Configure Firewall
-# -----------------------------------------------
-echo ""
-echo -e "${CYAN}[Step 4/5] Checking Firewall Settings...${NC}"
-
-if command -v ufw &> /dev/null && ufw status | grep -q "Status: active"; then
-    echo "  UFW firewall is active on this host."
-    echo "  Adding explicit rule to allow outbound syslog traffic to $SIEM_IP ($SIEM_PROTOCOL)..."
-    ufw allow out to "$SIEM_IP" port "$SIEM_PORT" proto "$SIEM_PROTOCOL" > /dev/null
-    echo -e "  ${GREEN}✔ Firewall rule added successfully (UFW)${NC}"
-elif command -v firewall-cmd &> /dev/null && systemctl is-active --quiet firewalld; then
-    echo "  Firewalld is active on this host."
-    echo "  Adding explicit rule to allow outbound syslog traffic..."
-    firewall-cmd --permanent --add-rich-rule="rule family='ipv4' destination address='$SIEM_IP' port port='$SIEM_PORT' protocol='$SIEM_PROTOCOL' accept" > /dev/null 2>&1
-    firewall-cmd --reload > /dev/null 2>&1
-    echo -e "  ${GREEN}✔ Firewall rule added successfully (Firewalld)${NC}"
+# Validate syntax BEFORE restarting so we never leave rsyslog in a broken state
+echo "  Validating rsyslog configuration..."
+if rsyslogd -N1 > /tmp/smartward-rsyslog-validate.log 2>&1; then
+    echo -e "  ${GREEN}✔ Configuration syntax is valid${NC}"
 else
-    echo "  No active UFW or Firewalld detected. Outbound logging traffic assumed allowed."
+    echo -e "  ${RED}✖ Configuration validation FAILED:${NC}"
+    cat /tmp/smartward-rsyslog-validate.log
+    exit 1
 fi
 
 # -----------------------------------------------
-# Step 5: Start & Enable rsyslog
+# Step 6: Configure Firewall
 # -----------------------------------------------
 echo ""
-echo -e "${CYAN}[Step 5/5] Activating and starting services...${NC}"
+echo -e "${CYAN}[Step 6/7] Checking Firewall Settings...${NC}"
 
+if command -v ufw &> /dev/null && ufw status | grep -q "Status: active"; then
+    echo "  UFW is active. Allowing outbound syslog to $SIEM_IP ($SIEM_PROTOCOL)..."
+    ufw allow out to "$SIEM_IP" port "$SIEM_PORT" proto "$SIEM_PROTOCOL" > /dev/null
+    echo -e "  ${GREEN}✔ Firewall rule added (UFW)${NC}"
+elif command -v firewall-cmd &> /dev/null && systemctl is-active --quiet firewalld; then
+    echo "  Firewalld is active. Adding outbound rule..."
+    firewall-cmd --permanent --add-rich-rule="rule family='ipv4' destination address='$SIEM_IP' port port='$SIEM_PORT' protocol='$SIEM_PROTOCOL' accept" > /dev/null 2>&1
+    firewall-cmd --reload > /dev/null 2>&1
+    echo -e "  ${GREEN}✔ Firewall rule added (Firewalld)${NC}"
+else
+    echo "  No active UFW/Firewalld detected. Outbound traffic assumed allowed."
+fi
+
+# Restart & enable rsyslog
+echo "  Restarting rsyslog service..."
 systemctl daemon-reload
-systemctl enable rsyslog
+systemctl enable rsyslog > /dev/null 2>&1
 systemctl restart rsyslog
 
 if systemctl is-active --quiet rsyslog; then
@@ -186,12 +268,61 @@ else
     exit 1
 fi
 
+# -----------------------------------------------
+# Step 7: LIVE validation — prove a log line leaves the host
+# -----------------------------------------------
+echo ""
+echo -e "${CYAN}[Step 7/7] Live delivery self-test...${NC}"
+
+# Pick a monitored file we can safely append a marker to
+TEST_FILE="$OCTANE_LOG_PATH"
+if [ ! -f "$TEST_FILE" ]; then
+    TEST_FILE="$MYSQL_LOG_PATH"
+fi
+
+if [ ! -f "$TEST_FILE" ] || ! command -v tcpdump &> /dev/null; then
+    echo -e "  ${YELLOW}Skipping self-test (no monitored file present or tcpdump missing).${NC}"
+    echo -e "  Manual test: append a line to $OCTANE_LOG_PATH and watch:"
+    echo -e "    sudo tcpdump -i any -n host $SIEM_IP and port $SIEM_PORT"
+else
+    MARKER="SMARTWARD-SELFTEST-$$-$(date +%s)"
+    PCAP="$(mktemp /tmp/smartward-selftest.XXXXXX.pcap)"
+
+    echo "  Capturing traffic to $SIEM_IP:$SIEM_PORT (up to 15s)..."
+    # Capture a single matching packet, or give up after 15s
+    timeout 15 tcpdump -i any -n "host $SIEM_IP and port $SIEM_PORT" -c 1 -w "$PCAP" > /dev/null 2>&1 &
+    TD_PID=$!
+
+    sleep 2
+    echo "  Injecting test marker into $(basename "$TEST_FILE")..."
+    # imfile polls every 5s, so allow time below
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $MARKER smartward log-forwarding self-test" >> "$TEST_FILE"
+
+    wait $TD_PID 2>/dev/null
+    CAPTURED=$(tcpdump -r "$PCAP" 2>/dev/null | wc -l)
+    rm -f "$PCAP"
+
+    echo ""
+    if [ "${CAPTURED:-0}" -ge 1 ]; then
+        echo -e "  ${GREEN}✔ SUCCESS: log packet was sent from this host to $SIEM_IP:$SIEM_PORT ($SIEM_PROTOCOL).${NC}"
+        echo -e "  ${GREEN}  The sender side is working. If the SIEM still shows nothing, the issue is${NC}"
+        echo -e "  ${GREEN}  on the receiver: confirm the 514 input exists and matches protocol ($SIEM_PROTOCOL).${NC}"
+    else
+        echo -e "  ${RED}✖ NO packet left the host within the timeout.${NC}"
+        echo -e "  ${YELLOW}  Troubleshoot in this order:${NC}"
+        echo -e "    1. Can rsyslog read the file?   sudo -u ${RSYSLOG_USER} cat \"$TEST_FILE\""
+        echo -e "    2. Any rsyslog errors?          sudo journalctl -u rsyslog -n 30 --no-pager"
+        echo -e "    3. Route to SIEM reachable?     ping $SIEM_IP"
+    fi
+fi
+
 echo ""
 echo "================================================="
-echo -e " ${GREEN}Log forwarding setup successfully completed!${NC}"
+echo -e " ${GREEN}Log forwarding setup completed.${NC}"
 echo "================================================="
-echo " What is next:"
-echo "   1. Ensure your Docker deployment is running."
-echo "   2. To watch logs being forwarded, run: tail -f /var/log/syslog"
+echo " Target : $SIEM_IP:$SIEM_PORT ($SIEM_PROTOCOL)"
+echo " App log: $OCTANE_LOG_PATH"
+echo " DB log : $MYSQL_LOG_PATH"
+echo " Verify : sudo ./status.sh"
 echo "================================================="
 echo ""

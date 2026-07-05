@@ -1,0 +1,18 @@
+[Unit]
+Description=MP5SC network self-healing watchdog
+Documentation=file:///opt/mp5sc/mp5sc_v2.md
+After=network.target NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+# Runs as root: needs nmcli, systemctl restart NetworkManager, and reboot.
+ExecStart=/opt/mp5sc/netwatch.sh /var/lib/mp5sc/mp5sc.env
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mp5sc-netwatch
+
+[Install]
+WantedBy=multi-user.target

@@ -12,12 +12,15 @@ class QmedGateway extends Model
     protected $fillable = [
         'name',
         'gateway_id',
+        'hostname',
         'location',
         'ward_id',
         'mac_address',
         'cpu_serial',
         'last_ping_at',
         'last_ping_ip',
+        'ssh_user',
+        'ssh_port',
         'last_heartbeat_at',
         'last_heartbeat',
         'last_stats',
@@ -32,8 +35,22 @@ class QmedGateway extends Model
         'last_heartbeat' => 'array',
         'last_stats' => 'array',
         'last_stats_at' => 'datetime',
+        'ssh_port' => 'integer',
         'is_active' => 'boolean',
     ];
+
+    /**
+     * Ready-to-paste SSH command to reach this cart, using its last known IP.
+     */
+    public function getSshCommandAttribute(): ?string
+    {
+        if (!$this->last_ping_ip) {
+            return null;
+        }
+        $user = $this->ssh_user ?: 'pi';
+        $port = (int) ($this->ssh_port ?: 22);
+        return 'ssh ' . $user . '@' . $this->last_ping_ip . ($port !== 22 ? ' -p ' . $port : '');
+    }
 
     // Grace before a silent cart is considered offline (missed heartbeats).
     public const OFFLINE_AFTER_SECONDS = 180;

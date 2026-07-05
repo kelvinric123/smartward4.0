@@ -26,20 +26,42 @@ sudo ./setup.sh --server http://10.0.0.5:88/api/v1 \
   --uplink-if wlan0 --yes
 ```
 
-### The 12 steps
+### The 13 steps
 
 1. Check environment (root, Pi detection, base tools)
 2. Gather configuration (interactive prompts)
-3. Install dependencies → verify each command present
+3. Install dependencies (auto-detects offline) → verify each present
 4. Create service user & directories → verify
 5. Install application & virtualenv → verify deps import
 6. **Verify server connectivity** (DNS + TCP + credentials) — gates naming
-7. **Register & get server-assigned name** (see below)
+7. **Register & get server-assigned name + ward + hostname** (see below)
 8. Write the env file → verify `GATEWAY_ID`
-9. **Configure monitor LAN, never-default** (see below)
-10. **Verify routing** — server traffic must not go out the monitor LAN
-11. Enable time sync (`fake-hwclock` + `systemd-timesyncd`)
-12. Install & start the `systemd` service → verify active
+9. **Apply server hostname & enable SSH**
+10. **Configure monitor LAN, never-default** (see below)
+11. **Verify routing** — server traffic must not go out the monitor LAN
+12. Enable time sync (`fake-hwclock` + `systemd-timesyncd`)
+13. Install & start the `systemd` service → verify active
+
+## Offline installs
+
+Setup works without internet. Step 3 auto-detects a lack of apt connectivity (or
+pass `--offline`) and then **verifies** the required dependencies instead of
+installing them — so they must already be in the Pi image:
+
+- **Bake them once** on a Pi with internet, then clone that SD as your base image:
+  ```bash
+  sudo apt install -y python3 python3-venv python3-pip sqlite3 curl \
+       network-manager fake-hwclock systemd-timesyncd \
+       python3-requests python3-dotenv libraspberrypi-bin
+  ```
+  Offline, the venv is created with `--system-site-packages`, so it picks up the
+  system-installed `python3-requests` / `python3-dotenv`.
+- **Or bundle wheels**: drop matching-arch wheels into `deploy_pi/wheels/` and
+  setup installs them with `pip --no-index`. (Build them on/for the Pi's arch,
+  e.g. `pip download -r ../listener/requirements.txt -d wheels`.)
+
+If a required dep is missing offline, step 3/5 fails with a clear message telling
+you exactly what to pre-install — nothing is silently skipped.
 
 ## Server-assigned naming (SD-clone safe)
 

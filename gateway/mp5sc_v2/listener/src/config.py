@@ -45,6 +45,8 @@ class Settings:
     heartbeat_enabled: bool
     # Extended stats (DB + network details) sent less frequently
     extended_interval: int
+    # systemd unit name to report status for
+    service_name: str
 
 
 def _get_bool(name: str, default: str) -> bool:
@@ -93,4 +95,5 @@ def load_settings() -> Settings:
         heartbeat_interval=int(os.getenv("HEARTBEAT_INTERVAL", "30")),
         heartbeat_enabled=_get_bool("HEARTBEAT_ENABLED", "true"),
         extended_interval=int(os.getenv("EXTENDED_INTERVAL", "1800")),
+        service_name=os.getenv("SERVICE_NAME", "mp5sc"),
     )

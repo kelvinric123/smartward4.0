@@ -198,6 +198,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/vital-sign-integration/gateway', [VitalSignIntegrationController::class, 'storeGateway'])->name('vital-sign-integration.gateway.store');
     Route::put('/vital-sign-integration/gateway/{gateway}', [VitalSignIntegrationController::class, 'updateGateway'])->name('vital-sign-integration.gateway.update');
     Route::delete('/vital-sign-integration/gateway/{gateway}', [VitalSignIntegrationController::class, 'destroyGateway'])->name('vital-sign-integration.gateway.destroy');
+    Route::post('/vital-sign-integration/gateway/{gateway}/ping', [VitalSignIntegrationController::class, 'pingGateway'])->name('vital-sign-integration.gateway.ping');
 
     // Monitor Device Routes (for mp5sc listener) - REMOVED
     // Route::post('/vital-sign-integration/device', [VitalSignIntegrationController::class, 'storeDevice'])->name('vital-sign-integration.device.store');

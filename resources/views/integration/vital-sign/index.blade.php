@@ -912,6 +912,10 @@ Content-Type: application/json</pre>
                                                     {{ $gateway->ward?->ward_name ?? 'Unassigned' }}
                                                 </div>
                                                 <div>
+                                                    <span class="font-medium text-gray-500">Hostname:</span>
+                                                    {{ $gateway->hostname ?? 'N/A' }}
+                                                </div>
+                                                <div>
                                                     <span class="font-medium text-gray-500">Location:</span>
                                                     {{ $gateway->location ?? 'N/A' }}
                                                 </div>
@@ -959,6 +963,24 @@ Content-Type: application/json</pre>
                                                         <span class="font-medium text-gray-500">App / Disk:</span>
                                                         {{ data_get($hb, 'app_version', '?') }}@if(data_get($hb, 'disk_free_pct') !== null) &middot; {{ data_get($hb, 'disk_free_pct') }}% free @endif
                                                     </div>
+                                                    <div>
+                                                        <span class="font-medium text-gray-500">Listener:</span>
+                                                        @php $svc = data_get($hb, 'service'); @endphp
+                                                        @if(data_get($svc, 'active_state'))
+                                                            <span class="{{ data_get($svc, 'active_state') === 'active' ? 'text-green-600' : 'text-red-600' }}">{{ data_get($svc, 'active_state') }} ({{ data_get($svc, 'sub_state', '?') }})</span>@if(data_get($svc, 'n_restarts'))<span class="text-orange-600"> &middot; {{ data_get($svc, 'n_restarts') }} restart(s)</span>@endif
+                                                        @else
+                                                            <span class="text-gray-400">N/A</span>
+                                                        @endif
+                                                    </div>
+                                                    <div>
+                                                        <span class="font-medium text-gray-500">Net recovery:</span>
+                                                        @php $nw = data_get($hb, 'netwatch'); @endphp
+                                                        @if($nw)
+                                                            <span class="{{ data_get($nw, 'reconnects', 0) > 0 ? 'text-orange-600' : 'text-green-600' }}">{{ data_get($nw, 'reconnects', 0) }} Wi-Fi reconnect(s)</span>@if(!data_get($nw, 'link_ok', true))<span class="text-red-600"> &middot; link down</span>@endif
+                                                        @else
+                                                            <span class="text-gray-400">N/A</span>
+                                                        @endif
+                                                    </div>
                                                     @if(!empty($hb['identity_conflict']))
                                                         <div class="md:col-span-2 text-red-700 font-semibold">
                                                             ⚠ Identity conflict — this gateway_id is reporting from different hardware (cloned SD card?). Re-run <code>setup.sh</code> on that Pi.
@@ -985,6 +1007,31 @@ Content-Type: application/json</pre>
                                                         <div><span class="text-gray-500">Wi-Fi:</span>
                                                             {{ data_get($st, 'network.ssid', '—') ?? '—' }}{{ data_get($st, 'network.wifi_signal') !== null ? ' (' . data_get($st, 'network.wifi_signal') . '%)' : '' }}</div>
                                                         <div><span class="text-gray-500">Uplink:</span> {{ data_get($st, 'network.uplink_if', '—') ?? '—' }}</div>
+                                                    </div>
+                                                </div>
+                                            @endif
+
+                                            @if($gateway->ssh_command)
+                                                <div class="mt-3" x-data="{ pinging:false, result:null, ok:false, copied:false,
+                                                    async ping(){ this.pinging=true; this.result=null;
+                                                        try {
+                                                            const r = await fetch('{{ route('vital-sign-integration.gateway.ping', $gateway) }}', {method:'POST', headers:{'X-CSRF-TOKEN':'{{ csrf_token() }}','Accept':'application/json'}});
+                                                            const d = await r.json();
+                                                            this.ok = d.reachable;
+                                                            this.result = d.reachable ? ('Reachable · '+d.ms+' ms') : (d.message || 'Unreachable');
+                                                        } catch(e){ this.ok=false; this.result='Request failed'; }
+                                                        this.pinging=false;
+                                                    },
+                                                    copy(){ navigator.clipboard.writeText('{{ $gateway->ssh_command }}'); this.copied=true; setTimeout(()=>this.copied=false,1500); } }">
+                                                    <span class="text-xs font-medium text-gray-500 uppercase tracking-wider">SSH Access</span>
+                                                    <div class="flex flex-wrap items-center gap-2 mt-1">
+                                                        <code class="text-xs bg-gray-900 text-emerald-300 px-2 py-1 rounded font-mono">{{ $gateway->ssh_command }}</code>
+                                                        <button type="button" @click="copy()" class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded">Copy</button>
+                                                        <button type="button" @click="ping()" :disabled="pinging" class="px-2 py-1 text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded disabled:opacity-50">
+                                                            <span x-show="!pinging">Ping</span><span x-show="pinging">Pinging…</span>
+                                                        </button>
+                                                        <span x-show="copied" class="text-xs text-emerald-600">Copied!</span>
+                                                        <span x-show="result" class="text-xs font-medium" :class="ok ? 'text-green-600' : 'text-red-600'" x-text="result"></span>
                                                     </div>
                                                 </div>
                                             @endif
@@ -1077,6 +1124,7 @@ Content-Type: application/json</pre>
                                 </div>
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-6 text-sm text-gray-600">
                                     <div><span class="font-medium text-gray-500">Ward:</span> Ward A (General Medical)</div>
+                                    <div><span class="font-medium text-gray-500">Hostname:</span> gw-0007</div>
                                     <div><span class="font-medium text-gray-500">Location:</span> Cart 7</div>
                                     <div><span class="font-medium text-gray-500">Last Heartbeat:</span> a few seconds ago</div>
                                     <div><span class="font-medium text-gray-500">Last IP:</span> <code class="bg-gray-100 px-1.5 py-0.5 rounded">10.20.0.51</code></div>
@@ -1085,6 +1133,8 @@ Content-Type: application/json</pre>
                                     <div><span class="font-medium text-gray-500">Queue:</span> 2 pending</div>
                                     <div><span class="font-medium text-gray-500">Power:</span> <span class="text-green-600">OK</span></div>
                                     <div><span class="font-medium text-gray-500">App / Disk:</span> v2.1.0 &middot; 74% free</div>
+                                    <div><span class="font-medium text-gray-500">Listener:</span> <span class="text-green-600">active (running)</span> &middot; 0 restart(s)</div>
+                                    <div><span class="font-medium text-gray-500">Net recovery:</span> <span class="text-green-600">1 Wi-Fi reconnect(s)</span></div>
                                 </div>
                                 <div class="mt-3 rounded-lg bg-gray-50 border border-gray-100 p-3 text-xs text-gray-600">
                                     <div class="font-semibold text-gray-500 uppercase tracking-wider mb-2">Details
@@ -1096,6 +1146,14 @@ Content-Type: application/json</pre>
                                         <div><span class="text-gray-500">Last sent:</span> 2026-07-02 10:41:57</div>
                                         <div><span class="text-gray-500">Wi-Fi:</span> WARD-ENTERPRISE (74%)</div>
                                         <div><span class="text-gray-500">Uplink:</span> wlan0</div>
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <span class="text-xs font-medium text-gray-500 uppercase tracking-wider">SSH Access</span>
+                                    <div class="flex flex-wrap items-center gap-2 mt-1">
+                                        <code class="text-xs bg-gray-900 text-emerald-300 px-2 py-1 rounded font-mono">ssh pi@10.20.0.51</code>
+                                        <button type="button" class="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded" disabled>Copy</button>
+                                        <button type="button" class="px-2 py-1 text-xs bg-emerald-100 text-emerald-700 rounded" disabled>Ping</button>
                                     </div>
                                 </div>
                                 <div class="mt-3">

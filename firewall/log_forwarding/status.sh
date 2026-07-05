@@ -66,26 +66,49 @@ echo -e "${CYAN}[3/5] Checking Log Source Files...${NC}"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 LOCAL_CONF="$SCRIPT_DIR/forwarding.conf"
 
+# Determine the user rsyslog reads files as (Debian/Ubuntu = syslog; RHEL = root)
+if id syslog &> /dev/null; then
+    RSYSLOG_USER="syslog"
+else
+    RSYSLOG_USER="root"
+fi
+
+# Resolve the real absolute log paths from the Docker volume
+resolve_log_paths() {
+    local mount=""
+    if command -v docker &> /dev/null && [ -n "$LOG_VOLUME_NAME" ]; then
+        mount=$(docker volume inspect -f '{{ .Mountpoint }}' "$LOG_VOLUME_NAME" 2>/dev/null)
+    fi
+    [ -z "$mount" ] && [ -n "$LOG_VOLUME_NAME" ] && mount="/var/lib/docker/volumes/$LOG_VOLUME_NAME/_data"
+    if [ -n "$mount" ]; then
+        OCTANE_LOG_PATH="$mount/$APP_LOG_REL"
+        MYSQL_LOG_PATH="$mount/$DB_LOG_REL"
+    fi
+}
+
+# Report a single log source honestly: MISSING / EMPTY / UNREADABLE / OK
+check_log_source() {
+    local label="$1" path="$2"
+    if [ ! -f "$path" ]; then
+        echo -e "  $label ${RED}MISSING${NC} — nothing to forward"
+        echo "               at $path"
+    elif [ ! -s "$path" ]; then
+        echo -e "  $label ${YELLOW}EMPTY (0 bytes) — no data being forwarded${NC}"
+        echo "               at $path"
+    elif ! sudo -u "$RSYSLOG_USER" test -r "$path"; then
+        echo -e "  $label ${RED}UNREADABLE by '$RSYSLOG_USER' — permission denied, not forwarded${NC}"
+        echo "               at $path (run log_forwarding.sh to fix ACLs)"
+    else
+        local size; size=$(du -h "$path" | awk '{print $1}')
+        echo -e "  $label ${GREEN}OK ($size, readable)${NC} at $path"
+    fi
+}
+
 if [ -f "$LOCAL_CONF" ]; then
     source "$LOCAL_CONF"
-    
-    # Check Laravel logs
-    if [ -f "$OCTANE_LOG_PATH" ]; then
-        LOG_SIZE=$(du -h "$OCTANE_LOG_PATH" | awk '{print $1}')
-        echo -e "  Laravel Log: ${GREEN}FOUND ($LOG_SIZE)${NC} at $OCTANE_LOG_PATH"
-    else
-        echo -e "  Laravel Log: ${GREEN}HEALTHY (No error logs generated yet)${NC}"
-        echo "               at $OCTANE_LOG_PATH"
-    fi
-    
-    # Check MySQL logs
-    if [ -f "$MYSQL_LOG_PATH" ]; then
-        DB_SIZE=$(du -h "$MYSQL_LOG_PATH" | awk '{print $1}')
-        echo -e "  MySQL Log:   ${GREEN}FOUND ($DB_SIZE)${NC} at $MYSQL_LOG_PATH"
-    else
-        echo -e "  MySQL Log:   ${GREEN}HEALTHY (No error logs generated yet)${NC}"
-        echo "               at $MYSQL_LOG_PATH"
-    fi
+    resolve_log_paths
+    check_log_source "App Log:  " "$OCTANE_LOG_PATH"
+    check_log_source "DB Log:   " "$MYSQL_LOG_PATH"
 else
     echo -e "  ${RED}Warning: Local forwarding.conf missing, cannot check log files.${NC}"
 fi

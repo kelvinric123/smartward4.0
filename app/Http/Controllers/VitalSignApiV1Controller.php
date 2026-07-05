@@ -534,7 +534,9 @@ class VitalSignApiV1Controller extends Controller
             ], 422);
         }
         $mac = trim((string) $request->input('mac_address')) ?: null;
-        $hostname = trim((string) $request->input('hostname')) ?: null;
+        $reportedHost = trim((string) $request->input('hostname')) ?: null;
+        $sshUser = trim((string) $request->input('ssh_user')) ?: null;
+        $sshPort = (int) $request->input('ssh_port') ?: null;
         $prefix = config('services.vital_sign_api.gateway_prefix', 'GW-');
 
         // Resolve the ward chosen during setup (ignored if it doesn't exist).
@@ -542,13 +544,16 @@ class VitalSignApiV1Controller extends Controller
         $wardId = ($wardId !== null && $wardId !== '' && \App\Models\Ward::whereKey($wardId)->exists())
             ? (int) $wardId : null;
 
-        $result = \Illuminate\Support\Facades\DB::transaction(function () use ($cpuSerial, $mac, $hostname, $prefix, $wardId) {
-            // Same board re-provisioned -> keep its name; allow ward/mac to update.
+        $result = \Illuminate\Support\Facades\DB::transaction(function () use ($cpuSerial, $mac, $reportedHost, $sshUser, $sshPort, $prefix, $wardId) {
+            // Same board re-provisioned -> keep its name; allow ward/ssh/mac to update.
             $existing = \App\Models\QmedGateway::where('cpu_serial', $cpuSerial)->first();
             if ($existing) {
                 $dirty = false;
                 if ($mac && !$existing->mac_address) { $existing->mac_address = $mac; $dirty = true; }
                 if ($wardId !== null && $existing->ward_id !== $wardId) { $existing->ward_id = $wardId; $dirty = true; }
+                if (!$existing->hostname && $existing->gateway_id) { $existing->hostname = strtolower($existing->gateway_id); $dirty = true; }
+                if ($sshUser && $existing->ssh_user !== $sshUser) { $existing->ssh_user = $sshUser; $dirty = true; }
+                if ($sshPort && $existing->ssh_port !== $sshPort) { $existing->ssh_port = $sshPort; $dirty = true; }
                 if ($dirty) { $existing->save(); }
                 return [$existing, false];
             }
@@ -557,13 +562,17 @@ class VitalSignApiV1Controller extends Controller
             $gateway = new \App\Models\QmedGateway();
             $gateway->cpu_serial = $cpuSerial;
             $gateway->mac_address = $mac;
-            $gateway->location = $hostname;
+            $gateway->location = $reportedHost;
             $gateway->ward_id = $wardId;
+            $gateway->ssh_user = $sshUser;
+            $gateway->ssh_port = $sshPort;
             $gateway->is_active = true;
             $gateway->name = 'pending';
             $gateway->save();
 
+            // Server-assigned identity: sequential name + matching hostname.
             $gateway->gateway_id = sprintf('%s%04d', $prefix, $gateway->id);
+            $gateway->hostname = strtolower($gateway->gateway_id);
             $gateway->name = $gateway->gateway_id;
             $gateway->save();
 
@@ -585,6 +594,10 @@ class VitalSignApiV1Controller extends Controller
                 'assigned' => $assigned,
                 'ward_id' => $gateway->ward_id,
                 'ward' => $gateway->ward?->ward_name,
+                'hostname' => $gateway->hostname,
+                'ssh_user' => $gateway->ssh_user,
+                'ssh_port' => $gateway->ssh_port,
+                'ssh_command' => $gateway->ssh_command,
             ],
         ];
 

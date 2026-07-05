@@ -801,6 +801,39 @@ class VitalSignIntegrationController extends Controller
     // ============================================
 
     /**
+     * Check whether a gateway is reachable (TCP connect to its SSH port).
+     * Used by the "Ping" button on the dashboard.
+     */
+    public function pingGateway(QmedGateway $gateway)
+    {
+        $ip = $gateway->last_ping_ip;
+        if (!$ip) {
+            return response()->json([
+                'reachable' => false,
+                'message' => 'No known IP yet (waiting for first heartbeat).',
+            ]);
+        }
+        $port = (int) ($gateway->ssh_port ?: 22);
+        $start = microtime(true);
+        $conn = @fsockopen($ip, $port, $errno, $errstr, 3);
+        if ($conn) {
+            fclose($conn);
+            return response()->json([
+                'reachable' => true,
+                'ip' => $ip,
+                'port' => $port,
+                'ms' => (int) round((microtime(true) - $start) * 1000),
+            ]);
+        }
+        return response()->json([
+            'reachable' => false,
+            'ip' => $ip,
+            'port' => $port,
+            'message' => "SSH port {$port} unreachable" . ($errstr ? " ({$errstr})" : ''),
+        ]);
+    }
+
+    /**
      * Store a new Qmed gateway.
      */
     public function storeGateway(Request $request)
