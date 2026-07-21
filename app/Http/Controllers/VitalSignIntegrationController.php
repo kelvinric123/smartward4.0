@@ -51,7 +51,9 @@ class VitalSignIntegrationController extends Controller
 
             $recentLogs = $query->paginate(50)->withQueryString();
         } else {
-            // Default "Dashboard" View - Fetch 100 recent logs for each category
+            // Default "Dashboard" View - keep each category represented for the
+            // client-side category filter, but fetch a light slice for fast loads.
+            // (Was 100 per category = up to 500 rows rendered into the DOM.)
             $logCategories = [
                 'vital_signs' => fn($q) => $q->where('endpoint', 'like', '%vital-sign%'),
                 'ping' => fn($q) => $q->where('endpoint', 'like', '%ping%'),
@@ -66,14 +68,15 @@ class VitalSignIntegrationController extends Controller
                         $callback($query);
                     })
                     ->latest()
-                    ->limit(100)
+                    ->limit(20)
                     ->get();
 
                 $recentLogs = $recentLogs->merge($categoryLogs);
             }
 
-            // Remove duplicates (in case a log matches multiple categories) and sort by date
-            $recentLogs = $recentLogs->unique('id')->sortByDesc('created_at')->values();
+            // Remove duplicates (in case a log matches multiple categories), keep the
+            // most recent overall and cap the rendered set.
+            $recentLogs = $recentLogs->unique('id')->sortByDesc('created_at')->take(60)->values();
         }
 
         // Get Qmed gateways
