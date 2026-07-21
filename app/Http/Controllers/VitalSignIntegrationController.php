@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\ApiUser;
 use App\Models\VitalSign;
 use App\Models\VitalSignApiLog;
+use App\Models\VitalSignApiLogSummary;
 use App\Models\QmedGateway;
 use App\Models\Patient;
+use App\Services\VitalSignApiLogPruner;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -18,9 +20,7 @@ class VitalSignIntegrationController extends Controller
      */
     public function index(Request $request)
     {
-        $apiUsers = ApiUser::withCount('apiLogs')
-            ->latest()
-            ->get();
+        $apiUsers = ApiUser::latest()->get();
 
         $recentLogs = collect();
         $isFiltered = false;
@@ -50,34 +50,9 @@ class VitalSignIntegrationController extends Controller
             }
 
             $recentLogs = $query->paginate(50)->withQueryString();
-        } else {
-            // Default "Dashboard" View - keep each category represented for the
-            // client-side category filter, but fetch a light slice for fast loads.
-            // (Was 100 per category = up to 500 rows rendered into the DOM.)
-            $logCategories = [
-                'vital_signs' => fn($q) => $q->where('endpoint', 'like', '%vital-sign%'),
-                'ping' => fn($q) => $q->where('endpoint', 'like', '%ping%'),
-                'login' => fn($q) => $q->where('endpoint', 'like', '%login%')->orWhere('endpoint', 'like', '%logout%'),
-                'patients' => fn($q) => $q->where('endpoint', 'like', '%patient%'),
-                'monitor' => fn($q) => $q->where('endpoint', 'like', '%monitor%')->orWhere('endpoint', 'like', '%device%'),
-            ];
-
-            foreach ($logCategories as $key => $callback) {
-                $categoryLogs = VitalSignApiLog::with('apiUser')
-                    ->where(function ($query) use ($callback) {
-                        $callback($query);
-                    })
-                    ->latest()
-                    ->limit(20)
-                    ->get();
-
-                $recentLogs = $recentLogs->merge($categoryLogs);
-            }
-
-            // Remove duplicates (in case a log matches multiple categories), keep the
-            // most recent overall and cap the rendered set.
-            $recentLogs = $recentLogs->unique('id')->sortByDesc('created_at')->take(60)->values();
         }
+        // Default view: logs are not queried here at all — the Logs tab
+        // lazy-loads them via the logs.table endpoint when it is opened.
 
         // Get Qmed gateways
         $gateways = QmedGateway::with('apiUsers', 'ward')->latest()->get();
@@ -703,18 +678,39 @@ class VitalSignIntegrationController extends Controller
     }
 
     /**
-     * Clear API logs.
+     * Render the lazy-loaded logs table (recent raw logs + daily summaries).
      */
-    public function clearLogs(Request $request)
+    public function logsTable()
     {
-        if ($request->api_user_id) {
-            VitalSignApiLog::where('api_user_id', $request->api_user_id)->delete();
-        } else {
-            VitalSignApiLog::truncate();
-        }
+        // latest('id') = insertion order over the primary key: fast on any table size.
+        $recentLogs = VitalSignApiLog::with('apiUser')
+            ->latest('id')
+            ->limit(100)
+            ->get();
+
+        $summaries = VitalSignApiLogSummary::with('apiUser')
+            ->where('summary_date', '>=', now()->subDays(30)->toDateString())
+            ->orderByDesc('summary_date')
+            ->orderByDesc('total_requests')
+            ->limit(200)
+            ->get();
+
+        return view('integration.vital-sign.partials.logs-table', [
+            'recentLogs' => $recentLogs,
+            'isFiltered' => false,
+            'summaries' => $summaries,
+        ]);
+    }
+
+    /**
+     * Clear API logs (daily summaries are saved before deleting).
+     */
+    public function clearLogs(Request $request, VitalSignApiLogPruner $pruner)
+    {
+        $result = $pruner->summarizeAndDelete(null, $request->api_user_id ?: null);
 
         return redirect()->route('vital-sign-integration.index')
-            ->with('success', 'API logs cleared successfully.');
+            ->with('success', "API logs cleared ({$result['deleted']} deleted). Daily summaries saved.");
     }
 
     /**

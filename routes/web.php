@@ -190,6 +190,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/vital-sign-integration/api-user/{apiUser}', [VitalSignIntegrationController::class, 'destroyApiUser'])->name('vital-sign-integration.api-user.destroy');
     Route::post('/vital-sign-integration/api-user/{apiUser}/regenerate-token', [VitalSignIntegrationController::class, 'regenerateToken'])->name('vital-sign-integration.api-user.regenerate-token');
     Route::get('/vital-sign-integration/logs', [VitalSignIntegrationController::class, 'getLogs'])->name('vital-sign-integration.logs');
+    Route::get('/vital-sign-integration/logs/table', [VitalSignIntegrationController::class, 'logsTable'])->name('vital-sign-integration.logs.table');
     Route::post('/vital-sign-integration/logs/clear', [VitalSignIntegrationController::class, 'clearLogs'])->name('vital-sign-integration.logs.clear');
     Route::get('/vital-sign-integration/logs/export', [VitalSignIntegrationController::class, 'exportLogs'])->name('vital-sign-integration.logs.export');
     Route::get('/vital-sign-integration/logs/print', [VitalSignIntegrationController::class, 'printLogs'])->name('vital-sign-integration.logs.print');

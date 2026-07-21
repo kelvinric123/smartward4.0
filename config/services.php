@@ -49,6 +49,8 @@ return [
         'passphrase' => env('VITAL_SIGN_API_PASSPHRASE', 'qmedno1'),
         // Prefix for server-assigned gateway names, e.g. "GW-0007".
         'gateway_prefix' => env('VITAL_SIGN_GATEWAY_PREFIX', 'GW-'),
+        // Raw API log rows older than this are rolled into daily summaries and deleted.
+        'log_retention_days' => (int) env('VITAL_SIGN_API_LOG_RETENTION_DAYS', 7),
     ],
 
     /*

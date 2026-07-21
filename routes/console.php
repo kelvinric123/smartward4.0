@@ -13,3 +13,7 @@ Artisan::command('inspire', function () {
 Schedule::command('ekad:update-shift-nurses --shift=AM')->dailyAt('06:45');
 Schedule::command('ekad:update-shift-nurses --shift=PM')->dailyAt('13:45');
 Schedule::command('ekad:update-shift-nurses --shift=ON')->dailyAt('22:45');
+
+// Roll old vital sign API logs into daily summaries and delete the raw rows
+// (retention configurable via VITAL_SIGN_API_LOG_RETENTION_DAYS, default 7 days).
+Schedule::command('vital-sign:prune-api-logs')->dailyAt('02:30');

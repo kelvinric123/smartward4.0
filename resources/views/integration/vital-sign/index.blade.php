@@ -74,7 +74,7 @@
                                 'icon' => 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z'],
                             ['id' => 'testing', 'label' => 'API Testing', 'count' => null,
                                 'icon' => 'M13 10V3L4 14h7v7l9-11h-7z'],
-                            ['id' => 'logs', 'label' => 'API Logs', 'count' => $recentLogs->count(),
+                            ['id' => 'logs', 'label' => 'API Logs', 'count' => ($isFiltered ?? false) ? $recentLogs->count() : null,
                                 'icon' => 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'],
                         ];
                     @endphp
@@ -419,6 +419,43 @@ DEVICE_PASSWORD = "your_password"`;
                 showDetailsModal: false,
                 selectedLog: null,
                 activeTab: 'request',
+
+                // Lazy loading: logs are only fetched when the Logs tab is opened
+                // (skipped when a server-side filter is active — table renders inline).
+                logsLazy: @json(!($isFiltered ?? false)),
+                logsLoaded: false,
+                logsLoading: false,
+
+                init() {
+                    if (!this.logsLazy) return;
+                    if (this.mainTab === 'logs') this.loadLogs();
+                    this.$watch('mainTab', (tab) => {
+                        if (tab === 'logs') this.loadLogs();
+                    });
+                },
+
+                async loadLogs() {
+                    if (!this.logsLazy || this.logsLoaded || this.logsLoading) return;
+                    this.logsLoading = true;
+                    try {
+                        const response = await fetch('{{ route('vital-sign-integration.logs.table') }}', {
+                            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                        });
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
+                        document.getElementById('vsiLogsTableContainer').innerHTML = await response.text();
+                        this.logsLoaded = true;
+                    } catch (error) {
+                        document.getElementById('vsiLogsTableContainer').innerHTML =
+                            '<div class="text-center py-8 text-red-500 text-sm">Failed to load logs: ' + error.message + '</div>';
+                    } finally {
+                        this.logsLoading = false;
+                    }
+                },
+
+                refreshLogs() {
+                    this.logsLoaded = false;
+                    this.loadLogs();
+                },
 
                 matchesFilter(endpoint) {
                     if (this.categoryFilter === 'all') return true;
