@@ -313,6 +313,8 @@ Route::prefix('api/v1')->group(function () {
     // Gateway registration (server-assigned name) + heartbeat / health telemetry (mp5sc_v2)
     Route::post('/gateway/register', [\App\Http\Controllers\VitalSignApiV1Controller::class, 'registerGateway']);
     Route::post('/gateway/heartbeat', [\App\Http\Controllers\VitalSignApiV1Controller::class, 'heartbeat']);
+    // ECG recordings forwarded by ECG gateways (gateway/ecg, Philips TC35)
+    Route::post('/ecg', [\App\Http\Controllers\VitalSignApiV1Controller::class, 'receiveEcg']);
     // Monitor devices list for mp5sc listener
     Route::get('/monitor-devices', [VitalSignIntegrationController::class, 'apiGetDevices']);
     Route::post('/monitor-devices/{device}/status', [VitalSignIntegrationController::class, 'apiUpdateDeviceStatus']);

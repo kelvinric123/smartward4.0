@@ -9,9 +9,15 @@ class QmedGateway extends Model
 {
     use HasFactory;
 
+    // Gateway kinds: vital-sign carts (MP5SC/VS4/CM100) vs ECG forwarders (TC35).
+    public const TYPE_VITAL_SIGN = 'vital_sign';
+    public const TYPE_ECG = 'ecg';
+    public const TYPES = [self::TYPE_VITAL_SIGN, self::TYPE_ECG];
+
     protected $fillable = [
         'name',
         'gateway_id',
+        'gateway_type',
         'hostname',
         'location',
         'ward_id',

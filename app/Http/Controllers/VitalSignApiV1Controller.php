@@ -537,14 +537,26 @@ class VitalSignApiV1Controller extends Controller
         $reportedHost = trim((string) $request->input('hostname')) ?: null;
         $sshUser = trim((string) $request->input('ssh_user')) ?: null;
         $sshPort = (int) $request->input('ssh_port') ?: null;
-        $prefix = config('services.vital_sign_api.gateway_prefix', 'GW-');
+
+        // Gateway kind: vital-sign cart (default) or ECG forwarder. Each kind
+        // gets its own name prefix so ECG gateways read as ECG-0001, etc.
+        $gatewayType = trim((string) $request->input('gateway_type')) ?: \App\Models\QmedGateway::TYPE_VITAL_SIGN;
+        if (!in_array($gatewayType, \App\Models\QmedGateway::TYPES, true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid gateway_type (expected: ' . implode(', ', \App\Models\QmedGateway::TYPES) . ')',
+            ], 422);
+        }
+        $prefix = $gatewayType === \App\Models\QmedGateway::TYPE_ECG
+            ? config('services.vital_sign_api.ecg_gateway_prefix', 'ECG-')
+            : config('services.vital_sign_api.gateway_prefix', 'GW-');
 
         // Resolve the ward chosen during setup (ignored if it doesn't exist).
         $wardId = $request->input('ward_id');
         $wardId = ($wardId !== null && $wardId !== '' && \App\Models\Ward::whereKey($wardId)->exists())
             ? (int) $wardId : null;
 
-        $result = \Illuminate\Support\Facades\DB::transaction(function () use ($cpuSerial, $mac, $reportedHost, $sshUser, $sshPort, $prefix, $wardId) {
+        $result = \Illuminate\Support\Facades\DB::transaction(function () use ($cpuSerial, $mac, $reportedHost, $sshUser, $sshPort, $prefix, $wardId, $gatewayType) {
             // Same board re-provisioned -> keep its name; allow ward/ssh/mac to update.
             $existing = \App\Models\QmedGateway::where('cpu_serial', $cpuSerial)->first();
             if ($existing) {
@@ -554,6 +566,7 @@ class VitalSignApiV1Controller extends Controller
                 if (!$existing->hostname && $existing->gateway_id) { $existing->hostname = strtolower($existing->gateway_id); $dirty = true; }
                 if ($sshUser && $existing->ssh_user !== $sshUser) { $existing->ssh_user = $sshUser; $dirty = true; }
                 if ($sshPort && $existing->ssh_port !== $sshPort) { $existing->ssh_port = $sshPort; $dirty = true; }
+                if ($existing->gateway_type !== $gatewayType) { $existing->gateway_type = $gatewayType; $dirty = true; }
                 if ($dirty) { $existing->save(); }
                 return [$existing, false];
             }
@@ -561,6 +574,7 @@ class VitalSignApiV1Controller extends Controller
             // New board -> create, then derive the sequential name from its id.
             $gateway = new \App\Models\QmedGateway();
             $gateway->cpu_serial = $cpuSerial;
+            $gateway->gateway_type = $gatewayType;
             $gateway->mac_address = $mac;
             $gateway->location = $reportedHost;
             $gateway->ward_id = $wardId;
@@ -590,6 +604,7 @@ class VitalSignApiV1Controller extends Controller
             'message' => $assigned ? 'Gateway registered' : 'Gateway already registered',
             'data' => [
                 'gateway_id' => $gateway->gateway_id,
+                'gateway_type' => $gateway->gateway_type,
                 'name' => $gateway->name,
                 'assigned' => $assigned,
                 'ward_id' => $gateway->ward_id,
@@ -660,6 +675,13 @@ class VitalSignApiV1Controller extends Controller
         if (!$gateway->exists) {
             $gateway->name = $request->input('name', $gatewayId);
             $gateway->is_active = true;
+        }
+
+        // Let the heartbeat carry the gateway kind (ECG gateways send
+        // gateway_type=ecg) so even a manually-added row gets typed correctly.
+        $reportedType = trim((string) $request->input('gateway_type'));
+        if (in_array($reportedType, \App\Models\QmedGateway::TYPES, true) && $gateway->gateway_type !== $reportedType) {
+            $gateway->gateway_type = $reportedType;
         }
 
         // Detect a cloned / mis-provisioned Pi: this gateway_id is being used by
@@ -938,6 +960,142 @@ class VitalSignApiV1Controller extends Controller
     /**
      * Log API request.
      */
+    /**
+     * Receive one ECG recording from an ECG gateway (Philips TC35 forwarder).
+     *
+     * The gateway sends the raw XML (and the PDF it extracted) base64-encoded,
+     * plus a content-addressed gateway_event_id. Files are written into the
+     * shared ECG store so the existing ECG admin/patient viewers pick them up
+     * unchanged; a row in ecg_uploads records the receipt and makes retries
+     * idempotent (a replayed upload is acknowledged, never duplicated).
+     */
+    public function receiveEcg(Request $request)
+    {
+        $startTime = microtime(true);
+
+        $passphraseError = $this->validatePassphrase($request);
+        if ($passphraseError) {
+            return $passphraseError;
+        }
+        $apiUser = $this->authenticateUser($request);
+        if (!$apiUser) {
+            return response()->json(['success' => false, 'message' => 'Invalid credentials'], 401);
+        }
+
+        $eventId = $request->header('X-Idempotency-Key') ?: $request->input('gateway_event_id');
+        $validator = Validator::make($request->all(), [
+            'gateway_event_id' => 'required|string|max:64',
+            'gateway_id' => 'nullable|string|max:255',
+            'patient_code' => 'nullable|string|max:255',
+            'captured_at' => 'nullable|date',
+            'filename' => 'nullable|string|max:255',
+            'xml_b64' => 'required|string',
+            'pdf_b64' => 'nullable|string',
+        ]);
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+        $eventId = $eventId ?: $request->input('gateway_event_id');
+
+        // Idempotent replay: the gateway retried after a lost ACK.
+        $existing = \App\Models\EcgUpload::where('gateway_event_id', $eventId)->first();
+        if ($existing) {
+            $responseData = [
+                'success' => true,
+                'status' => 'success',
+                'duplicate' => true,
+                'message' => 'ECG already received',
+                'data' => ['xml_file' => $existing->xml_filename, 'pdf_file' => $existing->pdf_filename],
+            ];
+            $this->logApiRequest($apiUser, '/api/v1/ecg', 'POST',
+                ['gateway_event_id' => $eventId, 'duplicate' => true], $responseData, 200, $startTime);
+            return response()->json($responseData, 200);
+        }
+
+        $xml = base64_decode((string) $request->input('xml_b64'), true);
+        if ($xml === false || $xml === '') {
+            return response()->json(['success' => false, 'message' => 'xml_b64 is not valid base64'], 422);
+        }
+        $pdf = null;
+        if ($request->filled('pdf_b64')) {
+            $pdf = base64_decode((string) $request->input('pdf_b64'), true);
+            if ($pdf === false || substr($pdf, 0, 4) !== '%PDF') {
+                $pdf = null; // ignore a corrupt PDF; the XML still carries the data
+            }
+        }
+
+        try {
+            $storePath = config('services.ecg.store_path');
+            if (!is_dir($storePath) && !@mkdir($storePath, 0755, true)) {
+                throw new \RuntimeException('ECG store path is not writable: ' . $storePath);
+            }
+
+            // Viewer-compatible names: EcgController parses ecg_upload_YYYYMMDD_HHMMSS
+            // and pairs <base>.xml with <base>_extracted.pdf. The event-id suffix
+            // keeps two recordings in the same second from colliding.
+            $capturedAt = $request->input('captured_at')
+                ? \Illuminate\Support\Carbon::parse($request->input('captured_at'))
+                : now();
+            $base = sprintf('ecg_upload_%s_%s', $capturedAt->format('Ymd_His'), substr($eventId, 0, 8));
+            $xmlName = $base . '.xml';
+            file_put_contents($storePath . '/' . $xmlName, $xml);
+            $pdfName = null;
+            if ($pdf !== null) {
+                $pdfName = $base . '_extracted.pdf';
+                file_put_contents($storePath . '/' . $pdfName, $pdf);
+            }
+
+            $upload = \App\Models\EcgUpload::create([
+                'gateway_event_id' => $eventId,
+                'gateway_id' => $request->input('gateway_id'),
+                'patient_code' => $request->input('patient_code'),
+                'xml_filename' => $xmlName,
+                'pdf_filename' => $pdfName,
+                'file_size' => strlen($xml) + ($pdf !== null ? strlen($pdf) : 0),
+                'captured_at' => $capturedAt,
+                'source_ip' => $request->ip(),
+            ]);
+        } catch (\Illuminate\Database\UniqueConstraintViolationException $e) {
+            // Concurrent retry raced us; the other request won. Acknowledge.
+            $responseData = ['success' => true, 'status' => 'success', 'duplicate' => true, 'message' => 'ECG already received'];
+            $this->logApiRequest($apiUser, '/api/v1/ecg', 'POST',
+                ['gateway_event_id' => $eventId, 'duplicate' => true], $responseData, 200, $startTime);
+            return response()->json($responseData, 200);
+        } catch (\Throwable $e) {
+            Log::error('[API V1] ECG receive failed', ['event_id' => $eventId, 'error' => $e->getMessage()]);
+            $responseData = ['success' => false, 'message' => 'Failed to store ECG: ' . $e->getMessage()];
+            $this->logApiRequest($apiUser, '/api/v1/ecg', 'POST',
+                ['gateway_event_id' => $eventId], $responseData, 500, $startTime);
+            return response()->json($responseData, 500);
+        }
+
+        $apiUser->incrementRequestCount();
+        $responseData = [
+            'success' => true,
+            'status' => 'success',
+            'duplicate' => false,
+            'message' => 'ECG received',
+            'data' => [
+                'id' => $upload->id,
+                'xml_file' => $upload->xml_filename,
+                'pdf_file' => $upload->pdf_filename,
+                'patient_code' => $upload->patient_code,
+            ],
+        ];
+        $this->logApiRequest($apiUser, '/api/v1/ecg', 'POST', [
+            'gateway_event_id' => $eventId,
+            'gateway_id' => $request->input('gateway_id'),
+            'patient_code' => $request->input('patient_code'),
+            'file_size' => $upload->file_size,
+        ], $responseData, 201, $startTime);
+
+        return response()->json($responseData, 201);
+    }
+
     private function logApiRequest(
         ApiUser $apiUser,
         string $endpoint,

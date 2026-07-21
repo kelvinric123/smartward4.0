@@ -49,8 +49,19 @@ return [
         'passphrase' => env('VITAL_SIGN_API_PASSPHRASE', 'qmedno1'),
         // Prefix for server-assigned gateway names, e.g. "GW-0007".
         'gateway_prefix' => env('VITAL_SIGN_GATEWAY_PREFIX', 'GW-'),
+        // Prefix for server-assigned ECG gateway names, e.g. "ECG-0012".
+        'ecg_gateway_prefix' => env('ECG_GATEWAY_PREFIX', 'ECG-'),
         // Raw API log rows older than this are rolled into daily summaries and deleted.
         'log_retention_days' => (int) env('VITAL_SIGN_API_LOG_RETENTION_DAYS', 7),
+    ],
+
+    'ecg' => [
+        // Where received ECG XML/PDF files live. The ECG viewers (EcgController)
+        // and the gateway upload endpoint both use this path, so files forwarded
+        // by an ECG gateway appear in the same admin/patient pages as files
+        // written by the dockerized ECG listener. In docker, point this at a
+        // WRITABLE mount of the shared ecg_data volume.
+        'store_path' => env('ECG_STORE_PATH') ?: base_path('ecg/store'),
     ],
 
     /*

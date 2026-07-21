@@ -45,12 +45,31 @@
             $uvNow = data_get($hb, 'power.undervoltage_now');
             $uvSeen = data_get($hb, 'power.undervoltage_seen');
         @endphp
-        <div>
-            <span class="font-medium text-gray-500">Monitor:</span>
-            @if($mConn !== null)
-                <span class="{{ $mConn > 0 ? 'text-green-600' : 'text-red-600' }}">{{ $mConn }}/{{ $mCount }} connected</span>
-            @else N/A @endif
-        </div>
+        @if($gateway->gateway_type === \App\Models\QmedGateway::TYPE_ECG)
+            @php
+                $ecgReceived = data_get($hb, 'ecg.received_total');
+                $ecgSent = data_get($hb, 'ecg.sent_total');
+                $ecgFailed = data_get($hb, 'ecg.failed_total', 0);
+                $ecgLastSent = data_get($hb, 'ecg.last_sent_at');
+            @endphp
+            <div>
+                <span class="font-medium text-gray-500">ECG received / sent:</span>
+                @if($ecgReceived !== null || $ecgSent !== null)
+                    {{ $ecgReceived ?? '?' }} / <span class="text-green-600">{{ $ecgSent ?? '?' }}</span>{!! $ecgFailed > 0 ? ' / <span class="text-red-600 font-semibold">' . e($ecgFailed) . ' failed</span>' : '' !!}
+                @else N/A @endif
+            </div>
+            <div>
+                <span class="font-medium text-gray-500">Last ECG sent:</span>
+                {{ $ecgLastSent ?? 'N/A' }}
+            </div>
+        @else
+            <div>
+                <span class="font-medium text-gray-500">Monitor:</span>
+                @if($mConn !== null)
+                    <span class="{{ $mConn > 0 ? 'text-green-600' : 'text-red-600' }}">{{ $mConn }}/{{ $mCount }} connected</span>
+                @else N/A @endif
+            </div>
+        @endif
         <div>
             <span class="font-medium text-gray-500">Queue:</span>
             {{ $qPending }} pending{!! $qDead > 0 ? ', <span class="text-red-600 font-semibold">' . e($qDead) . ' dead-lettered</span>' : '' !!}

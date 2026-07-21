@@ -1,0 +1,16 @@
+[Unit]
+Description=ECG gateway network self-healing watchdog
+After=network.target
+
+[Service]
+Type=simple
+# Root: needs nmcli device control, NetworkManager restart, and reboot.
+ExecStart=/opt/ecg/netwatch.sh /var/lib/ecg/ecg.env
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ecg-netwatch
+
+[Install]
+WantedBy=multi-user.target

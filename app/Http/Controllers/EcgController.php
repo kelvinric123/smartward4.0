@@ -41,7 +41,7 @@ class EcgController extends Controller
      */
     private function getAllEcgFilesWithPatients(): array
     {
-        $ecgStorePath = base_path('ecg/store');
+        $ecgStorePath = config('services.ecg.store_path');
         $allFiles = [];
         $processedPdfs = []; // Track PDFs that are linked to XML files
 
@@ -209,7 +209,7 @@ class EcgController extends Controller
         $filename = basename($filename);
 
         // Look for the file in the ECG store directory
-        $ecgStorePath = base_path('ecg/store');
+        $ecgStorePath = config('services.ecg.store_path');
         $filePath = $ecgStorePath . '/' . $filename;
 
         if (!file_exists($filePath)) {
@@ -229,7 +229,7 @@ class EcgController extends Controller
      */
     private function findEcgFilesForPatient(?string $mrn, ?string $rn = null): array
     {
-        $ecgStorePath = base_path('ecg/store');
+        $ecgStorePath = config('services.ecg.store_path');
         $ecgFiles = [];
 
         // Clean the identifiers for comparison (trim whitespace)
@@ -383,7 +383,7 @@ class EcgController extends Controller
      */
     public function listFiles(Request $request)
     {
-        $ecgStorePath = base_path('ecg/store');
+        $ecgStorePath = config('services.ecg.store_path');
         $allFiles = [];
 
         if (!is_dir($ecgStorePath)) {

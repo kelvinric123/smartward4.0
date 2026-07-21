@@ -12,6 +12,11 @@
         'red'    => ($lastSeen ? 'No heartbeat > 2h' : 'Never seen'),
     ][$conn];
 
+    // Gateway-kind badge: vital-sign carts (emerald) vs ECG forwarders (rose).
+    $typeBadge = fn($g) => $g->gateway_type === \App\Models\QmedGateway::TYPE_ECG
+        ? ['label' => 'ECG', 'bg' => '#ffe4e6', 'text' => '#be123c', 'border' => '#fecdd3']
+        : ['label' => 'Vital Sign', 'bg' => '#d1fae5', 'text' => '#047857', 'border' => '#a7f3d0'];
+
     // Group carts by ward so each ward reads like its own control panel.
     $groupedGateways = $gateways->groupBy(fn($g) => $g->ward?->ward_name ?? 'Unassigned')->sortKeys();
     $totalGateways = $gateways->count();
@@ -116,6 +121,10 @@
                                     $mCount = data_get($hb, 'monitor.count');
                                     $qPending = data_get($hb, 'queue.pending');
                                     $qDead = data_get($hb, 'queue.dead', 0);
+                                    $isEcg = $gateway->gateway_type === \App\Models\QmedGateway::TYPE_ECG;
+                                    $ecgSent = data_get($hb, 'ecg.sent_total');
+                                    $ecgFailed = data_get($hb, 'ecg.failed_total', 0);
+                                    $tb = $typeBadge($gateway);
                                 @endphp
                                 <div x-data="{ open: false }"
                                     class="relative rounded-xl border border-gray-200 bg-white p-4 hover:shadow-md transition-all"
@@ -131,9 +140,13 @@
                                             </span>
                                             <div class="min-w-0">
                                                 <div class="font-bold text-gray-800 truncate" title="{{ $gateway->name }}">{{ $gateway->name }}</div>
-                                                @if($gateway->gateway_id)
-                                                    <code class="text-[11px] text-emerald-700">{{ $gateway->gateway_id }}</code>
-                                                @endif
+                                                <div class="flex items-center gap-1.5">
+                                                    @if($gateway->gateway_id)
+                                                        <code class="text-[11px] text-emerald-700">{{ $gateway->gateway_id }}</code>
+                                                    @endif
+                                                    <span class="inline-flex px-1.5 py-px text-[10px] font-semibold rounded border"
+                                                        style="background-color:{{ $tb['bg'] }};color:{{ $tb['text'] }};border-color:{{ $tb['border'] }}">{{ $tb['label'] }}</span>
+                                                </div>
                                             </div>
                                         </div>
                                         <button type="button" @click="open = true" title="View details"
@@ -158,12 +171,21 @@
 
                                     <!-- Micro stats -->
                                     <div class="mt-3 grid grid-cols-3 gap-2 text-center">
-                                        <div class="rounded-lg bg-gray-50 py-1.5">
-                                            <div class="text-[10px] uppercase tracking-wide text-gray-400">Monitor</div>
-                                            <div class="text-sm font-semibold {{ $mConn !== null ? ($mConn > 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400' }}">
-                                                {{ $mConn !== null ? $mConn.'/'.$mCount : '—' }}
+                                        @if($isEcg)
+                                            <div class="rounded-lg bg-gray-50 py-1.5" title="ECG recordings delivered to the server{{ $ecgFailed > 0 ? ' / failed (dead-lettered)' : '' }}">
+                                                <div class="text-[10px] uppercase tracking-wide text-gray-400">ECG Sent</div>
+                                                <div class="text-sm font-semibold {{ $ecgFailed > 0 ? 'text-red-600' : ($ecgSent !== null ? 'text-green-600' : 'text-gray-400') }}">
+                                                    {{ $ecgSent !== null ? $ecgSent . ($ecgFailed > 0 ? '/' . $ecgFailed . '✗' : '') : '—' }}
+                                                </div>
                                             </div>
-                                        </div>
+                                        @else
+                                            <div class="rounded-lg bg-gray-50 py-1.5">
+                                                <div class="text-[10px] uppercase tracking-wide text-gray-400">Monitor</div>
+                                                <div class="text-sm font-semibold {{ $mConn !== null ? ($mConn > 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400' }}">
+                                                    {{ $mConn !== null ? $mConn.'/'.$mCount : '—' }}
+                                                </div>
+                                            </div>
+                                        @endif
                                         <div class="rounded-lg bg-gray-50 py-1.5">
                                             <div class="text-[10px] uppercase tracking-wide text-gray-400">Queue</div>
                                             <div class="text-sm font-semibold {{ $qDead > 0 ? 'text-red-600' : 'text-gray-700' }}">
@@ -191,6 +213,8 @@
                                                             @if($gateway->gateway_id)
                                                                 <code class="px-2 py-0.5 text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 rounded">{{ $gateway->gateway_id }}</code>
                                                             @endif
+                                                            <span class="px-2 py-0.5 text-xs font-semibold rounded-full border"
+                                                                style="background-color:{{ $tb['bg'] }};color:{{ $tb['text'] }};border-color:{{ $tb['border'] }}">{{ $tb['label'] }}</span>
                                                             <span class="px-2 py-0.5 text-xs font-medium {{ $gateway->is_active ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700' }} rounded-full">
                                                                 {{ $gateway->is_active ? 'Active' : 'Inactive' }}
                                                             </span>
@@ -247,6 +271,7 @@
                                     $conn = $gateway->connection_status;
                                     $cc = $connColors[$conn];
                                     $connLabel = $connLabels($conn, $lastSeen);
+                                    $tb = $typeBadge($gateway);
                                 @endphp
                                 <div class="border border-gray-200 rounded-xl p-5 hover:border-emerald-300 hover:shadow-md transition-all bg-white"
                                     style="border-left:5px solid {{ $cc['dot'] }}">
@@ -257,6 +282,8 @@
                                                 @if($gateway->gateway_id)
                                                     <code class="px-2 py-0.5 text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 rounded">{{ $gateway->gateway_id }}</code>
                                                 @endif
+                                                <span class="px-2 py-0.5 text-xs font-semibold rounded-full border"
+                                                    style="background-color:{{ $tb['bg'] }};color:{{ $tb['text'] }};border-color:{{ $tb['border'] }}">{{ $tb['label'] }}</span>
                                                 <span class="px-2 py-0.5 text-xs font-medium {{ $gateway->is_active ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700' }} rounded-full">
                                                     {{ $gateway->is_active ? 'Active' : 'Inactive' }}
                                                 </span>

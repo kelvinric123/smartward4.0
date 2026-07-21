@@ -1,0 +1,37 @@
+[Unit]
+Description=ECG v2 vital-sign gateway (TC35 ECG store-and-forward gateway)
+Documentation=file:///opt/ecg/ecg_v2.md
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ecg
+Group=ecg
+
+# All configuration (creds, ports, tuning) comes from this file so it is the
+# single source of truth and lives on writable storage, not in the code image.
+EnvironmentFile=/var/lib/ecg/ecg.env
+Environment=PYTHONUNBUFFERED=1
+
+WorkingDirectory=/opt/ecg/listener
+ExecStart=/opt/ecg/venv/bin/python main.py
+
+# Self-heal: always come back after a crash, a port clash, or a power blip.
+Restart=always
+RestartSec=5
+
+# Logs go to journald (volatile on a read-only rootfs) and are shipped in the
+# heartbeat; we do not write log files to the SD card.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ecg
+
+# Light hardening (safe on a single-purpose appliance).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/ecg
+
+[Install]
+WantedBy=multi-user.target
