@@ -197,14 +197,34 @@ step_gather() {
 }
 
 # =============================================================== STEP 3 =======
+# True when everything the gateway needs is already installed — the normal
+# case on an SD-clone rerun, where a previous setup on the master card did the
+# apt work. Checks the venv's python first (covers pip-only installs).
+_deps_ready() {
+  command -v python3 >/dev/null && command -v sqlite3 >/dev/null && command -v curl >/dev/null || return 1
+  python3 -m venv --help >/dev/null 2>&1 || return 1
+  local py="${APP_DIR}/venv/bin/python"
+  [[ -x "$py" ]] || py=python3
+  "$py" -c "import requests, dotenv" 2>/dev/null
+}
+
 step_deps() {
   export DEBIAN_FRONTEND=noninteractive
 
+  # SD-clone rerun fast path: the cloned card already carries everything, so
+  # skip apt entirely instead of waiting on mirrors.
+  if _deps_ready; then
+    ok "all dependencies already installed (SD-clone rerun) - skipping apt"
+    command -v nmcli >/dev/null && ok "nmcli present"       || warn "nmcli missing; the LAN step will fall back to dhcpcd"
+    command -v vcgencmd >/dev/null && ok "vcgencmd present"       || warn "vcgencmd missing; power telemetry will be limited"
+    return 0
+  fi
+
   # Decide online vs offline. Honour --offline, else probe apt connectivity.
   if [[ "$OFFLINE" -eq 0 ]]; then
-    say "checking apt connectivity..."
-    if ! apt-get update -qq 2>/dev/null; then
-      warn "no apt connectivity -> switching to OFFLINE mode (verifying pre-installed deps)"
+    say "checking apt connectivity (up to 3 min on a fresh Pi; Ctrl+C and rerun with --offline to skip)..."
+    if ! timeout 180 apt-get update -qq 2>/dev/null; then
+      warn "no apt connectivity (or timed out) -> switching to OFFLINE mode (verifying pre-installed deps)"
       OFFLINE=1
     fi
   else
