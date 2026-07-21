@@ -1,0 +1,37 @@
+[Unit]
+Description=VS4 v2 vital-sign gateway (HL7/MLLP store-and-forward listener)
+Documentation=file:///opt/vs4/vs4_v2.md
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vs4
+Group=vs4
+
+# All configuration (creds, ports, tuning) comes from this file so it is the
+# single source of truth and lives on writable storage, not in the code image.
+EnvironmentFile=/var/lib/vs4/vs4.env
+Environment=PYTHONUNBUFFERED=1
+
+WorkingDirectory=/opt/vs4/listener
+ExecStart=/opt/vs4/venv/bin/python main.py
+
+# Self-heal: always come back after a crash, a port clash, or a power blip.
+Restart=always
+RestartSec=5
+
+# Logs go to journald (volatile on a read-only rootfs) and are shipped in the
+# heartbeat; we do not write log files to the SD card.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vs4
+
+# Light hardening (safe on a single-purpose appliance).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/vs4
+
+[Install]
+WantedBy=multi-user.target

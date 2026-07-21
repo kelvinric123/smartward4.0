@@ -1,0 +1,7 @@
+# Python dependencies for the VS4 HL7 listener.
+#
+# The listener + discovery dumper use ONLY the Python standard library and run
+# with nothing installed here. This dep is for the HL7 parsing we'll add once we
+# know the VS4 message shape (mirrors the cm100 project).
+
+hl7>=0.4.5

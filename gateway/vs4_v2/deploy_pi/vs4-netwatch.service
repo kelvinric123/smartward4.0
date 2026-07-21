@@ -1,0 +1,16 @@
+[Unit]
+Description=VS4 gateway network self-healing watchdog
+After=network.target
+
+[Service]
+Type=simple
+# Root: needs nmcli device control, NetworkManager restart, and reboot.
+ExecStart=/opt/vs4/netwatch.sh /var/lib/vs4/vs4.env
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vs4-netwatch
+
+[Install]
+WantedBy=multi-user.target
