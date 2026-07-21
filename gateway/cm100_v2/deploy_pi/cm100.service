@@ -1,0 +1,37 @@
+[Unit]
+Description=CM100 v2 vital-sign gateway (HL7/MLLP store-and-forward listener)
+Documentation=file:///opt/cm100/cm100_v2.md
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cm100
+Group=cm100
+
+# All configuration (creds, ports, tuning) comes from this file so it is the
+# single source of truth and lives on writable storage, not in the code image.
+EnvironmentFile=/var/lib/cm100/cm100.env
+Environment=PYTHONUNBUFFERED=1
+
+WorkingDirectory=/opt/cm100/listener
+ExecStart=/opt/cm100/venv/bin/python main.py
+
+# Self-heal: always come back after a crash, a port clash, or a power blip.
+Restart=always
+RestartSec=5
+
+# Logs go to journald (volatile on a read-only rootfs) and are shipped in the
+# heartbeat; we do not write log files to the SD card.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cm100
+
+# Light hardening (safe on a single-purpose appliance).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/cm100
+
+[Install]
+WantedBy=multi-user.target

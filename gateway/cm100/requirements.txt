@@ -1,0 +1,8 @@
+# Python dependencies for the CM100 HL7 listener.
+#
+# NOTE: the listener itself (hl7_listener.py) uses ONLY the Python standard
+# library and runs with nothing installed here. The dependency below is for the
+# HL7 message parsing we'll layer on later (decoding the CM100 ORU^R01 vitals).
+# Swap it for hl7apy if your framework standardizes on that instead.
+
+hl7>=0.4.5
