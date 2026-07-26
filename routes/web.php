@@ -212,6 +212,8 @@ Route::middleware('auth')->group(function () {
     Route::put('/infusion-integration/pump/{pump}', [InfusionIntegrationController::class, 'updatePump'])->name('infusion-integration.pump.update');
     Route::delete('/infusion-integration/pump/{pump}', [InfusionIntegrationController::class, 'destroyPump'])->name('infusion-integration.pump.destroy');
     Route::post('/infusion-integration/logs/clear', [InfusionIntegrationController::class, 'clearLogs'])->name('infusion-integration.logs.clear');
+    Route::post('/infusion-integration/settings', [InfusionIntegrationController::class, 'saveIntegrationSettings'])->name('infusion-integration.settings.save');
+    Route::post('/infusion-integration/engine/test', [InfusionIntegrationController::class, 'testEngineConnection'])->name('infusion-integration.engine.test');
 
     // Ward Infusion Overview (iframe)
     Route::get('/ward-dashboard/infusion-overview', [InfusionIntegrationController::class, 'wardOverview'])->name('ward.infusion-overview');
@@ -226,6 +228,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/ecg/patient', [EcgController::class, 'patientEcg'])->name('ecg.patient');
     Route::get('/ecg/pdf', [EcgController::class, 'servePdf'])->name('ecg.pdf');
     Route::get('/ecg/list', [EcgController::class, 'listFiles'])->name('ecg.list');
+    Route::post('/ecg/upload', [EcgController::class, 'uploadPdf'])->name('ecg.upload');
+    Route::post('/ecg/delete', [EcgController::class, 'deleteEcg'])->name('ecg.delete');
 
     // EKad (SEEKINK E-Ink) Routes
     Route::get('/ekad', [EkadController::class, 'index'])->name('ekad.index');
@@ -289,6 +293,7 @@ Route::prefix('api/vital-sign')->group(function () {
 
 // Public API Routes for Infusion Pump Gateway (no CSRF, no auth)
 Route::prefix('api/infusion')->group(function () {
+    Route::get('/pumps', [InfusionIntegrationController::class, 'apiListPumps']);
     Route::post('/login', [InfusionIntegrationController::class, 'apiLogin']);
     Route::post('/logout', [InfusionIntegrationController::class, 'apiLogout']);
     Route::post('/status', [InfusionIntegrationController::class, 'apiReceiveStatus']);
@@ -322,6 +327,46 @@ Route::prefix('api/v1')->group(function () {
     // Monitor status log endpoint
     Route::post('/monitor/status', [VitalSignIntegrationController::class, 'apiReceiveMonitorStatus']);
 });
+
+// Public API Routes for the Doctor mobile app (token auth, no CSRF)
+Route::prefix('api/doctor')->group(function () {
+    Route::post('/ping', [\App\Http\Controllers\DoctorAppApiController::class, 'ping']);
+    Route::get('/ping', [\App\Http\Controllers\DoctorAppApiController::class, 'ping']);
+    Route::post('/login', [\App\Http\Controllers\DoctorAppApiController::class, 'login']);
+    Route::post('/logout', [\App\Http\Controllers\DoctorAppApiController::class, 'logout']);
+    Route::get('/dashboard', [\App\Http\Controllers\DoctorAppApiController::class, 'dashboard']);
+    Route::get('/patients/{patient}/notes', [\App\Http\Controllers\DoctorAppApiController::class, 'listNotes']);
+    Route::post('/patients/{patient}/notes', [\App\Http\Controllers\DoctorAppApiController::class, 'addNote']);
+});
+
+// Public API Routes for the Nurse mobile app (token auth, no CSRF)
+Route::prefix('api/nurse')->group(function () {
+    Route::post('/ping', [\App\Http\Controllers\NurseAppApiController::class, 'ping']);
+    Route::get('/ping', [\App\Http\Controllers\NurseAppApiController::class, 'ping']);
+    Route::post('/login', [\App\Http\Controllers\NurseAppApiController::class, 'login']);
+    Route::post('/logout', [\App\Http\Controllers\NurseAppApiController::class, 'logout']);
+    Route::get('/dashboard', [\App\Http\Controllers\NurseAppApiController::class, 'dashboard']);
+});
+
+// Public API Routes for the bedside Patient Information Terminal (no CSRF)
+Route::prefix('api/terminal')->group(function () {
+    Route::get('/ping', [\App\Http\Controllers\TerminalApiController::class, 'ping']);
+    Route::post('/ping', [\App\Http\Controllers\TerminalApiController::class, 'ping']);
+    Route::get('/wards', [\App\Http\Controllers\TerminalApiController::class, 'wards']);
+    Route::get('/beds', [\App\Http\Controllers\TerminalApiController::class, 'beds']);
+    Route::get('/beds/{bed}/snapshot', [\App\Http\Controllers\TerminalApiController::class, 'snapshot']);
+});
+
+// Bedside Patient Information Terminal web app (static SPA build in public/terminal).
+// Deep links (e.g. /terminal/care/vitals) all serve the SPA's index.html;
+// real asset files under public/terminal/ are served directly by the web server.
+Route::get('/terminal/{any?}', function () {
+    $index = public_path('terminal/index.html');
+    if (!\Illuminate\Support\Facades\File::exists($index)) {
+        abort(404, 'Patient terminal build not deployed. Copy the terminal dist folder to public/terminal.');
+    }
+    return response()->file($index);
+})->where('any', '.*');
 
 // Route to serve static slideshow pictures from base_path('picture')
 Route::get('/picture-slides/{filename}', function ($filename) {

@@ -255,7 +255,7 @@ export default function BedCard({ bed, doctorName }) {
           )}
         </View>
 
-        <ConsultantNotesSection bedId={bed.id} author={doctorName ?? 'Consultant'} />
+        <ConsultantNotesSection patientId={bed.patient_id} author={doctorName ?? 'Consultant'} />
       </View>
 
       <VitalsTrendModal

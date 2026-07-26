@@ -31,7 +31,13 @@ class ConsultantController extends Controller
             'email' => 'nullable|email|max:255',
             'qualifications' => 'nullable|string',
             'years_of_experience' => 'nullable|integer|min:0',
+            'app_username' => 'nullable|string|max:100|unique:consultants,app_username',
+            'app_password' => 'nullable|string|min:4|max:100',
         ]);
+
+        if (empty($validated['app_password'])) {
+            unset($validated['app_password']);
+        }
 
         $validated['is_active'] = true;
         Consultant::create($validated);
@@ -62,7 +68,14 @@ class ConsultantController extends Controller
             'email' => 'nullable|email|max:255',
             'qualifications' => 'nullable|string',
             'years_of_experience' => 'nullable|integer|min:0',
+            'app_username' => 'nullable|string|max:100|unique:consultants,app_username,' . $consultant->id,
+            'app_password' => 'nullable|string|min:4|max:100',
         ]);
+
+        // Leaving the password blank keeps the current one
+        if (empty($validated['app_password'])) {
+            unset($validated['app_password']);
+        }
 
         $consultant->update($validated);
 

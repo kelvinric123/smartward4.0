@@ -40,3 +40,6 @@ mp5sc_listener/.git/
 !bbraun/.env
 bbraun/logs/
 bbraun/venv/
+
+# Python bytecode
+__pycache__/

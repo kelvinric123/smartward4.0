@@ -4,6 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Patient ECG - {{ $patient ? $patient->name : 'ECG Viewer' }}</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <style>
@@ -72,11 +73,19 @@
                     </div>
                     <h2 class="text-lg font-semibold text-gray-700 mb-2">No ECG Yet</h2>
                     <p class="text-gray-500 text-sm mb-4">No ECG records found for this patient.</p>
-                    <div class="bg-gray-50 rounded-lg px-4 py-3 text-left text-sm">
+                    <div class="bg-gray-50 rounded-lg px-4 py-3 text-left text-sm mb-4">
                         <p class="text-gray-600"><span class="font-medium text-gray-700">Patient:</span>
                             {{ $patient->name }}</p>
                         <p class="text-gray-600"><span class="font-medium text-gray-700">MRN:</span> {{ $patient->mrn }}</p>
                     </div>
+                    <button onclick="triggerEcgUpload()" id="emptyUploadBtn"
+                        class="inline-flex items-center px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors">
+                        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        Upload ECG PDF
+                    </button>
                 </div>
             </div>
         @else
@@ -104,13 +113,25 @@
                         <p class="text-xs font-semibold text-emerald-700">MRN: {{ $patient->mrn }}</p>
                     </div>
 
+                    <!-- Upload Button -->
+                    <div class="px-2 py-2 border-b border-gray-200">
+                        <button onclick="triggerEcgUpload()" id="sidebarUploadBtn"
+                            class="w-full flex items-center justify-center px-2 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition-colors">
+                            <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                            </svg>
+                            Upload PDF
+                        </button>
+                    </div>
+
                     <!-- ECG List -->
                     <div class="flex-1 overflow-y-auto">
                         @foreach($ecgFiles as $index => $ecg)
-                            <button
-                                onclick="selectEcg({{ $index }}, '{{ $ecg['pdf_file'] ?? '' }}', {{ $ecg['has_pdf'] ? 'true' : 'false' }})"
-                                class="ecg-item w-full px-3 py-2 text-left hover:bg-emerald-50 transition-colors border-b border-gray-100 {{ $index === 0 ? 'active' : '' }}"
-                                data-index="{{ $index }}">
+                            <div onclick="selectEcg({{ $index }}, '{{ $ecg['pdf_file'] ?? '' }}', {{ $ecg['has_pdf'] ? 'true' : 'false' }})"
+                                class="ecg-item w-full px-3 py-2 text-left cursor-pointer hover:bg-emerald-50 transition-colors border-b border-gray-100 {{ $index === 0 ? 'active' : '' }}"
+                                data-index="{{ $index }}"
+                                @if(($ecg['source'] ?? '') === 'manual') title="Manually uploaded" @endif>
                                 <div class="flex items-center justify-between">
                                     <div class="min-w-0">
                                         <p class="text-xs font-medium text-gray-800 truncate">
@@ -126,12 +147,26 @@
                                             @endif
                                         </p>
                                     </div>
-                                    @if($ecg['has_pdf'])
-                                        <span
-                                            class="bg-emerald-100 text-emerald-600 text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0">PDF</span>
-                                    @endif
+                                    <div class="flex items-center space-x-1 flex-shrink-0">
+                                        @if(($ecg['source'] ?? '') === 'manual')
+                                            <span
+                                                class="bg-blue-100 text-blue-600 text-[10px] px-1.5 py-0.5 rounded font-medium">M</span>
+                                        @endif
+                                        @if($ecg['has_pdf'])
+                                            <span
+                                                class="bg-emerald-100 text-emerald-600 text-[10px] px-1.5 py-0.5 rounded font-medium">PDF</span>
+                                        @endif
+                                        <button
+                                            onclick="event.stopPropagation(); deleteEcg('{{ $ecg['xml_file'] ?? '' }}', '{{ $ecg['pdf_file'] ?? '' }}')"
+                                            class="p-0.5 text-gray-300 hover:text-red-500 transition-colors" title="Delete ECG">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </div>
-                            </button>
+                            </div>
                         @endforeach
                     </div>
                 </div>
@@ -159,14 +194,24 @@
                                 @endif
                             </span>
                         </div>
-                        <button id="enlargeBtn" onclick="toggleFullscreen()"
-                            class="flex items-center px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition-colors {{ $latestEcg && $latestEcg['has_pdf'] ? '' : 'hidden' }}">
-                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                            </svg>
-                            Enlarge
-                        </button>
+                        <div class="flex items-center space-x-2">
+                            <button id="exportBtn" onclick="exportEcgPdf()"
+                                class="flex items-center px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-medium rounded-lg transition-colors {{ $latestEcg && $latestEcg['has_pdf'] ? '' : 'hidden' }}">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                Export PDF
+                            </button>
+                            <button id="enlargeBtn" onclick="toggleFullscreen()"
+                                class="flex items-center px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-lg transition-colors {{ $latestEcg && $latestEcg['has_pdf'] ? '' : 'hidden' }}">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                </svg>
+                                Enlarge
+                            </button>
+                        </div>
                     </div>
 
                     <!-- PDF Container -->
@@ -210,14 +255,24 @@
                         <span class="ml-3 text-gray-400 text-sm">MRN: {{ $patient->mrn }}</span>
                         <span id="fullscreenEcgDate" class="ml-3 text-emerald-400 text-sm"></span>
                     </div>
-                    <button onclick="toggleFullscreen()"
-                        class="flex items-center px-4 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors">
-                        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                        </svg>
-                        Back
-                    </button>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="exportEcgPdf()"
+                            class="flex items-center px-4 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            Export PDF
+                        </button>
+                        <button onclick="toggleFullscreen()"
+                            class="flex items-center px-4 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm font-medium rounded-lg transition-colors">
+                            <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                            </svg>
+                            Back
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Fullscreen PDF Container -->
@@ -226,12 +281,98 @@
                 </div>
             </div>
         @endif
+
+        @if($patient)
+            <!-- Hidden file input for manual ECG PDF upload -->
+            <input type="file" id="ecgFileInput" accept="application/pdf,.pdf" class="hidden"
+                onchange="handleEcgFile(this)">
+        @endif
     </div>
 
     <script>
         let currentPdfUrl = '{{ $latestEcg && $latestEcg["has_pdf"] ? route("ecg.pdf.public", ["file" => $latestEcg["pdf_file"]]) : "" }}';
         let currentEcgDate = '{{ $latestEcg && $latestEcg["recorded_at"] ? \Carbon\Carbon::parse($latestEcg["recorded_at"])->format("d M Y H:i") : "" }}';
         let isFullscreen = false;
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        const ecgPatientId = {{ $patient ? $patient->id : 'null' }};
+        let ecgUploading = false;
+
+        function triggerEcgUpload() {
+            if (ecgUploading) return;
+            document.getElementById('ecgFileInput').click();
+        }
+
+        function handleEcgFile(input) {
+            const file = input.files[0];
+            if (!file || !ecgPatientId) return;
+
+            if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+                alert('Please select a PDF file.');
+                input.value = '';
+                return;
+            }
+
+            ecgUploading = true;
+            setUploadButtonsState('Uploading...', true);
+
+            const formData = new FormData();
+            formData.append('patient_id', ecgPatientId);
+            formData.append('pdf', file);
+
+            fetch('{{ route('ecg.upload') }}', {
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+                body: formData,
+            })
+                .then(async (response) => {
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok || !data.success) {
+                        throw new Error(data.message || 'Upload failed');
+                    }
+                    location.reload();
+                })
+                .catch((error) => {
+                    alert('Upload failed: ' + error.message);
+                    ecgUploading = false;
+                    setUploadButtonsState('Upload PDF', false);
+                    input.value = '';
+                });
+        }
+
+        function setUploadButtonsState(text, disabled) {
+            ['sidebarUploadBtn', 'emptyUploadBtn'].forEach((id) => {
+                const btn = document.getElementById(id);
+                if (btn) {
+                    btn.disabled = disabled;
+                    btn.classList.toggle('opacity-60', disabled);
+                }
+            });
+        }
+
+        function deleteEcg(xmlFile, pdfFile) {
+            if (!confirm('Delete this ECG record? This cannot be undone.')) return;
+
+            const formData = new FormData();
+            if (xmlFile) formData.append('xml_file', xmlFile);
+            if (pdfFile) formData.append('pdf_file', pdfFile);
+
+            fetch('{{ route('ecg.delete') }}', {
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': csrfToken, 'Accept': 'application/json' },
+                body: formData,
+            })
+                .then(async (response) => {
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok || !data.success) {
+                        throw new Error(data.message || 'Delete failed');
+                    }
+                    location.reload();
+                })
+                .catch((error) => {
+                    alert('Delete failed: ' + error.message);
+                });
+        }
 
         function selectEcg(index, pdfFile, hasPdf) {
             // Update active state on list items
@@ -245,6 +386,7 @@
 
             const viewer = document.getElementById('ecgViewer');
             const enlargeBtn = document.getElementById('enlargeBtn');
+            const exportBtn = document.getElementById('exportBtn');
             const dateSpan = document.getElementById('currentEcgDate');
 
             // Get the date from the clicked item
@@ -258,6 +400,7 @@
                 currentPdfUrl = '{{ route("ecg.pdf.public") }}?file=' + encodeURIComponent(pdfFile);
                 viewer.innerHTML = `<iframe id="pdfFrame" src="${currentPdfUrl}" class="w-full h-full pdf-viewer" title="ECG PDF Viewer"></iframe>`;
                 enlargeBtn.classList.remove('hidden');
+                if (exportBtn) exportBtn.classList.remove('hidden');
             } else {
                 currentPdfUrl = '';
                 viewer.innerHTML = `
@@ -274,7 +417,21 @@
                     </div>
                 `;
                 enlargeBtn.classList.add('hidden');
+                if (exportBtn) exportBtn.classList.add('hidden');
             }
+        }
+
+        function exportEcgPdf() {
+            if (!currentPdfUrl) return;
+
+            // Friendly download name: ECG_{MRN}_{date}.pdf
+            const namePart = ('ECG_{{ $patient->mrn ?? '' }}_' + (currentEcgDate || ''))
+                .trim()
+                .replace(/[^\w\-]+/g, '_')
+                .replace(/_+$/, '');
+            const sep = currentPdfUrl.includes('?') ? '&' : '?';
+
+            window.location.href = currentPdfUrl + sep + 'download=1&dl_name=' + encodeURIComponent(namePart + '.pdf');
         }
 
         function toggleFullscreen() {

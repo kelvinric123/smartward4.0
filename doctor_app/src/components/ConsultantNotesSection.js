@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { colors, radius } from '../theme';
 import Pill from './Pill';
-import { addNote, getNotes, subscribe, formatRelative } from '../data/notesStore';
+import { addNote, getNotes, loadNotes, subscribe, formatRelative } from '../data/notesStore';
 
 function useKeyboardHeight() {
   const [height, setHeight] = useState(0);
@@ -31,23 +31,35 @@ function useKeyboardHeight() {
   return height;
 }
 
-export default function ConsultantNotesSection({ bedId, author }) {
-  const [notes, setNotes] = useState(() => getNotes(bedId));
+export default function ConsultantNotesSection({ patientId, author }) {
+  const [notes, setNotes] = useState(() => getNotes(patientId));
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
   const kbHeight = useKeyboardHeight();
 
   useEffect(() => {
-    setNotes(getNotes(bedId));
-    const unsub = subscribe(() => setNotes(getNotes(bedId)));
+    setNotes(getNotes(patientId));
+    const unsub = subscribe(() => setNotes(getNotes(patientId)));
+    loadNotes(patientId);
     return () => unsub();
-  }, [bedId]);
+  }, [patientId]);
 
-  function save() {
-    const note = addNote(bedId, draft, author);
-    if (note) {
-      setDraft('');
-      setAdding(false);
+  async function save() {
+    if (saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const ok = await addNote(patientId, draft, author);
+      if (ok) {
+        setDraft('');
+        setAdding(false);
+      }
+    } catch (e) {
+      setSaveError(e?.message ?? 'Could not save the note. Please try again.');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -109,8 +121,8 @@ export default function ConsultantNotesSection({ bedId, author }) {
               <Text style={styles.sheetEyebrow}>NEW CONSULTANT NOTE</Text>
               <Text style={styles.sheetTitle}>Record your impression</Text>
               <Text style={styles.sheetMeta}>
-                Notes are saved against this bed and visible on next view.
-                In production, notes are persisted to the QMed Smart Ward backend.
+                Notes are saved against this patient in the QMed Smart Ward system and
+                visible to the care team.
               </Text>
 
               <TextInput
@@ -125,21 +137,23 @@ export default function ConsultantNotesSection({ bedId, author }) {
                 underlineColorAndroid="transparent"
               />
 
+              {saveError ? <Text style={styles.saveErrorText}>{saveError}</Text> : null}
+
               <View style={styles.actionRow}>
                 <TouchableOpacity
                   style={[styles.btn, styles.btnCancel]}
-                  onPress={() => { Keyboard.dismiss(); setAdding(false); setDraft(''); }}
+                  onPress={() => { Keyboard.dismiss(); setAdding(false); setDraft(''); setSaveError(null); }}
                   activeOpacity={0.85}
                 >
                   <Text style={styles.btnCancelText}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.btn, styles.btnSave, !draft.trim() && { opacity: 0.5 }]}
-                  disabled={!draft.trim()}
+                  style={[styles.btn, styles.btnSave, (!draft.trim() || saving) && { opacity: 0.5 }]}
+                  disabled={!draft.trim() || saving}
                   onPress={() => { Keyboard.dismiss(); save(); }}
                   activeOpacity={0.85}
                 >
-                  <Text style={styles.btnSaveText}>Save Note</Text>
+                  <Text style={styles.btnSaveText}>{saving ? 'Saving...' : 'Save Note'}</Text>
                 </TouchableOpacity>
               </View>
             </ScrollView>
@@ -252,6 +266,12 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 12,
     lineHeight: 17,
+  },
+  saveErrorText: {
+    marginTop: 10,
+    color: colors.rose600,
+    fontSize: 12,
+    fontWeight: '600',
   },
   textarea: {
     marginTop: 14,

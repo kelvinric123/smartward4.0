@@ -1,9 +1,32 @@
 # Doctor (Consultant) Dashboard — Expo App
 
-React Native (Expo SDK 56) app for QMed Smart Ward consultants. The login
-screen is a mock — any credentials log in — and all data lives in
-`src/data/mockData.js`. Swap that file (and `src/api/endpoints.js`) for real
-fetches when the Laravel backend is ready.
+React Native (Expo SDK 56) app for QMed Smart Ward consultants, fully
+integrated with the Laravel backend (`DoctorAppApiController`, routes under
+`/api/doctor/*`).
+
+## Server integration
+
+- **Consultant credentials** are configured on the SmartWard Consultant edit
+  page (`/consultants/{id}/edit` → "Doctor App Login" section: App Username +
+  App Password). A consultant can only log in once both are set.
+- **API path**: defaults to `http://192.168.0.88:18080`. Change it from the
+  login screen → gear icon → config password `1324` → API Path (has a
+  "Test Connection" button; persisted with AsyncStorage).
+- **Auth**: login returns a bearer token (72 h expiry); all requests send
+  `Authorization: Bearer <token>`. The backend scopes every response to the
+  patients under that consultant's care (primary consultant, ADT care
+  provider link, or bed_consultant assignment).
+
+Endpoints used:
+
+```
+POST  /api/doctor/login                      { username, password }
+GET   /api/doctor/dashboard                  doctor + summary + wards + beds
+GET   /api/doctor/patients/{id}/notes
+POST  /api/doctor/patients/{id}/notes        { text }
+POST  /api/doctor/logout
+POST  /api/doctor/ping                       connectivity test
+```
 
 ## Project layout
 
@@ -14,27 +37,30 @@ doctor_app/
   index.js
   src/
     theme.js                   -- colors / radius / spacing tokens
-    api/endpoints.js           -- API client. Currently returns mock data.
-                                  Documents the planned Laravel endpoints.
-    data/mockData.js           -- replace with API calls later
+    config.js                  -- API base URL store (AsyncStorage) + config password
+    api/endpoints.js           -- API client (fetch + bearer token)
+    data/notesStore.js         -- consultant notes cache, backed by the API
     components/
       Pill.js
       StatCard.js
       BedCard.js               -- doctor view: diagnosis, meds, vitals, infusions
     screens/
-      LoginScreen.js           -- mock consultant login
-      DoctorDashboard.js       -- ward filter + bed queue + bed detail
+      LoginScreen.js           -- consultant login + settings dialog (API path)
+      DoctorDashboard.js       -- ward filter + bed queue + bed detail (auto-refresh 60s)
 ```
 
 ## What the app shows
 
-- **Login**: clearly states "QMed Smart Ward · Consultant Mobile Access" and
-  "Login as Consultant". Includes a yellow "DEMO BUILD" note so showcase
-  viewers know it's mock.
+- **Login**: authenticates against the SmartWard server using the consultant's
+  configured app credentials. Gear icon opens the connection settings
+  (config password `1324`).
 - **Dashboard**: shows total beds under the consultant's care, ward count,
-  critical patients, pending reviews / orders / discharges. Beds can be
-  filtered by ward, then paged through one-at-a-time with the bottom
-  Prev/Next bar.
+  critical patients (EWS >= 5) and pending discharges, live from the ward
+  system. Beds can be filtered by ward, then paged through one-at-a-time with
+  the bottom Prev/Next bar. Pull down to refresh; data also auto-refreshes
+  every 60 seconds.
+- **Consultant notes** are persisted per patient on the server and visible to
+  the whole care team.
 
 ## Run on a device with Expo Go (fastest dev loop)
 
@@ -98,24 +124,10 @@ doctor_app\android\app\build\outputs\apk\release\app-release.apk
 
 Or copy the APK to the phone and tap to install.
 
-## Wiring real data later
+## Android cleartext HTTP note
 
-The API client in `src/api/endpoints.js` already documents the Laravel
-endpoints we plan to hit:
-
-```
-POST  /auth/consultant/login
-GET   /consultants/{doctorId}/dashboard
-GET   /consultants/{doctorId}/wards
-GET   /consultants/{doctorId}/wards/{wardId}/beds
-GET   /beds/{bedId}
-POST  /auth/logout
-```
-
-To go live:
-
-1. Set `BASE_URL` in `src/api/endpoints.js` to the real Laravel host.
-2. Replace each function body with a `fetch` call. Keep the return shape
-   identical to the mock data — the screens won't need to change.
-3. Store the auth token (e.g. via `expo-secure-store`) and pass it as
-   `Authorization: Bearer <token>` on subsequent requests.
+The default server URL uses plain `http://`. Expo prebuild enables
+`usesCleartextTraffic` for debug builds automatically; for **release** builds
+`app.json` sets `expo.android.usesCleartextTraffic: true` so the app can talk
+to the LAN server without HTTPS. If the server later moves behind TLS, switch
+the API path to `https://...` in the app settings.

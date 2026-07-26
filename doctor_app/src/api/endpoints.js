@@ -1,92 +1,132 @@
-// Placeholder API client. All functions currently return mock data from
-// src/data/mockData.js. When the Laravel backend is ready, point BASE_URL
-// to the QMed Smart Ward API and replace each function's body with a fetch.
+// API client for the QMed Smart Ward Laravel backend.
 //
 // Auth model: consultant logs in -> receives a token -> all subsequent calls
 // include `Authorization: Bearer <token>`. The backend scopes the response to
-// the beds (and wards) under that consultant's care.
+// the patients (and wards) under that consultant's care.
 //
-// Backend (Laravel) endpoints we plan to wire to:
+// Laravel endpoints (routes/web.php, DoctorAppApiController):
 //
-//   POST  {BASE_URL}/auth/consultant/login
+//   POST  {BASE_URL}/api/doctor/login
 //         body:  { username, password }
-//         resp:  { token, doctor: { id, name, title, specialty }, wards: [...] }
+//         resp:  { success, token, doctor: { id, name, title, specialty, mmc }, wards: [...] }
 //
-//   GET   {BASE_URL}/consultants/{doctorId}/dashboard
+//   GET   {BASE_URL}/api/doctor/dashboard
 //         resp:  { doctor, summary, wards: [...], beds: [...] }
 //
-//   GET   {BASE_URL}/consultants/{doctorId}/wards
-//         resp:  [ { id, ward_name, bed_count, ... } ]
+//   GET   {BASE_URL}/api/doctor/patients/{patientId}/notes
+//   POST  {BASE_URL}/api/doctor/patients/{patientId}/notes   body: { text }
 //
-//   GET   {BASE_URL}/consultants/{doctorId}/wards/{wardId}/beds
-//         resp:  [ bed, bed, ... ]   (same shape as mockData.consultantBeds)
-//
-//   GET   {BASE_URL}/beds/{bedId}
-//         resp:  full bed object (patient, vitals, infusions, notes, orders)
-//
-//   GET   {BASE_URL}/beds/{bedId}/vitals?range=24h
-//         resp:  [ { recorded_at, pulse_rate, systolic_bp, diastolic_bp,
-//                    spo2, respiratory_rate, temperature, ews } ]
-//         used by:  VitalsTrendModal (tap "LATEST VITALS")
-//
-//   GET   {BASE_URL}/beds/{bedId}/consultant-notes
-//         resp:  [ { id, text, author, created_at } ]
-//   POST  {BASE_URL}/beds/{bedId}/consultant-notes
-//         body:  { text }
-//         used by:  ConsultantNotesSection (Add / view notes)
-//
-//   POST  {BASE_URL}/auth/logout
-//
-// Keep the function signatures stable so screens don't need changes when we
-// swap mock data for real fetches.
+//   POST  {BASE_URL}/api/doctor/logout
+//   GET   {BASE_URL}/api/doctor/ping
 
-import * as mock from '../data/mockData';
+import { getBaseUrl, ensureConfigLoaded } from '../config';
 
-export const BASE_URL = 'https://smartward.example.com/api/v1'; // TODO: set real Laravel host
 export const API_TIMEOUT_MS = 15000;
 
+// Current session token, set on login so other modules (notes store) can
+// call the API without threading the token everywhere.
+let sessionToken = null;
+
+export function setSessionToken(token) {
+  sessionToken = token;
+}
+
+export function getSessionToken() {
+  return sessionToken;
+}
+
+async function apiFetch(path, { method = 'GET', body, token } = {}) {
+  await ensureConfigLoaded();
+  const url = `${getBaseUrl()}${path}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(token || sessionToken
+          ? { Authorization: `Bearer ${token ?? sessionToken}` }
+          : {}),
+      },
+      body: body != null ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (e) {
+    const aborted = e?.name === 'AbortError';
+    const err = new Error(
+      aborted
+        ? 'Server did not respond. Check the API path in Settings.'
+        : 'Cannot reach the server. Check your network and the API path in Settings.'
+    );
+    err.cause = e;
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  let data = null;
+  try {
+    data = await res.json();
+  } catch (e) {
+    // Non-JSON response (e.g. HTML error page)
+  }
+
+  if (!res.ok) {
+    const err = new Error(
+      data?.message ?? `Request failed (HTTP ${res.status}).`
+    );
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+
+  return data;
+}
+
+export async function pingServer() {
+  return apiFetch('/api/doctor/ping', { method: 'POST' });
+}
+
 export async function loginConsultant({ username, password }) {
-  // TODO: replace with:
-  //   const res = await fetch(`${BASE_URL}/auth/consultant/login`, { ... });
-  //   return res.json();
-  await fakeDelay(450);
+  const data = await apiFetch('/api/doctor/login', {
+    method: 'POST',
+    body: { username, password },
+  });
+  setSessionToken(data.token);
   return {
-    token: 'mock-token-consultant-001',
-    doctor: mock.doctor,
-    wards: mock.wards,
+    token: data.token,
+    doctor: data.doctor,
+    wards: data.wards ?? [],
   };
 }
 
 export async function fetchDoctorDashboard(doctorId, token) {
-  // TODO: GET `${BASE_URL}/consultants/${doctorId}/dashboard`
-  await fakeDelay(250);
-  return {
-    doctor: mock.doctor,
-    summary: mock.summary,
-    wards: mock.wards,
-    beds: mock.consultantBeds,
-  };
+  return apiFetch('/api/doctor/dashboard', { token });
 }
 
-export async function fetchWards(doctorId, token) {
-  // TODO: GET `${BASE_URL}/consultants/${doctorId}/wards`
-  await fakeDelay(150);
-  return mock.wards;
+export async function fetchNotes(patientId) {
+  const data = await apiFetch(`/api/doctor/patients/${patientId}/notes`);
+  return data?.notes ?? [];
 }
 
-export async function fetchBedsForWard(doctorId, wardId, token) {
-  // TODO: GET `${BASE_URL}/consultants/${doctorId}/wards/${wardId}/beds`
-  await fakeDelay(150);
-  if (wardId == null || wardId === 'all') return mock.consultantBeds;
-  return mock.consultantBeds.filter((b) => b.ward_id === wardId);
+export async function postNote(patientId, text) {
+  const data = await apiFetch(`/api/doctor/patients/${patientId}/notes`, {
+    method: 'POST',
+    body: { text },
+  });
+  return data?.notes ?? [];
 }
 
 export async function logout(token) {
-  // TODO: POST `${BASE_URL}/auth/logout`
-  await fakeDelay(100);
+  try {
+    await apiFetch('/api/doctor/logout', { method: 'POST', token });
+  } catch (e) {
+    // Logout is best-effort; clearing the local session is what matters.
+  }
+  setSessionToken(null);
   return { ok: true };
-}
-
-function fakeDelay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

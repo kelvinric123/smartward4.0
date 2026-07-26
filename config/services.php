@@ -62,6 +62,14 @@ return [
         // written by the dockerized ECG listener. In docker, point this at a
         // WRITABLE mount of the shared ecg_data volume.
         'store_path' => env('ECG_STORE_PATH') ?: base_path('ecg/store'),
+
+        // ECG upload server (ecg/http_server.py container). When set, manual
+        // uploads/deletes from the web UI are forwarded here instead of writing
+        // to store_path directly - in docker the Laravel container mounts the
+        // shared ecg_data volume READ-ONLY and only the ECG container can write.
+        'upload_url' => env('ECG_UPLOAD_URL'),
+        'upload_username' => env('ECG_UPLOAD_USERNAME', 'admin'),
+        'upload_password' => env('ECG_UPLOAD_PASSWORD', 'admin123'),
     ],
 
     /*

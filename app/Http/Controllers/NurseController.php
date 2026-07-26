@@ -44,7 +44,13 @@ class NurseController extends Controller
             'is_tagging' => 'nullable|boolean',
             'tagging_nurse_ids' => 'nullable|array',
             'tagging_nurse_ids.*' => 'exists:nurses,id',
+            'app_username' => 'nullable|string|max:100|unique:nurses,app_username',
+            'app_password' => 'nullable|string|min:4|max:100',
         ]);
+
+        if (empty($validated['app_password'])) {
+            unset($validated['app_password']);
+        }
 
         $validated['designation'] = $validated['designation'] ?? Nurse::DEFAULT_DESIGNATION;
         $validated['is_active'] = true;
@@ -94,7 +100,14 @@ class NurseController extends Controller
             'is_tagging' => 'nullable|boolean',
             'tagging_nurse_ids' => 'nullable|array',
             'tagging_nurse_ids.*' => 'exists:nurses,id',
+            'app_username' => 'nullable|string|max:100|unique:nurses,app_username,' . $nurse->id,
+            'app_password' => 'nullable|string|min:4|max:100',
         ]);
+
+        // Leaving the password blank keeps the current one
+        if (empty($validated['app_password'])) {
+            unset($validated['app_password']);
+        }
 
         $validated['is_tagging'] = $request->boolean('is_tagging');
 

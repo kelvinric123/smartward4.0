@@ -12,10 +12,12 @@ Environment Variables:
 """
 
 import os
+import re
 import sys
 import cgi
 import io
 import logging
+import urllib.parse
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from datetime import datetime
 import base64
@@ -360,6 +362,51 @@ class ECGUploadHandler(BaseHTTPRequestHandler):
             logger.error("=" * 60)
             self._send_ecg_error_response()
     
+    def do_DELETE(self):
+        """Handle DELETE request - remove an uploaded ECG file.
+        Used by the SmartWard web UI (Laravel mounts the shared volume
+        read-only, so deletes are forwarded here)."""
+        # Check authentication
+        if not self.check_auth():
+            self.send_auth_required()
+            return
+
+        try:
+            # Filename comes from the URL path, e.g. DELETE /ecg_upload_20260726_120000.xml
+            filename = os.path.basename(urllib.parse.unquote(self.path.strip('/')))
+
+            # Only allow simple pdf/xml filenames (no traversal, no other types)
+            if not re.match(r'^[\w\-. ]+\.(pdf|xml)$', filename, re.IGNORECASE):
+                self.send_error(400, "Invalid filename")
+                return
+
+            save_dir = os.path.join(os.path.dirname(__file__), "ftp_data")
+            filepath = os.path.join(save_dir, filename)
+
+            if not os.path.isfile(filepath):
+                self.send_error(404, "File not found")
+                return
+
+            os.remove(filepath)
+
+            logger.info("=" * 60)
+            logger.info("FILE DELETED via HTTP DELETE")
+            logger.info(f"  Source IP  : {self.client_address[0]}")
+            logger.info(f"  Filename   : {filename}")
+            logger.info(f"  Status     : SUCCESS")
+            logger.info("=" * 60)
+
+            self._send_ecg_success_response()
+
+        except Exception as e:
+            logger.error("=" * 60)
+            logger.error("FILE DELETE FAILED via HTTP DELETE")
+            logger.error(f"  Source IP  : {self.client_address[0]}")
+            logger.error(f"  Error      : {str(e)}")
+            logger.error(f"  Status     : FAILED")
+            logger.error("=" * 60)
+            self._send_ecg_error_response()
+
     def check_auth(self):
         """Check HTTP Basic Authentication"""
         auth_header = self.headers.get('Authorization')
@@ -461,7 +508,7 @@ class ECGUploadHandler(BaseHTTPRequestHandler):
         try:
             self.send_response(200)
             self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Access-Control-Allow-Methods', 'POST, PUT, OPTIONS')
+            self.send_header('Access-Control-Allow-Methods', 'POST, PUT, DELETE, OPTIONS')
             self.send_header('Access-Control-Allow-Headers', 'Authorization, Content-Type')
             self.send_header('Connection', 'close')
             self.send_header('Server', 'Apache/2.4.0')
@@ -914,6 +961,7 @@ def main():
     logger.info("SUPPORTED METHODS")
     logger.info(f"  HTTP POST      : Enabled")
     logger.info(f"  HTTP PUT       : Enabled")
+    logger.info(f"  HTTP DELETE    : Enabled (SmartWard web UI)")
     logger.info("-" * 70)
     logger.info("ECG MACHINE CONFIGURATION")
     logger.info(f"  URL            : http://<SERVER_IP>:{ECG_PORT}/")

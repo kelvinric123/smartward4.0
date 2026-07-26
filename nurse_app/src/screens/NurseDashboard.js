@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,18 +7,26 @@ import {
   TouchableOpacity,
   StatusBar,
   Platform,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius } from '../theme';
 import StatCard from '../components/StatCard';
 import BedCard from '../components/BedCard';
-import {
-  nurse,
-  currentShift,
-  selectedWard,
-  summary,
-  assignedBeds,
-} from '../data/mockData';
+import { fetchNurseDashboard } from '../api/endpoints';
+import * as mock from '../data/mockData';
+
+const REFRESH_INTERVAL_MS = 60000;
+
+const EMPTY_SUMMARY = {
+  assigned_beds: 0,
+  occupied_beds: 0,
+  critical_patients: 0,
+  active_infusions: 0,
+  infusion_alerts: 0,
+  ward_occupancy: 0,
+};
 
 function nowLabel() {
   const d = new Date();
@@ -31,15 +39,74 @@ function nowLabel() {
   };
 }
 
-export default function NurseDashboard() {
+export default function NurseDashboard({ session, onLogout }) {
   const insets = useSafeAreaInsets();
+  const isDemo = !!session?.demo;
+
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+  const mountedRef = useRef(true);
+
+  const nurse = data?.nurse ?? session?.nurse ?? { name: 'Nurse' };
+  const currentShift = data?.current_shift ?? null;
+  const selectedWard = data?.ward ?? null;
+  const summary = data?.summary ?? EMPTY_SUMMARY;
+  const assignedBeds = data?.beds ?? [];
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const total = assignedBeds.length;
   const label = useMemo(nowLabel, []);
-  const bed = assignedBeds[currentIndex];
+  const safeIndex = Math.min(currentIndex, Math.max(0, total - 1));
+  const bed = assignedBeds[safeIndex];
 
-  const canPrev = currentIndex > 0;
-  const canNext = currentIndex < total - 1;
+  const canPrev = safeIndex > 0;
+  const canNext = safeIndex < total - 1;
+
+  const load = useCallback(async (isRefresh = false) => {
+    if (isDemo) {
+      setData({
+        nurse: mock.nurse,
+        current_shift: mock.currentShift,
+        ward: mock.selectedWard,
+        summary: mock.summary,
+        beds: mock.assignedBeds,
+      });
+      setLoadError(null);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+    if (isRefresh) setRefreshing(true);
+    try {
+      const payload = await fetchNurseDashboard(session?.token);
+      if (!mountedRef.current) return;
+      setData(payload);
+      setLoadError(null);
+    } catch (e) {
+      if (!mountedRef.current) return;
+      setLoadError(e?.message ?? 'Could not load your assigned beds.');
+      if (e?.status === 401) {
+        onLogout?.();
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  }, [session, onLogout, isDemo]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    load();
+    const timer = isDemo ? null : setInterval(() => load(), REFRESH_INTERVAL_MS);
+    return () => {
+      mountedRef.current = false;
+      if (timer) clearInterval(timer);
+    };
+  }, [load, isDemo]);
 
   return (
     <View style={styles.root}>
@@ -48,8 +115,8 @@ export default function NurseDashboard() {
         <View style={styles.header}>
           <View style={styles.headerTopRow}>
             <View style={styles.statusPill}>
-              <View style={styles.statusDot} />
-              <Text style={styles.statusText}>LIVE</Text>
+              <View style={[styles.statusDot, isDemo && { backgroundColor: '#f59e0b' }]} />
+              <Text style={styles.statusText}>{isDemo ? 'DEMO' : 'LIVE'}</Text>
             </View>
             <Text style={styles.dateText}>
               {label.date}  ·  {label.time}
@@ -57,7 +124,7 @@ export default function NurseDashboard() {
           </View>
 
           <View style={styles.titleRow}>
-            <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={onLogout}>
               <Text style={styles.iconBtnText}>‹</Text>
             </TouchableOpacity>
             <View style={{ flex: 1, alignItems: 'center' }}>
@@ -66,8 +133,8 @@ export default function NurseDashboard() {
                 {nurse.name}
               </Text>
             </View>
-            <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
-              <Text style={[styles.iconBtnText, { fontSize: 18 }]}>≡</Text>
+            <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={onLogout}>
+              <Text style={[styles.iconBtnText, { fontSize: 14 }]}>⎋</Text>
             </TouchableOpacity>
           </View>
 
@@ -98,7 +165,24 @@ export default function NurseDashboard() {
           { paddingBottom: 80 + insets.bottom + 16 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} />
+        }
       >
+        {loadError ? (
+          <TouchableOpacity style={styles.errorBanner} onPress={() => load(true)} activeOpacity={0.85}>
+            <Text style={styles.errorBannerTitle}>Could not refresh data</Text>
+            <Text style={styles.errorBannerText}>{loadError} · Tap to retry</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {loading && !data ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color={colors.cyan700} />
+            <Text style={styles.loadingText}>Loading your assigned beds...</Text>
+          </View>
+        ) : null}
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -139,7 +223,7 @@ export default function NurseDashboard() {
         <View style={styles.tabsCard}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabsRow}>
             {assignedBeds.map((b, i) => {
-              const active = i === currentIndex;
+              const active = i === safeIndex;
               return (
                 <TouchableOpacity
                   key={b.id}
@@ -179,7 +263,7 @@ export default function NurseDashboard() {
           <View style={styles.navCenter}>
             <Text style={styles.navCenterLabel}>BED</Text>
             <Text style={styles.navCenterValue}>
-              {currentIndex + 1} / {total}
+              {total === 0 ? '0 / 0' : `${safeIndex + 1} / ${total}`}
             </Text>
           </View>
           <TouchableOpacity
@@ -328,6 +412,35 @@ const styles = StyleSheet.create({
   statsRow: {
     paddingVertical: 4,
     gap: 10,
+  },
+
+  errorBanner: {
+    backgroundColor: colors.rose50,
+    borderColor: colors.rose100,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: 12,
+    marginBottom: 12,
+  },
+  errorBannerTitle: {
+    color: colors.rose700,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  errorBannerText: {
+    marginTop: 2,
+    color: colors.rose600,
+    fontSize: 11,
+  },
+  loadingBox: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '600',
   },
 
   sectionHead: {

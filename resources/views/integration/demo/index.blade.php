@@ -44,10 +44,31 @@
                 <div class="p-6">
                     <!-- Tab 1: Seed Patients -->
                     <div x-show="activeTab === 'seed-patients'" x-transition
-                        x-data="{ dietMode: 'random', allergyMode: 'random', hgtMode: 'random' }">
-                        <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Admit Demo Patients to a Ward</h3>
+                        x-data="{ seedAction: 'new', dietMode: 'random', allergyMode: 'random', hgtMode: 'random' }">
+                        <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4" x-text="seedAction === 'new' ? 'Admit Demo Patients to a Ward' : 'Reseed Clinical Indicators for a Ward'"></h3>
                         <form action="{{ route('integration.demo.seed-patients') }}" method="POST">
                             @csrf
+
+                            {{-- Mode: admit new patients vs reseed indicators on existing ones --}}
+                            <div class="mb-6 flex flex-col sm:flex-row gap-3">
+                                <label class="flex items-start gap-2 border rounded-md p-3 cursor-pointer flex-1"
+                                    :class="seedAction === 'new' ? 'border-indigo-500 ring-1 ring-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-gray-300 dark:border-gray-600'">
+                                    <input type="radio" name="seed_action" value="new" x-model="seedAction" class="mt-0.5 text-indigo-600 focus:ring-indigo-500">
+                                    <span>
+                                        <span class="block text-sm font-medium text-gray-900 dark:text-gray-100">Admit new demo patients</span>
+                                        <span class="block text-xs text-gray-500">Creates patients in unoccupied beds with the indicators below.</span>
+                                    </span>
+                                </label>
+                                <label class="flex items-start gap-2 border rounded-md p-3 cursor-pointer flex-1"
+                                    :class="seedAction === 'reseed' ? 'border-indigo-500 ring-1 ring-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' : 'border-gray-300 dark:border-gray-600'">
+                                    <input type="radio" name="seed_action" value="reseed" x-model="seedAction" class="mt-0.5 text-indigo-600 focus:ring-indigo-500">
+                                    <span>
+                                        <span class="block text-sm font-medium text-gray-900 dark:text-gray-100">Reseed existing ward patients</span>
+                                        <span class="block text-xs text-gray-500">Overwrites the clinical indicators of every patient already admitted in the ward.</span>
+                                    </span>
+                                </label>
+                            </div>
+
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
                                     <label for="ward_id" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Select Ward</label>
@@ -59,10 +80,21 @@
                                     </select>
                                 </div>
 
-                                <div>
+                                <div x-show="seedAction === 'new'">
                                     <label for="number_of_beds" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Number of Beds to Admit</label>
-                                    <input type="number" id="number_of_beds" name="number_of_beds" min="1" max="50" value="1" required class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                                    <input type="number" id="number_of_beds" name="number_of_beds" min="1" max="50" value="1" :required="seedAction === 'new'" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                                     <p class="mt-2 text-sm text-gray-500">Will find unoccupied beds and seed patients. Max 50.</p>
+                                </div>
+
+                                <div x-show="seedAction === 'reseed'" x-cloak>
+                                    <label class="flex items-start gap-2 mt-1 text-sm text-gray-700 dark:text-gray-300">
+                                        <input type="hidden" name="full_seed" value="0">
+                                        <input type="checkbox" name="full_seed" value="1" class="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                        <span>
+                                            <span class="font-medium">Fully seed the data</span>
+                                            <span class="block text-xs text-gray-500">Every patient gets every indicator — "Random mix" never resolves to none, and all patients receive diet orders, allergies and HGT monitoring.</span>
+                                        </span>
+                                    </label>
                                 </div>
                             </div>
 
@@ -186,8 +218,8 @@
                             </div>
 
                             <div class="mt-6">
-                                <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                                    Seed Patients
+                                <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                    x-text="seedAction === 'new' ? 'Seed Patients' : 'Reseed Ward Indicators'">
                                 </button>
                             </div>
                         </form>

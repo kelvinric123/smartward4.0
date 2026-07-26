@@ -1,0 +1,7 @@
+# PostgreSQL driver (pure Python - no build tools needed).
+# The engine falls back to embedded SQLite if INFUSION_DB_HOST is not set,
+# so this is only required for Postgres deployments (the Docker image installs it).
+pg8000>=1.30
+
+# Optional: load .env files during local development
+python-dotenv>=1.0.0

@@ -7,8 +7,12 @@ use App\Models\Infusion;
 use App\Models\InfusionApiLog;
 use App\Models\InfusionApiUser;
 use App\Models\InfusionPump;
+use App\Models\IntegrationSetting;
 use App\Models\Patient;
+use App\Services\EngineInfusionService;
+use App\Services\InfusionEngineClient;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
@@ -59,12 +63,44 @@ class InfusionIntegrationController extends Controller
 
         $hl7Logs = $query->limit(100)->get();
 
+        // Integration mode selection: 'local' (built-in listener) or 'engine' (Qmed Infusion Engine)
+        $integrationMode = InfusionEngineClient::mode();
+
+        $localConfig = IntegrationSetting::get('infusion.local', [
+            'host' => env('BBRAUN_HOST', '0.0.0.0'),
+            'port' => env('BBRAUN_PORT', '5001'),
+        ]);
+
+        $engineConfig = array_merge([
+            'url' => 'http://127.0.0.1:6001',
+            'api_key' => '',
+            'timeout' => 5,
+            'refresh_sec' => 10,
+        ], IntegrationSetting::get(InfusionEngineClient::CONFIG_KEY, []));
+
+        // When engine mode is active, show its live status on the page and
+        // sync engine-seen pumps into the Registered Pump Users registry so
+        // the ward dashboard can bind them to patients.
+        $engineStatus = null;
+        $engineSync = null;
+        if ($integrationMode === InfusionEngineClient::MODE_ENGINE) {
+            $engineStatus = InfusionEngineClient::fromSettings()->testConnection();
+            if ($engineStatus['ok'] ?? false) {
+                try {
+                    $engineSync = EngineInfusionService::make()->syncRegistry();
+                } catch (\Throwable $e) {
+                    Log::warning('Engine pump registry sync failed: ' . $e->getMessage());
+                }
+            }
+        }
+
+        // Fetched after the engine sync so newly auto-registered pumps appear
         $pumps = InfusionPump::with('ward')->latest()->get();
 
         // MLLP Configuration from environment
         $mllpConfig = [
-            'host' => env('BBRAUN_HOST', '0.0.0.0'),
-            'port' => env('BBRAUN_PORT', '5001'),
+            'host' => $localConfig['host'] ?? env('BBRAUN_HOST', '0.0.0.0'),
+            'port' => $localConfig['port'] ?? env('BBRAUN_PORT', '5001'),
             'protocol' => 'MLLP (Minimal Lower Layer Protocol)',
             'hl7_version' => '2.x',
             'supported_messages' => ['ORU', 'ORM', 'ADT', 'RAS', 'RDE', 'RGV'],
@@ -90,7 +126,68 @@ class InfusionIntegrationController extends Controller
             'error_messages' => BbraunHl7Log::where('status', 'error')->count(),
         ];
 
-        return view('integration.infusion.index', compact('hl7Logs', 'pumps', 'stats', 'mllpConfig', 'dbConfig', 'duration', 'statusFilter'));
+        return view('integration.infusion.index', compact(
+            'hl7Logs', 'pumps', 'stats', 'mllpConfig', 'dbConfig', 'duration', 'statusFilter',
+            'integrationMode', 'localConfig', 'engineConfig', 'engineStatus', 'engineSync'
+        ));
+    }
+
+    /**
+     * Save the integration mode + per-mode configuration.
+     */
+    public function saveIntegrationSettings(Request $request)
+    {
+        $validated = $request->validate([
+            'mode' => 'required|in:local,engine',
+            'local_host' => 'nullable|string|max:255',
+            'local_port' => 'nullable|integer|min:1|max:65535',
+            'engine_url' => 'required_if:mode,engine|nullable|url|max:255',
+            'engine_api_key' => 'nullable|string|max:255',
+            'engine_timeout' => 'nullable|integer|min:1|max:60',
+            'engine_refresh_sec' => 'nullable|integer|min:2|max:300',
+        ]);
+
+        IntegrationSetting::put(InfusionEngineClient::MODE_KEY, $validated['mode']);
+
+        IntegrationSetting::put('infusion.local', [
+            'host' => $validated['local_host'] ?? env('BBRAUN_HOST', '0.0.0.0'),
+            'port' => (string) ($validated['local_port'] ?? env('BBRAUN_PORT', '5001')),
+        ]);
+
+        IntegrationSetting::put(InfusionEngineClient::CONFIG_KEY, [
+            'url' => rtrim($validated['engine_url'] ?? 'http://127.0.0.1:6001', '/'),
+            'api_key' => $validated['engine_api_key'] ?? '',
+            'timeout' => (int) ($validated['engine_timeout'] ?? 5),
+            'refresh_sec' => (int) ($validated['engine_refresh_sec'] ?? 10),
+        ]);
+
+        $modeLabel = $validated['mode'] === 'engine'
+            ? 'Qmed Infusion Engine (via API)'
+            : 'In the same project (built-in listener)';
+
+        return redirect()->route('infusion-integration.index')
+            ->with('success', "Infusion integration mode set to: {$modeLabel}");
+    }
+
+    /**
+     * Test connectivity to a Qmed Infusion Engine (with the values from the form,
+     * so the connection can be verified before saving).
+     */
+    public function testEngineConnection(Request $request)
+    {
+        $validated = $request->validate([
+            'url' => 'required|url|max:255',
+            'api_key' => 'nullable|string|max:255',
+            'timeout' => 'nullable|integer|min:1|max:60',
+        ]);
+
+        $client = new InfusionEngineClient(
+            $validated['url'],
+            $validated['api_key'] ?? '',
+            (int) ($validated['timeout'] ?? 5),
+        );
+
+        return response()->json($client->testConnection());
     }
 
     /**
@@ -242,6 +339,19 @@ class InfusionIntegrationController extends Controller
         $tab = $request->get('tab', 'infusions'); // infusions, devices
         $filter = $request->get('filter', 'active'); // active, completed, all, warnings
 
+        // Qmed Infusion Engine mode: pull live data from the engine API,
+        // mapped to patients through the local pump registry. Falls back to
+        // the local database (with a warning) if the engine is unreachable.
+        $engineError = null;
+        if (InfusionEngineClient::engineModeActive()) {
+            try {
+                return $this->wardOverviewFromEngine($request, $wardId, $tab, $filter);
+            } catch (\Throwable $e) {
+                Log::warning('Infusion engine unreachable, falling back to local data: ' . $e->getMessage());
+                $engineError = 'Qmed Infusion Engine unreachable (' . $e->getMessage() . ') — showing local database data.';
+            }
+        }
+
         $query = Infusion::with(['patient', 'infusionPump']);
 
         if ($wardId) {
@@ -300,7 +410,66 @@ class InfusionIntegrationController extends Controller
 
         $pumps = $pumpsQuery->get();
 
-        return view('wards.infusion-overview', compact('infusions', 'stats', 'filter', 'wardId', 'tab', 'pumps', 'recentlyCompleted'));
+        $dataSource = 'local';
+
+        return view('wards.infusion-overview', compact(
+            'infusions', 'stats', 'filter', 'wardId', 'tab', 'pumps',
+            'recentlyCompleted', 'dataSource', 'engineError'
+        ));
+    }
+
+    /**
+     * Ward infusion overview built from the Qmed Infusion Engine API.
+     * Pump -> patient mapping comes from the local pump registry.
+     */
+    protected function wardOverviewFromEngine(Request $request, $wardId, string $tab, string $filter): View
+    {
+        $service = EngineInfusionService::make();
+
+        $all = $service->infusions();
+
+        if ($wardId) {
+            $all = $all->filter(fn($i) => ($i->patient->ward_id ?? null) == $wardId)->values();
+        }
+
+        $stats = $service->stats($all);
+
+        $infusions = match ($filter) {
+            'active' => $all->filter(fn($i) => in_array($i->status, ['running', 'paused', 'alarming'])),
+            'completed' => $all->where('status', 'completed'),
+            'warnings' => $all->where('status', 'running')->where('is_warning', true),
+            'alarms' => $all->where('status', 'alarming'),
+            default => $all,
+        };
+        $infusions = $infusions->sortByDesc('last_updated_at')->values();
+
+        // Engine keeps the latest state per pump, so "recently completed" =
+        // completed pumps that reported within the last 24 hours
+        $recentlyCompleted = collect();
+        if ($filter === 'active') {
+            $recentlyCompleted = $all
+                ->where('status', 'completed')
+                ->filter(fn($i) => $i->last_updated_at && $i->last_updated_at->gte(now()->subHours(24)))
+                ->sortByDesc('last_updated_at')
+                ->values();
+        }
+
+        // Devices tab keeps showing the local registry (it holds the patient links)
+        $pumpsQuery = InfusionPump::with(['patient', 'ward'])
+            ->orderByRaw('patient_id IS NULL')
+            ->orderBy('device_id');
+        if ($wardId) {
+            $pumpsQuery->where('ward_id', $wardId);
+        }
+        $pumps = $pumpsQuery->get();
+
+        $dataSource = 'engine';
+        $engineError = null;
+
+        return view('wards.infusion-overview', compact(
+            'infusions', 'stats', 'filter', 'wardId', 'tab', 'pumps',
+            'recentlyCompleted', 'dataSource', 'engineError'
+        ));
     }
 
     /**
@@ -311,17 +480,42 @@ class InfusionIntegrationController extends Controller
         $patientId = $request->get('patient_id');
         $patient = Patient::find($patientId);
 
-        $infusions = $patient
-            ? Infusion::with('infusionPump')
-                ->where('patient_id', $patientId)
-                ->latest('last_updated_at')
-                ->get()
-            : collect();
+        // Qmed Infusion Engine mode: live data from the engine, mapped through
+        // the pumps linked to this patient. Local DB fallback on failure.
+        $dataSource = 'local';
+        $engineError = null;
+        $infusions = null;
+
+        if ($patient && InfusionEngineClient::engineModeActive()) {
+            try {
+                $infusions = EngineInfusionService::make()
+                    ->infusionsForPatient((int) $patient->id)
+                    ->sortByDesc('last_updated_at')
+                    ->values();
+                $dataSource = 'engine';
+            } catch (\Throwable $e) {
+                Log::warning('Infusion engine unreachable, falling back to local data: ' . $e->getMessage());
+                $engineError = 'Qmed Infusion Engine unreachable (' . $e->getMessage() . ') — showing local database data.';
+                $infusions = null;
+            }
+        }
+
+        if ($infusions === null) {
+            $infusions = $patient
+                ? Infusion::with('infusionPump')
+                    ->where('patient_id', $patientId)
+                    ->latest('last_updated_at')
+                    ->get()
+                : collect();
+        }
 
         $activeInfusions = $infusions->filter(fn($i) => in_array($i->status, ['running', 'paused', 'alarming']));
         $completedInfusions = $infusions->filter(fn($i) => $i->status === 'completed');
 
-        return view('wards.patient-infusions', compact('patient', 'infusions', 'activeInfusions', 'completedInfusions'));
+        return view('wards.patient-infusions', compact(
+            'patient', 'infusions', 'activeInfusions', 'completedInfusions',
+            'dataSource', 'engineError'
+        ));
     }
 
     /**
@@ -451,6 +645,30 @@ class InfusionIntegrationController extends Controller
     // ============================================
     // API Endpoints (for Infusion Pump Gateway)
     // ============================================
+
+    /**
+     * API: Registered pump list (device metadata only, no patient data).
+     * Used by the Qmed Infusion Engine's demo tab so demo pumps can be
+     * created with the same Device IDs SmartWard has registered.
+     */
+    public function apiListPumps()
+    {
+        $pumps = InfusionPump::with('ward')
+            ->orderBy('device_name')
+            ->get()
+            ->map(fn(InfusionPump $pump) => [
+                'device_id' => $pump->device_id,
+                'serial_no' => $pump->serial_no,
+                'device_name' => $pump->device_name,
+                'device_type' => $pump->device_type,
+                'pump_model' => $pump->pump_model,
+                'ward' => $pump->ward->ward_name ?? null,
+                'is_active' => (bool) $pump->is_active,
+                'is_linked' => $pump->patient_id !== null,
+            ]);
+
+        return response()->json(['pumps' => $pumps]);
+    }
 
     /**
      * API: Authenticate and get bearer token.

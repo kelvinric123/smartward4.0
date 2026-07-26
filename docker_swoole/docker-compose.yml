@@ -93,6 +93,13 @@ services:
       # ADT HL7 Listener (Docker service name for inter-container communication)
       ADT_HOST: "adt"
       ADT_PORT: "3000"
+
+      # ECG upload server - manual web-UI uploads/deletes are forwarded here
+      # because this container's /app/ecg/store mount is read-only
+      ECG_UPLOAD_URL: "http://ecg:3050"
+      ECG_UPLOAD_USERNAME: "${ECG_USERNAME:-admin}"
+      ECG_UPLOAD_PASSWORD: "${ECG_PASSWORD:-admin123}"
+
       # Extra CA certificates for Node.js
       NODE_EXTRA_CA_CERTS: "/usr/local/share/ca-certificates/IntermediateCA.crt"
     depends_on:

@@ -19,6 +19,16 @@
 </head>
 <body class="bg-gray-50">
     <div class="p-4">
+        @if(!empty($engineError))
+            <div class="mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-medium">
+                ⚠ {{ $engineError }}
+            </div>
+        @elseif(($dataSource ?? 'local') === 'engine')
+            <div class="mb-3 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-700 font-medium inline-flex items-center">
+                <span class="w-1.5 h-1.5 bg-indigo-500 rounded-full mr-2 animate-pulse"></span>
+                Live from Qmed Infusion Engine
+            </div>
+        @endif
         @if($patient)
             <!-- Active Infusions -->
             <div class="mb-6">

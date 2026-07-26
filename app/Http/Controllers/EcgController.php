@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Patient;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
@@ -54,6 +55,7 @@ class EcgController extends Controller
         // Get all patients and create dual lookup by MRN and RN
         $patientsByMrn = [];
         $patientsByRn = [];
+        $patientsById = [];
 
         $activePatients = Patient::where('is_active', true)->get();
 
@@ -66,6 +68,7 @@ class EcgController extends Controller
             if (!empty($patient->rn)) {
                 $patientsByRn[trim($patient->rn)] = $patient;
             }
+            $patientsById[$patient->id] = $patient;
         }
 
         // First pass: Process XML files (ECG data with patient info)
@@ -144,13 +147,27 @@ class EcgController extends Controller
 
             $pdfPath = $ecgStorePath . '/' . $file;
 
+            // Manually uploaded PDFs are named manual_pid{patientId}_{timestamp}.pdf
+            // so we can match them back to a patient by ID
+            $patient = null;
+            if (preg_match('/^manual_pid(\d+)_/i', $file, $matches)) {
+                $matchedPatient = $patientsById[(int) $matches[1]] ?? null;
+                if ($matchedPatient) {
+                    $patient = [
+                        'id' => $matchedPatient->id,
+                        'name' => $matchedPatient->patient_name,
+                        'mrn' => $matchedPatient->mrn,
+                    ];
+                }
+            }
+
             $allFiles[] = [
                 'xml_file' => null,
                 'pdf_file' => $file,
                 'has_pdf' => true,
-                'mrn' => null,
-                'timestamp' => date('Y-m-d H:i:s', filemtime($pdfPath)),
-                'patient' => null,
+                'mrn' => $patient['mrn'] ?? null,
+                'timestamp' => $this->getTimestampFromFilename($file, $pdfPath),
+                'patient' => $patient,
                 'type' => 'standalone_pdf',
             ];
         }
@@ -177,8 +194,9 @@ class EcgController extends Controller
             $patient = Patient::where('is_active', true)->find($patientId);
 
             if ($patient) {
-                // Search for ECG files matching this patient's MRN or RN
-                $ecgFiles = $this->findEcgFilesForPatient($patient->mrn, $patient->rn);
+                // Search for ECG files matching this patient's MRN or RN,
+                // plus manually uploaded PDFs matched by patient ID
+                $ecgFiles = $this->findEcgFilesForPatient($patient->mrn, $patient->rn, $patient->id);
 
                 // Get the latest ECG file
                 if (!empty($ecgFiles)) {
@@ -216,6 +234,19 @@ class EcgController extends Controller
             abort(404, 'ECG file not found');
         }
 
+        // Export mode: force download, optionally with a friendly filename
+        if ($request->boolean('download')) {
+            $downloadName = $request->input('dl_name');
+            $downloadName = $downloadName ? preg_replace('/[^\w\-. ]+/', '_', $downloadName) : $filename;
+            if (!preg_match('/\.pdf$/i', $downloadName)) {
+                $downloadName .= '.pdf';
+            }
+
+            return response()->download($filePath, $downloadName, [
+                'Content-Type' => 'application/pdf',
+            ]);
+        }
+
         // Return the PDF file
         return response()->file($filePath, [
             'Content-Type' => 'application/pdf',
@@ -225,9 +256,10 @@ class EcgController extends Controller
 
     /**
      * Find ECG files for a patient by MRN or RN
-     * Matches ECG XML files where <PatientID> equals the patient's MRN or RN
+     * Matches ECG XML files where <PatientID> equals the patient's MRN or RN.
+     * Also includes manually uploaded PDFs (manual_pid{patientId}_*.pdf) matched by patient ID.
      */
-    private function findEcgFilesForPatient(?string $mrn, ?string $rn = null): array
+    private function findEcgFilesForPatient(?string $mrn, ?string $rn = null, ?int $patientId = null): array
     {
         $ecgStorePath = config('services.ecg.store_path');
         $ecgFiles = [];
@@ -236,8 +268,8 @@ class EcgController extends Controller
         $mrn = $mrn ? trim($mrn) : null;
         $rn = $rn ? trim($rn) : null;
 
-        if (empty($mrn) && empty($rn)) {
-            Log::warning('ECG search: Empty MRN and RN provided');
+        if (empty($mrn) && empty($rn) && empty($patientId)) {
+            Log::warning('ECG search: Empty MRN, RN and patient ID provided');
             return [];
         }
 
@@ -254,8 +286,31 @@ class EcgController extends Controller
                 continue;
             }
 
+            // Manually uploaded PDFs are matched by patient ID in the filename
+            if ($patientId && preg_match('/^manual_pid(\d+)_.*\.pdf$/i', $file, $matches)) {
+                if ((int) $matches[1] === $patientId) {
+                    $pdfPath = $ecgStorePath . '/' . $file;
+                    $timestamp = $this->getTimestampFromFilename($file, $pdfPath);
+
+                    $ecgFiles[] = [
+                        'xml_file' => null,
+                        'pdf_file' => $file,
+                        'has_pdf' => true,
+                        'mrn' => $mrn,
+                        'timestamp' => $timestamp,
+                        'recorded_at' => $timestamp,
+                        'source' => 'manual',
+                    ];
+                }
+                continue;
+            }
+
             // Only process XML files
             if (!preg_match('/\.xml$/i', $file)) {
+                continue;
+            }
+
+            if (empty($mrn) && empty($rn)) {
                 continue;
             }
 
@@ -292,6 +347,7 @@ class EcgController extends Controller
                     'mrn' => $ecgPatientId,  // The MRN from ECG (PatientID)
                     'timestamp' => $timestamp,
                     'recorded_at' => $timestamp,
+                    'source' => 'gateway',
                 ];
 
                 Log::debug('ECG file matched', [
@@ -315,6 +371,172 @@ class EcgController extends Controller
         ]);
 
         return $ecgFiles;
+    }
+
+    /**
+     * Manually upload an ECG PDF for a patient
+     * Saved as manual_pid{patientId}_{Ymd_His}.pdf in the ECG store so it can
+     * be matched back to the patient by ID (no XML involved)
+     */
+    public function uploadPdf(Request $request)
+    {
+        $validated = $request->validate([
+            'patient_id' => 'required|integer|exists:patients,id',
+            'pdf' => 'required|file|mimes:pdf|max:20480',
+        ]);
+
+        $patient = Patient::where('is_active', true)->find($validated['patient_id']);
+
+        if (!$patient) {
+            return response()->json(['success' => false, 'message' => 'Patient not found or inactive.'], 404);
+        }
+
+        $ecgStorePath = config('services.ecg.store_path');
+        $uploadUrl = config('services.ecg.upload_url');
+
+        $timestamp = now()->format('Ymd_His');
+        $filename = "manual_pid{$patient->id}_{$timestamp}.pdf";
+        $counter = 1;
+
+        while (is_dir($ecgStorePath) && file_exists($ecgStorePath . '/' . $filename)) {
+            $filename = "manual_pid{$patient->id}_{$timestamp}_{$counter}.pdf";
+            $counter++;
+        }
+
+        if ($uploadUrl) {
+            // Forward to the ECG upload server (same path the ECG integration
+            // uses) - in docker this container's ECG store mount is read-only,
+            // only the ECG container can write to the shared volume.
+            try {
+                $response = Http::withBasicAuth(
+                    config('services.ecg.upload_username'),
+                    config('services.ecg.upload_password')
+                )
+                    ->timeout(30)
+                    ->withBody(file_get_contents($request->file('pdf')->getRealPath()), 'application/pdf')
+                    ->post(rtrim($uploadUrl, '/') . '/' . rawurlencode($filename));
+            } catch (\Throwable $e) {
+                Log::error('Manual ECG upload: ECG upload server unreachable', [
+                    'url' => $uploadUrl,
+                    'error' => $e->getMessage(),
+                ]);
+                return response()->json(['success' => false, 'message' => 'ECG upload server is unreachable.'], 502);
+            }
+
+            if (!$response->successful()) {
+                Log::error('Manual ECG upload rejected by ECG upload server', [
+                    'url' => $uploadUrl,
+                    'status' => $response->status(),
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'ECG upload server rejected the file (HTTP ' . $response->status() . ').',
+                ], 502);
+            }
+        } else {
+            if (!is_dir($ecgStorePath)) {
+                @mkdir($ecgStorePath, 0775, true);
+            }
+
+            if (!is_dir($ecgStorePath) || !is_writable($ecgStorePath)) {
+                Log::error('ECG store directory not writable for manual upload', ['path' => $ecgStorePath]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'ECG storage directory is not writable and no ECG upload server is configured (ECG_UPLOAD_URL).',
+                ], 500);
+            }
+
+            $request->file('pdf')->move($ecgStorePath, $filename);
+        }
+
+        Log::info('Manual ECG PDF uploaded', [
+            'patient_id' => $patient->id,
+            'mrn' => $patient->mrn,
+            'file' => $filename,
+            'via' => $uploadUrl ? 'ecg-upload-server' : 'direct-write',
+            'uploaded_by' => $request->user()?->id,
+        ]);
+
+        return response()->json(['success' => true, 'file' => $filename]);
+    }
+
+    /**
+     * Delete an ECG record (XML and/or PDF files) from the ECG store
+     */
+    public function deleteEcg(Request $request)
+    {
+        $request->validate([
+            'xml_file' => 'nullable|string',
+            'pdf_file' => 'nullable|string',
+        ]);
+
+        $ecgStorePath = config('services.ecg.store_path');
+        $uploadUrl = config('services.ecg.upload_url');
+        $deleted = [];
+
+        // Build the list of files to remove (sanitized against traversal,
+        // only pdf/xml allowed; deleting an XML also removes its extracted PDF)
+        $targets = [];
+        foreach (['xml_file', 'pdf_file'] as $key) {
+            $name = $request->input($key);
+
+            if (empty($name)) {
+                continue;
+            }
+
+            $name = basename($name);
+            if (!preg_match('/^[\w\-. ]+\.(pdf|xml)$/i', $name)) {
+                continue;
+            }
+
+            $targets[] = $name;
+
+            if (preg_match('/\.xml$/i', $name)) {
+                $targets[] = pathinfo($name, PATHINFO_FILENAME) . '_extracted.pdf';
+            }
+        }
+        $targets = array_values(array_unique($targets));
+
+        foreach ($targets as $name) {
+            if ($uploadUrl) {
+                // Forward to the ECG upload server - in docker this container's
+                // ECG store mount is read-only, only the ECG container can write.
+                try {
+                    $response = Http::withBasicAuth(
+                        config('services.ecg.upload_username'),
+                        config('services.ecg.upload_password')
+                    )
+                        ->timeout(15)
+                        ->delete(rtrim($uploadUrl, '/') . '/' . rawurlencode($name));
+                } catch (\Throwable $e) {
+                    Log::error('ECG delete: ECG upload server unreachable', [
+                        'url' => $uploadUrl,
+                        'error' => $e->getMessage(),
+                    ]);
+                    return response()->json(['success' => false, 'message' => 'ECG upload server is unreachable.'], 502);
+                }
+
+                if ($response->successful()) {
+                    $deleted[] = $name;
+                }
+            } else {
+                $path = $ecgStorePath . '/' . $name;
+                if (file_exists($path) && @unlink($path)) {
+                    $deleted[] = $name;
+                }
+            }
+        }
+
+        if (empty($deleted)) {
+            return response()->json(['success' => false, 'message' => 'No matching ECG files found to delete.'], 404);
+        }
+
+        Log::info('ECG files deleted', [
+            'deleted' => $deleted,
+            'deleted_by' => $request->user()?->id,
+        ]);
+
+        return response()->json(['success' => true, 'deleted' => $deleted]);
     }
 
     /**

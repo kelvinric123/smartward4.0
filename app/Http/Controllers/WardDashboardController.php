@@ -2660,7 +2660,7 @@ class WardDashboardController extends Controller
      * Calculate Early Warning Score (EWS) based on vital signs
      * Supports multiple scoring systems: EWS IHH, NEWS2, NEWS, MEWS, PEWS
      */
-    private function calculateEWS(?VitalSign $vitals, string $ewsSystem = 'ews_ihh'): array
+    public function calculateEWS(?VitalSign $vitals, string $ewsSystem = 'ews_ihh'): array
     {
         if (!$vitals) {
             return [

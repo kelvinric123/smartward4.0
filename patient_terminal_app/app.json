@@ -1,0 +1,39 @@
+{
+  "expo": {
+    "name": "Patient Terminal",
+    "slug": "patient-terminal",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "androidStatusBar": {
+      "hidden": true
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.smartward.patientterminal"
+    },
+    "android": {
+      "package": "com.smartward.patientterminal",
+      "versionCode": 1,
+      "permissions": ["INTERNET"],
+      "adaptiveIcon": {
+        "backgroundColor": "#0b2435",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      }
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ]
+  }
+}

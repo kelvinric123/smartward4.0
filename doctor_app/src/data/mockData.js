@@ -1,11 +1,10 @@
-// Hardcoded data for the Doctor (Consultant) dashboard.
-// Swap this file's exports for real API calls when wiring the backend later.
-// See src/api/endpoints.js for the planned Laravel endpoints.
+// Hardcoded data for the Doctor (Consultant) dashboard DEMO mode.
+// Used only when the user taps "Demo Login" on the login screen — the real
+// login authenticates against the Laravel backend (see src/api/endpoints.js).
 
 // Helper: build a vitals trend (oldest -> newest, last entry should mirror
 // the bed's current `vitals`). Used to render the "tap latest vitals -> trend"
-// modal. Backend mapping (later):
-//   GET {BASE_URL}/beds/{bedId}/vitals?range=24h  -> [{ recorded_at, ... }]
+// modal.
 function trend(rows) {
   return rows.map((r, i) => ({ id: `vh-${i}`, ...r }));
 }

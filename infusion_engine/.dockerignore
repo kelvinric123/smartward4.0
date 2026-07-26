@@ -1,0 +1,7 @@
+logs/
+data/
+__pycache__/
+**/__pycache__/
+*.pyc
+docker_infusion/
+.dockerignore

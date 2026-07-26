@@ -1,0 +1,120 @@
+# =============================================================================
+# Infusion Engine stack - engine + PostgreSQL
+# Receives HL7 from the pump gateway (MLLP :6000), stores every raw message,
+# parses infusion data into PostgreSQL, serves REST API + management UI (:6001).
+# SmartWard points at the REST API - no shared database, works separately.
+#
+#   docker compose up -d --build        (build locally)
+#   docker compose up -d                (use pushed image kelvinric/infusion)
+# =============================================================================
+
+services:
+  infusion-db:
+    image: postgres:16-alpine
+    container_name: infusion-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${INFUSION_DB_NAME:-infusion}"
+      POSTGRES_USER: "${INFUSION_DB_USER:-infusion}"
+      POSTGRES_PASSWORD: "${INFUSION_DB_PASSWORD:-infusion_secret}"
+      TZ: "${TZ:-Asia/Kuala_Lumpur}"
+    volumes:
+      - infusion_pgdata:/var/lib/postgresql/data
+    # Uncomment to reach Postgres from the host (pgAdmin/DBeaver):
+    # ports:
+    #   - "6432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${INFUSION_DB_USER:-infusion} -d ${INFUSION_DB_NAME:-infusion}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: "512M"
+        reservations:
+          cpus: "0.25"
+          memory: "128M"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+        tag: "infusion-db"
+
+  infusion-engine:
+    image: ${INFUSION_IMAGE:-kelvinric/infusion:latest}
+    build:
+      context: ..
+      dockerfile: docker_infusion/Dockerfile
+    container_name: infusion-engine
+    restart: unless-stopped
+    depends_on:
+      infusion-db:
+        condition: service_healthy
+    ports:
+      # HL7 MLLP in (pump gateway / NUC sends here)
+      - "${INFUSION_MLLP_PORT:-6000}:6000"
+      # REST API + management page (SmartWard / browser)
+      - "${INFUSION_API_PORT:-6001}:6001"
+    environment:
+      TZ: "${TZ:-Asia/Kuala_Lumpur}"
+      PYTHONUNBUFFERED: "1"
+      INFUSION_MLLP_HOST: "0.0.0.0"
+      INFUSION_MLLP_PORT: "6000"
+      INFUSION_API_HOST: "0.0.0.0"
+      INFUSION_API_PORT: "6001"
+      # PostgreSQL (service name on the internal network)
+      INFUSION_DB_HOST: "infusion-db"
+      INFUSION_DB_PORT: "5432"
+      INFUSION_DB_NAME: "${INFUSION_DB_NAME:-infusion}"
+      INFUSION_DB_USER: "${INFUSION_DB_USER:-infusion}"
+      INFUSION_DB_PASSWORD: "${INFUSION_DB_PASSWORD:-infusion_secret}"
+      INFUSION_LOG_DIR: "/data/logs"
+      # Optional API key SmartWard must send (X-API-Key header). Empty = open.
+      INFUSION_API_KEY: "${INFUSION_API_KEY:-}"
+      # Purge raw messages older than N days. 0 = keep forever.
+      INFUSION_RETENTION_DAYS: "${INFUSION_RETENTION_DAYS:-0}"
+      # Demo pump simulator (management page > Demo Data). Disable in production.
+      INFUSION_DEMO_ENABLED: "${INFUSION_DEMO_ENABLED:-true}"
+      # SmartWard base URL - lets the demo tab list SmartWard's registered
+      # pumps so demo Device IDs match (e.g. http://192.168.0.88:18080)
+      INFUSION_SMARTWARD_URL: "${INFUSION_SMARTWARD_URL:-}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    volumes:
+      - infusion_logs:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://127.0.0.1:6001/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: "256M"
+        reservations:
+          cpus: "0.25"
+          memory: "64M"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        tag: "infusion-engine"
+
+volumes:
+  infusion_pgdata:
+    driver: local
+  infusion_logs:
+    driver: local
+
+networks:
+  default:
+    name: infusion-network
+    driver: bridge

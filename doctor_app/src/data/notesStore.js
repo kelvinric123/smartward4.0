@@ -1,42 +1,79 @@
-// In-memory consultant notes store. Notes are keyed by bed id.
+// Consultant notes store, backed by the Laravel API and keyed by patient id.
 //
-// For showcase build only — notes are lost when the app restarts. When wiring
-// the Laravel backend, replace the implementation with:
+//   GET  {BASE_URL}/api/doctor/patients/{patientId}/notes
+//   POST {BASE_URL}/api/doctor/patients/{patientId}/notes  body: { text }
 //
-//   GET  {BASE_URL}/beds/{bedId}/consultant-notes
-//   POST {BASE_URL}/beds/{bedId}/consultant-notes  body: { text }
-//
-// Or persist locally via @react-native-async-storage/async-storage.
+// A small in-memory cache keeps the UI snappy; loadNotes() refreshes it from
+// the server and notifies subscribers.
+
+import { fetchNotes, postNote } from '../api/endpoints';
 
 const listeners = new Set();
-const notesByBed = new Map();
+const notesByPatient = new Map();
 
-// Seed a couple of demo notes so the showcase has something to render.
-seed(101, [
-  { id: 'n-101-1', text: 'Continue IV antibiotics. Repeat CXR tomorrow. Watch SpO2 trend overnight.', author: 'Dr. Rajan Krishnan', created_at: isoMinusHours(8) },
-  { id: 'n-101-2', text: 'Discussed plan with family. They are aware of escalation plan.', author: 'Dr. Rajan Krishnan', created_at: isoMinusHours(2) },
-]);
-seed(103, [
-  { id: 'n-103-1', text: 'For early MET review if EWS rises. Repeat lactate in 2 hours.', author: 'Dr. Rajan Krishnan', created_at: isoMinusHours(3) },
-]);
+// Demo mode ("Demo Login"): notes live only in memory, seeded with samples,
+// and nothing touches the server.
+let demoMode = false;
 
-export function getNotes(bedId) {
-  return notesByBed.get(bedId) ?? [];
+export function setDemoMode(on) {
+  demoMode = !!on;
+  notesByPatient.clear();
+  if (demoMode) {
+    // Keyed by the mock patients' ids (see src/data/mockData.js)
+    notesByPatient.set(5001, [
+      { id: 'n-5001-1', text: 'Continue IV antibiotics. Repeat CXR tomorrow. Watch SpO2 trend overnight.', author: 'Dr. Rajan Krishnan', created_at: isoMinusHours(8) },
+      { id: 'n-5001-2', text: 'Discussed plan with family. They are aware of escalation plan.', author: 'Dr. Rajan Krishnan', created_at: isoMinusHours(2) },
+    ]);
+    notesByPatient.set(5003, [
+      { id: 'n-5003-1', text: 'For early MET review if EWS rises. Repeat lactate in 2 hours.', author: 'Dr. Rajan Krishnan', created_at: isoMinusHours(3) },
+    ]);
+  }
+  emit();
 }
 
-export function addNote(bedId, text, author) {
+export function getNotes(patientId) {
+  return notesByPatient.get(patientId) ?? [];
+}
+
+/**
+ * Refresh notes for a patient from the server. Emits on success.
+ * No-op in demo mode.
+ */
+export async function loadNotes(patientId) {
+  if (patientId == null || demoMode) return;
+  try {
+    const notes = await fetchNotes(patientId);
+    notesByPatient.set(patientId, notes);
+    emit();
+  } catch (e) {
+    // Keep whatever is cached; the section simply shows stale/empty data.
+  }
+}
+
+/**
+ * Persist a new note. Server-backed normally; in-memory only in demo mode.
+ * Resolves true on success, throws on error.
+ */
+export async function addNote(patientId, text, author) {
   const cleaned = (text ?? '').trim();
-  if (!cleaned) return null;
-  const note = {
-    id: `n-${bedId}-${Date.now()}`,
-    text: cleaned,
-    author: author ?? 'Consultant',
-    created_at: new Date().toISOString(),
-  };
-  const next = [note, ...getNotes(bedId)];
-  notesByBed.set(bedId, next);
+  if (!cleaned || patientId == null) return null;
+
+  if (demoMode) {
+    const note = {
+      id: `n-${patientId}-${Date.now()}`,
+      text: cleaned,
+      author: author ?? 'Consultant',
+      created_at: new Date().toISOString(),
+    };
+    notesByPatient.set(patientId, [note, ...getNotes(patientId)]);
+    emit();
+    return true;
+  }
+
+  const notes = await postNote(patientId, cleaned);
+  notesByPatient.set(patientId, notes);
   emit();
-  return note;
+  return true;
 }
 
 export function subscribe(fn) {
@@ -48,14 +85,6 @@ function emit() {
   listeners.forEach((fn) => {
     try { fn(); } catch (e) {}
   });
-}
-
-function seed(bedId, notes) {
-  notesByBed.set(bedId, notes);
-}
-
-function isoMinusHours(h) {
-  return new Date(Date.now() - h * 3600 * 1000).toISOString();
 }
 
 export function formatRelative(iso) {

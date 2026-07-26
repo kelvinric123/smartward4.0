@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,18 +6,27 @@ import {
   ScrollView,
   TouchableOpacity,
   StatusBar,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius } from '../theme';
 import StatCard from '../components/StatCard';
 import BedCard from '../components/BedCard';
 import CriticalListModal from '../components/CriticalListModal';
-import {
-  doctor as mockDoctor,
-  wards as mockWards,
-  summary as mockSummary,
-  consultantBeds,
-} from '../data/mockData';
+import { fetchDoctorDashboard } from '../api/endpoints';
+import * as mock from '../data/mockData';
+
+const REFRESH_INTERVAL_MS = 60000;
+
+const EMPTY_SUMMARY = {
+  total_beds_under_care: 0,
+  wards_covered: 0,
+  critical_patients: 0,
+  pending_discharge: 0,
+  pending_reviews: 0,
+  pending_orders: 0,
+};
 
 function nowLabel() {
   const d = new Date();
@@ -32,14 +41,65 @@ function nowLabel() {
 
 export default function DoctorDashboard({ session, onLogout }) {
   const insets = useSafeAreaInsets();
-  const doctor = session?.doctor ?? mockDoctor;
-  const wards = session?.wards ?? mockWards;
-  const summary = mockSummary;
-  const allBeds = consultantBeds;
+  const isDemo = !!session?.demo;
+
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+  const mountedRef = useRef(true);
+
+  const doctor = data?.doctor ?? session?.doctor ?? { name: 'Consultant', title: 'Consultant' };
+  const wards = data?.wards ?? session?.wards ?? [];
+  const summary = data?.summary ?? EMPTY_SUMMARY;
+  const allBeds = data?.beds ?? [];
 
   const [wardFilter, setWardFilter] = useState('all');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [criticalOpen, setCriticalOpen] = useState(false);
+
+  const load = useCallback(async (isRefresh = false) => {
+    if (isDemo) {
+      setData({
+        doctor: mock.doctor,
+        summary: mock.summary,
+        wards: mock.wards,
+        beds: mock.consultantBeds,
+      });
+      setLoadError(null);
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+    if (isRefresh) setRefreshing(true);
+    try {
+      const payload = await fetchDoctorDashboard(session?.doctor?.id, session?.token);
+      if (!mountedRef.current) return;
+      setData(payload);
+      setLoadError(null);
+    } catch (e) {
+      if (!mountedRef.current) return;
+      setLoadError(e?.message ?? 'Could not load your patients.');
+      if (e?.status === 401) {
+        onLogout?.();
+      }
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+        setRefreshing(false);
+      }
+    }
+  }, [session, onLogout, isDemo]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    load();
+    const timer = isDemo ? null : setInterval(() => load(), REFRESH_INTERVAL_MS);
+    return () => {
+      mountedRef.current = false;
+      if (timer) clearInterval(timer);
+    };
+  }, [load, isDemo]);
 
   const beds = useMemo(() => {
     if (wardFilter === 'all') return allBeds;
@@ -73,8 +133,8 @@ export default function DoctorDashboard({ session, onLogout }) {
         <View style={styles.header}>
           <View style={styles.headerTopRow}>
             <View style={styles.statusPill}>
-              <View style={styles.statusDot} />
-              <Text style={styles.statusText}>LIVE</Text>
+              <View style={[styles.statusDot, isDemo && { backgroundColor: '#f59e0b' }]} />
+              <Text style={styles.statusText}>{isDemo ? 'DEMO' : 'LIVE'}</Text>
             </View>
             <Text style={styles.dateText}>
               {label.date}  ·  {label.time}
@@ -128,7 +188,24 @@ export default function DoctorDashboard({ session, onLogout }) {
           { paddingBottom: 80 + insets.bottom + 16 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} />
+        }
       >
+        {loadError ? (
+          <TouchableOpacity style={styles.errorBanner} onPress={() => load(true)} activeOpacity={0.85}>
+            <Text style={styles.errorBannerTitle}>Could not refresh data</Text>
+            <Text style={styles.errorBannerText}>{loadError} · Tap to retry</Text>
+          </TouchableOpacity>
+        ) : null}
+
+        {loading && !data ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color={colors.blue700} />
+            <Text style={styles.loadingText}>Loading your patients...</Text>
+          </View>
+        ) : null}
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -233,9 +310,13 @@ export default function DoctorDashboard({ session, onLogout }) {
 
         {bed ? <BedCard bed={bed} doctorName={doctor.name} /> : (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No beds in this ward</Text>
+            <Text style={styles.emptyTitle}>
+              {loading ? 'Loading...' : wardFilter === 'all' ? 'No patients under your care' : 'No beds in this ward'}
+            </Text>
             <Text style={styles.emptyMeta}>
-              You have no patients in the selected ward. Switch to another ward or "All wards".
+              {wardFilter === 'all'
+                ? 'No admitted patients are currently assigned to you in the QMed Smart Ward system.'
+                : 'You have no patients in the selected ward. Switch to another ward or "All wards".'}
             </Text>
           </View>
         )}
@@ -416,6 +497,35 @@ const styles = StyleSheet.create({
   statsRow: {
     paddingVertical: 4,
     gap: 10,
+  },
+
+  errorBanner: {
+    backgroundColor: colors.rose50,
+    borderColor: colors.rose100,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: 12,
+    marginBottom: 12,
+  },
+  errorBannerTitle: {
+    color: colors.rose700,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  errorBannerText: {
+    marginTop: 2,
+    color: colors.rose600,
+    fontSize: 11,
+  },
+  loadingBox: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '600',
   },
 
   sectionHead: {

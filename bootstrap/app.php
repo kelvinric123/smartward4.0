@@ -16,6 +16,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/infusion/*',
             'api/adt/*',
             'api/v1/*',
+            'api/doctor/*',
+            'api/nurse/*',
+            'api/terminal/*',
         ]);
         $middleware->web(append: [
             \App\Http\Middleware\SiemUserRestriction::class,

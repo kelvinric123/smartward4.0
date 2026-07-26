@@ -66,6 +66,27 @@
                             @enderror
                         </div>
 
+                        <div class="mb-6 p-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
+                            <h3 class="text-sm font-semibold text-blue-800 dark:text-blue-200 mb-1">Doctor App Login</h3>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">Credentials used by this consultant to sign in on the QMed Smart Ward Doctor mobile app. Optional — can be configured later.</p>
+
+                            <div class="mb-4">
+                                <label for="app_username" class="block text-sm font-medium text-gray-700 dark:text-gray-300">App Username</label>
+                                <input type="text" name="app_username" id="app_username" value="{{ old('app_username') }}" autocomplete="off" class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="e.g. drrajan">
+                                @error('app_username')
+                                    <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                                @enderror
+                            </div>
+
+                            <div class="mb-1">
+                                <label for="app_password" class="block text-sm font-medium text-gray-700 dark:text-gray-300">App Password</label>
+                                <input type="password" name="app_password" id="app_password" value="" autocomplete="new-password" class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" placeholder="Set a password to enable app login">
+                                @error('app_password')
+                                    <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        </div>
+
                         <div class="mb-4">
                             <label for="qualifications" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Qualifications</label>
                             <textarea name="qualifications" id="qualifications" rows="3" class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">{{ old('qualifications') }}</textarea>

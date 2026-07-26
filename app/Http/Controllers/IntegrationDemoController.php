@@ -36,8 +36,10 @@ class IntegrationDemoController extends Controller
     public function seedPatients(Request $request)
     {
         $request->validate([
+            'seed_action' => 'nullable|string|in:new,reseed',
+            'full_seed' => 'nullable|boolean',
             'ward_id' => 'required|exists:wards,id',
-            'number_of_beds' => 'required|integer|min:1|max:50',
+            'number_of_beds' => 'required_unless:seed_action,reseed|nullable|integer|min:1|max:50',
             'nursing_level' => 'nullable|string|in:random,none,level_1,level_2,level_3,level_4',
             'fall_risk' => 'nullable|string|in:random,none,low,moderate,high,alert_active',
             'isolation_type' => 'nullable|string|in:random,none,contact,droplet,airborne,protective,mrsa,vre,cdiff,covid,tb',
@@ -52,8 +54,59 @@ class IntegrationDemoController extends Controller
         ]);
 
         $ward = Ward::findOrFail($request->ward_id);
+        $seedAction = $request->input('seed_action', 'new');
+        $faker = Faker::create();
 
-        // Find beds in this ward that are not occupied
+        // Clinical indicator selections ('random' = realistic weighted mix per patient)
+        $config = [
+            // full_seed: every 'random' choice resolves to an actual value — no patient is left without data
+            'full_seed' => $request->boolean('full_seed'),
+            'nursing' => $request->input('nursing_level', 'random'),
+            'fall' => $request->input('fall_risk', 'random'),
+            'isolation' => $request->input('isolation_type', 'random'),
+            'diet_mode' => $request->input('diet_mode', 'random'),
+            'diet_codes' => collect($request->input('diet_codes', []))
+                ->map(fn($c) => strtoupper(trim($c)))->filter()->unique()->values()->all(),
+            'allergy_mode' => $request->input('allergy_mode', 'random'),
+            'allergies' => collect(explode(',', (string) $request->input('custom_allergies', '')))
+                ->map(fn($a) => trim($a))->filter()->values()->all(),
+            'hgt_mode' => $request->input('hgt_mode', 'random'),
+            'hgt_frequency' => $request->input('hgt_frequency', 'random'),
+        ];
+        $seedSugarReading = $request->boolean('seed_sugar_reading', true);
+
+        // ---- Reseed mode: overwrite clinical indicators on the ward's existing patients ----
+        if ($seedAction === 'reseed') {
+            $patients = Patient::where('ward_id', $ward->id)
+                ->where('is_active', true)
+                ->whereIn('status', ['admitted', 'pending_discharge'])
+                ->get();
+
+            if ($patients->isEmpty()) {
+                return back()->with('error', "No admitted patients found in {$ward->ward_name} to reseed.");
+            }
+
+            foreach ($patients as $patient) {
+                $indicators = $this->resolveClinicalIndicators($faker, $config);
+                $patient->update($indicators);
+
+                if ($indicators['hgt_enabled'] && $seedSugarReading) {
+                    SugarReading::create([
+                        'patient_id' => $patient->id,
+                        'value' => $faker->randomFloat(1, 3.5, 13.5),
+                        'frequency' => $indicators['hgt_frequency'],
+                        'notes' => 'Demo seeded data',
+                        'recorded_by' => Auth::id() ?? 1,
+                        'recorded_at' => now()->subMinutes($faker->numberBetween(5, 240)),
+                    ]);
+                }
+            }
+
+            $suffix = $config['full_seed'] ? ' (fully seeded — every patient received all indicators)' : '';
+            return back()->with('success', "Successfully reseeded clinical indicators for {$patients->count()} patients in {$ward->ward_name}.{$suffix}");
+        }
+
+        // ---- New-patient mode: find beds in this ward that are not occupied ----
         $availableBeds = Bed::where('ward_id', $ward->id)
             ->where('is_active', true)
             ->where(function ($query) {
@@ -67,74 +120,17 @@ class IntegrationDemoController extends Controller
             return back()->with('error', "No available beds found in {$ward->ward_name} to admit patients to.");
         }
 
-        $faker = Faker::create();
         $seededCount = 0;
-
-        // Clinical indicator selections ('random' = realistic weighted mix per patient)
-        $nursingChoice = $request->input('nursing_level', 'random');
-        $fallChoice = $request->input('fall_risk', 'random');
-        $isolationChoice = $request->input('isolation_type', 'random');
-        $dietMode = $request->input('diet_mode', 'random');
-        $customDietCodes = collect($request->input('diet_codes', []))
-            ->map(fn($c) => strtoupper(trim($c)))->filter()->unique()->values()->all();
-        $allergyMode = $request->input('allergy_mode', 'random');
-        $customAllergies = collect(explode(',', (string) $request->input('custom_allergies', '')))
-            ->map(fn($a) => trim($a))->filter()->values()->all();
-        $hgtMode = $request->input('hgt_mode', 'random');
-        $hgtFrequencyChoice = $request->input('hgt_frequency', 'random');
-        $seedSugarReading = $request->boolean('seed_sugar_reading', true);
-
-        $allergyPool = ['Penicillin', 'Paracetamol', 'Aspirin', 'NSAIDs', 'Sulfa Drugs', 'Latex', 'Seafood', 'Peanuts', 'Eggs', 'Dust Mites'];
-        $randomDietPool = ['RD' => 30, 'SD' => 15, 'DMD' => 15, 'LSD' => 10, 'HPD' => 8, 'LFD' => 7, 'NBM' => 6, 'CLQD' => 5, 'FLD' => 4];
 
         foreach ($availableBeds as $bed) {
             $admittedAt = now();
 
-            // ---- Resolve clinical indicators for this patient ----
-            $nursingLevel = $nursingChoice === 'random'
-                ? $this->weightedRandom(['none' => 30, 'level_1' => 30, 'level_2' => 20, 'level_3' => 13, 'level_4' => 7])
-                : $nursingChoice;
-
-            $fallRisk = $fallChoice === 'random'
-                ? $this->weightedRandom(['none' => 35, 'low' => 25, 'moderate' => 20, 'high' => 12, 'alert_active' => 8])
-                : $fallChoice;
-
-            $isolationType = $isolationChoice === 'random'
-                ? $this->weightedRandom(['none' => 70, 'contact' => 8, 'droplet' => 7, 'protective' => 4, 'mrsa' => 4, 'airborne' => 3, 'covid' => 2, 'tb' => 2])
-                : $isolationChoice;
-
-            $dietTypes = null;
-            if ($dietMode === 'custom' && !empty($customDietCodes)) {
-                $dietTypes = $customDietCodes;
-            } elseif ($dietMode === 'random') {
-                // ~40% regular (no diet orders recorded), otherwise 1-2 diet orders
-                if ($faker->numberBetween(1, 100) > 40) {
-                    $picked = [];
-                    $count = $faker->numberBetween(1, 2);
-                    for ($i = 0; $i < $count; $i++) {
-                        $picked[] = $this->weightedRandom($randomDietPool);
-                    }
-                    $dietTypes = array_values(array_unique($picked));
-                }
-            }
-
-            $allergies = null;
-            if ($allergyMode === 'custom' && !empty($customAllergies)) {
-                $allergies = $customAllergies;
-            } elseif ($allergyMode === 'random' && $faker->numberBetween(1, 100) <= 35) {
-                $allergies = $faker->randomElements($allergyPool, $faker->numberBetween(1, 2));
-            }
-
-            $hgtEnabled = $hgtMode === 'enabled' || ($hgtMode === 'random' && $faker->numberBetween(1, 100) <= 30);
-            $hgtFrequency = null;
-            if ($hgtEnabled) {
-                $hgtFrequency = $hgtFrequencyChoice === 'random'
-                    ? $faker->randomElement(['bd', 'tds', 'qid', 'pid'])
-                    : $hgtFrequencyChoice;
-            }
+            $indicators = $this->resolveClinicalIndicators($faker, $config);
+            $hgtEnabled = $indicators['hgt_enabled'];
+            $hgtFrequency = $indicators['hgt_frequency'];
 
             // Create a demo patient
-            $patient = Patient::create([
+            $patient = Patient::create($indicators + [
                 'name' => 'Demo Patient - ' . $faker->name,
                 'mrn' => 'MRN-D' . $faker->unique()->numberBetween(100000, 999999),
                 'rn' => 'RN-D' . $faker->unique()->numberBetween(100000, 999999),
@@ -150,14 +146,6 @@ class IntegrationDemoController extends Controller
                 'bed_number' => $bed->bed_number,
                 'admitted_at' => $admittedAt,
                 'status' => 'admitted',
-                // Clinical indicators (shown on the ward dashboard bed cards)
-                'nursing_level' => $nursingLevel,
-                'fall_risk' => $fallRisk,
-                'isolation_type' => $isolationType,
-                'diet_types' => $dietTypes,
-                'allergies' => $allergies,
-                'hgt_enabled' => $hgtEnabled,
-                'hgt_frequency' => $hgtFrequency,
             ]);
 
             // Seed an initial glucose reading so "Last HGT" shows on the dashboard
@@ -202,6 +190,79 @@ class IntegrationDemoController extends Controller
         }
 
         return back()->with('success', $message);
+    }
+
+    /**
+     * Resolve one patient's clinical indicators from the seed form config.
+     * With full_seed, 'random' choices always resolve to real data ('none'
+     * outcomes are removed from the pools and diet/allergy/HGT always assign).
+     */
+    private function resolveClinicalIndicators(\Faker\Generator $faker, array $config): array
+    {
+        $fullSeed = $config['full_seed'];
+
+        $nursingLevel = $config['nursing'] === 'random'
+            ? $this->weightedRandom($fullSeed
+                ? ['level_1' => 40, 'level_2' => 30, 'level_3' => 20, 'level_4' => 10]
+                : ['none' => 30, 'level_1' => 30, 'level_2' => 20, 'level_3' => 13, 'level_4' => 7])
+            : $config['nursing'];
+
+        $fallRisk = $config['fall'] === 'random'
+            ? $this->weightedRandom($fullSeed
+                ? ['low' => 38, 'moderate' => 30, 'high' => 20, 'alert_active' => 12]
+                : ['none' => 35, 'low' => 25, 'moderate' => 20, 'high' => 12, 'alert_active' => 8])
+            : $config['fall'];
+
+        $isolationType = $config['isolation'] === 'random'
+            ? $this->weightedRandom($fullSeed
+                ? ['contact' => 27, 'droplet' => 23, 'protective' => 14, 'mrsa' => 13, 'airborne' => 10, 'covid' => 7, 'tb' => 6]
+                : ['none' => 70, 'contact' => 8, 'droplet' => 7, 'protective' => 4, 'mrsa' => 4, 'airborne' => 3, 'covid' => 2, 'tb' => 2])
+            : $config['isolation'];
+
+        $randomDietPool = ['RD' => 30, 'SD' => 15, 'DMD' => 15, 'LSD' => 10, 'HPD' => 8, 'LFD' => 7, 'NBM' => 6, 'CLQD' => 5, 'FLD' => 4];
+
+        $dietTypes = null;
+        if ($config['diet_mode'] === 'custom' && !empty($config['diet_codes'])) {
+            $dietTypes = $config['diet_codes'];
+        } elseif ($config['diet_mode'] === 'random') {
+            // Normally ~40% stay regular (no diet orders); full seed gives everyone 1-2 orders
+            if ($fullSeed || $faker->numberBetween(1, 100) > 40) {
+                $picked = [];
+                $count = $faker->numberBetween(1, 2);
+                for ($i = 0; $i < $count; $i++) {
+                    $picked[] = $this->weightedRandom($randomDietPool);
+                }
+                $dietTypes = array_values(array_unique($picked));
+            }
+        }
+
+        $allergyPool = ['Penicillin', 'Paracetamol', 'Aspirin', 'NSAIDs', 'Sulfa Drugs', 'Latex', 'Seafood', 'Peanuts', 'Eggs', 'Dust Mites'];
+
+        $allergies = null;
+        if ($config['allergy_mode'] === 'custom' && !empty($config['allergies'])) {
+            $allergies = $config['allergies'];
+        } elseif ($config['allergy_mode'] === 'random' && ($fullSeed || $faker->numberBetween(1, 100) <= 35)) {
+            $allergies = $faker->randomElements($allergyPool, $faker->numberBetween(1, 2));
+        }
+
+        $hgtEnabled = $config['hgt_mode'] === 'enabled'
+            || ($config['hgt_mode'] === 'random' && ($fullSeed || $faker->numberBetween(1, 100) <= 30));
+        $hgtFrequency = null;
+        if ($hgtEnabled) {
+            $hgtFrequency = $config['hgt_frequency'] === 'random'
+                ? $faker->randomElement(['bd', 'tds', 'qid', 'pid'])
+                : $config['hgt_frequency'];
+        }
+
+        return [
+            'nursing_level' => $nursingLevel,
+            'fall_risk' => $fallRisk,
+            'isolation_type' => $isolationType,
+            'diet_types' => $dietTypes,
+            'allergies' => $allergies,
+            'hgt_enabled' => $hgtEnabled,
+            'hgt_frequency' => $hgtFrequency,
+        ];
     }
 
     /**

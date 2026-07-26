@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,16 +9,40 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radius } from '../theme';
-import { loginConsultant } from '../api/endpoints';
+import { loginConsultant, pingServer } from '../api/endpoints';
+import * as mock from '../data/mockData';
+import {
+  DEFAULT_BASE_URL,
+  SETTINGS_PASSWORD,
+  ensureConfigLoaded,
+  getBaseUrl,
+  setBaseUrl,
+  normalizeBaseUrl,
+} from '../config';
 
 export default function LoginScreen({ onLogin }) {
-  const [username, setUsername] = useState('drrajan');
-  const [password, setPassword] = useState('demo');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+
+  // Settings dialog state
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
+  const [configPass, setConfigPass] = useState('');
+  const [configError, setConfigError] = useState(null);
+  const [apiUrl, setApiUrl] = useState(DEFAULT_BASE_URL);
+  const [testResult, setTestResult] = useState(null);
+  const [testing, setTesting] = useState(false);
+  const [currentUrl, setCurrentUrl] = useState(DEFAULT_BASE_URL);
+
+  useEffect(() => {
+    ensureConfigLoaded().then(() => setCurrentUrl(getBaseUrl()));
+  }, []);
 
   async function handleLogin() {
     setError(null);
@@ -31,9 +55,76 @@ export default function LoginScreen({ onLogin }) {
       const session = await loginConsultant({ username: username.trim(), password });
       onLogin(session);
     } catch (e) {
-      setError('Login failed. Please try again.');
+      setError(e?.message ?? 'Login failed. Please try again.');
     } finally {
       setBusy(false);
+    }
+  }
+
+  function handleDemoLogin() {
+    setError(null);
+    onLogin({
+      demo: true,
+      token: null,
+      doctor: mock.doctor,
+      wards: mock.wards,
+    });
+  }
+
+  function openSettings() {
+    setSettingsOpen(true);
+    setUnlocked(false);
+    setConfigPass('');
+    setConfigError(null);
+    setTestResult(null);
+    setApiUrl(getBaseUrl());
+  }
+
+  function closeSettings() {
+    setSettingsOpen(false);
+    setUnlocked(false);
+    setConfigPass('');
+    setConfigError(null);
+    setTestResult(null);
+  }
+
+  function unlock() {
+    if (configPass === SETTINGS_PASSWORD) {
+      setUnlocked(true);
+      setConfigError(null);
+      setApiUrl(getBaseUrl());
+    } else {
+      setConfigError('Incorrect config password.');
+    }
+  }
+
+  async function saveSettings() {
+    const saved = await setBaseUrl(apiUrl);
+    setApiUrl(saved);
+    setCurrentUrl(saved);
+    setTestResult(null);
+    closeSettings();
+  }
+
+  async function resetToDefault() {
+    setApiUrl(DEFAULT_BASE_URL);
+    setTestResult(null);
+  }
+
+  async function testConnection() {
+    setTesting(true);
+    setTestResult(null);
+    // Apply the URL being edited so the ping targets it
+    const saved = await setBaseUrl(apiUrl);
+    setApiUrl(saved);
+    setCurrentUrl(saved);
+    try {
+      await pingServer();
+      setTestResult({ ok: true, message: 'Connected to QMed Smart Ward server.' });
+    } catch (e) {
+      setTestResult({ ok: false, message: e?.message ?? 'Could not reach the server.' });
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -58,6 +149,13 @@ export default function LoginScreen({ onLogin }) {
                   <Text style={styles.brandTitle}>QMed Smart Ward</Text>
                   <Text style={styles.brandSub}>Consultant Mobile Access</Text>
                 </View>
+                <TouchableOpacity
+                  style={styles.settingsBtn}
+                  onPress={openSettings}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.settingsBtnText}>⚙</Text>
+                </TouchableOpacity>
               </View>
 
               <View style={styles.brandTagCard}>
@@ -74,8 +172,8 @@ export default function LoginScreen({ onLogin }) {
               <Text style={styles.cardEyebrow}>CONSULTANT LOGIN</Text>
               <Text style={styles.cardTitle}>Welcome back, Doctor</Text>
               <Text style={styles.cardMeta}>
-                Use your QMed Smart Ward credentials. Your access scope is limited to patients
-                under your consultancy.
+                Use the app credentials configured for you in the QMed Smart Ward system. Your
+                access scope is limited to patients under your consultancy.
               </Text>
 
               <View style={styles.field}>
@@ -116,21 +214,159 @@ export default function LoginScreen({ onLogin }) {
                 </Text>
               </TouchableOpacity>
 
-              <View style={styles.mockNote}>
-                <Text style={styles.mockNoteTitle}>DEMO BUILD</Text>
-                <Text style={styles.mockNoteText}>
-                  This is a showcase APK with mock data. Any credentials will log you in. The
-                  production build will authenticate against the QMed Smart Ward Laravel backend.
-                </Text>
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>OR</Text>
+                <View style={styles.dividerLine} />
               </View>
+
+              <TouchableOpacity
+                style={styles.demoBtn}
+                onPress={handleDemoLogin}
+                activeOpacity={0.85}
+                disabled={busy}
+              >
+                <Text style={styles.demoBtnText}>Demo Login</Text>
+              </TouchableOpacity>
+              <Text style={styles.demoHint}>
+                Explore the app with sample data — no server connection needed.
+              </Text>
             </View>
 
             <View style={styles.footer}>
               <Text style={styles.footerText}>QMed Smart Ward · Doctor App · v1.0.0</Text>
+              <Text style={styles.footerUrl}>{currentUrl}</Text>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      <Modal
+        visible={settingsOpen}
+        animationType="slide"
+        transparent
+        statusBarTranslucent
+        onRequestClose={closeSettings}
+      >
+        <View style={styles.backdrop}>
+          <TouchableOpacity style={styles.backdropTap} activeOpacity={1} onPress={closeSettings} />
+          <View style={styles.sheet}>
+            <View style={styles.sheetHandle} />
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ padding: 18, paddingBottom: 28 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {!unlocked ? (
+                <>
+                  <Text style={styles.sheetEyebrow}>SETTINGS</Text>
+                  <Text style={styles.sheetTitle}>Config password required</Text>
+                  <Text style={styles.sheetMeta}>
+                    Enter the config password to change the connection settings of this app.
+                  </Text>
+
+                  <View style={styles.field}>
+                    <Text style={styles.fieldLabel}>CONFIG PASSWORD</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={configPass}
+                      onChangeText={setConfigPass}
+                      secureTextEntry
+                      keyboardType="number-pad"
+                      placeholder="Enter config password"
+                      placeholderTextColor={colors.mutedSoft}
+                      onSubmitEditing={unlock}
+                    />
+                  </View>
+
+                  {configError ? <Text style={styles.errorText}>{configError}</Text> : null}
+
+                  <View style={styles.actionRow}>
+                    <TouchableOpacity
+                      style={[styles.btn, styles.btnCancel]}
+                      onPress={closeSettings}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.btnCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.btn, styles.btnSave]}
+                      onPress={unlock}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.btnSaveText}>Unlock</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.sheetEyebrow}>SETTINGS</Text>
+                  <Text style={styles.sheetTitle}>API Connection</Text>
+                  <Text style={styles.sheetMeta}>
+                    Address of the QMed Smart Ward server this app connects to. Consultant logins
+                    are validated against this server.
+                  </Text>
+
+                  <View style={styles.field}>
+                    <Text style={styles.fieldLabel}>API PATH</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={apiUrl}
+                      onChangeText={setApiUrl}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="url"
+                      placeholder={DEFAULT_BASE_URL}
+                      placeholderTextColor={colors.mutedSoft}
+                    />
+                    <Text style={styles.fieldHint}>
+                      Default: {DEFAULT_BASE_URL}
+                    </Text>
+                  </View>
+
+                  {testResult ? (
+                    <Text style={[styles.testText, { color: testResult.ok ? colors.emerald600 ?? '#059669' : colors.rose600 }]}>
+                      {testResult.message}
+                    </Text>
+                  ) : null}
+
+                  <TouchableOpacity
+                    style={[styles.testBtn, testing && { opacity: 0.6 }]}
+                    onPress={testConnection}
+                    disabled={testing}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.testBtnText}>
+                      {testing ? 'Testing...' : 'Test Connection'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity onPress={resetToDefault} activeOpacity={0.7}>
+                    <Text style={styles.resetText}>Reset to default</Text>
+                  </TouchableOpacity>
+
+                  <View style={styles.actionRow}>
+                    <TouchableOpacity
+                      style={[styles.btn, styles.btnCancel]}
+                      onPress={closeSettings}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.btnCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.btn, styles.btnSave, !normalizeBaseUrl(apiUrl) && { opacity: 0.5 }]}
+                      onPress={saveSettings}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.btnSaveText}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -182,6 +418,22 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontWeight: '600',
     letterSpacing: 0.3,
+  },
+  settingsBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 10,
+  },
+  settingsBtnText: {
+    color: '#fff',
+    fontSize: 18,
+    lineHeight: 20,
   },
   brandTagCard: {
     marginTop: 16,
@@ -246,6 +498,11 @@ const styles = StyleSheet.create({
     letterSpacing: 1.8,
     color: colors.muted,
   },
+  fieldHint: {
+    marginTop: 6,
+    fontSize: 11,
+    color: colors.muted,
+  },
   input: {
     marginTop: 6,
     borderWidth: 1,
@@ -277,25 +534,43 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.4,
   },
-  mockNote: {
-    marginTop: 16,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.amber100,
-    backgroundColor: colors.amber50,
-    padding: 12,
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 18,
+    gap: 10,
   },
-  mockNoteTitle: {
-    color: colors.amber700,
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.slate200,
+  },
+  dividerText: {
+    color: colors.mutedSoft,
     fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 1.8,
+    letterSpacing: 2,
   },
-  mockNoteText: {
-    marginTop: 4,
+  demoBtn: {
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: colors.amber500,
+    backgroundColor: colors.amber50,
+    borderRadius: radius.lg,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  demoBtnText: {
     color: colors.amber700,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  demoHint: {
+    marginTop: 8,
+    color: colors.muted,
+    fontSize: 11,
+    textAlign: 'center',
   },
   footer: {
     marginTop: 18,
@@ -304,5 +579,104 @@ const styles = StyleSheet.create({
   footerText: {
     color: 'rgba(219, 234, 254, 0.6)',
     fontSize: 11,
+  },
+  footerUrl: {
+    marginTop: 4,
+    color: 'rgba(219, 234, 254, 0.45)',
+    fontSize: 10,
+  },
+
+  // Settings sheet
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(2,6,23,0.55)',
+    justifyContent: 'flex-end',
+  },
+  backdropTap: {
+    flex: 1,
+  },
+  sheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.slate300,
+    marginTop: 8,
+  },
+  sheetEyebrow: {
+    color: colors.blue700,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 2.2,
+  },
+  sheetTitle: {
+    marginTop: 2,
+    color: colors.slate900,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  sheetMeta: {
+    marginTop: 6,
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  testText: {
+    marginTop: 12,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  testBtn: {
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: colors.blue700,
+    borderRadius: radius.lg,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  testBtnText: {
+    color: colors.blue700,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  resetText: {
+    marginTop: 12,
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+    alignSelf: 'center',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18,
+  },
+  btn: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+  },
+  btnCancel: {
+    backgroundColor: colors.slate100,
+  },
+  btnCancelText: {
+    color: colors.slate700,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  btnSave: {
+    backgroundColor: colors.blue700,
+  },
+  btnSaveText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

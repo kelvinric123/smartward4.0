@@ -29,6 +29,16 @@
 </head>
 <body class="bg-gray-50">
     <div class="p-4" x-data="{ filter: '{{ $filter }}', wardId: '{{ $wardId }}', tab: '{{ $tab }}', showUnbindModal: false, unbindPumpId: null, unbindPumpName: '', unbindPumpHasActiveInfusion: false }">
+        @if(!empty($engineError))
+            <div class="mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-medium">
+                ⚠ {{ $engineError }}
+            </div>
+        @elseif(($dataSource ?? 'local') === 'engine')
+            <div class="mb-3 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-700 font-medium inline-flex items-center">
+                <span class="w-1.5 h-1.5 bg-indigo-500 rounded-full mr-2 animate-pulse"></span>
+                Live from Qmed Infusion Engine
+            </div>
+        @endif
         <!-- Header with Stats -->
         <div class="mb-4">
             <div class="flex items-center justify-between mb-3">
