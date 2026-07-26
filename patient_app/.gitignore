@@ -39,3 +39,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# built APKs (rebuild with build_patient_app.bat)
+*.apk
+*.aab
