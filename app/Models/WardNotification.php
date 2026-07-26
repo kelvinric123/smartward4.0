@@ -15,6 +15,7 @@ class WardNotification extends Model
         'patient_id',
         'bed_number',
         'type',
+        'category',
         'severity',
         'message',
         'ews_score',
@@ -35,6 +36,7 @@ class WardNotification extends Model
 
     // Type constants
     const TYPE_EWS = 'ews';
+    const TYPE_PATIENT_REQUEST = 'patient_request';
 
     // Status constants
     const STATUS_PENDING = 'pending';
@@ -224,6 +226,48 @@ class WardNotification extends Model
             'severity' => $severity,
             'message' => $message,
             'ews_score' => $ewsScore,
+            'status' => self::STATUS_PENDING,
+        ]);
+    }
+
+    /**
+     * Raise a smart call from the bedside patient app.
+     *
+     * Re-tapping the same category while a call is still pending returns the
+     * existing notification instead of stacking duplicates in the nurse's
+     * queue — the patient sees their original call still waiting.
+     */
+    public static function createPatientRequest(
+        int $wardId,
+        int $patientId,
+        string $bedNumber,
+        string $category,
+        string $label,
+        string $patientName,
+        bool $urgent = false
+    ): self {
+        $existing = self::where('patient_id', $patientId)
+            ->where('type', self::TYPE_PATIENT_REQUEST)
+            ->where('category', $category)
+            ->where('status', self::STATUS_PENDING)
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        $severity = $urgent ? self::SEVERITY_URGENT : self::SEVERITY_WARNING;
+        $prefix = $urgent ? 'URGENT PATIENT CALL' : 'Patient call';
+
+        return self::create([
+            'ward_id' => $wardId,
+            'patient_id' => $patientId,
+            'bed_number' => $bedNumber,
+            'type' => self::TYPE_PATIENT_REQUEST,
+            'category' => $category,
+            'severity' => $severity,
+            'message' => "{$prefix}: {$patientName} (Bed {$bedNumber}) requested \"{$label}\"",
+            'ews_score' => null,
             'status' => self::STATUS_PENDING,
         ]);
     }

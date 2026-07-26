@@ -1,0 +1,38 @@
+{
+  "12345": {
+    "mrn": "12345",
+    "firstName": "John",
+    "lastName": "Doe",
+    "dob": "19800115",
+    "sex": "M",
+    "ward": "ICU",
+    "bed": "01",
+    "height": 170,
+    "weight": 70
+  },
+  "67890": {
+    "mrn": "67890",
+    "firstName": "Jane",
+    "lastName": "Smith",
+    "dob": "19920730",
+    "sex": "F",
+    "ward": "WARD2",
+    "bed": "05"
+  },
+  "MRN12123": {
+    "mrn": "MRN12123",
+    "name": "Tan Chee Keong",
+    "dob": "1975-04-22",
+    "sex": "M",
+    "ward": "Medical Ward 3",
+    "bed": "A109"
+  },
+  "99999": {
+    "mrn": "99999",
+    "name": "Siti Nurhaliza",
+    "dob": "1988-11-02",
+    "sex": "F",
+    "ward": "Maternity",
+    "bed": "M12"
+  }
+}

@@ -1,0 +1,114 @@
+# =============================================================================
+# Comen NC5 gateway - standalone stack, pulled and deployed on demand.
+#
+# Deliberately NOT part of the main SmartWard compose: it has its own image,
+# its own network and its own volume, and reaches SmartWard over HTTP like any
+# other client. Deploy or remove it without touching the SmartWard stack.
+#
+# The NC5 connects IN to port 2576 and uses that one connection for both
+# patient queries (answered from SmartWard) and vitals (queued, then POSTed to
+# /api/v1/vital-signs). The gateway appears under
+# http://192.168.0.88:18080/vital-sign-integration -> Qmed Gateways after its
+# first heartbeat (~30s).
+#
+# Every credential below has a working default, so on the NAS this is just:
+#   docker compose pull && docker compose up -d
+# =============================================================================
+
+services:
+  nc5-gateway:
+    image: ${NC5_IMAGE:-kelvinric/nc5:latest}
+    container_name: nc5-gateway
+    restart: unless-stopped
+    ports:
+      # HL7 MLLP in - point the NC5's HL7 export and patient query here
+      - "${NC5_LISTEN_PORT:-2576}:2576"
+    environment:
+      TZ: "${TZ:-Asia/Kuala_Lumpur}"
+      PYTHONUNBUFFERED: "1"
+
+      # --- SmartWard API -----------------------------------------------------
+      # SmartWard is published on the NAS at 18080; going through the host IP
+      # keeps this stack independent of SmartWard's docker network.
+      API_BASE_URL: "${NC5_API_BASE_URL:-http://192.168.0.88:18080/api/v1}"
+      API_PASSPHRASE: "${NC5_API_PASSPHRASE:-qmedno1}"
+      API_USERNAME: "${NC5_API_USERNAME:-api@qmed.asia}"
+      API_PASSWORD: "${NC5_API_PASSWORD:-88888888}"
+      API_TIMEOUT: "${NC5_API_TIMEOUT:-10}"
+
+      # --- Identity (this is the row you see under Qmed Gateways) ------------
+      GATEWAY_ID: "${NC5_GATEWAY_ID:-NC5-01}"
+      GATEWAY_NAME: "${NC5_GATEWAY_NAME:-NC5 Gateway}"
+
+      # --- HL7 listener ------------------------------------------------------
+      LISTEN_HOST: "0.0.0.0"
+      LISTEN_PORT: "2576"
+      ACK_APP: "${NC5_ACK_APP:-NC5_GATEWAY}"
+      ACK_FACILITY: "${NC5_ACK_FACILITY:-SMARTWARD}"
+      ACK_MESSAGE_TYPE: "${NC5_ACK_MESSAGE_TYPE:-ACK}"
+
+      # --- Patient query (QRY^R02 / QRY^A19 -> SmartWard MRN lookup) ---------
+      QUERY_ENABLED: "${NC5_QUERY_ENABLED:-true}"
+      PATIENT_CACHE_TTL: "${NC5_PATIENT_CACHE_TTL:-60}"
+      PATIENT_CACHE_STALE_TTL: "${NC5_PATIENT_CACHE_STALE_TTL:-86400}"
+      PATIENT_NAME_ORDER: "${NC5_PATIENT_NAME_ORDER:-full}"
+
+      # --- Continuous-vitals aggregation -------------------------------------
+      RECORD_INTERVAL: "${NC5_RECORD_INTERVAL:-300}"
+      FLUSH_ON_BP: "${NC5_FLUSH_ON_BP:-true}"
+      WINDOW_IDLE_TIMEOUT: "${NC5_WINDOW_IDLE_TIMEOUT:-60}"
+      VITAL_STALENESS: "${NC5_VITAL_STALENESS:-300}"
+      BP_REPEAT_GUARD: "${NC5_BP_REPEAT_GUARD:-60}"
+
+      # --- Offline queue -----------------------------------------------------
+      QUEUE_DB_PATH: "/data/nc5.sqlite"
+      SEND_INTERVAL: "${NC5_SEND_INTERVAL:-3}"
+      SEND_BATCH_SIZE: "${NC5_SEND_BATCH_SIZE:-20}"
+      RETRY_BASE_SECONDS: "${NC5_RETRY_BASE_SECONDS:-5}"
+      RETRY_MAX_SECONDS: "${NC5_RETRY_MAX_SECONDS:-300}"
+      MAX_AGE_404_MINUTES: "${NC5_MAX_AGE_404_MINUTES:-120}"
+
+      # --- Heartbeat (drives the Qmed Gateways health light) -----------------
+      HEARTBEAT_ENABLED: "${NC5_HEARTBEAT_ENABLED:-true}"
+      HEARTBEAT_INTERVAL: "${NC5_HEARTBEAT_INTERVAL:-30}"
+      EXTENDED_INTERVAL: "${NC5_EXTENDED_INTERVAL:-1800}"
+
+      # --- Troubleshooting ---------------------------------------------------
+      # SAVE_RAW=true writes every received HL7 message to /data/raw
+      SAVE_RAW: "${NC5_SAVE_RAW:-false}"
+      RAW_DIR: "/data/raw"
+      DEBUG_MODE: "${NC5_DEBUG_MODE:-false}"
+    volumes:
+      # The outbox queue: unsent readings survive restarts and NAS reboots
+      - nc5_data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import socket;socket.create_connection(('127.0.0.1',2576),3).close()" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "256M"
+        reservations:
+          cpus: "0.1"
+          memory: "64M"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        tag: "nc5-gateway"
+
+volumes:
+  nc5_data:
+    driver: local
+
+networks:
+  default:
+    name: nc5-network
+    driver: bridge

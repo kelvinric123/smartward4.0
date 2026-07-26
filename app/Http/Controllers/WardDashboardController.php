@@ -1822,6 +1822,186 @@ class WardDashboardController extends Controller
     /**
      * Discharge patient from the ward.
      */
+    /**
+     * Manually add a consultant to the patient's care team.
+     *
+     * ADT (PV1-7/8/9) normally drives care providers, but wards need to add a
+     * consultant who was brought in verbally or outside the ADT feed. Manual
+     * entries sit alongside ADT ones and are the only ones that can be removed.
+     */
+    public function storeCareProvider(Request $request)
+    {
+        $validated = $request->validate([
+            'patient_id' => 'required|exists:patients,id',
+            'consultant_id' => 'required|exists:consultants,id',
+            'role' => 'required|in:attending,referring,consulting',
+        ]);
+
+        $patient = Patient::where('is_active', true)->findOrFail($validated['patient_id']);
+        $consultant = Consultant::findOrFail($validated['consultant_id']);
+
+        $redirect = redirect()->route('ward.patient-details', [
+            'patient_id' => $patient->id,
+            'active_tab' => 'careprovider',
+        ]);
+
+        $alreadyAssigned = PatientCareProvider::where('patient_id', $patient->id)
+            ->where('consultant_id', $consultant->id)
+            ->where('role', $validated['role'])
+            ->where('is_active', true)
+            ->exists();
+
+        if ($alreadyAssigned) {
+            return $redirect->with('error', "{$consultant->name} is already assigned to this patient in that role.");
+        }
+
+        PatientCareProvider::create([
+            'patient_id' => $patient->id,
+            'role' => $validated['role'],
+            'doctor_code' => $consultant->personnel_code,
+            'doctor_name' => $consultant->name,
+            'consultant_id' => $consultant->id,
+            'source' => PatientCareProvider::SOURCE_MANUAL,
+            'assigned_at' => now(),
+            'is_active' => true,
+        ]);
+
+        Log::info('Care provider added manually', [
+            'patient_id' => $patient->id,
+            'consultant_id' => $consultant->id,
+            'role' => $validated['role'],
+            'added_by' => Auth::id(),
+        ]);
+
+        return $redirect->with('success', "{$consultant->name} added to the care team.");
+    }
+
+    /**
+     * Remove a manually added care provider. ADT-sourced providers are left
+     * alone so the next ADT message stays the source of truth.
+     */
+    public function destroyCareProvider(PatientCareProvider $careProvider)
+    {
+        $patientId = $careProvider->patient_id;
+
+        $redirect = redirect()->route('ward.patient-details', [
+            'patient_id' => $patientId,
+            'active_tab' => 'careprovider',
+        ]);
+
+        if ($careProvider->source !== PatientCareProvider::SOURCE_MANUAL) {
+            return $redirect->with('error', 'Only manually added care providers can be removed.');
+        }
+
+        $name = $careProvider->display_name;
+        $careProvider->update(['is_active' => false]);
+
+        Log::info('Care provider removed', [
+            'care_provider_id' => $careProvider->id,
+            'patient_id' => $patientId,
+            'removed_by' => Auth::id(),
+        ]);
+
+        return $redirect->with('success', "{$name} removed from the care team.");
+    }
+
+    /**
+     * Schedule a discharge for a future date/time instead of discharging now.
+     *
+     * The patient stays in the bed with status "pending_discharge" so the ward
+     * can plan ahead, and the bedside patient app shows the expected date.
+     */
+    public function scheduleDischarge(Request $request)
+    {
+        $validated = $request->validate([
+            'patient_id' => 'required|exists:patients,id',
+            'expected_discharge_at' => 'required|date',
+            'discharge_notes' => 'nullable|string',
+        ]);
+
+        $patient = Patient::where('is_active', true)->findOrFail($validated['patient_id']);
+
+        $redirect = redirect()->route('ward.patient-details', [
+            'patient_id' => $patient->id,
+            'active_tab' => 'discharge',
+        ]);
+
+        if (!in_array($patient->status, [Patient::STATUS_ADMITTED, Patient::STATUS_PENDING_DISCHARGE])) {
+            return $redirect->with('error', 'Only admitted patients can have a discharge scheduled.');
+        }
+
+        $expectedAt = now()->parse($validated['expected_discharge_at']);
+
+        $patient->update([
+            'status' => Patient::STATUS_PENDING_DISCHARGE,
+            'pending_discharge_at' => now(),
+            'expected_discharge_at' => $expectedAt,
+        ]);
+
+        // Notes live on the admission log, matching how an actual discharge records them.
+        AdmissionLog::create([
+            'patient_id' => $patient->id,
+            'ward_id' => $patient->ward_id,
+            'user_id' => Auth::id(),
+            'bed_number' => $patient->bed_number,
+            'action' => 'discharge_scheduled',
+            'patient_name' => $patient->name,
+            'mrn' => $patient->mrn,
+            'consultant_name' => $patient->consultant?->name,
+            'nurse_name' => $patient->nurse?->name,
+            'gender' => $patient->gender,
+            'age' => $patient->age,
+            'notes' => trim('Scheduled for ' . $expectedAt->format('j M Y, H:i')
+                . ($validated['discharge_notes'] ? ' | ' . $validated['discharge_notes'] : '')),
+            'source' => 'manual',
+        ]);
+
+        Log::info('Discharge scheduled', [
+            'patient_id' => $patient->id,
+            'expected_discharge_at' => $expectedAt->toDateTimeString(),
+            'scheduled_by' => Auth::id(),
+        ]);
+
+        return $redirect->with(
+            'success',
+            'Discharge scheduled for ' . $expectedAt->format('j M Y, H:i') . '.'
+        );
+    }
+
+    /**
+     * Cancel a scheduled discharge and put the patient back to admitted.
+     */
+    public function cancelScheduledDischarge(Request $request)
+    {
+        $validated = $request->validate([
+            'patient_id' => 'required|exists:patients,id',
+        ]);
+
+        $patient = Patient::where('is_active', true)->findOrFail($validated['patient_id']);
+
+        $redirect = redirect()->route('ward.patient-details', [
+            'patient_id' => $patient->id,
+            'active_tab' => 'discharge',
+        ]);
+
+        if ($patient->status !== Patient::STATUS_PENDING_DISCHARGE) {
+            return $redirect->with('error', 'This patient does not have a scheduled discharge.');
+        }
+
+        $patient->update([
+            'status' => Patient::STATUS_ADMITTED,
+            'pending_discharge_at' => null,
+            'expected_discharge_at' => null,
+        ]);
+
+        Log::info('Scheduled discharge cancelled', [
+            'patient_id' => $patient->id,
+            'cancelled_by' => Auth::id(),
+        ]);
+
+        return $redirect->with('success', 'Scheduled discharge cancelled. Patient is admitted again.');
+    }
+
     public function dischargePatient(Request $request)
     {
         $request->validate([
@@ -2205,6 +2385,8 @@ class WardDashboardController extends Controller
                 return [
                     'id' => $notification->id,
                     'type' => $notification->type,
+                    'type_label' => $this->notificationTypeLabel($notification->type),
+                    'category' => $notification->category,
                     'severity' => $notification->severity,
                     'severity_label' => $notification->severity_label,
                     'severity_bg_class' => $notification->severity_bg_class,
@@ -2229,6 +2411,8 @@ class WardDashboardController extends Controller
                 return [
                     'id' => $notification->id,
                     'type' => $notification->type,
+                    'type_label' => $this->notificationTypeLabel($notification->type),
+                    'category' => $notification->category,
                     'severity' => $notification->severity,
                     'message' => $notification->message,
                     'ews_score' => $notification->ews_score,
@@ -2249,6 +2433,18 @@ class WardDashboardController extends Controller
     /**
      * Mark a notification as responded
      */
+    /**
+     * Human-friendly badge text for a notification type.
+     */
+    private function notificationTypeLabel(?string $type): string
+    {
+        return match ($type) {
+            WardNotification::TYPE_EWS => 'EWS',
+            WardNotification::TYPE_PATIENT_REQUEST => 'PATIENT CALL',
+            default => strtoupper(str_replace('_', ' ', (string) $type)),
+        };
+    }
+
     public function respondNotification(Request $request, WardNotification $notification)
     {
         if ($notification->status === WardNotification::STATUS_RESPONDED) {

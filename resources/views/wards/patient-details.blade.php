@@ -122,10 +122,16 @@
             ? IsolationType::getDisplayName($patient->isolation_type)
             : 'None';
 
-        // Get care providers from ADT (grouped by role)
+        // Get care providers (ADT + manually added), grouped by role
         $attendingDoctors = $patient ? $patient->activeCareProviders()->where('role', PatientCareProvider::ROLE_ATTENDING)->get() : collect();
         $referringDoctors = $patient ? $patient->activeCareProviders()->where('role', PatientCareProvider::ROLE_REFERRING)->get() : collect();
         $consultingDoctors = $patient ? $patient->activeCareProviders()->where('role', PatientCareProvider::ROLE_CONSULTING)->get() : collect();
+
+        // Consultants selectable when adding a care provider by hand
+        $assignableConsultants = \App\Models\Consultant::where('is_active', true)
+            ->with('specialty')
+            ->orderBy('name')
+            ->get();
 
         // Pre-calculate IHH vitals data for the chart (avoid inline closures in @json)
         $ihhVitalsData = [];
@@ -1810,8 +1816,57 @@
                 <div x-show="activeTab === 'careprovider'" x-cloak>
                     <h3 class="text-lg font-semibold text-gray-800 mb-3">Care Provider</h3>
                     <p class="text-sm text-gray-600 mb-4">
-                        Doctors assigned to this patient from ADT PV1 segment. This includes attending, referring, and consulting doctors.
+                        Doctors assigned to this patient from the ADT PV1 segment, plus any consultant added here by hand.
+                        Everyone listed below is shown to the patient in the bedside patient app.
                     </p>
+
+                    <!-- Add a consultant manually -->
+                    <div class="mb-6 rounded-lg border border-gray-200 bg-white p-4">
+                        <h4 class="text-sm font-semibold text-gray-800 mb-1">Add a consultant</h4>
+                        <p class="text-xs text-gray-500 mb-3">
+                            For a consultant brought in outside the ADT feed. They appear in the patient's care team immediately.
+                        </p>
+                        <form method="POST" action="{{ route('ward.care-providers.store') }}"
+                              class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                            @csrf
+                            <input type="hidden" name="patient_id" value="{{ $patient->id }}">
+
+                            <div class="md:col-span-1">
+                                <label for="cp_consultant_id" class="block text-xs font-semibold text-gray-700 mb-1">
+                                    Consultant
+                                </label>
+                                <select id="cp_consultant_id" name="consultant_id" required
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                                    <option value="">Select a consultant…</option>
+                                    @foreach($assignableConsultants as $consultant)
+                                        <option value="{{ $consultant->id }}">
+                                            {{ $consultant->name }}@if($consultant->specialty) — {{ $consultant->specialty->name }}@endif
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div class="md:col-span-1">
+                                <label for="cp_role" class="block text-xs font-semibold text-gray-700 mb-1">Role</label>
+                                <select id="cp_role" name="role" required
+                                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                                    <option value="consulting">Consulting Doctor</option>
+                                    <option value="attending">Attending Doctor</option>
+                                    <option value="referring">Referring Doctor</option>
+                                </select>
+                            </div>
+
+                            <div class="md:col-span-1">
+                                <button type="submit"
+                                        class="w-full inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                    </svg>
+                                    Add to care team
+                                </button>
+                            </div>
+                        </form>
+                    </div>
 
                     <div class="space-y-6">
                         <!-- Attending Doctors (PV1-7) -->
@@ -1835,18 +1890,35 @@
                                                     @endif
                                                 </div>
                                             </div>
-                                            @if($provider->isLinked())
-                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                    <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-                                                    </svg>
-                                                    Linked
-                                                </span>
-                                            @else
-                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                                                    ADT Only
-                                                </span>
-                                            @endif
+                                            <div class="flex items-center gap-3">
+                                                @if($provider->source === PatientCareProvider::SOURCE_MANUAL)
+                                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                                        Added manually
+                                                    </span>
+                                                @elseif($provider->isLinked())
+                                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                                        </svg>
+                                                        Linked
+                                                    </span>
+                                                @else
+                                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                                        ADT Only
+                                                    </span>
+                                                @endif
+
+                                                @if($provider->source === PatientCareProvider::SOURCE_MANUAL)
+                                                    <form method="POST" action="{{ route('ward.care-providers.destroy', $provider->id) }}"
+                                                          onsubmit="return confirm('Remove {{ $provider->display_name }} from this patient\'s care team?');">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button type="submit" class="text-xs font-medium text-red-600 hover:text-red-800 hover:underline">
+                                                            Remove
+                                                        </button>
+                                                    </form>
+                                                @endif
+                                            </div>
                                         </div>
                                     @endforeach
                                 </div>
@@ -1876,18 +1948,35 @@
                                                     @endif
                                                 </div>
                                             </div>
-                                            @if($provider->isLinked())
-                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                    <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-                                                    </svg>
-                                                    Linked
-                                                </span>
-                                            @else
-                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                                                    ADT Only
-                                                </span>
-                                            @endif
+                                            <div class="flex items-center gap-3">
+                                                @if($provider->source === PatientCareProvider::SOURCE_MANUAL)
+                                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                                        Added manually
+                                                    </span>
+                                                @elseif($provider->isLinked())
+                                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                                        </svg>
+                                                        Linked
+                                                    </span>
+                                                @else
+                                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                                        ADT Only
+                                                    </span>
+                                                @endif
+
+                                                @if($provider->source === PatientCareProvider::SOURCE_MANUAL)
+                                                    <form method="POST" action="{{ route('ward.care-providers.destroy', $provider->id) }}"
+                                                          onsubmit="return confirm('Remove {{ $provider->display_name }} from this patient\'s care team?');">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button type="submit" class="text-xs font-medium text-red-600 hover:text-red-800 hover:underline">
+                                                            Remove
+                                                        </button>
+                                                    </form>
+                                                @endif
+                                            </div>
                                         </div>
                                     @endforeach
                                 </div>
@@ -1917,18 +2006,35 @@
                                                     @endif
                                                 </div>
                                             </div>
-                                            @if($provider->isLinked())
-                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                                    <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-                                                    </svg>
-                                                    Linked
-                                                </span>
-                                            @else
-                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-                                                    ADT Only
-                                                </span>
-                                            @endif
+                                            <div class="flex items-center gap-3">
+                                                @if($provider->source === PatientCareProvider::SOURCE_MANUAL)
+                                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                                        Added manually
+                                                    </span>
+                                                @elseif($provider->isLinked())
+                                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                        <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                                                        </svg>
+                                                        Linked
+                                                    </span>
+                                                @else
+                                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                                                        ADT Only
+                                                    </span>
+                                                @endif
+
+                                                @if($provider->source === PatientCareProvider::SOURCE_MANUAL)
+                                                    <form method="POST" action="{{ route('ward.care-providers.destroy', $provider->id) }}"
+                                                          onsubmit="return confirm('Remove {{ $provider->display_name }} from this patient\'s care team?');">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button type="submit" class="text-xs font-medium text-red-600 hover:text-red-800 hover:underline">
+                                                            Remove
+                                                        </button>
+                                                    </form>
+                                                @endif
+                                            </div>
                                         </div>
                                     @endforeach
                                 </div>
@@ -2066,17 +2172,122 @@
                         </p>
                     @else
                         <p class="text-sm text-gray-600 mb-4">
-                            Discharge this patient from the ward. The current bed will be freed and the patient
-                            will no longer appear as admitted on the ward dashboard.
+                            Discharge this patient now, or schedule it for later so the ward can plan ahead.
+                            A scheduled discharge keeps the patient in the bed and shows the expected date
+                            in the bedside patient app.
                         </p>
 
                         <div class="mb-3 text-xs text-gray-600">
-                            <div>Status: <span class="font-semibold capitalize">{{ $patient->status }}</span></div>
+                            <div>Status: <span class="font-semibold capitalize">{{ str_replace('_', ' ', $patient->status) }}</span></div>
                             <div>Ward: <span class="font-semibold">{{ $patient->ward->ward_name ?? '-' }}</span></div>
                             <div>Bed: <span class="font-semibold">{{ $patient->bed_number ?? '-' }}</span></div>
                         </div>
 
-                        <form method="POST" action="{{ route('ward.discharge-patient') }}" class="space-y-4">
+                        @if($patient->status === 'pending_discharge' && $patient->expected_discharge_at)
+                            <div class="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                                <div class="flex items-start justify-between gap-4">
+                                    <div>
+                                        <p class="text-sm font-semibold text-amber-800">Discharge already scheduled</p>
+                                        <p class="text-sm text-amber-700 mt-1">
+                                            Expected {{ $patient->expected_discharge_at->format('l, j M Y \a\t H:i') }}
+                                        </p>
+                                        <p class="text-xs text-amber-600 mt-1">
+                                            The patient sees this date in their app. Confirm the discharge below when they actually leave.
+                                        </p>
+                                    </div>
+                                    <form method="POST" action="{{ route('ward.cancel-scheduled-discharge') }}"
+                                          onsubmit="return confirm('Cancel the scheduled discharge and set this patient back to admitted?');">
+                                        @csrf
+                                        <input type="hidden" name="patient_id" value="{{ $patient->id }}">
+                                        <button type="submit"
+                                                class="whitespace-nowrap px-3 py-1.5 bg-white border border-amber-300 text-amber-800 text-xs font-semibold rounded-md hover:bg-amber-100">
+                                            Cancel schedule
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        @endif
+
+                        <div x-data="{ mode: '{{ $patient->status === 'pending_discharge' ? 'now' : 'schedule' }}' }">
+                            <!-- Immediate vs scheduled -->
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+                                <button type="button" @click="mode = 'now'"
+                                        :class="mode === 'now' ? 'border-red-500 bg-red-50 ring-2 ring-red-200' : 'border-gray-200 bg-white hover:border-gray-300'"
+                                        class="text-left rounded-lg border p-4 transition">
+                                    <div class="flex items-center">
+                                        <span class="inline-flex w-4 h-4 rounded-full border-2 mr-2 items-center justify-center"
+                                              :class="mode === 'now' ? 'border-red-600' : 'border-gray-300'">
+                                            <span x-show="mode === 'now'" class="w-2 h-2 rounded-full bg-red-600"></span>
+                                        </span>
+                                        <span class="text-sm font-semibold text-gray-800">Discharge immediately</span>
+                                    </div>
+                                    <p class="mt-1 text-xs text-gray-500 pl-6">
+                                        The patient is leaving now. Frees the bed straight away.
+                                    </p>
+                                </button>
+
+                                <button type="button" @click="mode = 'schedule'"
+                                        :class="mode === 'schedule' ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200' : 'border-gray-200 bg-white hover:border-gray-300'"
+                                        class="text-left rounded-lg border p-4 transition">
+                                    <div class="flex items-center">
+                                        <span class="inline-flex w-4 h-4 rounded-full border-2 mr-2 items-center justify-center"
+                                              :class="mode === 'schedule' ? 'border-blue-600' : 'border-gray-300'">
+                                            <span x-show="mode === 'schedule'" class="w-2 h-2 rounded-full bg-blue-600"></span>
+                                        </span>
+                                        <span class="text-sm font-semibold text-gray-800">Schedule a discharge</span>
+                                    </div>
+                                    <p class="mt-1 text-xs text-gray-500 pl-6">
+                                        Plan a future date. Patient keeps the bed and sees the date in their app.
+                                    </p>
+                                </button>
+                            </div>
+
+                            <!-- Scheduled discharge -->
+                            <form x-show="mode === 'schedule'" x-cloak
+                                  method="POST" action="{{ route('ward.schedule-discharge') }}" class="space-y-4">
+                                @csrf
+                                <input type="hidden" name="patient_id" value="{{ $patient->id }}">
+
+                                <div>
+                                    <label for="expected_discharge_at" class="block text-xs font-semibold text-gray-700 mb-1">
+                                        Expected Discharge Date &amp; Time
+                                    </label>
+                                    <input type="datetime-local"
+                                           id="expected_discharge_at"
+                                           name="expected_discharge_at"
+                                           required
+                                           value="{{ $patient->expected_discharge_at?->format('Y-m-d\TH:i') }}"
+                                           class="mt-1 block w-full md:w-1/2 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
+                                    <p class="mt-1 text-[11px] text-gray-500">
+                                        Shown to the patient as their expected going-home date.
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <label for="schedule_discharge_notes" class="block text-xs font-semibold text-gray-700 mb-1">
+                                        Notes (optional)
+                                    </label>
+                                    <textarea id="schedule_discharge_notes"
+                                              name="discharge_notes"
+                                              rows="2"
+                                              class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                              placeholder="e.g. Pending final review by consultant"></textarea>
+                                </div>
+
+                                <div class="flex justify-end">
+                                    <button type="submit"
+                                            class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                        </svg>
+                                        Schedule Discharge
+                                    </button>
+                                </div>
+                            </form>
+
+                        <form x-show="mode === 'now'" x-cloak
+                              method="POST" action="{{ route('ward.discharge-patient') }}" class="space-y-4">
                             @csrf
                             <input type="hidden" name="patient_id" value="{{ $patient->id }}">
                             <input type="hidden" name="active_tab" value="discharge">
@@ -2129,6 +2340,7 @@
                                 </button>
                             </div>
                         </form>
+                        </div>
                     @endif
                 </div>
             </div>

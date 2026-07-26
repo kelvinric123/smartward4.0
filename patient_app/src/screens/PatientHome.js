@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, shadow } from '../theme';
@@ -17,21 +18,6 @@ import RoomTab from './tabs/RoomTab';
 import MealsTab from './tabs/MealsTab';
 import RequestsTab from './tabs/RequestsTab';
 import ScheduleTab from './tabs/ScheduleTab';
-import {
-  patient,
-  careTeam,
-  vitals,
-  medications,
-  recoveryOverview,
-  roomControls,
-  dietProfile,
-  mealMenu,
-  requestCategories,
-  todaySchedule,
-  dischargeChecklist,
-  notifications,
-  visitor,
-} from '../data/mockData';
 
 const TABS = [
   { id: 'home', label: 'Home', emoji: '🏠' },
@@ -53,7 +39,23 @@ function nowLabel() {
   };
 }
 
-export default function PatientHome() {
+export default function PatientHome({ data, demo = true, bedId = null, onExit }) {
+  const {
+    patient,
+    careTeam,
+    vitals,
+    medications,
+    recoveryOverview,
+    roomControls,
+    dietProfile,
+    mealMenu,
+    requestCategories,
+    todaySchedule,
+    dischargeChecklist,
+    notifications,
+    visitor,
+  } = data;
+
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState('home');
   const [showRequests, setShowRequests] = useState(false);
@@ -61,6 +63,20 @@ export default function PatientHome() {
   const label = useMemo(nowLabel, []);
 
   const showToast = (message) => setToast({ visible: true, message });
+
+  const confirmExit = () => {
+    if (!onExit) return;
+    Alert.alert(
+      demo ? 'Leave demo mode?' : 'Disconnect from this bed?',
+      demo
+        ? 'You will return to the setup screen.'
+        : 'The app will stop following this bed and return to the setup screen.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: demo ? 'Leave' : 'Disconnect', style: 'destructive', onPress: onExit },
+      ]
+    );
+  };
 
   const goRequests = () => {
     setShowRequests(true);
@@ -76,8 +92,10 @@ export default function PatientHome() {
         <View style={styles.header}>
           <View style={styles.headerTopRow}>
             <View style={styles.statusPill}>
-              <View style={styles.statusDot} />
-              <Text style={styles.statusText}>LIVE</Text>
+              <View
+                style={[styles.statusDot, demo && { backgroundColor: '#fbbf24' }]}
+              />
+              <Text style={styles.statusText}>{demo ? 'DEMO' : 'LIVE'}</Text>
             </View>
             <Text style={styles.dateText}>
               {label.date}  ·  {label.time}
@@ -95,7 +113,7 @@ export default function PatientHome() {
                 MRN {patient.mrn} · {patient.gender}, {patient.age} yrs
               </Text>
             </View>
-            <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.iconBtn} activeOpacity={0.8} onPress={confirmExit}>
               <Text style={styles.iconBtnText}>≡</Text>
             </TouchableOpacity>
           </View>
@@ -163,6 +181,8 @@ export default function PatientHome() {
             requestCategories={requestCategories}
             openInitial={showRequests}
             onConsumeOpen={() => setShowRequests(false)}
+            bedId={bedId}
+            demo={demo}
           />
         ) : null}
       </View>

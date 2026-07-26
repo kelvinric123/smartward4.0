@@ -85,7 +85,9 @@ class InfusionIntegrationController extends Controller
         $engineSync = null;
         if ($integrationMode === InfusionEngineClient::MODE_ENGINE) {
             $engineStatus = InfusionEngineClient::fromSettings()->testConnection();
-            if ($engineStatus['ok'] ?? false) {
+            // Registry sync at most once per 30s - page reloads stay fast
+            if (($engineStatus['ok'] ?? false)
+                && \Illuminate\Support\Facades\Cache::add('infusion_engine_registry_sync', 1, 30)) {
                 try {
                     $engineSync = EngineInfusionService::make()->syncRegistry();
                 } catch (\Throwable $e) {

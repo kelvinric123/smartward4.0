@@ -1,0 +1,6 @@
+listener/data/
+listener/__pycache__/
+listener/src/__pycache__/
+listener/.env
+docker_nc5/.env
+logs/

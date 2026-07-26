@@ -59,7 +59,12 @@ class InfusionEngineClient
 
     protected function request()
     {
-        $request = Http::timeout($this->timeout)->acceptJson();
+        // Short connect timeout: a firewalled/unroutable engine URL fails in
+        // ~2s instead of burning the full response timeout per call (the
+        // integration page makes these calls synchronously on load).
+        $request = Http::timeout($this->timeout)
+            ->connectTimeout(min($this->timeout, 2))
+            ->acceptJson();
 
         if ($this->apiKey !== '') {
             $request = $request->withHeaders(['X-API-Key' => $this->apiKey]);

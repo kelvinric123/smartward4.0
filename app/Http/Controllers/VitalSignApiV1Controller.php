@@ -802,7 +802,9 @@ class VitalSignApiV1Controller extends Controller
                 'visit_number' => $patient->visit_number,
                 'ic_passport' => $patient->ic_passport,
                 'is_admitted' => $patient->bed !== null,
-                'ward_name' => $patient->ward?->name,
+                // Ward's column is ward_name; `name` does not exist on the model
+                // and returned null, which left the NC5's PV1 ward blank.
+                'ward_name' => $patient->ward?->ward_name,
                 'bed_number' => $patient->bed?->bed_number,
             ],
         ];

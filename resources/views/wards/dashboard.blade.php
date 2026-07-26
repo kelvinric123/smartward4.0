@@ -3741,7 +3741,7 @@
                                     <div class="flex items-center gap-2 mb-2">
                                         <span class="px-2 py-0.5 text-xs font-bold rounded text-white"
                                             :class="notification.severity === 'urgent' ? 'bg-red-500' : (notification.severity === 'warning' ? 'bg-yellow-500' : 'bg-green-500')"
-                                            x-text="notification.type.toUpperCase()"></span>
+                                            x-text="notification.type_label || notification.type.toUpperCase()"></span>
                                         <span class="text-xs font-medium"
                                             :class="notification.severity === 'urgent' ? 'text-red-700' : (notification.severity === 'warning' ? 'text-yellow-700' : 'text-green-700')"
                                             x-text="notification.severity_label"></span>
@@ -3757,6 +3757,10 @@
                                         Bed <span x-text="notification.bed_number"></span> • MRN: <span
                                             x-text="notification.patient_mrn"></span>
                                     </p>
+                                    <template x-if="notification.type === 'patient_request'">
+                                        <p class="text-sm text-gray-700 mt-1.5 font-medium"
+                                            x-text="notification.message"></p>
+                                    </template>
                                     <p class="text-xs text-gray-500 mt-1" x-text="notification.created_at"></p>
                                 </div>
                                 <button @click="respondToNotification(notification.id)"
@@ -3791,7 +3795,7 @@
                                 <div>
                                     <div class="flex items-center gap-2 mb-1">
                                         <span class="px-2 py-0.5 text-xs font-medium rounded bg-gray-200 text-gray-600"
-                                            x-text="notification.type.toUpperCase()"></span>
+                                            x-text="notification.type_label || notification.type.toUpperCase()"></span>
                                         <template x-if="notification.ews_score !== null">
                                             <span class="text-xs text-gray-500"
                                                 x-text="'EWS: ' + notification.ews_score"></span>
@@ -3800,6 +3804,9 @@
                                     <p class="text-sm font-medium text-gray-700" x-text="notification.patient_name"></p>
                                     <p class="text-xs text-gray-500">Bed <span x-text="notification.bed_number"></span>
                                     </p>
+                                    <template x-if="notification.type === 'patient_request'">
+                                        <p class="text-xs text-gray-600 mt-1" x-text="notification.message"></p>
+                                    </template>
                                 </div>
                                 <div class="text-right">
                                     <p class="text-xs text-gray-500" x-text="notification.responded_at"></p>
@@ -3826,6 +3833,13 @@
                 responding: null,
                 wardId: {{ $selectedWard->id ?? 'null' }},
 
+                init() {
+                    if (!this.wardId) return;
+                    // Patient smart calls arrive at any time — keep the bell badge
+                    // live so a waiting patient is noticed without opening the panel.
+                    setInterval(() => this.refreshQuietly(), 20000);
+                },
+
                 openModal() {
                     this.isOpen = true;
                     this.fetchNotifications();
@@ -3833,6 +3847,23 @@
 
                 closeModal() {
                     this.isOpen = false;
+                },
+
+                // Background refresh: no spinner, and never fights an in-flight respond.
+                async refreshQuietly() {
+                    if (!this.wardId || this.responding !== null) return;
+
+                    try {
+                        const response = await fetch(`/ward-dashboard/notifications?ward_id=${this.wardId}`);
+                        if (!response.ok) return;
+                        const data = await response.json();
+
+                        this.pending = data.pending || [];
+                        this.responded = data.responded || [];
+                        this.pendingCount = data.pending_count || 0;
+                    } catch (error) {
+                        // Transient network issue — the next tick retries.
+                    }
                 },
 
                 async fetchNotifications() {

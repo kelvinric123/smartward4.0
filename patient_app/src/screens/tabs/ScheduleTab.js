@@ -95,9 +95,10 @@ function DischargeStep({ step, index, last }) {
 
 export default function ScheduleTab({ todaySchedule, dischargeChecklist, visitor }) {
   const [tab, setTab] = useState('today');
-  const done = dischargeChecklist.steps.filter((s) => s.done).length;
-  const total = dischargeChecklist.steps.length;
-  const pct = Math.round((done / total) * 100);
+  const steps = dischargeChecklist.steps ?? [];
+  const done = steps.filter((s) => s.done).length;
+  const total = steps.length;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
   return (
     <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
@@ -130,11 +131,22 @@ export default function ScheduleTab({ todaySchedule, dischargeChecklist, visitor
 
       {tab === 'today' ? (
         <SectionCard eyebrow="TIMELINE" title="Today">
-          <View>
-            {todaySchedule.map((s) => (
-              <ScheduleRow key={s.id} item={s} />
-            ))}
-          </View>
+          {todaySchedule.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyEmoji}>📭</Text>
+              <Text style={styles.emptyTitle}>Nothing scheduled today</Text>
+              <Text style={styles.emptyBody}>
+                You have no appointments or procedures booked. Your ward will add them here if
+                anything is arranged.
+              </Text>
+            </View>
+          ) : (
+            <View>
+              {todaySchedule.map((s) => (
+                <ScheduleRow key={s.id} item={s} />
+              ))}
+            </View>
+          )}
         </SectionCard>
       ) : null}
 
@@ -152,26 +164,32 @@ export default function ScheduleTab({ todaySchedule, dischargeChecklist, visitor
                 </Text>
               </View>
             </View>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${pct}%` }]} />
-            </View>
-            <Text style={styles.dischargeHint}>
-              Every step below must be cleared before you can be discharged.
-            </Text>
+            {total > 0 ? (
+              <>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${pct}%` }]} />
+                </View>
+                <Text style={styles.dischargeHint}>
+                  Every step below must be cleared before you can be discharged.
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.dischargeHint}>
+                No discharge date has been set yet. Your doctor will decide when you are ready to
+                go home, and the date will appear here.
+              </Text>
+            )}
           </SectionCard>
 
-          <SectionCard eyebrow="CHECKLIST" title="Clinical sign-offs" style={{ marginTop: 14 }}>
-            <View>
-              {dischargeChecklist.steps.map((s, i) => (
-                <DischargeStep
-                  key={s.id}
-                  step={s}
-                  index={i}
-                  last={i === dischargeChecklist.steps.length - 1}
-                />
-              ))}
-            </View>
-          </SectionCard>
+          {total > 0 ? (
+            <SectionCard eyebrow="CHECKLIST" title="Clinical sign-offs" style={{ marginTop: 14 }}>
+              <View>
+                {steps.map((s, i) => (
+                  <DischargeStep key={s.id} step={s} index={i} last={i === steps.length - 1} />
+                ))}
+              </View>
+            </SectionCard>
+          ) : null}
         </>
       ) : null}
 
@@ -329,6 +347,27 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: colors.muted,
     fontSize: 12,
+    lineHeight: 18,
+  },
+
+  emptyBox: {
+    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 8,
+  },
+  emptyEmoji: { fontSize: 30 },
+  emptyTitle: {
+    marginTop: 8,
+    fontSize: 14,
+    fontWeight: '800',
+    color: colors.slate900,
+  },
+  emptyBody: {
+    marginTop: 4,
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
   },
 
   discharge: {

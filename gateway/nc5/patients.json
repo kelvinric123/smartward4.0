@@ -1,0 +1,18 @@
+{
+  "12345": {
+    "firstName": "John",
+    "lastName": "Doe",
+    "dob": "19800115",
+    "sex": "M",
+    "ward": "ICU",
+    "bed": "01"
+  },
+  "67890": {
+    "firstName": "Jane",
+    "lastName": "Smith",
+    "dob": "19920730",
+    "sex": "F",
+    "ward": "WARD2",
+    "bed": "05"
+  }
+}

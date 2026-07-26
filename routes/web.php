@@ -159,6 +159,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/ward-dashboard/patient-referrals', [WardDashboardController::class, 'storeReferral'])->name('ward.patient-referrals.store');
     Route::post('/ward-dashboard/transfer-bed', [WardDashboardController::class, 'transferBed'])->name('ward.transfer-bed');
     Route::post('/ward-dashboard/discharge-patient', [WardDashboardController::class, 'dischargePatient'])->name('ward.discharge-patient');
+    Route::post('/ward-dashboard/schedule-discharge', [WardDashboardController::class, 'scheduleDischarge'])->name('ward.schedule-discharge');
+    Route::post('/ward-dashboard/cancel-scheduled-discharge', [WardDashboardController::class, 'cancelScheduledDischarge'])->name('ward.cancel-scheduled-discharge');
+    Route::post('/ward-dashboard/care-providers', [WardDashboardController::class, 'storeCareProvider'])->name('ward.care-providers.store');
+    Route::delete('/ward-dashboard/care-providers/{careProvider}', [WardDashboardController::class, 'destroyCareProvider'])->name('ward.care-providers.destroy');
     Route::post('/ward-dashboard/update-patient-clinical', [WardDashboardController::class, 'updatePatientClinical'])->name('ward.update-patient-clinical');
     Route::post('/ward-dashboard/save-sugar-reading', [WardDashboardController::class, 'saveSugarReading'])->name('ward.save-sugar-reading');
     Route::post('/ward-dashboard/settings/clinical-options', [WardDashboardController::class, 'updateClinicalIndicatorOptions'])->name('ward.settings.clinical-options');
@@ -355,6 +359,10 @@ Route::prefix('api/terminal')->group(function () {
     Route::get('/wards', [\App\Http\Controllers\TerminalApiController::class, 'wards']);
     Route::get('/beds', [\App\Http\Controllers\TerminalApiController::class, 'beds']);
     Route::get('/beds/{bed}/snapshot', [\App\Http\Controllers\TerminalApiController::class, 'snapshot']);
+
+    // Patient smart call -> ward dashboard notifications
+    Route::get('/beds/{bed}/requests', [\App\Http\Controllers\TerminalApiController::class, 'listRequests']);
+    Route::post('/beds/{bed}/requests', [\App\Http\Controllers\TerminalApiController::class, 'storeRequest']);
 });
 
 // Bedside Patient Information Terminal web app (static SPA build in public/terminal).

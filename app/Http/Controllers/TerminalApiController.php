@@ -7,10 +7,12 @@ use App\Models\DietType;
 use App\Models\IsolationType;
 use App\Models\Patient;
 use App\Models\PatientCareProvider;
+use App\Models\PatientMovement;
 use App\Models\ShiftSetting;
 use App\Models\SugarReading;
 use App\Models\VitalSign;
 use App\Models\Ward;
+use App\Models\WardNotification;
 use App\Models\WardScheduleAssignment;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,6 +27,12 @@ use Illuminate\Http\Request;
  */
 class TerminalApiController extends Controller
 {
+    /**
+     * How long after a discharge the bedside app still shows the farewell
+     * screen instead of a plain "no patient in this bed" message.
+     */
+    private const DISCHARGED_NOTICE_HOURS = 12;
+
     /**
      * GET/POST /api/terminal/ping — connectivity test for the settings screen.
      */
@@ -92,18 +100,37 @@ class TerminalApiController extends Controller
         $patient = $this->patientForBed($bed);
 
         if (!$patient) {
+            // Distinguish "your stay has ended" from "this bed was never yours" —
+            // the app shows a farewell rather than a bare empty-bed screen.
+            $recentlyDischarged = Patient::where('ward_id', $bed->ward_id)
+                ->where('bed_number', $bed->bed_number)
+                ->where('status', Patient::STATUS_DISCHARGED)
+                ->whereNotNull('discharged_at')
+                ->where('discharged_at', '>=', now()->subHours(self::DISCHARGED_NOTICE_HOURS))
+                ->orderByDesc('discharged_at')
+                ->first();
+
             return response()->json([
                 'success' => true,
                 'occupied' => false,
+                'vacancy_reason' => $recentlyDischarged ? 'discharged' : 'vacant',
                 'bed' => [
                     'id' => $bed->id,
                     'bed_number' => $bed->bed_number,
                     'ward_name' => $bed->ward?->ward_name,
                     'ward_code' => $bed->ward?->ward_code,
                 ],
+                'discharged_patient' => $recentlyDischarged ? [
+                    'name' => $recentlyDischarged->name,
+                    'first_name' => explode(' ', trim($recentlyDischarged->name))[0] ?? null,
+                    'discharged_at' => $recentlyDischarged->discharged_at?->toIso8601String(),
+                    'discharged_at_label' => $recentlyDischarged->discharged_at?->format('j M Y, H:i'),
+                ] : null,
                 'patient' => null,
                 'care_team' => [],
                 'vitals' => null,
+                'schedule' => [],
+                'discharge' => null,
             ]);
         }
 
@@ -181,7 +208,167 @@ class TerminalApiController extends Controller
                 'glucose' => $glucoseRows,
                 'latest_label' => $vitalRows->last()['time_label'] ?? null,
             ],
+            'schedule' => $this->schedule($patient),
+            'discharge' => $this->discharge($patient),
         ]);
+    }
+
+    /**
+     * Today's planned movements (scans, theatre, physio, ...) for the patient's
+     * timeline. Ward staff create these in the dashboard's Movement tab.
+     */
+    private function schedule(Patient $patient): array
+    {
+        return PatientMovement::where('patient_id', $patient->id)
+            ->whereDate('scheduled_at', now()->toDateString())
+            ->orderBy('scheduled_at')
+            ->get()
+            ->map(function (PatientMovement $m) {
+                // 'returned' means the patient is back on the ward; 'sent' means
+                // they are out of the ward right now.
+                $status = match ($m->status) {
+                    'returned' => 'done',
+                    'sent' => 'active',
+                    default => 'upcoming',
+                };
+
+                $detail = $m->location_type ?: 'Ward movement';
+                if ($m->notes) {
+                    $detail .= ' · ' . $m->notes;
+                }
+
+                return [
+                    'id' => 'movement-' . $m->id,
+                    'time' => $m->scheduled_at?->format('H:i'),
+                    'title' => $m->location,
+                    'detail' => $detail,
+                    'type' => $this->movementType($m->location_type, $m->location),
+                    'status' => $status,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Best-effort mapping of a movement to one of the patient app's timeline
+     * icons. Unknown destinations fall back to a generic check.
+     */
+    private function movementType(?string $locationType, ?string $location): string
+    {
+        $haystack = strtolower(trim(($locationType ?? '') . ' ' . ($location ?? '')));
+
+        return match (true) {
+            str_contains($haystack, 'physio'), str_contains($haystack, 'therapy'),
+            str_contains($haystack, 'rehab') => 'therapy',
+            str_contains($haystack, 'theatre'), str_contains($haystack, 'ot '),
+            str_contains($haystack, 'surgery'), str_contains($haystack, 'operation') => 'doctor',
+            str_contains($haystack, 'x-ray'), str_contains($haystack, 'xray'),
+            str_contains($haystack, 'scan'), str_contains($haystack, 'ct'),
+            str_contains($haystack, 'mri'), str_contains($haystack, 'radiology'),
+            str_contains($haystack, 'imaging'), str_contains($haystack, 'lab') => 'check',
+            str_contains($haystack, 'dialysis'), str_contains($haystack, 'endoscopy') => 'med',
+            default => 'check',
+        };
+    }
+
+    /**
+     * Discharge plan the patient app shows on its Discharge tab.
+     */
+    private function discharge(Patient $patient): array
+    {
+        $isScheduled = $patient->status === Patient::STATUS_PENDING_DISCHARGE
+            && $patient->expected_discharge_at !== null;
+
+        return [
+            'status' => $patient->status,
+            'is_scheduled' => $isScheduled,
+            'expected_at' => $patient->expected_discharge_at?->toIso8601String(),
+            'expected_date_label' => $patient->expected_discharge_at?->format('l, j M Y'),
+            'expected_time_label' => $patient->expected_discharge_at?->format('H:i'),
+        ];
+    }
+
+    /**
+     * POST /api/terminal/beds/{bed}/requests — patient raises a smart call.
+     *
+     * Lands in the ward dashboard's Ward Notifications panel, where a nurse
+     * marks it responded; the patient app then sees the response.
+     */
+    public function storeRequest(Request $request, Bed $bed): JsonResponse
+    {
+        $validated = $request->validate([
+            'category' => 'required|string|max:64',
+            'label' => 'required|string|max:120',
+            'urgent' => 'sometimes|boolean',
+        ]);
+
+        $patient = $this->patientForBed($bed);
+
+        if (!$patient) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No patient is currently admitted to this bed.',
+            ], 409);
+        }
+
+        $notification = WardNotification::createPatientRequest(
+            $bed->ward_id,
+            $patient->id,
+            $bed->bed_number,
+            $validated['category'],
+            $validated['label'],
+            $patient->name,
+            (bool) ($validated['urgent'] ?? false)
+        );
+
+        return response()->json([
+            'success' => true,
+            'request' => $this->formatRequest($notification),
+        ], 201);
+    }
+
+    /**
+     * GET /api/terminal/beds/{bed}/requests — this bed's recent smart calls
+     * and whether a nurse has responded yet.
+     */
+    public function listRequests(Bed $bed): JsonResponse
+    {
+        $patient = $this->patientForBed($bed);
+
+        if (!$patient) {
+            return response()->json(['success' => true, 'requests' => []]);
+        }
+
+        $requests = WardNotification::where('patient_id', $patient->id)
+            ->where('type', WardNotification::TYPE_PATIENT_REQUEST)
+            ->with('responder:id,name')
+            ->orderBy('created_at', 'desc')
+            ->limit(20)
+            ->get()
+            ->map(fn(WardNotification $n) => $this->formatRequest($n))
+            ->values();
+
+        return response()->json(['success' => true, 'requests' => $requests]);
+    }
+
+    private function formatRequest(WardNotification $notification): array
+    {
+        $notification->loadMissing('responder:id,name');
+
+        return [
+            'id' => $notification->id,
+            'category' => $notification->category,
+            'status' => $notification->status,
+            'severity' => $notification->severity,
+            'message' => $notification->message,
+            'created_at' => $notification->created_at?->toIso8601String(),
+            'created_at_label' => $notification->created_at?->format('H:i'),
+            'responded' => $notification->status === WardNotification::STATUS_RESPONDED,
+            'responded_at' => $notification->responded_at?->toIso8601String(),
+            'responded_at_label' => $notification->responded_at?->format('H:i'),
+            'responded_by' => $notification->responder?->name,
+        ];
     }
 
     // ------------------------------------------------------------------
