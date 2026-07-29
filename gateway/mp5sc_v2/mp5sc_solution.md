@@ -235,12 +235,17 @@ then sent with no temperature at all.
 - [`reliable_ipv_data_source.py`](./listener/src/reliable_ipv_data_source.py)
   overrides `extract_physoi_id` and keeps **one slot per label** with its own
   timestamp. An "unavailable" publish can no longer clobber a good reading from
-  another channel. Recognition is by label band (the IEEE 11073 / Philips
-  temperature block, `TEMP_ID_BAND_MIN..MAX`) plus explicit ID lists, so probe
-  channels are covered without guessing a single ID.
-- `TempPolicy` normalises each raw observation: rejects the `8388607` sentinel,
-  rescales unscaled integers (`365` → `36.5`), converts a Fahrenheit-reporting
-  channel to Celsius, and range-checks against `TEMP_MIN_C..TEMP_MAX_C`.
+  another channel. Recognition is **whitelist-only** (`TEMP_PRIMARY_IDS` +
+  `TEMP_SECONDARY_IDS`, covering the known monitor and probe temperature
+  labels). A band heuristic was tried first and removed after field testing:
+  label **19384 = SpO2** sits between the temperature labels, so band matching
+  captured the SpO2 stream as a fake "probe temperature".
+- `TempPolicy` validates each raw observation: rejects the `8388607` sentinel
+  and range-checks against `TEMP_MIN_C..TEMP_MAX_C`. Unit transforms
+  (Fahrenheit conversion, integer rescale) exist but are **off by default** —
+  the MP5SC publishes Celsius directly, and auto-conversion is what turned a
+  mis-captured SpO2 of 100 into a plausible-looking 37.8 °C. Exactly one value
+  is ever picked; nothing is averaged or summed.
 - [`main.py`](./listener/main.py) `update_temperature()` resolves the two
   sources every poll (and again immediately before a BP capture):
 

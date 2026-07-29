@@ -106,13 +106,16 @@ def load_settings() -> Settings:
         pr_range_min=int(os.getenv("PR_RANGE_MIN", "30")),
         pr_range_max=int(os.getenv("PR_RANGE_MAX", "220")),
         temp_primary_ids=os.getenv("TEMP_PRIMARY_IDS", "19272,19296,19298,61639"),
-        temp_secondary_ids=os.getenv("TEMP_SECONDARY_IDS", ""),
-        temp_id_band_min=int(os.getenv("TEMP_ID_BAND_MIN", "19272")),
-        temp_id_band_max=int(os.getenv("TEMP_ID_BAND_MAX", "19420")),
+        temp_secondary_ids=os.getenv("TEMP_SECONDARY_IDS", "19328,19330,19360,19394,188420,64530"),
+        # Band matching disabled by default: 19384 (SpO2) sits inside the
+        # temperature label range, so only whitelisted IDs are trusted.
+        temp_id_band_min=int(os.getenv("TEMP_ID_BAND_MIN", "0")),
+        temp_id_band_max=int(os.getenv("TEMP_ID_BAND_MAX", "0")),
         temp_min_c=float(os.getenv("TEMP_MIN_C", "25")),
         temp_max_c=float(os.getenv("TEMP_MAX_C", "45")),
-        temp_fahrenheit_autoconvert=_get_bool("TEMP_FAHRENHEIT_AUTOCONVERT", "true"),
-        temp_autoscale=_get_bool("TEMP_AUTOSCALE", "true"),
+        # Off by default: the MP5SC publishes Celsius directly.
+        temp_fahrenheit_autoconvert=_get_bool("TEMP_FAHRENHEIT_AUTOCONVERT", "false"),
+        temp_autoscale=_get_bool("TEMP_AUTOSCALE", "false"),
         temp_agreement_tolerance=float(os.getenv("TEMP_AGREEMENT_TOLERANCE", "0.3")),
         heartbeat_interval=int(os.getenv("HEARTBEAT_INTERVAL", "30")),
         heartbeat_enabled=_get_bool("HEARTBEAT_ENABLED", "true"),

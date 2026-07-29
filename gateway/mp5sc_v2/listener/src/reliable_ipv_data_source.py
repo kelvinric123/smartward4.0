@@ -21,9 +21,12 @@ INVALID_SENTINEL = 8388607
 
 # Labels the monitor uses for the value taken/confirmed on the monitor itself.
 DEFAULT_PRIMARY_TEMP_IDS = "19272,19296,19298,61639"
-# IEEE 11073 / Philips SCADA temperature block. Any other label inside this band
-# is a probe channel (skin, tympanic, rectal, oral, esophageal, ...).
-DEFAULT_TEMP_BAND = (19272, 19420)
+# Known probe-channel labels (skin, tympanic, rectal, esophageal, ...).
+# 64530 = Philips-private MP5SC temp-probe channel, confirmed in the field.
+# Only explicitly listed IDs are ever treated as temperature: a band heuristic
+# was tried and mis-captured SpO2 (label 19384 sits between the temperature
+# labels), so recognition is whitelist-only.
+DEFAULT_SECONDARY_TEMP_IDS = "19328,19330,19360,19394,188420,64530"
 
 
 def parse_id_list(raw):
@@ -51,19 +54,25 @@ class TempPolicy:
     def __init__(self, settings=None):
         get = (lambda n, d: getattr(settings, n, d)) if settings is not None else (lambda n, d: d)
         self.primary_ids = parse_id_list(get("temp_primary_ids", DEFAULT_PRIMARY_TEMP_IDS))
-        self.secondary_ids = parse_id_list(get("temp_secondary_ids", ""))
-        self.band_min = int(get("temp_id_band_min", DEFAULT_TEMP_BAND[0]))
-        self.band_max = int(get("temp_id_band_max", DEFAULT_TEMP_BAND[1]))
+        self.secondary_ids = parse_id_list(get("temp_secondary_ids", DEFAULT_SECONDARY_TEMP_IDS))
+        # Optional extra label band; DISABLED by default (0/0) because nearby
+        # IDs are not all temperature (19384 is SpO2). Whitelist-only is safe.
+        self.band_min = int(get("temp_id_band_min", 0))
+        self.band_max = int(get("temp_id_band_max", 0))
         self.min_c = float(get("temp_min_c", 25.0))
         self.max_c = float(get("temp_max_c", 45.0))
-        self.fahrenheit = bool(get("temp_fahrenheit_autoconvert", True))
-        self.autoscale = bool(get("temp_autoscale", True))
+        # Unit transforms are OFF by default: the MP5SC publishes Celsius
+        # directly, and auto-conversion turned a mis-labeled SpO2 of 100 into a
+        # fake 37.8C "temperature". Only enable at a site that truly reports
+        # Fahrenheit/unscaled values.
+        self.fahrenheit = bool(get("temp_fahrenheit_autoconvert", False))
+        self.autoscale = bool(get("temp_autoscale", False))
 
     def is_temp_label(self, label_id):
         return (
             label_id in self.primary_ids
             or label_id in self.secondary_ids
-            or self.band_min <= label_id <= self.band_max
+            or (self.band_max > 0 and self.band_min <= label_id <= self.band_max)
         )
 
     def bucket(self, label_id):
