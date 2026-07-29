@@ -212,6 +212,58 @@ value for backward compatibility.
 
 ---
 
+## 4d. Temperature: two sources, one reading (fix)
+
+**Symptom.** Temperature taken *on the monitor* was captured, but temperature
+taken *with the temp probe* was not mapped, stored as `--`, and the vitals were
+then sent with no temperature at all.
+
+**Cause.** Three compounding issues in the capture path:
+
+1. The legacy parser collapses **every** temperature label into a single
+   `p_temp` field (`self.p_temp = observ_val`), so the last label published in a
+   poll wins. A good probe reading followed by an "unavailable"
+   publish (`8388607`) on another temperature channel wiped the value.
+2. Only the label IDs hard-coded in the legacy list were recognised at all; a
+   probe publishing under any other label was silently discarded.
+3. Temperature was only read inside the `diff_time != last_vital_time` gate, so
+   a spot-check reading arriving without the monitor's relative timestamp
+   advancing was never picked up.
+
+**Fix** (all inside `mp5sc_v2`, the legacy parser is untouched):
+
+- [`reliable_ipv_data_source.py`](./listener/src/reliable_ipv_data_source.py)
+  overrides `extract_physoi_id` and keeps **one slot per label** with its own
+  timestamp. An "unavailable" publish can no longer clobber a good reading from
+  another channel. Recognition is by label band (the IEEE 11073 / Philips
+  temperature block, `TEMP_ID_BAND_MIN..MAX`) plus explicit ID lists, so probe
+  channels are covered without guessing a single ID.
+- `TempPolicy` normalises each raw observation: rejects the `8388607` sentinel,
+  rescales unscaled integers (`365` → `36.5`), converts a Fahrenheit-reporting
+  channel to Celsius, and range-checks against `TEMP_MIN_C..TEMP_MAX_C`.
+- [`main.py`](./listener/main.py) `update_temperature()` resolves the two
+  sources every poll (and again immediately before a BP capture):
+
+  | Monitor value | Probe value | Result |
+  |---|---|---|
+  | present | present, equal (±`TEMP_AGREEMENT_TOLERANCE`) | send it, source `monitor+probe` |
+  | present | present, different | **monitor wins**, mismatch logged as a WARNING |
+  | present | absent | monitor value |
+  | **null** | present | **probe value** — this is the case that used to be `--` |
+  | null | null | no `temperature` field, as before |
+
+  The chosen value still passes through the existing staleness gate
+  (`VITAL_STALENESS_SECONDS`) and is cleared on patient change, so the
+  patient-safety rules of §4 are unchanged.
+
+**Field identification.** The first time a label produces a temperature the
+listener logs `Temperature source: label <id> mapped as monitor|probe source
+(raw=… -> …C)`. With `DEBUG_MODE=true` it also flags any *unmapped* label
+carrying a temperature-shaped value, which is how a site-specific probe label is
+confirmed and then pinned via `TEMP_SECONDARY_IDS` — no code change needed.
+
+---
+
 ## 5. Workstream 4 — Heartbeat / warnings
 
 ### 5.1 Pi side — new `Heartbeat` thread
@@ -378,6 +430,7 @@ when it is up.
 | Failure classification + backoff + isolation | [`api_client.py`](./listener/src/api_client.py), [`main.py`](./listener/main.py) | done, unit-tested |
 | Creds out of the queue | [`main.py`](./listener/main.py), [`api_client.py`](./listener/src/api_client.py) | done |
 | Patient-safety (fresh context, cache reset, staleness, settle-drop) | [`main.py`](./listener/main.py) | done |
+| Temperature dual-source capture (monitor + probe) | [`reliable_ipv_data_source.py`](./listener/src/reliable_ipv_data_source.py), [`main.py`](./listener/main.py), [`config.py`](./listener/src/config.py) | done, unit-tested; Pi-only, no server change |
 | SpO2/PR range capture + display | [`main.py`](./listener/main.py), migration `..._add_vital_ranges_to_vital_signs_table`, [`VitalSign`](../../app/Models/VitalSign.php), controller, dashboard views | code done, unit-tested; **migration pending** |
 | Server idempotency | migration `..._add_gateway_event_id_to_vital_signs_table`, [`VitalSignApiV1Controller`](../../app/Http/Controllers/VitalSignApiV1Controller.php), [`VitalSign`](../../app/Models/VitalSign.php) | code done; **migration pending** |
 | Heartbeat (Pi) | [`heartbeat.py`](./listener/src/heartbeat.py), [`main.py`](./listener/main.py) | done, smoke-tested |

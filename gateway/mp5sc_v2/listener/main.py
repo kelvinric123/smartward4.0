@@ -184,6 +184,10 @@ class VitalSignListener(threading.Thread, LoggerMixin):
         self.spo2_max = None
         self.hr_min = None
         self.hr_max = None
+        # Which of the two monitor temperature sources the current value came
+        # from ("monitor", "probe", or both when they agree).
+        self.temp_source = ""
+        self.last_temp_log = ""
         self.last_status_report_at = 0
 
     def reset_ranges(self):
@@ -191,7 +195,7 @@ class VitalSignListener(threading.Thread, LoggerMixin):
         self.spo2_min = self.spo2_max = None
         self.hr_min = self.hr_max = None
 
-    def reset_vital_cache(self):
+    def reset_vital_cache(self, dev=None):
         """Drop cached continuous vitals so one patient's values never ride
         along on the next patient's BP snapshot."""
         self.last_valid_heart_rate = 0
@@ -199,6 +203,12 @@ class VitalSignListener(threading.Thread, LoggerMixin):
         self.last_valid_temp = 0
         self.last_valid_resp_rate = 0
         self.hr_at = self.oxygen_at = self.temp_at = self.resp_rate_at = 0
+        self.temp_source = ""
+        self.last_temp_log = ""
+        # Temperature slots live in the parser wrapper (one per monitor label),
+        # so they have to be cleared there too.
+        if dev is not None:
+            dev.clear_temperatures()
         self.reset_ranges()
 
     def update_status(self, status, connected=False):
@@ -240,7 +250,8 @@ class VitalSignListener(threading.Thread, LoggerMixin):
             if self.spo2_min is not None and self.spo2_max is not None:
                 payload["spo2_min"] = int(round(self.spo2_min))
                 payload["spo2_max"] = int(round(self.spo2_max))
-        if self._fresh(self.temp_at) and 20 < self.last_valid_temp < 50:
+        if self._fresh(self.temp_at) and \
+                self.settings.temp_min_c <= self.last_valid_temp <= self.settings.temp_max_c:
             payload["temperature"] = round(self.last_valid_temp, 1)
         if self._fresh(self.resp_rate_at) and 0 < self.last_valid_resp_rate < 100:
             payload["respiratory_rate"] = int(self.last_valid_resp_rate)
@@ -282,7 +293,7 @@ class VitalSignListener(threading.Thread, LoggerMixin):
                     f"Patient changed {self.last_patient_id} -> {patient_id}; clearing cached vitals",
                     "WARNING",
                 )
-                self.reset_vital_cache()
+                self.reset_vital_cache(dev)
             self.patient_id_changed_at = time.time()
 
         if full_name != self.last_patient_name or patient_id != self.last_patient_id:
@@ -300,11 +311,11 @@ class VitalSignListener(threading.Thread, LoggerMixin):
         current_oxygen = float(temp_l[5][1])
         current_heart_rate = float(temp_l[6][1])
 
+        # Temperature is not read from this list: it is resolved from both
+        # monitor sources in update_temperature().
         try:
-            current_temp = float(temp_l[11][1]) if len(temp_l) > 11 else 0
             current_resp_rate = float(temp_l[12][1]) if len(temp_l) > 12 else 0
         except (IndexError, ValueError):
-            current_temp = 0
             current_resp_rate = 0
 
         now = time.time()
@@ -322,9 +333,6 @@ class VitalSignListener(threading.Thread, LoggerMixin):
             self.oxygen_at = now
             self.spo2_min = current_oxygen if self.spo2_min is None else min(self.spo2_min, current_oxygen)
             self.spo2_max = current_oxygen if self.spo2_max is None else max(self.spo2_max, current_oxygen)
-        if 20 < current_temp < 50 and current_temp != 8388607:
-            self.last_valid_temp = current_temp
-            self.temp_at = now
         if 0 < current_resp_rate < 100 and current_resp_rate != 8388607:
             self.last_valid_resp_rate = current_resp_rate
             self.resp_rate_at = now
@@ -333,9 +341,68 @@ class VitalSignListener(threading.Thread, LoggerMixin):
             self.log(
                 "Raw values "
                 f"HR={current_heart_rate}, O2={current_oxygen}, "
-                f"Temp={current_temp}, RR={current_resp_rate}",
+                f"RR={current_resp_rate}",
                 "DEBUG",
             )
+
+    def update_temperature(self, dev):
+        """Resolve temperature from the monitor's two temperature sources.
+
+        The monitor publishes temperature under more than one label: the value
+        taken/confirmed on the monitor itself (first choice) and the value
+        coming from the temperature probe (second choice). Previously only the
+        first was usable, so a probe-only reading was stored as "--" and the
+        vitals went out with no temperature at all.
+
+        Rules, in order:
+          1. both present and equal -> send it (either source is the answer)
+          2. both present but different -> the monitor value wins
+          3. monitor value null -> the probe value is the reading
+        """
+        for event in dev.drain_temp_events():
+            self.log(f"Temperature source: {event}")
+
+        readings = dev.get_temperature_readings()
+        window = self.settings.vital_staleness_seconds
+        primary = readings.get("primary")
+        secondary = readings.get("secondary")
+        if primary and primary["age"] > window:
+            primary = None
+        if secondary and secondary["age"] > window:
+            secondary = None
+
+        disagrees = False
+        if primary and secondary:
+            if abs(primary["value"] - secondary["value"]) <= self.settings.temp_agreement_tolerance:
+                chosen, source = primary, "monitor+probe"
+            else:
+                # Not a reason to drop the reading; the monitor value is the one
+                # the user confirmed, the mismatch is logged for follow-up.
+                chosen, source, disagrees = primary, "monitor", True
+        elif primary:
+            chosen, source = primary, "monitor"
+        elif secondary:
+            chosen, source = secondary, "probe"
+        else:
+            return
+
+        self.last_valid_temp = chosen["value"]
+        # Convert the wrapper's age back to this class's clock base so the
+        # existing staleness gate in build_payload keeps working unchanged.
+        self.temp_at = time.time() - chosen["age"]
+        self.temp_source = source
+
+        signature = f"{chosen['value']}|{source}"
+        if signature != self.last_temp_log:
+            self.last_temp_log = signature
+            if disagrees:
+                self.log(
+                    f"Temperature {chosen['value']}C from monitor (label {chosen['label']}); "
+                    f"probe reported {secondary['value']}C (label {secondary['label']}) - monitor value used",
+                    "WARNING",
+                )
+            else:
+                self.log(f"Temperature {chosen['value']}C from {source} (label {chosen['label']})")
 
     def maybe_report_queue_state(self):
         now = time.time()
@@ -355,7 +422,7 @@ class VitalSignListener(threading.Thread, LoggerMixin):
         self.log(f"Starting v2 listener for {self.monitor_ip}")
         self.update_status("Connecting...", False)
 
-        dev = ReliableIpvDataSource(self.monitor_ip)
+        dev = ReliableIpvDataSource(self.monitor_ip, self.settings)
         dev.debug_info = self.settings.debug_mode
 
         try:
@@ -385,6 +452,11 @@ class VitalSignListener(threading.Thread, LoggerMixin):
                 if diff_time != last_vital_time:
                     self.update_live_values(temp_l)
                     last_vital_time = diff_time
+
+                # Temperature is checked every poll, not only when the monitor's
+                # relative timestamp advances: a spot-check probe reading can
+                # arrive without that timestamp moving, and it used to be missed.
+                self.update_temperature(dev)
 
                 v = temp_l[4][1]
                 w = temp_l[10][1]
@@ -416,6 +488,9 @@ class VitalSignListener(threading.Thread, LoggerMixin):
                         time.sleep(self.settings.poll_interval)
                         continue
 
+                    # Pick up a probe reading taken right before the cuff finished.
+                    self.update_temperature(dev)
+
                     payload = self.build_payload(patient_id, v, bp_sys, bp_dias, full_name)
                     event_id = payload["gateway_event_id"]
                     inserted = self.storage.enqueue(event_id, payload, self.device_name, self.monitor_ip)
@@ -424,7 +499,9 @@ class VitalSignListener(threading.Thread, LoggerMixin):
                         f"BP captured for {full_name or patient_id}: "
                         f"{int(bp_sys)}/{int(bp_dias)} "
                         f"PR={payload.get('pulse_rate_min', '?')}-{payload.get('pulse_rate_max', '?')} "
-                        f"SpO2={payload.get('spo2_min', '?')}-{payload.get('spo2_max', '?')} [{state}]"
+                        f"SpO2={payload.get('spo2_min', '?')}-{payload.get('spo2_max', '?')} "
+                        f"Temp={payload.get('temperature', '--')}"
+                        f"{'/' + self.temp_source if payload.get('temperature') else ''} [{state}]"
                     )
                     last_nbp_time = v
                     # New capture window for the next reading.

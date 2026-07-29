@@ -1,0 +1,112 @@
+{
+  "_comment": "ADT records served to the VS8 on tcp/3502. Keys are the patient ID typed on the monitor. assigning_authority and id_type mirror the monitor's own PID-3 (99999^^^Hospital^PI). This file is re-read automatically on every query - no restart needed after editing.",
+
+  "99999": {
+    "last": "TEST",
+    "first": "PATIENT",
+    "dob": "19800101",
+    "sex": "M",
+    "ward": "D5",
+    "room": "12",
+    "bed": "01",
+    "visit": "V00099999",
+    "assigning_authority": "Hospital",
+    "id_type": "PI"
+  },
+  "12345": {
+    "last": "TAN",
+    "first": "AH KOW",
+    "dob": "19551103",
+    "sex": "M",
+    "ward": "D6",
+    "room": "03",
+    "bed": "02",
+    "visit": "V00012345",
+    "assigning_authority": "Hospital",
+    "id_type": "PI"
+  },
+  "10001": {
+    "last": "SITI NURHALIZA",
+    "first": "BINTI ABDULLAH",
+    "dob": "19790215",
+    "sex": "F",
+    "ward": "D5",
+    "room": "01",
+    "bed": "01",
+    "visit": "V00010001",
+    "assigning_authority": "Hospital",
+    "id_type": "PI"
+  },
+  "10002": {
+    "last": "RAJESH",
+    "first": "KUMAR",
+    "dob": "19680922",
+    "sex": "M",
+    "ward": "D5",
+    "room": "02",
+    "bed": "03",
+    "visit": "V00010002",
+    "assigning_authority": "Hospital",
+    "id_type": "PI"
+  },
+  "10003": {
+    "last": "LEE",
+    "first": "MEI LING",
+    "dob": "19910707",
+    "sex": "F",
+    "ward": "D6",
+    "room": "05",
+    "bed": "01",
+    "visit": "V00010003",
+    "assigning_authority": "Hospital",
+    "id_type": "PI"
+  },
+  "20001": {
+    "last": "MOHD FAIZAL",
+    "first": "BIN OMAR",
+    "dob": "19601230",
+    "sex": "M",
+    "ward": "ICU",
+    "room": "01",
+    "bed": "01",
+    "visit": "V00020001",
+    "assigning_authority": "Hospital",
+    "id_type": "PI"
+  },
+  "20002": {
+    "last": "WONG",
+    "first": "KAM FOOK",
+    "dob": "19450318",
+    "sex": "M",
+    "ward": "D6",
+    "room": "07",
+    "bed": "04",
+    "visit": "V00020002",
+    "assigning_authority": "Hospital",
+    "id_type": "PI"
+  },
+  "30001": {
+    "last": "PRIYA DEVI",
+    "first": "SUNDRAM",
+    "dob": "20010524",
+    "sex": "F",
+    "ward": "D5",
+    "room": "09",
+    "bed": "02",
+    "visit": "V00030001",
+    "assigning_authority": "Hospital",
+    "id_type": "PI"
+  },
+  "1": {
+    "last": "ONE",
+    "first": "SHORTID",
+    "dob": "19900101",
+    "sex": "M",
+    "ward": "D5",
+    "room": "01",
+    "bed": "02",
+    "visit": "V00000001",
+    "assigning_authority": "Hospital",
+    "id_type": "PI"
+  }
+}

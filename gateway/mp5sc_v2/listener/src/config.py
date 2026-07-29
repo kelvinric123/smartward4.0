@@ -40,6 +40,19 @@ class Settings:
     spo2_range_max: int
     pr_range_min: int
     pr_range_max: int
+    # Temperature capture. The monitor publishes temperature under more than one
+    # label: the value taken/confirmed on the monitor (primary) and the value
+    # coming from the temperature probe (secondary). IDs are field-tunable
+    # because the probe's label differs per monitor configuration.
+    temp_primary_ids: str
+    temp_secondary_ids: str
+    temp_id_band_min: int
+    temp_id_band_max: int
+    temp_min_c: float
+    temp_max_c: float
+    temp_fahrenheit_autoconvert: bool
+    temp_autoscale: bool
+    temp_agreement_tolerance: float
     # Heartbeat
     heartbeat_interval: int
     heartbeat_enabled: bool
@@ -92,6 +105,15 @@ def load_settings() -> Settings:
         spo2_range_max=int(os.getenv("SPO2_RANGE_MAX", "100")),
         pr_range_min=int(os.getenv("PR_RANGE_MIN", "30")),
         pr_range_max=int(os.getenv("PR_RANGE_MAX", "220")),
+        temp_primary_ids=os.getenv("TEMP_PRIMARY_IDS", "19272,19296,19298,61639"),
+        temp_secondary_ids=os.getenv("TEMP_SECONDARY_IDS", ""),
+        temp_id_band_min=int(os.getenv("TEMP_ID_BAND_MIN", "19272")),
+        temp_id_band_max=int(os.getenv("TEMP_ID_BAND_MAX", "19420")),
+        temp_min_c=float(os.getenv("TEMP_MIN_C", "25")),
+        temp_max_c=float(os.getenv("TEMP_MAX_C", "45")),
+        temp_fahrenheit_autoconvert=_get_bool("TEMP_FAHRENHEIT_AUTOCONVERT", "true"),
+        temp_autoscale=_get_bool("TEMP_AUTOSCALE", "true"),
+        temp_agreement_tolerance=float(os.getenv("TEMP_AGREEMENT_TOLERANCE", "0.3")),
         heartbeat_interval=int(os.getenv("HEARTBEAT_INTERVAL", "30")),
         heartbeat_enabled=_get_bool("HEARTBEAT_ENABLED", "true"),
         extended_interval=int(os.getenv("EXTENDED_INTERVAL", "1800")),
