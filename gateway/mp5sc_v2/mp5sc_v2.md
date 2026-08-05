@@ -24,6 +24,10 @@ That is fragile when the Raspberry Pi is battery-powered and moved between rooms
 4. Duplicate capture replay is reduced by a deterministic `gateway_event_id`.
 5. The legacy MP5SC parser is wrapped with a safer watchdog lifecycle to avoid duplicate watchdog threads and the old broken watchdog condition.
 
+6. Temperature is captured from **both** monitor sources (the value taken on the
+   monitor and the value from the temp probe) instead of a single
+   last-write-wins field, so a probe-only reading is no longer sent as `--`.
+
 ## New architecture
 
 Flow:
@@ -93,6 +97,15 @@ Important settings:
 - `RETRY_MAX_SECONDS`
 - `QUEUE_DB_PATH`
 - `DEBUG_MODE`
+
+Temperature capture (see [`mp5sc_solution.md` §4d](./mp5sc_solution.md)):
+
+- `TEMP_PRIMARY_IDS` — labels treated as "taken on the monitor" (first choice)
+- `TEMP_SECONDARY_IDS` — extra probe labels outside the band (second choice)
+- `TEMP_ID_BAND_MIN` / `TEMP_ID_BAND_MAX`
+- `TEMP_MIN_C` / `TEMP_MAX_C`
+- `TEMP_FAHRENHEIT_AUTOCONVERT` / `TEMP_AUTOSCALE`
+- `TEMP_AGREEMENT_TOLERANCE`
 
 Copy `.env.example` to `.env` beside `main.py` when deploying.
 
