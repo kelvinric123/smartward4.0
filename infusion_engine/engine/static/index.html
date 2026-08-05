@@ -375,6 +375,7 @@ async function showRaw(id) {
 
 // ---------------------------------------------------------------- demo
 let demoAlarmOptions = [];
+let demoScenarios = {};
 let demoPumps = [];
 
 async function demoStatus() {
@@ -407,6 +408,7 @@ function demoRemove(label) {
 }
 function renderDemo(s) {
   demoAlarmOptions = s.alarm_options || [];
+  demoScenarios = s.scenarios || {};
   demoPumps = s.pumps;
   let state = s.running
     ? `Running — ${s.sent_count} HL7 messages sent, every ${s.interval_sec}s`
@@ -427,7 +429,8 @@ function renderDemo(s) {
     <td><span style="font:11px Consolas,monospace;word-break:break-all">${esc(p.device_id)}</span></td>
     <td>${esc(p.ward)}</td>
     <td>${esc(p.drug)}</td><td>${p.rate} mL/h</td>
-    <td>${p.infused} / ${p.vtbi} mL</td><td>${badge(p)}</td>
+    <td>${p.infused} / ${p.vtbi} mL</td>
+    <td>${badge(p)}${p.scenario ? `<br><small style="color:var(--accent)">▶ ${esc(p.scenario)}</small>` : ''}</td>
     <td>${p.alarm ? '⚠ ' + esc(p.alarm) : '—'}</td>
     <td style="white-space:nowrap">
       <button class="btn small" onclick="demoAction('${esc(p.label)}','start')">Start</button>
@@ -435,6 +438,7 @@ function renderDemo(s) {
       <button class="btn small" onclick="demoAction('${esc(p.label)}','complete')">Complete</button>
       <button class="btn small danger" onclick="demoAlarmModal('${esc(p.label)}')">Alarm</button>
       <button class="btn small" onclick="demoAction('${esc(p.label)}','clear_alarm')">Clear</button>
+      <button class="btn small primary" onclick="demoScenarioModal('${esc(p.label)}')">Scenario</button>
       <button class="btn small" title="Edit pump" onclick="demoEditModal('${esc(p.label)}')">✎</button>
       <button class="btn small danger" title="Remove pump" onclick="demoRemove('${esc(p.label)}')">✕</button>
     </td></tr>`).join('');
@@ -543,6 +547,30 @@ function demoAlarmModal(label) {
 function demoAlarmFire(label, text) {
   closeModal();
   demoAction(label, 'alarm', {alarm_text: (text || '').trim()});
+}
+function demoScenarioModal(label) {
+  const titles = {
+    occlusion_recovery: '⚠ Occlusion → recover',
+    near_end_complete: '⏳ Infusion Near End → complete',
+    rate_change: '📈 Rate change / titration',
+  };
+  const rows = Object.entries(demoScenarios).map(([key, desc]) => `
+    <button class="btn" style="display:block;width:100%;text-align:left;margin-bottom:8px;padding:10px 14px"
+            onclick="demoScenarioRun('${esc(label)}','${key}')">
+      <b>${titles[key] || key}</b><br>
+      <small style="color:var(--muted)">${esc(desc)}</small>
+    </button>`).join('');
+  openModal('Run scenario on ' + esc(label),
+    `<div style="padding:16px">
+       <p class="note" style="margin-top:0">Scripted sequences replaying the real ward
+          message patterns (R40 alarms + R42 events + R01 status). Watch the Message Log
+          tab while it runs.</p>
+       ${rows}
+     </div>`, '');
+}
+function demoScenarioRun(label, key) {
+  closeModal();
+  demoAction(label, 'scenario', {scenario: key});
 }
 
 // ---------------------------------------------------------------- api docs

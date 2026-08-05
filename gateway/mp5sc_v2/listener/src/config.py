@@ -40,6 +40,8 @@ class Settings:
     spo2_range_max: int
     pr_range_min: int
     pr_range_max: int
+    # Seconds between physio census dumps (0 = off)
+    physio_report_interval: int
     # Heartbeat
     heartbeat_interval: int
     heartbeat_enabled: bool
@@ -92,6 +94,7 @@ def load_settings() -> Settings:
         spo2_range_max=int(os.getenv("SPO2_RANGE_MAX", "100")),
         pr_range_min=int(os.getenv("PR_RANGE_MIN", "30")),
         pr_range_max=int(os.getenv("PR_RANGE_MAX", "220")),
+        physio_report_interval=int(os.getenv("PHYSIO_REPORT_INTERVAL", "0")),
         heartbeat_interval=int(os.getenv("HEARTBEAT_INTERVAL", "30")),
         heartbeat_enabled=_get_bool("HEARTBEAT_ENABLED", "true"),
         extended_interval=int(os.getenv("EXTENDED_INTERVAL", "1800")),

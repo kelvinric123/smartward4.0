@@ -284,6 +284,9 @@ def make_handler(database, api_key='', demo=None):
                             return self._send_json(demo.remove_pump(label))
                         if action == 'update':
                             return self._send_json(demo.update_pump(label, body))
+                        if action == 'scenario':
+                            return self._send_json(
+                                demo.run_scenario(label, body.get('scenario', '')))
                         return self._send_json(demo.pump_action(label, action, body))
                     except KeyError as e:
                         # str(KeyError) wraps the message in quotes - unwrap it

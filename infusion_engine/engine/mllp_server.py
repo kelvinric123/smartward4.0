@@ -1,5 +1,6 @@
 """MLLP TCP server: receives HL7 from the pump gateway, stores + parses, ACKs."""
 
+import itertools
 import logging
 import socket
 import threading
@@ -21,10 +22,13 @@ class MLLPServer:
         self.db = database
         self.running = False
         self.server_socket = None
+        # itertools.count is atomic under the GIL - safe across client threads
+        self._msg_counter = itertools.count(1)
         self.message_count = 0
 
     def process_message(self, raw_message, client_socket, client_address):
-        self.message_count += 1
+        self.message_count = next(self._msg_counter)
+        seq = self.message_count
         source_ip = client_address[0]
 
         # Raw HL7 is always stored first, even if parsing fails
@@ -35,14 +39,14 @@ class MLLPServer:
             self.db.save_parsed(message_id, msg)
             logger.info(
                 'MSG #%d id=%d %s from %s pump=%s status=%s rate=%s',
-                self.message_count, message_id, msg.message_type, source_ip,
+                seq, message_id, msg.message_type, source_ip,
                 msg.pump_label or msg.device_id,
                 msg.values.get('pump_status') or (msg.alarm or {}).get('alert_text'),
                 msg.values.get('flow_rate'),
             )
             ack = hl7.build_ack(msg, 'AA')
         except Exception as e:
-            logger.error('MSG #%d id=%d parse failed: %s', self.message_count, message_id, e)
+            logger.error('MSG #%d id=%d parse failed: %s', seq, message_id, e)
             self.db.mark_parse_error(message_id, e)
             ack = hl7.build_ack(raw_message, 'AE', f'Parse error: {e}')
 

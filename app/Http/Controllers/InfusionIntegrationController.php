@@ -117,15 +117,26 @@ class InfusionIntegrationController extends Controller
             // Password hidden for security
         ];
 
+        // The HL7 log counters scan a table that reaches millions of rows in
+        // production (pumps report every few seconds), so cache them briefly.
+        // where('created_at', >=) is index-friendly; whereDate() is not.
+        $hl7Counts = \Illuminate\Support\Facades\Cache::remember(
+            'bbraun_hl7_log_counts', 30, fn() => [
+                'total' => BbraunHl7Log::count(),
+                'today' => BbraunHl7Log::where('created_at', '>=', today())->count(),
+                'errors' => BbraunHl7Log::where('status', 'error')->count(),
+            ]
+        );
+
         $stats = [
             'total_pumps' => InfusionPump::count(),
             'active_pumps' => InfusionPump::where('is_active', true)->count(),
             'active_infusions' => Infusion::active()->count(),
             'warnings' => Infusion::running()->withWarnings()->count(),
             'alarms' => Infusion::alarming()->count(),
-            'total_hl7_messages' => BbraunHl7Log::count(),
-            'messages_today' => BbraunHl7Log::whereDate('created_at', today())->count(),
-            'error_messages' => BbraunHl7Log::where('status', 'error')->count(),
+            'total_hl7_messages' => $hl7Counts['total'],
+            'messages_today' => $hl7Counts['today'],
+            'error_messages' => $hl7Counts['errors'],
         ];
 
         return view('integration.infusion.index', compact(

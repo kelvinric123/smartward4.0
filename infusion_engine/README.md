@@ -56,6 +56,7 @@ Every message is ACKed and stored raw even if parsing fails, so nothing is lost.
 - `engine/` — the service (Python; only pip dependency is `pg8000` for Postgres)
   - `main.py` entry point, `mllp_server.py` HL7 in, `hl7.py` parser,
     `db.py` storage (PostgreSQL or SQLite), `api.py` REST out, `config.py` env config
+- `simulator.py` — B.Braun HL7 scenario simulator (see below)
 - `docker_infusion/` — Dockerfile, docker-compose (engine + PostgreSQL),
   `build_and_push.bat` (image `kelvinric/infusion`)
 - `tests/` — parser unit tests + MLLP sample sender (real B.Braun samples)
@@ -127,12 +128,84 @@ Common query params: `limit` (default 100, max 1000), `offset`,
 
 `device_id` is the pump's EUI-64 serial from MSH-3 (e.g. `0012211839000001`).
 
+## Simulator (`simulator.py`)
+
+One CLI that plays realistic B.Braun ward traffic into the engine's MLLP port —
+PCD-01 status, PCD-10 delivery events, PCD-04 alarms and PCD-15 device reports —
+so the whole receive → parse → store → API path can be exercised without pumps.
+Segment layout, MDC codes and units come from the real captures in
+`tests/samples/`, and `tests/test_simulator.py` asserts every scenario parses
+back correctly and that no observation code is invented.
+
+```bash
+python simulator.py --list            # the catalogue, with what each one exercises
+python simulator.py normal            # one scenario
+python simulator.py occlusion battery # several, back to back
+python simulator.py all               # everything except the soak test
+python simulator.py normal --dry-run  # print the HL7, send nothing
+```
+
+| Scenario | What it puts through the engine |
+|---|---|
+| `idle` | pump powered on, nothing loaded — baseline registration |
+| `normal` | LVP infusion start → periodic status → near-end → complete |
+| `syringe` | Perfusor with concentration, dose delivered/remaining, weight, syringe level |
+| `titration` | rate changed four times mid-infusion |
+| `occlusion` | alarm active → muted → cleared → infusion resumes |
+| `air-in-line` | the same alarm firing twice (repeat-alarm handling) |
+| `syringe-holder-open` | exact replay of the 4-message sequence in `sample2.txt` |
+| `near-end` | near-end condition, completion, then KVO |
+| `battery` | PCD-15 on mains → on battery → Battery Low → Battery Empty → recovery |
+| `power-off` | `pump-stopped-powered-off`, reporting gap, pump returns |
+| `wifi-drop` | signal decays, station goes quiet, backfill arrives **out of order** |
+| `standby` | paused into standby until the standby-timeout reminder |
+| `multi-pump` | 4 pumps, 2 wards, one SpaceStation, concurrent |
+| `alarm-storm` | 6 pumps alarming and clearing in quick succession |
+| `alarm` | fire one chosen alarm — `--alarm air-in-line` |
+| `malformed` | truncated / unparseable / out-of-spec HL7 — nothing may be lost |
+| `soak` | throughput test — `--pumps 20 --messages 50` |
+| `replay` | the genuine captures in `tests/samples/` |
+
+The simulator runs on its own clock: messages carry *simulated* timestamps and
+`--speed` only changes how long the run takes in wall-clock seconds, so an hour
+of infusion can be replayed in a minute with the arithmetic still lining up.
+
+| Option | Default | Description |
+|---|---|---|
+| `--host`, `--port` | `127.0.0.1:6000` | engine MLLP endpoint |
+| `--speed` | `10` | simulated seconds per real second; `0` = no waiting |
+| `--interval` | `60` | seconds between periodic PCD-01 reports |
+| `--start-time` | now | backdate the clock, e.g. `2026-08-05T09:00:00` |
+| `--dry-run`, `--out FILE` | off | print / save the HL7 instead of (as well as) sending |
+| `--repeat N`, `--loop` | 1 | run the scenarios repeatedly |
+| `--connection` | `persistent` | or `per-message` to reconnect for every message |
+| `--alarm-identity` | `sys-id` | `realistic` omits MDC_ATTR_SYS_ID from PCD-04, exactly like the captures |
+| `--pump-type`, `--label`, `--ward`, `--facility`, `--drug`, `--rate`, `--vtbi`, `--mrn` | — | override the scenario's first pump |
+
+Two things worth knowing, both true of real pumps and reproduced here:
+
+- **Battery and wifi only arrive in PCD-15**, never in PCD-01, so a pump's
+  battery stays `null` until a device report comes in.
+- **PCD-04 alarms carry no `MDC_ATTR_SYS_ID`** in the B.Braun captures, so the
+  engine can only key them as `<station>:<label>` — a *different* record from the
+  PCD-01 stream. The simulator adds the SYS_ID by default so alarms bind to the
+  right pump; `--alarm-identity realistic` reproduces the split.
+
+Exit code is 0 only when every message got the ACK the scenario expected.
+
 ## Test
 
 Parser unit tests (against real captured B.Braun messages in `tests/samples/`):
 
 ```bash
 python -m tests.test_parser
+```
+
+Simulator tests — runs every scenario and pushes the generated HL7 back through
+the parser:
+
+```bash
+python -m tests.test_simulator
 ```
 
 End-to-end: with the engine running, send all samples over MLLP and check the API:

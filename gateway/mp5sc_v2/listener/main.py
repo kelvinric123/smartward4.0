@@ -185,6 +185,7 @@ class VitalSignListener(threading.Thread, LoggerMixin):
         self.hr_min = None
         self.hr_max = None
         self.last_status_report_at = 0
+        self.last_physio_report_at = 0
 
     def reset_ranges(self):
         """Start a fresh SpO2/PR range window (after a capture)."""
@@ -322,12 +323,22 @@ class VitalSignListener(threading.Thread, LoggerMixin):
             self.oxygen_at = now
             self.spo2_min = current_oxygen if self.spo2_min is None else min(self.spo2_min, current_oxygen)
             self.spo2_max = current_oxygen if self.spo2_max is None else max(self.spo2_max, current_oxygen)
+        # Temp and RR are spot values: the source reports 0 once the monitor has
+        # stopped showing one (cleared, blanked or invalidated), and the cache is
+        # dropped immediately so a cleared value cannot ride the staleness window
+        # onto the next BP.
         if 20 < current_temp < 50 and current_temp != 8388607:
             self.last_valid_temp = current_temp
             self.temp_at = now
+        else:
+            self.last_valid_temp = 0
+            self.temp_at = 0
         if 0 < current_resp_rate < 100 and current_resp_rate != 8388607:
             self.last_valid_resp_rate = current_resp_rate
             self.resp_rate_at = now
+        else:
+            self.last_valid_resp_rate = 0
+            self.resp_rate_at = 0
 
         if self.settings.debug_mode:
             self.log(
@@ -351,11 +362,26 @@ class VitalSignListener(threading.Thread, LoggerMixin):
         )
         self.last_status_report_at = now
 
+    def maybe_report_physio(self, dev):
+        """Periodic dump of every numeric the monitor sends, so an unlisted
+        Temp/RR physio id is visible without attaching a packet sniffer."""
+        interval = self.settings.physio_report_interval
+        if interval <= 0:
+            return
+        now = time.time()
+        if now - self.last_physio_report_at < interval:
+            return
+        self.last_physio_report_at = now
+        try:
+            self.log(dev.census_report(), "INFO")
+        except Exception as exc:
+            self.log(f"Physio census failed: {exc}", "DEBUG")
+
     def run(self):
         self.log(f"Starting v2 listener for {self.monitor_ip}")
         self.update_status("Connecting...", False)
 
-        dev = ReliableIpvDataSource(self.monitor_ip)
+        dev = ReliableIpvDataSource(self.monitor_ip, logger=self.log)
         dev.debug_info = self.settings.debug_mode
 
         try:
@@ -380,6 +406,7 @@ class VitalSignListener(threading.Thread, LoggerMixin):
                     refresh_counter = 0
 
                 patient_id, full_name = self.refresh_patient_context(dev)
+                self.maybe_report_physio(dev)
 
                 diff_time = ((temp_l[8][1] * 0.000125) / 60) - ((temp_l[9][1] * 0.000125) / 60)
                 if diff_time != last_vital_time:

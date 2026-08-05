@@ -8,6 +8,7 @@ data exercises exactly the same receive -> store -> parse path as real pumps.
 import logging
 import socket
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -28,9 +29,23 @@ DEFAULT_FLEET = [
      'facility': 'PHKL', 'drug': 'Insulin', 'rate': 4.0, 'vtbi': 40.0},
 ]
 
-ALARM_TEXTS = ['Syringe Holder Open', 'Occlusion Downstream', 'Occlusion Upstream',
-               'Air In Line', 'Battery Low', 'Battery Empty', 'VTBI Near End',
-               'Infusion Complete', 'Door Open', 'Standby Timeout']
+# Alarm texts as the real B.Braun pumps word them (see production PCD-04 logs)
+ALARM_TEXTS = ['Downstream Occlusion', 'Upstream Occlusion', 'Infusion Near End',
+               'Syringe Holder Open', 'Air In Line', 'Battery Low', 'Battery Empty',
+               'VTBI Near End', 'Infusion Complete', 'Door Open', 'Standby Timeout']
+
+# Scripted multi-step scenarios replaying real ward sequences
+SCENARIOS = {
+    'occlusion_recovery':
+        'Downstream Occlusion alarm -> pump stops -> alarm repeats -> cleared -> '
+        'infusion resumes (as pump I51543 in production, ~20s)',
+    'near_end_complete':
+        'Infusion Near End alarm while infusing -> infusion completes -> pump stops '
+        '(as pump I51602 in production, ~10s)',
+    'rate_change':
+        'Loading rate then settles back to maintenance rate, sent as R42 titration '
+        'events (as the 800->300 mL/h change in production, ~8s)',
+}
 
 # Editable pump settings (label/device_id are fixed once created)
 EDITABLE_FIELDS = {'ward', 'facility', 'mrn', 'patient', 'drug', 'rate', 'vtbi'}
@@ -51,6 +66,7 @@ class DemoPump:
         self.status = spec.get('status', 'infusing')   # infusing / stopped / complete
         self.alarm_text = None
         self.battery = 100.0
+        self.scenario = None          # name of the scripted scenario running, if any
 
     def update(self, fields):
         for key, value in fields.items():
@@ -71,6 +87,7 @@ class DemoPump:
             'drug': self.drug, 'rate': self.rate, 'vtbi': self.vtbi,
             'infused': round(self.infused, 2), 'status': self.status,
             'alarm': self.alarm_text, 'battery': round(self.battery, 0),
+            'scenario': self.scenario,
         }
 
 
@@ -153,6 +170,7 @@ class DemoSimulator:
             'sent_count': self.sent_count,
             'last_error': self.last_error,
             'alarm_options': ALARM_TEXTS,
+            'scenarios': SCENARIOS,
             'default_fleet': [s['label'] for s in DEFAULT_FLEET],
             'pumps': [p.to_dict() for p in self.pumps.values()],
         }
@@ -229,15 +247,102 @@ class DemoSimulator:
                 pump.alarm_text = None
         else:
             raise ValueError(f'Unknown action: {action}')
-        # Push the new state out immediately
+        # Push the new state out immediately. Start/stop/complete are
+        # transitions - real pumps report those as R42 events, not R01.
         try:
-            self._send(self._build_pcd01(pump))
+            if action in ('start', 'stop', 'complete'):
+                self._send(self._build_pcd10(pump))
+            else:
+                self._send(self._build_pcd01(pump))
         except Exception as e:
             raise RuntimeError(f'Could not send HL7 to the engine MLLP port: {e}') from e
         result = pump.to_dict()
         if message:
             result['message'] = message
         return result
+
+    # -------------------------------------------------------------- scenarios
+
+    def run_scenario(self, label, name):
+        """Play a scripted multi-step sequence (in a background thread)."""
+        pump = self._get_pump(label)
+        if name not in SCENARIOS:
+            options = ', '.join(SCENARIOS)
+            raise ValueError(f'Unknown scenario "{name}". Options: {options}')
+        if pump.scenario:
+            raise ValueError(f'{label} is already running scenario "{pump.scenario}"')
+        pump.scenario = name
+        with self._lock:
+            self._start_ticker_locked()
+        threading.Thread(
+            target=self._scenario_thread, args=(pump, name), daemon=True).start()
+        result = pump.to_dict()
+        result['message'] = f'Scenario started on {label}: {SCENARIOS[name].split("(")[0].strip()}'
+        return result
+
+    def _scenario_thread(self, pump, name):
+        try:
+            if name == 'occlusion_recovery':
+                self._scn_occlusion_recovery(pump)
+            elif name == 'near_end_complete':
+                self._scn_near_end_complete(pump)
+            elif name == 'rate_change':
+                self._scn_rate_change(pump)
+            logger.info('Scenario %s finished on %s', name, pump.label)
+        except Exception as e:
+            self.last_error = f'Scenario {name} on {pump.label} failed: {e}'
+            logger.error(self.last_error)
+        finally:
+            pump.scenario = None
+
+    def _scn_occlusion_recovery(self, pump):
+        """As pump I51543 in production: occlusion -> stop -> repeats -> resume."""
+        pump.status = 'infusing'
+        self._send(self._build_pcd01(pump))
+        time.sleep(2)
+        pump.alarm_text = 'Downstream Occlusion'
+        pump.status = 'stopped'
+        self._send(self._build_pcd04(pump, phase='start', state='active'))
+        self._send(self._build_pcd10(pump))                    # R42: stopped
+        time.sleep(5)
+        self._send(self._build_pcd04(pump, phase='update', state='active'))
+        time.sleep(5)
+        self._send(self._build_pcd04(pump, phase='update', state='active'))
+        time.sleep(3)
+        self._send(self._build_pcd04(pump, phase='end', state='inactive'))
+        pump.alarm_text = None
+        pump.status = 'infusing'
+        self._send(self._build_pcd10(pump))                    # R42: resumed
+        self._send(self._build_pcd01(pump))
+
+    def _scn_near_end_complete(self, pump):
+        """As pump I51602 in production: near-end alarm -> completes -> stops."""
+        pump.status = 'infusing'
+        pump.infused = max(pump.infused, pump.vtbi * 0.96)
+        self._send(self._build_pcd01(pump))
+        time.sleep(2)
+        pump.alarm_text = 'Infusion Near End'
+        self._send(self._build_pcd04(pump, phase='start', state='active'))
+        time.sleep(5)
+        pump.infused = pump.vtbi
+        pump.status = 'complete'
+        self._send(self._build_pcd10(pump))                    # R42: not-infusing
+        self._send(self._build_pcd04(pump, phase='end', state='inactive'))
+        pump.alarm_text = None
+        self._send(self._build_pcd01(pump))
+
+    def _scn_rate_change(self, pump):
+        """As the 800->300 mL/h change in production: loading then maintenance."""
+        maintenance = pump.rate
+        loading = min(800.0, max(maintenance * 4, 100.0))
+        pump.status = 'infusing'
+        pump.rate = loading
+        self._send(self._build_pcd10(pump))                    # R42: loading rate
+        time.sleep(4)
+        pump.rate = maintenance
+        self._send(self._build_pcd10(pump))                    # R42: maintenance rate
+        time.sleep(2)
+        self._send(self._build_pcd01(pump))
 
     # ------------------------------------------------------------------- loop
 
@@ -289,6 +394,17 @@ class DemoSimulator:
         ]
 
     def _build_pcd01(self, pump):
+        """Periodic status report (PCD-01, ORU^R01)."""
+        return self._build_status(
+            pump, 'ORU^R01^ORU_R01', 'IHE_PCD_001^IHE PCD^1.3.6.1.4.1.19376.1.6.4.1^ISO')
+
+    def _build_pcd10(self, pump):
+        """Infusion event report (PCD-10, ORU^R42) - what real pumps send on
+        start/stop/rate-change transitions."""
+        return self._build_status(
+            pump, 'ORU^R42^ORU_R01', 'IHE_PCD_010^IHE PCD^1.3.6.1.4.1.19376.1.6.4.10^ISO')
+
+    def _build_status(self, pump, msg_type, profile):
         status = 'infusing' if pump.status == 'infusing' else 'not-infusing'
         delivering = 'delivering' if pump.status == 'infusing' else 'not-delivering'
         rate = pump.rate if pump.status == 'infusing' else 0.0
@@ -296,8 +412,8 @@ class DemoSimulator:
         remain_sec = int(remaining / pump.rate * 3600) if pump.rate > 0 else 0
         segs = self._msh_pid_obr(
             pump,
-            'IHE_PCD_001^IHE PCD^1.3.6.1.4.1.19376.1.6.4.1^ISO',
-            'ORU^R01^ORU_R01',
+            profile,
+            msg_type,
             f'DEMO01^{pump.drug}',
         )
         segs += [

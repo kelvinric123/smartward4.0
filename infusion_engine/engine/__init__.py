@@ -5,4 +5,4 @@ stores every raw message, parses the infusion data (rate, volumes, drug,
 status, alarms) into SQLite, and serves it over a REST API for SmartWard.
 """
 
-__version__ = '1.2.0'
+__version__ = '1.3.0'
