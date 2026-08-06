@@ -84,7 +84,7 @@
                         </div>
                     @else
                         <div class="text-center py-4 text-gray-500 text-sm">
-                            No pumps linked to this patient. Select a pump below or scan a pump ID.
+                            No pumps linked to this patient. Select a pump below or scan a device ID.
                         </div>
                     @endif
                 </div>
@@ -101,8 +101,23 @@
                         </div>
                         <div>
                             <h3 class="font-bold text-gray-800">Available Pumps</h3>
-                            <p class="text-xs text-gray-500">Select a pump to link to this patient</p>
+                            <p class="text-xs text-gray-500">
+                                @if($patient->ward && !$showAllWards)
+                                    Showing {{ $patient->ward->ward_name }} pumps (and pumps without a ward)
+                                @elseif($showAllWards)
+                                    Showing pumps from all wards
+                                @else
+                                    Select a pump to link to this patient
+                                @endif
+                            </p>
                         </div>
+                        @if($patient->ward)
+                            <a href="?patient_id={{ $patient->id }}{{ $showAllWards ? '' : '&all=1' }}"
+                               class="ml-auto text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors
+                                      {{ $showAllWards ? 'bg-blue-100 border-blue-300 text-blue-700 hover:bg-blue-200' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50' }}">
+                                {{ $showAllWards ? '← ' . $patient->ward->ward_name . ' only' : 'Show all wards' }}
+                            </a>
+                        @endif
                     </div>
                 </div>
                 <div class="p-4">
@@ -112,7 +127,7 @@
                             <input type="text" 
                                    x-model="scannedPumpId"
                                    @keydown.enter="linkByDeviceId()"
-                                   placeholder="Scan or enter Pump ID..."
+                                   placeholder="Scan or enter Device ID..."
                                    class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
                                    :disabled="loading">
                             <button 
@@ -122,16 +137,21 @@
                                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"/>
                                 </svg>
-                                Link by ID
+                                Link by Device ID
                             </button>
                         </div>
-                        <p class="text-xs text-gray-500 mt-1">Use a barcode scanner or manually enter the pump's device ID</p>
+                        <p class="text-xs text-gray-500 mt-1">Use a barcode scanner or manually enter the pump's device ID — typing also filters the list below</p>
                     </div>
 
                     @if($availablePumps->count() > 0)
                         <div class="space-y-2">
                             @foreach($availablePumps as $pump)
-                                <div class="flex items-center justify-between p-3 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-lg transition-all cursor-pointer group">
+                                <div x-show="pumpRowVisible($el)"
+                                     data-pump-search="{{ strtoupper(implode(' ', array_filter([
+                                         $pump->device_id, $pump->serial_no, $pump->device_name,
+                                         $pump->device_type, $pump->ward->ward_name ?? null, $pump->location,
+                                     ]))) }}"
+                                     class="flex items-center justify-between p-3 bg-gray-50 hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-lg transition-all cursor-pointer group">
                                     <div class="flex items-center">
                                         <div class="p-2 bg-gray-200 group-hover:bg-blue-100 rounded-lg mr-3 transition-colors">
                                             <svg class="w-5 h-5 text-gray-600 group-hover:text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -143,6 +163,7 @@
                                             <p class="text-xs text-gray-600">
                                                 ID: {{ $pump->device_id }}
                                                 @if($pump->device_type) | {{ ucfirst(str_replace('_', ' ', $pump->device_type)) }} @endif
+                                                @if($pump->ward) | {{ $pump->ward->ward_name }} @endif
                                                 @if($pump->location) | {{ $pump->location }} @endif
                                             </p>
                                             @if($pump->last_seen_at)
@@ -162,9 +183,19 @@
                                 </div>
                             @endforeach
                         </div>
+                        <div x-show="scannedPumpId.trim() !== '' && visiblePumpCount() === 0" x-cloak
+                             class="text-center py-4 text-sm text-gray-500 border border-dashed border-gray-300 rounded-lg mt-2">
+                            No available pump matches "<span class="font-semibold" x-text="scannedPumpId.trim()"></span>" —
+                            press <b>Link by Device ID</b> to link it anyway (auto-registers from the Infusion Engine).
+                        </div>
                     @else
                         <div class="text-center py-4 text-gray-500 text-sm">
-                            No available pumps. All pumps are currently linked to patients or inactive.
+                            @if($patient->ward && !$showAllWards)
+                                No available pumps in {{ $patient->ward->ward_name }}.
+                                All are linked to patients or inactive — try "Show all wards".
+                            @else
+                                No available pumps. All pumps are currently linked to patients or inactive.
+                            @endif
                         </div>
                     @endif
                 </div>
@@ -200,6 +231,27 @@
                 messageType: 'success',
                 patientId: {{ $patient->id ?? 'null' }},
                 scannedPumpId: '',
+
+                // Live filter: typing in the scan box narrows the Available
+                // Pumps list (matches serial, device id, name, type, ward,
+                // location; tolerates the bare-digits serial form).
+                pumpRowVisible(el) {
+                    const q = (this.scannedPumpId || '').trim().toUpperCase();
+                    if (!q) return true;
+                    const hay = el.dataset.pumpSearch || '';
+                    if (hay.includes(q)) return true;
+                    const bare = q.replace(/^[A-Z]+/, '');
+                    return bare !== '' && bare !== q && hay.includes(bare);
+                },
+
+                visiblePumpCount() {
+                    const q = (this.scannedPumpId || '').trim().toUpperCase();
+                    let n = 0;
+                    document.querySelectorAll('[data-pump-search]').forEach(el => {
+                        if (this.pumpRowVisible(el)) n++;
+                    });
+                    return n;
+                },
 
                 async linkByDeviceId() {
                     if (this.loading || !this.patientId || !this.scannedPumpId.trim()) return;

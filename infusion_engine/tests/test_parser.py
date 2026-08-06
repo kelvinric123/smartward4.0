@@ -72,6 +72,37 @@ class TestSampleParsing(unittest.TestCase):
         # No MDC_ATTR_SYS_ID in PCD-04 - identity falls back to station:label
         self.assertEqual(msgs[0].device_id, '0012211839000001:2449')
 
+    def test_pillar_details_spread_ward_format(self):
+        """Some gateways send the ward spread over components: '~~~Ward~~~~D6'.
+        Built from a production message (id 68120, ward D6 gateway)."""
+        raw = (
+            'MSH|^~\\&|PAT_DEVICE_BBRAUN^0012211839000001^EUI-64|BBRAUN|Qmed|Qmed|'
+            '20260806035600+0000||ORU^R01^ORU_R01|63921585360712943168132|P|2.4|||AL|NE'
+            '||ASCII|en^English^ISO639||IHE_PCD_001^IHE PCD^1.3.6.1.4.1.19376.1.6.4.1^ISO\r'
+            'PID|||Unknown Patient^Unknown Patient||^^^^^^U||||||||||||||||||||||||||Y\r'
+            'OBR|1|0^PAT_DEVICE_BBRAUN^0012211839000001^EUI-64|'
+            '0^PAT_DEVICE_BBRAUN^0012211839000001^EUI-64|999999^Unknown medication|||'
+            '20260806035556+0000\r'
+            'OBX|1||70049^MDC_DEV_PUMP_INFUS_LVP_MDS^MDC|1.0.0.0|||||||X|||||||'
+            'I51316^^0012210000000000^EUI-64\r'
+            'OBX|6|ST|67972^MDC_ATTR_SYS_ID^MDC|1.1.0.9|'
+            '46637152-3159-5f31-be9c-86e104aaf384||||||F\r'
+            'OBX|7|ST|0^MDC_ATTR_PUMP_PILLAR_DETAILS^MDC|1.1.0.24|0^0||||||F|||||||'
+            '~~~Ward~~~~D6^^0012210000000000^EUI-64\r'
+            'OBX|9|CWE|184519^MDC_PUMP_INFUSING_STATUS^MDC|1.1.1.1|'
+            '^pump-status-not-infusing||||||R\r'
+        )
+        msg = hl7.parse_message(raw)
+        self.assertEqual(msg.pump_label, 'I51316')
+        self.assertEqual(msg.device_id, '46637152-3159-5f31-be9c-86e104aaf384')
+        self.assertEqual(msg.ward, 'Ward D6')
+        self.assertIsNone(msg.facility)
+        # The original single-slot format still parses as before
+        std = dict(load_all_samples())['sample6_real.txt#1']
+        std_msg = hl7.parse_message(std)
+        self.assertEqual(std_msg.ward, 'WARD D5')
+        self.assertEqual(std_msg.facility, 'PHKL')
+
     def test_wrapped_msh_line_is_joined(self):
         """sample6_real has its MSH control id wrapped across two lines."""
         raw = dict(load_all_samples())['sample6_real.txt#1']

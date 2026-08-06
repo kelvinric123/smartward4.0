@@ -664,6 +664,17 @@
                                             <td class="px-4 py-3 text-sm text-gray-600">{{ $pump->last_seen_at ? $pump->last_seen_at->diffForHumans() : 'Never' }}</td>
                                             <td class="px-4 py-3">
                                                 <div class="flex items-center space-x-2">
+                                                    <button @click="viewPumpStatus({{ json_encode($pump) }})" title="View live status (Infusion Engine)" class="text-emerald-600 hover:text-emerald-800 transition-colors">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                                        </svg>
+                                                    </button>
+                                                    <button @click="viewPumpHl7({{ json_encode($pump) }})" title="View raw HL7 messages (debug)" class="text-indigo-600 hover:text-indigo-800 transition-colors">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                                                        </svg>
+                                                    </button>
                                                     <button @click="editPump({{ json_encode($pump) }})" class="text-blue-600 hover:text-blue-800 transition-colors">
                                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
@@ -863,10 +874,21 @@
                         <div class="space-y-4">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Serial No *</label>
-                                <input type="text" name="serial_no" x-model="pumpFormData.serial_no" required
-                                       class="w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
-                                       placeholder="e.g., I51541">
-                                <p class="mt-1 text-xs text-gray-500">Equipment serial number from the pump label (e.g., I51541, I51568)</p>
+                                <div class="flex space-x-2">
+                                    <input type="text" name="serial_no" x-model="pumpFormData.serial_no" required
+                                           @keydown.enter.prevent="autofillFromEngine()"
+                                           class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
+                                           placeholder="e.g., I51316">
+                                    <button type="button" @click="autofillFromEngine()"
+                                            :disabled="autofilling || !(pumpFormData.serial_no || '').trim()"
+                                            class="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-sm font-medium whitespace-nowrap transition-colors disabled:opacity-50">
+                                        <span x-show="!autofilling">⚡ Autofill</span>
+                                        <span x-show="autofilling" x-cloak>Fetching…</span>
+                                    </button>
+                                </div>
+                                <p class="mt-1 text-xs text-gray-500">Serial from the pump label (e.g., I51316). Autofill pulls Device ID, type and ward from the Infusion Engine.</p>
+                                <p class="mt-1 text-xs font-medium" x-show="autofillMsg" x-cloak
+                                   :class="autofillMsgOk ? 'text-green-600' : 'text-red-600'" x-text="autofillMsg"></p>
                             </div>
 
                             <div>
@@ -939,6 +961,286 @@
                             </button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Pump Status Modal (data from the Qmed Infusion Engine REST API) -->
+        <div x-show="showPumpStatusModal"
+             x-cloak
+             class="fixed inset-0 z-50 overflow-y-auto"
+             x-transition:enter="ease-out duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closePumpStatus()"></div>
+
+                <div class="relative inline-block w-full max-w-3xl p-6 my-8 text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                    <div class="flex justify-between items-center mb-1">
+                        <h3 class="text-xl font-bold text-gray-800">
+                            Live Pump Status
+                            <span class="text-gray-400 font-normal">·</span>
+                            <span x-text="statusPump.serial_no || statusPump.device_name || statusPump.device_id"></span>
+                        </h3>
+                        <button @click="closePumpStatus()" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <p class="text-xs text-gray-400 mb-4">
+                        Fetched live from the Qmed Infusion Engine REST API
+                        (<span class="font-mono">/api/pumps/{device_id}</span>)
+                        · auto-refreshes every <span x-text="pumpStatusRefreshMs / 1000"></span>s
+                    </p>
+
+                    <!-- Loading (first fetch) -->
+                    <div x-show="pumpStatusLoading && !pumpStatus && !pumpStatusError" class="py-10 text-center text-gray-500">
+                        <svg class="w-6 h-6 mx-auto mb-2 animate-spin text-purple-500" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                        </svg>
+                        Loading status from the engine…
+                    </div>
+
+                    <!-- Error -->
+                    <div x-show="pumpStatusError" x-cloak class="mb-4 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                        <b>Cannot show live status:</b> <span x-text="pumpStatusError"></span>
+                    </div>
+
+                    <template x-if="pumpStatus">
+                        <div class="space-y-4">
+                            <!-- Status line -->
+                            <div class="flex items-center flex-wrap gap-3">
+                                <span class="text-xs font-bold px-3 py-1 rounded-full"
+                                      :class="pumpStatus.active_alarm ? 'bg-red-100 text-red-700'
+                                            : ((pumpStatus.pump_status || '') === 'infusing' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600')"
+                                      x-text="pumpStatus.active_alarm ? 'ALARM' : (pumpStatus.pump_status || 'unknown').toUpperCase()"></span>
+                                <span class="text-sm font-semibold text-gray-700"
+                                      x-text="pumpStatus.drug_name || pumpStatus.medication || 'No drug reported'"></span>
+                                <span class="text-xs text-gray-400 ml-auto">
+                                    Device ID: <span class="font-mono" x-text="pumpStatus.device_id"></span>
+                                </span>
+                            </div>
+
+                            <!-- Active alarm banner -->
+                            <div x-show="pumpStatus.active_alarm" class="p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-semibold">
+                                ⚠ <span x-text="pumpStatus.active_alarm"></span>
+                                <span class="font-normal" x-text="pumpStatus.alarm_priority ? ' · priority ' + pumpStatus.alarm_priority : ''"></span>
+                            </div>
+
+                            <!-- Volume progress -->
+                            <div>
+                                <div class="flex justify-between text-xs text-gray-500 mb-1">
+                                    <span>Infused: <b class="text-gray-700" x-text="(pumpStatus.volume_infused ?? '—') + ' mL'"></b></span>
+                                    <span>VTBI: <b class="text-gray-700" x-text="(pumpStatus.vtbi ?? '—') + ' mL'"></b></span>
+                                </div>
+                                <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                    <div class="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all" :style="'width:' + pumpProgress() + '%'"></div>
+                                </div>
+                            </div>
+
+                            <!-- Detail cards -->
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                <div class="bg-gray-50 rounded-lg p-3">
+                                    <div class="text-xs font-semibold text-gray-500 uppercase">Flow Rate</div>
+                                    <div class="text-sm font-bold text-gray-800"
+                                         x-text="pumpStatus.flow_rate != null ? pumpStatus.flow_rate + ' ' + (pumpStatus.flow_rate_unit || 'mL/h') : '—'"></div>
+                                </div>
+                                <div class="bg-gray-50 rounded-lg p-3">
+                                    <div class="text-xs font-semibold text-gray-500 uppercase">Remaining</div>
+                                    <div class="text-sm font-bold text-gray-800"
+                                         x-text="pumpStatus.volume_remaining != null ? pumpStatus.volume_remaining + ' mL' : '—'"></div>
+                                </div>
+                                <div class="bg-gray-50 rounded-lg p-3">
+                                    <div class="text-xs font-semibold text-gray-500 uppercase">Time Left</div>
+                                    <div class="text-sm font-bold text-gray-800" x-text="fmtSecs(pumpStatus.time_remaining_sec)"></div>
+                                </div>
+                                <div class="bg-gray-50 rounded-lg p-3">
+                                    <div class="text-xs font-semibold text-gray-500 uppercase">Battery</div>
+                                    <div class="text-sm font-bold text-gray-800"
+                                         x-text="pumpStatus.battery_percent != null ? pumpStatus.battery_percent + '%' + (pumpStatus.power_status ? ' · ' + pumpStatus.power_status : '') : (pumpStatus.power_status || '—')"></div>
+                                </div>
+                                <div class="bg-gray-50 rounded-lg p-3">
+                                    <div class="text-xs font-semibold text-gray-500 uppercase">Delivery</div>
+                                    <div class="text-sm text-gray-800"
+                                         x-text="(pumpStatus.delivery_status || '—') + (pumpStatus.not_delivering_reason ? ' (' + pumpStatus.not_delivering_reason + ')' : '')"></div>
+                                </div>
+                                <div class="bg-gray-50 rounded-lg p-3">
+                                    <div class="text-xs font-semibold text-gray-500 uppercase">Ward</div>
+                                    <div class="text-sm text-gray-800"
+                                         x-text="[pumpStatus.ward, pumpStatus.facility].filter(Boolean).join(' · ') || '—'"></div>
+                                </div>
+                                <div class="bg-gray-50 rounded-lg p-3">
+                                    <div class="text-xs font-semibold text-gray-500 uppercase">Model</div>
+                                    <div class="text-sm text-gray-800" x-text="pumpStatus.pump_model || pumpStatus.pump_type || '—'"></div>
+                                </div>
+                                <div class="bg-gray-50 rounded-lg p-3">
+                                    <div class="text-xs font-semibold text-gray-500 uppercase">Last Seen</div>
+                                    <div class="text-sm text-gray-800" x-text="fmtEngineTime(pumpStatus.last_seen_at)"></div>
+                                </div>
+                            </div>
+
+                            <!-- Recent alarms from the engine history -->
+                            <div x-show="(pumpStatus.alarms || []).length">
+                                <h4 class="text-sm font-semibold text-gray-700 mb-2">Recent Alarms</h4>
+                                <div class="overflow-x-auto border border-gray-100 rounded-lg">
+                                    <table class="min-w-full divide-y divide-gray-100">
+                                        <thead>
+                                            <tr class="bg-gray-50">
+                                                <th class="px-3 py-2 text-left text-xs font-bold text-gray-600 uppercase">Time</th>
+                                                <th class="px-3 py-2 text-left text-xs font-bold text-gray-600 uppercase">Alarm</th>
+                                                <th class="px-3 py-2 text-left text-xs font-bold text-gray-600 uppercase">Priority</th>
+                                                <th class="px-3 py-2 text-left text-xs font-bold text-gray-600 uppercase">State</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="bg-white divide-y divide-gray-50">
+                                            <template x-for="alarm in (pumpStatus.alarms || []).slice(0, 5)" :key="alarm.id">
+                                                <tr>
+                                                    <td class="px-3 py-2 text-xs text-gray-600" x-text="fmtEngineTime(alarm.observed_at || alarm.created_at)"></td>
+                                                    <td class="px-3 py-2 text-xs font-medium text-gray-800" x-text="alarm.alert_text || alarm.event_name || '—'"></td>
+                                                    <td class="px-3 py-2 text-xs text-gray-600" x-text="alarm.priority || '—'"></td>
+                                                    <td class="px-3 py-2">
+                                                        <span class="text-xs font-medium px-2 py-0.5 rounded"
+                                                              :class="alarm.state === 'active' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'"
+                                                              x-text="alarm.state || '—'"></span>
+                                                    </td>
+                                                </tr>
+                                            </template>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <div class="mt-6 flex justify-between items-center">
+                        <span class="text-xs text-gray-400" x-show="pumpStatusUpdatedAt"
+                              x-text="'Last updated: ' + pumpStatusUpdatedAt"></span>
+                        <div class="flex space-x-3">
+                            <button @click="fetchPumpStatus()" class="px-4 py-2 bg-purple-50 hover:bg-purple-100 text-purple-700 font-medium rounded-lg transition-colors">
+                                Refresh
+                            </button>
+                            <button @click="closePumpStatus()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Raw HL7 Debug Modal (latest 100 messages from the Qmed Infusion Engine) -->
+        <div x-show="showPumpHl7Modal"
+             x-cloak
+             class="fixed inset-0 z-50 overflow-y-auto"
+             x-transition:enter="ease-out duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showPumpHl7Modal = false"></div>
+
+                <div class="relative inline-block w-full max-w-5xl p-6 my-8 text-left align-middle transition-all transform bg-white shadow-xl rounded-2xl">
+                    <div class="flex justify-between items-center mb-1">
+                        <h3 class="text-xl font-bold text-gray-800">
+                            Raw HL7 Messages
+                            <span class="text-gray-400 font-normal">·</span>
+                            <span x-text="hl7Pump.serial_no || hl7Pump.device_name || hl7Pump.device_id"></span>
+                        </h3>
+                        <button @click="showPumpHl7Modal = false" class="text-gray-400 hover:text-gray-600">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <p class="text-xs text-gray-400 mb-4">
+                        Debug view — latest 100 HL7 messages stored by the Qmed Infusion Engine for this pump
+                        (<span class="font-mono">/api/messages?device_id=…&raw=1</span>).
+                        Click a row to see the full raw HL7.
+                        <span x-show="pumpHl7DeviceId"> Engine device: <span class="font-mono" x-text="pumpHl7DeviceId"></span></span>
+                    </p>
+
+                    <!-- Loading -->
+                    <div x-show="pumpHl7Loading && !pumpHl7.length && !pumpHl7Error" class="py-10 text-center text-gray-500">
+                        <svg class="w-6 h-6 mx-auto mb-2 animate-spin text-indigo-500" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                        </svg>
+                        Loading messages from the engine…
+                    </div>
+
+                    <!-- Error -->
+                    <div x-show="pumpHl7Error" x-cloak class="mb-4 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                        <b>Cannot load HL7 messages:</b> <span x-text="pumpHl7Error"></span>
+                    </div>
+
+                    <!-- Empty -->
+                    <div x-show="!pumpHl7Loading && !pumpHl7Error && !pumpHl7.length" x-cloak class="py-10 text-center text-gray-400">
+                        No HL7 messages stored for this pump yet.
+                    </div>
+
+                    <!-- Message list -->
+                    <div x-show="pumpHl7.length" class="max-h-[60vh] overflow-y-auto border border-gray-100 rounded-lg">
+                        <table class="min-w-full divide-y divide-gray-100">
+                            <thead class="sticky top-0">
+                                <tr class="bg-gray-50">
+                                    <th class="px-3 py-2 text-left text-xs font-bold text-gray-600 uppercase">ID</th>
+                                    <th class="px-3 py-2 text-left text-xs font-bold text-gray-600 uppercase">Received</th>
+                                    <th class="px-3 py-2 text-left text-xs font-bold text-gray-600 uppercase">Type</th>
+                                    <th class="px-3 py-2 text-left text-xs font-bold text-gray-600 uppercase">Event</th>
+                                    <th class="px-3 py-2 text-left text-xs font-bold text-gray-600 uppercase">Parse</th>
+                                    <th class="px-3 py-2 text-left text-xs font-bold text-gray-600 uppercase">Source</th>
+                                    <th class="px-3 py-2 text-left text-xs font-bold text-gray-600 uppercase">Size</th>
+                                </tr>
+                            </thead>
+                            <template x-for="msg in pumpHl7" :key="msg.id">
+                                <tbody class="bg-white divide-y divide-gray-50">
+                                    <tr class="hover:bg-indigo-50/50 cursor-pointer transition-colors"
+                                        @click="expandedHl7 = expandedHl7 === msg.id ? null : msg.id">
+                                        <td class="px-3 py-2 text-xs font-mono text-gray-500" x-text="msg.id"></td>
+                                        <td class="px-3 py-2 text-xs text-gray-700 whitespace-nowrap" x-text="fmtEngineTime(msg.received_at)"></td>
+                                        <td class="px-3 py-2">
+                                            <span class="text-xs font-medium px-2 py-0.5 rounded bg-purple-100 text-purple-700" x-text="msg.message_type || '?'"></span>
+                                        </td>
+                                        <td class="px-3 py-2 text-xs text-gray-600" x-text="msg.trigger_event || '—'"></td>
+                                        <td class="px-3 py-2 text-xs"
+                                            :class="msg.parse_status === 'parsed' ? 'text-green-600' : 'text-red-600 font-semibold'"
+                                            x-text="msg.parse_status === 'parsed' ? '✓' : (msg.parse_status || '?')"></td>
+                                        <td class="px-3 py-2 text-xs font-mono text-gray-500" x-text="msg.source_ip || '—'"></td>
+                                        <td class="px-3 py-2 text-xs text-gray-500" x-text="(msg.raw || '').length + ' B'"></td>
+                                    </tr>
+                                    <tr x-show="expandedHl7 === msg.id" x-cloak>
+                                        <td colspan="7" class="px-3 pb-3 pt-0 bg-gray-50/50">
+                                            <pre class="bg-gray-900 text-green-400 p-3 rounded-lg text-xs overflow-x-auto font-mono whitespace-pre-wrap break-all"
+                                                 x-text="fmtHl7Raw(msg.raw)"></pre>
+                                            <div x-show="msg.parse_error" class="mt-2 text-xs text-red-600">
+                                                Parse error: <span x-text="msg.parse_error"></span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </template>
+                        </table>
+                    </div>
+
+                    <div class="mt-6 flex justify-between items-center">
+                        <span class="text-xs text-gray-400" x-show="pumpHl7.length"
+                              x-text="pumpHl7.length + ' messages (newest first)'"></span>
+                        <div class="flex space-x-3">
+                            <button @click="fetchPumpHl7()" class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium rounded-lg transition-colors">
+                                Refresh
+                            </button>
+                            <button @click="showPumpHl7Modal = false" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-lg transition-colors">
+                                Close
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1111,6 +1413,46 @@
                     this.showAddPumpModal = false;
                     this.showEditPumpModal = false;
                     this.resetPumpForm();
+                    this.autofillMsg = '';
+                },
+
+                // ---- Autofill the pump form from the Infusion Engine by Serial No ----
+                autofilling: false,
+                autofillMsg: '',
+                autofillMsgOk: true,
+
+                async autofillFromEngine() {
+                    const serial = (this.pumpFormData.serial_no || '').trim();
+                    if (!serial || this.autofilling) return;
+                    this.autofilling = true;
+                    this.autofillMsg = '';
+                    try {
+                        const res = await fetch('{{ route('infusion-integration.engine.pump-lookup') }}?serial=' + encodeURIComponent(serial), {
+                            headers: { 'Accept': 'application/json' },
+                        });
+                        const data = await res.json().catch(() => ({}));
+                        if (data.ok) {
+                            const p = data.pump;
+                            this.pumpFormData.serial_no = p.serial_no || serial;
+                            if (p.device_id) this.pumpFormData.device_id = p.device_id;
+                            if (p.device_name) this.pumpFormData.device_name = p.device_name;
+                            if (p.device_type) this.pumpFormData.device_type = p.device_type;
+                            if (p.location) this.pumpFormData.location = p.location;
+                            if (p.ward_id) this.pumpFormData.ward_id = String(p.ward_id);
+                            this.autofillMsgOk = true;
+                            this.autofillMsg = '✓ Filled from engine'
+                                + (p.last_seen_at ? ' — last seen ' + new Date(p.last_seen_at).toLocaleString() : '')
+                                + (p.ward && !p.ward_id ? ' (ward "' + p.ward + '" not registered in SmartWard — pick manually)' : '');
+                        } else {
+                            this.autofillMsgOk = false;
+                            this.autofillMsg = data.error || ('Lookup failed (HTTP ' + res.status + ')');
+                        }
+                    } catch (e) {
+                        this.autofillMsgOk = false;
+                        this.autofillMsg = 'Lookup failed: ' + e.message;
+                    } finally {
+                        this.autofilling = false;
+                    }
                 },
 
                 resetPumpForm() {
@@ -1145,6 +1487,118 @@
                 viewLogDetails(log) {
                     this.selectedLog = log;
                     this.showLogDetailsModal = true;
+                },
+
+                // ---- Live pump status (Qmed Infusion Engine REST API) ----
+                showPumpStatusModal: false,
+                statusPump: {},
+                pumpStatus: null,
+                pumpStatusError: null,
+                pumpStatusLoading: false,
+                pumpStatusUpdatedAt: null,
+                pumpStatusRefreshMs: @json(max(2, (int) ($engineConfig['refresh_sec'] ?? 10)) * 1000),
+                _pumpStatusTimer: null,
+
+                viewPumpStatus(pump) {
+                    this.statusPump = pump;
+                    this.pumpStatus = null;
+                    this.pumpStatusError = null;
+                    this.pumpStatusUpdatedAt = null;
+                    this.showPumpStatusModal = true;
+                    this.fetchPumpStatus();
+                    clearInterval(this._pumpStatusTimer);
+                    this._pumpStatusTimer = setInterval(() => this.fetchPumpStatus(), this.pumpStatusRefreshMs);
+                },
+
+                async fetchPumpStatus() {
+                    if (!this.showPumpStatusModal || !this.statusPump.id) return;
+                    this.pumpStatusLoading = true;
+                    try {
+                        const res = await fetch('{{ url('infusion-integration/pump') }}/' + this.statusPump.id + '/status', {
+                            headers: { 'Accept': 'application/json' },
+                        });
+                        const data = await res.json().catch(() => ({}));
+                        if (data.ok) {
+                            this.pumpStatus = data.pump;
+                            this.pumpStatusError = null;
+                        } else {
+                            this.pumpStatusError = data.error || ('Engine request failed (HTTP ' + res.status + ')');
+                        }
+                    } catch (e) {
+                        this.pumpStatusError = 'Request failed: ' + e.message;
+                    } finally {
+                        this.pumpStatusLoading = false;
+                        this.pumpStatusUpdatedAt = new Date().toLocaleTimeString();
+                    }
+                },
+
+                closePumpStatus() {
+                    this.showPumpStatusModal = false;
+                    clearInterval(this._pumpStatusTimer);
+                },
+
+                pumpProgress() {
+                    const p = this.pumpStatus;
+                    if (!p || !p.vtbi) return 0;
+                    return Math.min(100, Math.round((p.volume_infused || 0) / p.vtbi * 100));
+                },
+
+                fmtSecs(sec) {
+                    if (sec == null) return '—';
+                    sec = Math.max(0, Math.round(sec));
+                    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+                    return h ? h + 'h ' + m + 'm' : m + 'm';
+                },
+
+                fmtEngineTime(iso) {
+                    if (!iso) return '—';
+                    const d = new Date(iso);
+                    return isNaN(d) ? iso : d.toLocaleString();
+                },
+
+                // ---- Raw HL7 debug view (latest 100 engine messages) ----
+                showPumpHl7Modal: false,
+                hl7Pump: {},
+                pumpHl7: [],
+                pumpHl7Error: null,
+                pumpHl7Loading: false,
+                pumpHl7DeviceId: null,
+                expandedHl7: null,
+
+                viewPumpHl7(pump) {
+                    this.hl7Pump = pump;
+                    this.pumpHl7 = [];
+                    this.pumpHl7Error = null;
+                    this.pumpHl7DeviceId = null;
+                    this.expandedHl7 = null;
+                    this.showPumpHl7Modal = true;
+                    this.fetchPumpHl7();
+                },
+
+                async fetchPumpHl7() {
+                    if (!this.hl7Pump.id) return;
+                    this.pumpHl7Loading = true;
+                    try {
+                        const res = await fetch('{{ url('infusion-integration/pump') }}/' + this.hl7Pump.id + '/hl7', {
+                            headers: { 'Accept': 'application/json' },
+                        });
+                        const data = await res.json().catch(() => ({}));
+                        if (data.ok) {
+                            this.pumpHl7 = data.messages || [];
+                            this.pumpHl7DeviceId = data.device_id;
+                            this.pumpHl7Error = null;
+                        } else {
+                            this.pumpHl7Error = data.error || ('Engine request failed (HTTP ' + res.status + ')');
+                        }
+                    } catch (e) {
+                        this.pumpHl7Error = 'Request failed: ' + e.message;
+                    } finally {
+                        this.pumpHl7Loading = false;
+                    }
+                },
+
+                fmtHl7Raw(raw) {
+                    return (raw || '').replace(/\r/g, '\n').trim();
                 }
             };
         }

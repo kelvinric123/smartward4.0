@@ -215,9 +215,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/infusion-integration/pump', [InfusionIntegrationController::class, 'storePump'])->name('infusion-integration.pump.store');
     Route::put('/infusion-integration/pump/{pump}', [InfusionIntegrationController::class, 'updatePump'])->name('infusion-integration.pump.update');
     Route::delete('/infusion-integration/pump/{pump}', [InfusionIntegrationController::class, 'destroyPump'])->name('infusion-integration.pump.destroy');
+    Route::get('/infusion-integration/pump/{pump}/status', [InfusionIntegrationController::class, 'pumpStatus'])->name('infusion-integration.pump.status');
+    Route::get('/infusion-integration/pump/{pump}/hl7', [InfusionIntegrationController::class, 'pumpHl7Messages'])->name('infusion-integration.pump.hl7');
     Route::post('/infusion-integration/logs/clear', [InfusionIntegrationController::class, 'clearLogs'])->name('infusion-integration.logs.clear');
     Route::post('/infusion-integration/settings', [InfusionIntegrationController::class, 'saveIntegrationSettings'])->name('infusion-integration.settings.save');
     Route::post('/infusion-integration/engine/test', [InfusionIntegrationController::class, 'testEngineConnection'])->name('infusion-integration.engine.test');
+    Route::get('/infusion-integration/engine/pump-lookup', [InfusionIntegrationController::class, 'engineLookupPump'])->name('infusion-integration.engine.pump-lookup');
 
     // Ward Infusion Overview (iframe)
     Route::get('/ward-dashboard/infusion-overview', [InfusionIntegrationController::class, 'wardOverview'])->name('ward.infusion-overview');

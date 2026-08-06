@@ -2764,10 +2764,11 @@
     </div>
 
     <!-- Infusion Pump Modal -->
-    <div x-data="{ 
-            open: false, 
-            patientId: null
-         }" @open-infusion-pump-modal.window="open = true; patientId = $event.detail.patientId" x-show="open"
+    <div x-data="{
+            open: false,
+            patientId: null,
+            tab: 'link'
+         }" @open-infusion-pump-modal.window="open = true; tab = 'link'; patientId = $event.detail.patientId" x-show="open"
         class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
         <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
             <div x-show="open" @click="open = false" x-transition:enter="ease-out duration-300"
@@ -2785,7 +2786,7 @@
                 x-transition:leave="ease-in duration-200"
                 x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
                 x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
+                class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-6xl sm:w-full">
 
                 <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                     <div class="sm:flex sm:items-start">
@@ -2797,15 +2798,41 @@
                             </svg>
                         </div>
                         <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
-                                Link Infusion Pump
+                            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-2">
+                                Infusion Pump
                             </h3>
+
+                            <!-- Tabs: Link Pump / Infusions -->
+                            <div class="border-b border-gray-200">
+                                <nav class="flex space-x-2 text-sm">
+                                    <button type="button" @click="tab = 'link'"
+                                        :class="tab === 'link' ? 'border-purple-500 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                                        class="whitespace-nowrap py-2 px-3 border-b-2 font-medium">
+                                        🔗 Link Pump
+                                    </button>
+                                    <button type="button" @click="tab = 'infusions'"
+                                        :class="tab === 'infusions' ? 'border-purple-500 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                                        class="whitespace-nowrap py-2 px-3 border-b-2 font-medium">
+                                        💧 Infusions
+                                    </button>
+                                </nav>
+                            </div>
 
                             <div class="mt-2">
                                 <template x-if="patientId">
-                                    <iframe :src="'{{ route('ward.patient-pump-link') }}?patient_id=' + patientId"
-                                        class="w-full h-[550px] border-0 rounded-lg" title="Link Infusion Pump">
-                                    </iframe>
+                                    <div>
+                                        <!-- Link tab keeps its iframe alive so scan/form state survives tab switches -->
+                                        <iframe x-show="tab === 'link'"
+                                            :src="'{{ route('ward.patient-pump-link') }}?patient_id=' + patientId"
+                                            class="w-full h-[750px] border-0 rounded-lg" title="Link Infusion Pump">
+                                        </iframe>
+                                        <!-- Infusions tab re-renders on every visit so the list is always fresh -->
+                                        <template x-if="tab === 'infusions'">
+                                            <iframe :src="'{{ route('ward.patient-infusions') }}?patient_id=' + patientId"
+                                                class="w-full h-[750px] border-0 rounded-lg" title="Patient Infusions">
+                                            </iframe>
+                                        </template>
+                                    </div>
                                 </template>
                                 <template x-if="!patientId">
                                     <div class="text-sm text-red-500">

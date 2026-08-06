@@ -416,6 +416,30 @@ class Database:
                        alarm_since=NULL WHERE device_id=?'''),
                     (msg.device_id,))
 
+    def clear_pumps(self):
+        """Delete every pump plus all readings and alarms. Returns rows per table."""
+        return {t: self._write(f'DELETE FROM {t}')
+                for t in ('pumps', 'readings', 'alarms')}
+
+    def clear_messages(self):
+        """Delete the entire raw message log. Returns rows removed."""
+        return self._write('DELETE FROM messages')
+
+    def clear_demo_data(self, device_ids=()):
+        """Delete rows produced by demo pumps: the 00DEMO… ids plus any extra
+        device ids currently configured on the simulator. Returns rows per table."""
+        ids = [d for d in device_ids if d]
+        removed = {}
+        for table in ('pumps', 'readings', 'alarms', 'messages'):
+            sql = f'DELETE FROM {table} WHERE device_id LIKE ?'
+            params = ['00DEMO%']
+            if ids:
+                marks = ','.join('?' for _ in ids)
+                sql += f' OR device_id IN ({marks})'
+                params += ids
+            removed[table] = self._write(sql, params)
+        return removed
+
     def purge_older_than(self, days):
         """Delete messages/readings/alarms older than N days. Returns rows removed."""
         cutoff = (datetime.now().astimezone() - timedelta(days=days)).isoformat()
@@ -492,9 +516,10 @@ class Database:
     def list_messages(self, device_id=None, trigger_event=None, since=None,
                       limit=100, offset=0, include_raw=False):
         cols = '*' if include_raw else (
-            'id, received_at, source_ip, device_id, message_type, trigger_event, '
-            'pcd_profile, message_control_id, message_datetime, patient_mrn, '
-            'patient_name, parse_status, parse_error, length(raw) AS raw_length'
+            'id, received_at, source_ip, device_id, station_id, message_type, '
+            'trigger_event, pcd_profile, message_control_id, message_datetime, '
+            'patient_mrn, patient_name, parse_status, parse_error, '
+            'length(raw) AS raw_length'
         )
         sql = f'SELECT {cols} FROM messages WHERE 1=1'
         params = []
@@ -513,6 +538,22 @@ class Database:
 
     def get_message(self, message_id):
         return self._query('SELECT * FROM messages WHERE id=?', (message_id,), one=True)
+
+    _MESSAGE_SUMMARY_COLS = ('id, received_at, device_id, message_type, '
+                             'trigger_event, parse_status, parse_error')
+
+    def latest_message(self):
+        return self._query(
+            f'SELECT {self._MESSAGE_SUMMARY_COLS} FROM messages '
+            'ORDER BY id DESC LIMIT 1', one=True)
+
+    def latest_message_by_control_id(self, control_id):
+        if not control_id:
+            return None
+        return self._query(
+            f'SELECT {self._MESSAGE_SUMMARY_COLS} FROM messages '
+            'WHERE message_control_id=? ORDER BY id DESC LIMIT 1',
+            (control_id,), one=True)
 
     def stats(self):
         counts = {}

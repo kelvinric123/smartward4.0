@@ -20,6 +20,11 @@ Endpoints:
   /api/alarms                          alarms across all pumps
   /api/messages                        raw message log (metadata; raw=1 to include HL7)
   /api/messages/{id}                   one message including raw HL7
+  POST /api/admin/clear                wipe stored data
+                                       (body: {"scopes": ["pumps"|"messages"|"demo", ...],
+                                               "passphrase": "..."})
+  POST /api/hl7                        inject a raw HL7 message through the MLLP
+                                       pipeline (body: {"raw": "MSH|..."}) - debug tool
 
 Query params: limit (default 100, max 1000), offset, since (ISO timestamp),
 device_id, state (alarms), type (messages trigger event e.g. R01/R40).
@@ -32,6 +37,7 @@ import json
 import logging
 import os
 import re
+import socket
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
@@ -119,6 +125,79 @@ def make_handler(database, api_key='', demo=None):
                 return json.loads(self.rfile.read(length).decode('utf-8'))
             except (ValueError, UnicodeDecodeError):
                 return {}
+
+        def _admin_clear(self, body):
+            """Wipe stored data. Requires the clear passphrase; scopes pick what goes."""
+            if (body.get('passphrase') or '').strip() != config.CLEAR_PASSPHRASE:
+                return self._error(403, 'Invalid passphrase')
+            scopes = body.get('scopes') or []
+            valid = ('pumps', 'messages', 'demo')
+            if not scopes or any(s not in valid for s in scopes):
+                return self._error(
+                    400, f'scopes must be a non-empty list from: {", ".join(valid)}')
+
+            cleared = {'pumps': 0, 'readings': 0, 'alarms': 0,
+                       'messages': 0, 'demo_pumps': 0}
+            # Demo first so its rows are counted before a full pumps/messages wipe
+            if 'demo' in scopes:
+                demo_ids = demo.clear_fleet() if demo else []
+                cleared['demo_pumps'] = len(demo_ids)
+                for table, n in db.clear_demo_data(demo_ids).items():
+                    cleared[table] += n
+            if 'pumps' in scopes:
+                for table, n in db.clear_pumps().items():
+                    cleared[table] += n
+            if 'messages' in scopes:
+                cleared['messages'] += db.clear_messages()
+
+            parts = [f'{n} {name.replace("_", " ")}'
+                     for name, n in cleared.items() if n]
+            message = ('Cleared: ' + ', '.join(parts)) if parts else 'Nothing to clear'
+            logger.warning('Data cleared via /api/admin/clear (scopes=%s): %s',
+                           ','.join(scopes), message)
+            return self._send_json({'cleared': cleared, 'message': message})
+
+        def _inject_hl7(self, body):
+            """Send a pasted HL7 message into the engine's own MLLP port, so it
+            takes the exact same receive -> store -> parse path as a real pump."""
+            raw = (body.get('raw') or '').lstrip('\ufeff').strip()
+            if not raw:
+                return self._error(400, 'Body must include "raw" with the HL7 text')
+            if not raw.startswith('MSH|'):
+                return self._error(400, 'HL7 must start with an MSH segment (MSH|...)')
+
+            # Browser pastes arrive with \n; HL7 segments are \r-separated
+            raw = raw.replace('\r\n', '\r').replace('\n', '\r')
+            frame = b'\x0b' + raw.encode('utf-8') + b'\x1c\x0d'
+            try:
+                with socket.create_connection(('127.0.0.1', config.MLLP_PORT),
+                                              timeout=5) as sock:
+                    sock.sendall(frame)
+                    sock.settimeout(5)
+                    ack_bytes = sock.recv(65536)
+            except OSError as e:
+                return self._error(502, f'Could not reach the MLLP port: {e}')
+
+            ack = ack_bytes.decode('utf-8', errors='replace').strip('\x0b\x1c\r\n')
+            ack_code = ''
+            for seg in ack.split('\r'):
+                if seg.startswith('MSA|'):
+                    ack_code = (seg.split('|') + [''])[1]
+                    break
+
+            # Find the stored row by the control id from the pasted MSH-10;
+            # parse failures never get a control id, so fall back to the latest
+            msh = raw.split('\r', 1)[0].split('|')
+            control_id = msh[9] if len(msh) > 9 else ''
+            stored = (db.latest_message_by_control_id(control_id)
+                      or db.latest_message())
+
+            return self._send_json({
+                'ok': ack_code == 'AA',
+                'ack_code': ack_code,
+                'ack': ack,
+                'stored': stored,
+            })
 
         # ------------------------------------------------------------- routes
 
@@ -256,6 +335,13 @@ def make_handler(database, api_key='', demo=None):
             try:
                 if not self._authorized(query):
                     return self._error(401, 'Invalid or missing API key')
+
+                if path == '/api/admin/clear':
+                    return self._admin_clear(self._read_body())
+
+                if path == '/api/hl7':
+                    return self._inject_hl7(self._read_body())
+
                 if not demo:
                     return self._error(404, 'Demo simulator disabled')
 

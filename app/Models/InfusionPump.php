@@ -129,14 +129,23 @@ class InfusionPump extends Model
     }
 
     /**
-     * Find or create pump by device ID.
+     * Find or create pump by device ID. Also matches the Serial No, since
+     * gateways and barcode scanners often identify pumps by serial while the
+     * registry key is the device uuid - prevents duplicate registrations.
      */
     public static function findOrCreateByDeviceId(string $deviceId, array $attributes = []): self
     {
-        return static::firstOrCreate(
-            ['device_id' => $deviceId],
-            array_merge(['device_name' => $deviceId], $attributes)
-        );
+        $existing = static::where('device_id', $deviceId)
+            ->orWhereRaw('UPPER(serial_no) = ?', [strtoupper($deviceId)])
+            ->first();
+        if ($existing) {
+            return $existing;
+        }
+
+        return static::create(array_merge(
+            ['device_id' => $deviceId, 'device_name' => $deviceId],
+            $attributes
+        ));
     }
 
     /**

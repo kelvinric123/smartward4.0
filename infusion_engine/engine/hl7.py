@@ -320,6 +320,13 @@ def _parse_obx(msg, fields):
             msg.facility = parts[3] or None
         elif len(parts) >= 3:
             msg.ward = parts[2] or None
+        # Some gateway configurations spread the location over other
+        # components (e.g. '~~~Ward~~~~D6') - join whatever is non-empty.
+        if not msg.ward and len(parts) > 4:
+            extras = [p for p in parts if p]
+            if extras:
+                msg.ward = ' '.join(extras)
+                msg.facility = None
         return
 
     field_name = MDC_CODES.get(code)

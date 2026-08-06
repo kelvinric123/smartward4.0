@@ -163,6 +163,17 @@ class DemoSimulator:
         result['message'] = 'Demo stopped' if was_running else 'Demo was not running'
         return result
 
+    def clear_fleet(self):
+        """Stop sending and remove every demo pump. Returns the device ids removed."""
+        with self._lock:
+            self.running = False
+            self._stop.set()
+            ids = [p.device_id for p in self.pumps.values()]
+            self.pumps = {}
+        if ids:
+            logger.info('Demo fleet cleared (%d pumps)', len(ids))
+        return ids
+
     def status(self):
         return {
             'running': self.running,

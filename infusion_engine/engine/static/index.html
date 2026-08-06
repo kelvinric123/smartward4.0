@@ -104,6 +104,7 @@
 <section id="view-pumps" class="view active">
   <div class="toolbar">
     <span class="note" style="margin:0">Latest state per pump. Auto-refreshes every 5 s.</span>
+    <button class="btn danger small" style="margin-left:auto" onclick="clearDataModal()">🗑 Clear data…</button>
   </div>
   <div id="pumpgrid" class="grid"><div class="empty">Loading…</div></div>
 </section>
@@ -119,11 +120,12 @@
     <input id="msgdevice" placeholder="Filter device id…" style="width:200px"
            onkeydown="if(event.key==='Enter')loadMessages()">
     <button class="btn" onclick="loadMessages()">Refresh</button>
+    <button class="btn primary" onclick="pasteHl7Modal()">✉ Paste HL7…</button>
     <span class="note" style="margin:0">Click a row to view the raw HL7.</span>
   </div>
   <div class="tablewrap"><table id="msgtable">
-    <thead><tr><th>ID</th><th>Received</th><th>Type</th><th>Device</th><th>MRN</th>
-    <th>Patient</th><th>Source</th><th>Parse</th></tr></thead>
+    <thead><tr><th>ID</th><th>Received</th><th>Type</th><th>Serial No</th><th>Device ID</th>
+    <th>MRN</th><th>Source</th><th>Parse</th></tr></thead>
     <tbody></tbody>
   </table></div>
 </section>
@@ -161,7 +163,9 @@ SmartWard / any client ◀──REST JSON── port 6001  ◀── SQLite (own
       Every HL7 message (B.Braun SpacePlus, IHE PCD-01 status / PCD-04 alarms / PCD-10 events)
       is ACKed and stored raw even if parsing fails — nothing is lost. The parsed data is
       exposed by the read-only endpoints below. All responses are JSON.
-      <b>device_id</b> is the pump's EUI-64 serial (MSH-3); <b>mrn</b> is the patient MRN (PID-3).
+      <b>device_id</b> is the pump's own system id (MDC_ATTR_SYS_ID; unique per pump),
+      <b>station_id</b> is the SpaceStation/gateway EUI-64 (MSH-3; shared by its pumps),
+      <b>pump_label</b> is the Serial No (e.g. I51316); <b>mrn</b> is the patient MRN (PID-3).
     </p>
   </div>
   <div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(340px,1fr));margin-bottom:14px">
@@ -199,6 +203,15 @@ SmartWard / any client ◀──REST JSON── port 6001  ◀── SQLite (own
     <dt><code>POST /api/demo/pumps/{label}/update</code></dt><dd>change pump settings</dd>
     <dt><code>POST /api/demo/pumps/{label}/remove</code></dt><dd>delete pump</dd>
     <dt><code>POST /api/demo/pumps/{label}/{action}</code></dt><dd><code>start</code> · <code>stop</code> · <code>complete</code> · <code>alarm</code> (body <code>{"alarm_text":"…"}</code>) · <code>clear_alarm</code></dd>
+  </dl></div>
+  <h2>Admin endpoints (POST)</h2>
+  <div class="card"><dl class="kv" style="font-size:13px">
+    <dt><code>POST /api/admin/clear</code></dt><dd>permanently wipe stored data — body
+      <code>{"scopes":["pumps"|"messages"|"demo",…],"passphrase":"…"}</code>.
+      Passphrase-protected; also available from the Pumps tab ("🗑 Clear data…").</dd>
+    <dt><code>POST /api/hl7</code></dt><dd>inject a raw HL7 message through the MLLP
+      pipeline — body <code>{"raw":"MSH|…"}</code>. Debug tool; also available from the
+      Message Log tab ("✉ Paste HL7…").</dd>
   </dl></div>
   <h2>SmartWard (Laravel) integration example</h2>
   <div class="card"><pre style="font:12.5px/1.7 Consolas,monospace;overflow-x:auto" id="laravel-example"></pre></div>
@@ -327,7 +340,9 @@ async function loadPumps() {
         <div class="rate">${p.flow_rate ?? '—'} <small>${esc(p.flow_rate_unit || 'mL/h')}</small></div>
         <div class="bar"><i style="width:${pct}%"></i></div>
         <dl class="kv">
+          <dt>Serial No</dt><dd>${esc(p.pump_label || '—')}</dd>
           <dt>Device ID</dt><dd style="font-size:11px;word-break:break-all">${esc(p.device_id)}</dd>
+          ${p.station_id ? `<dt>Station</dt><dd style="font-size:11px;word-break:break-all">${esc(p.station_id)}</dd>` : ''}
           ${swBadge(p)}
           <dt>Drug</dt><dd>${esc(p.drug_name || p.medication || '—')}</dd>
           <dt>Infused</dt><dd>${fmtNum(p.volume_infused, 'mL')} / ${fmtNum(p.vtbi, 'mL')}</dd>
@@ -340,19 +355,66 @@ async function loadPumps() {
   } catch (e) { /* keybar shown if 401 */ }
 }
 
+// ---------------------------------------------------------------- clear data
+function clearDataModal() {
+  const row = (id, title, desc) => `
+    <label style="display:flex;gap:10px;align-items:flex-start;margin-bottom:10px;cursor:pointer">
+      <input type="checkbox" id="${id}" style="margin-top:3px">
+      <span><b>${title}</b><br><small style="color:var(--muted)">${desc}</small></span>
+    </label>`;
+  openModal('Clear data',
+    `<div style="padding:16px">
+       <p class="note" style="margin-top:0">Select which data to <b>permanently delete</b>.
+          This cannot be undone.</p>
+       ${row('clr_pumps', 'All pumps', 'every pump card, plus the full readings and alarm history')}
+       ${row('clr_messages', 'Message log', 'all stored raw HL7 messages')}
+       ${row('clr_demo', 'Demo data', 'the demo pump fleet and everything demo pumps sent (pumps, readings, alarms, messages)')}
+       <label style="display:block;margin-top:14px">Passphrase<br>
+         <input id="clr_pass" type="password" placeholder="required" style="width:60%"
+                onkeydown="if(event.key==='Enter')clearDataRun()">
+       </label>
+     </div>`,
+    `<button class="btn danger" onclick="clearDataRun()">Delete selected data</button>`);
+}
+async function clearDataRun() {
+  const scopes = ['pumps', 'messages', 'demo']
+    .filter(s => document.getElementById('clr_' + s).checked);
+  if (!scopes.length) return toast('Select at least one data set to clear', true);
+  const passphrase = document.getElementById('clr_pass').value.trim();
+  if (!passphrase) return toast('Passphrase required', true);
+  try {
+    const r = await api('/api/admin/clear', {method: 'POST', body: {scopes, passphrase}});
+    closeModal();
+    toast(r.message || 'Data cleared');
+    refreshAll(); loadMessages(); demoStatus();
+  } catch (e) { toast('Clear failed: ' + e.message, true); }
+}
+
 // ---------------------------------------------------------------- messages
+// device_id -> serial (pump_label), so the log uses the same terminology as
+// the SmartWard integration page (Serial No / Device ID / Station)
+let pumpSerials = {};
+
 async function loadMessages() {
   try {
     const params = new URLSearchParams({limit: 100});
     if ($('#msgtype').value) params.set('type', $('#msgtype').value);
     if ($('#msgdevice').value.trim()) params.set('device_id', $('#msgdevice').value.trim());
-    const data = await api('/api/messages?' + params);
+    const [data, pumps] = await Promise.all([
+      api('/api/messages?' + params),
+      api('/api/pumps').catch(() => null),
+    ]);
+    if (pumps) {
+      pumpSerials = {};
+      pumps.pumps.forEach(p => { if (p.pump_label) pumpSerials[p.device_id] = p.pump_label; });
+    }
     const tb = $('#msgtable tbody');
     tb.innerHTML = data.messages.map(m => `
       <tr class="clickable" onclick="showRaw(${m.id})">
         <td>${m.id}</td><td>${fmtTime(m.received_at)}</td><td>${esc(m.message_type || '?')}</td>
-        <td>${esc(m.device_id || '—')}</td><td>${esc(m.patient_mrn || '—')}</td>
-        <td>${esc(m.patient_name || '—')}</td><td>${esc(m.source_ip || '—')}</td>
+        <td><b>${esc(pumpSerials[m.device_id] || '—')}</b></td>
+        <td><span style="font:11px Consolas,monospace;word-break:break-all">${esc(m.device_id || '—')}</span></td>
+        <td>${esc(m.patient_mrn || '—')}</td><td>${esc(m.source_ip || '—')}</td>
         <td>${m.parse_status === 'parsed' ? '✓' : '<span style="color:var(--bad)">' + esc(m.parse_status) + '</span>'}</td>
       </tr>`).join('') || '<tr><td colspan="8" class="empty">No messages yet.</td></tr>';
   } catch (e) { /* ignore */ }
@@ -371,6 +433,47 @@ async function showRaw(id) {
         </div>
       </div>`;
   } catch (e) { alert(e.message); }
+}
+
+// ---------------------------------------------------------------- paste HL7
+function pasteHl7Modal() {
+  openModal('Send HL7 message to the engine',
+    `<div style="padding:16px">
+       <p class="note" style="margin-top:0">Paste a raw HL7 message (starting with <code>MSH|</code>).
+          It is injected into the engine's own MLLP port, so it flows through the exact same
+          receive → store → parse pipeline as a real pump — use it to verify a message
+          format is understood. Line endings are normalized automatically.</p>
+       <textarea id="f_hl7" rows="12" spellcheck="false"
+                 style="width:100%;font:12px/1.6 Consolas,monospace;border:1px solid var(--line);border-radius:8px;padding:10px"
+                 placeholder="MSH|^~\\&amp;|PAT_DEVICE_BBRAUN^0012211839000001^EUI-64|BBRAUN|...&#10;PID|||Unknown Patient^Unknown Patient||...&#10;OBR|1|...&#10;OBX|1||70049^MDC_DEV_PUMP_INFUS_LVP_MDS^MDC|..."></textarea>
+       <pre id="hl7result" style="display:none;max-height:220px;overflow:auto;background:var(--chip);border-radius:8px;padding:10px;font:12px/1.6 Consolas,monospace;margin-top:10px"></pre>
+     </div>`,
+    `<button class="btn primary" onclick="pasteHl7Send()">Send to engine</button>`);
+}
+async function pasteHl7Send() {
+  const raw = document.getElementById('f_hl7').value.trim();
+  if (!raw) return toast('Paste an HL7 message first', true);
+  const out = document.getElementById('hl7result');
+  out.style.display = 'block';
+  out.textContent = 'Sending…';
+  try {
+    const r = await api('/api/hl7', {method: 'POST', body: {raw}});
+    const s = r.stored;
+    out.textContent =
+      (r.ok ? '✓ Engine ACK: ' + r.ack_code + ' (accepted)' : '✗ Engine ACK: ' + (r.ack_code || '?') + ' (rejected)') +
+      (s ? `\nStored as message #${s.id} — parse: ${s.parse_status}` +
+           (s.device_id ? `\nDevice resolved: ${s.device_id}` : '') +
+           (s.parse_error ? `\nParse error: ${s.parse_error}` : '') : '') +
+      '\n\n--- ACK ---\n' + (r.ack || '').replace(/\r/g, '\n');
+    toast(r.ok
+      ? `Message #${s ? s.id : '?'} stored — parse: ${s ? s.parse_status : '?'}`
+      : 'Engine rejected the message' + (s && s.parse_error ? ': ' + s.parse_error : ''), !r.ok);
+    loadMessages();
+    loadHealth();
+  } catch (e) {
+    out.textContent = 'Send failed: ' + e.message;
+    toast('Send failed: ' + e.message, true);
+  }
 }
 
 // ---------------------------------------------------------------- demo
@@ -601,8 +704,9 @@ const API_ENDPOINTS = [
 
 const API_SCHEMAS = {
   'Pump (/api/pumps)': [
-    ['device_id', 'pump serial (EUI-64, from MSH-3) — unique key'],
-    ['pump_label', 'pump name/label from the device (e.g. I51559, P2449)'],
+    ['device_id', 'the pump\'s own system id (MDC_ATTR_SYS_ID) — unique key, matches SmartWard "Device ID"'],
+    ['station_id', 'SpaceStation/gateway EUI-64 (MSH-3) — shared by every pump on that station'],
+    ['pump_label', 'Serial No printed on the pump (e.g. I51316, P2449) — matches SmartWard "Serial No"'],
     ['pump_model / pump_type', 'e.g. "B Braun SpacePlus Infusomat", type lvp | syringe'],
     ['ward / facility', 'location reported by the pump (pillar details)'],
     ['patient_mrn / patient_name', 'patient association from the PID segment'],

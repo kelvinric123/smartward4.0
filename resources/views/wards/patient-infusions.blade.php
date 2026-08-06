@@ -34,7 +34,7 @@
             <div class="mb-6">
                 <h3 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
                     <div class="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                    Active Infusions ({{ $activeInfusions->count() }})
+                    Current Infusions ({{ $activeInfusions->count() }})
                 </h3>
                 
                 @if($activeInfusions->count() > 0)
@@ -45,6 +45,13 @@
                                     'running' => 'border-green-400 bg-green-50',
                                     'paused' => 'border-yellow-400 bg-yellow-50',
                                     'alarming' => 'border-red-500 bg-red-50',
+                                    'stopped' => 'border-gray-300 bg-gray-50',
+                                    'pending' => 'border-gray-300 bg-gray-50',
+                                ];
+                                $badgeColors = [
+                                    'running' => 'bg-green-500',
+                                    'paused' => 'bg-yellow-500',
+                                    'alarming' => 'bg-red-500',
                                 ];
                             @endphp
                             <div class="border-2 rounded-xl p-4 {{ $statusColors[$infusion->status] ?? 'border-gray-200 bg-white' }} {{ $infusion->is_warning ? 'pulse-warning' : '' }}">
@@ -67,7 +74,7 @@
                                                 FINISHING SOON
                                             </span>
                                         @endif
-                                        <span class="px-2 py-1 {{ $infusion->status === 'running' ? 'bg-green-500' : ($infusion->status === 'paused' ? 'bg-yellow-500' : 'bg-red-500') }} text-white text-xs font-bold rounded-lg uppercase">
+                                        <span class="px-2 py-1 {{ $badgeColors[$infusion->status] ?? 'bg-gray-500' }} text-white text-xs font-bold rounded-lg uppercase">
                                             {{ $infusion->status }}
                                         </span>
                                     </div>
@@ -135,7 +142,7 @@
                         <svg class="w-10 h-10 text-gray-300 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
                         </svg>
-                        <p class="text-sm text-gray-500">No active infusions for this patient.</p>
+                        <p class="text-sm text-gray-500">No current infusions for this patient.</p>
                     </div>
                 @endif
             </div>

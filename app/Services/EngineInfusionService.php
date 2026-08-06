@@ -33,7 +33,13 @@ class EngineInfusionService
      */
     public function pumpPairs(): Collection
     {
-        $enginePumps = collect($this->client->pumps());
+        // Identity-less rows (no pump label, keyed by the bare station/gateway
+        // EUI-64) come from HL7 without pump-identity OBX segments. They are
+        // not real pumps and must not pair with - or overwrite - registry rows.
+        $enginePumps = collect($this->client->pumps())
+            ->reject(fn (array $e) => empty($e['pump_label'])
+                && ($e['device_id'] ?? null) === ($e['station_id'] ?? null))
+            ->values();
         $localPumps = InfusionPump::with(['patient', 'ward'])->get();
 
         return $enginePumps->map(fn (array $engine) => [

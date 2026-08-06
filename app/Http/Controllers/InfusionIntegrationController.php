@@ -344,6 +344,185 @@ class InfusionIntegrationController extends Controller
     }
 
     /**
+     * Live status of one registered pump, fetched RESTfully from the
+     * Qmed Infusion Engine (/api/pumps/{device_id}). Used by the "view
+     * status" action on the integration page.
+     */
+    public function pumpStatus(InfusionPump $pump)
+    {
+        $client = InfusionEngineClient::fromSettings();
+
+        try {
+            $enginePump = $this->resolveEnginePump($pump, $client);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Qmed Infusion Engine unreachable: ' . $e->getMessage(),
+            ], 503);
+        }
+
+        if (!$enginePump) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'This pump has not reported to the Infusion Engine yet '
+                    . '(no engine data for device "' . ($pump->device_id ?: $pump->serial_no) . '").',
+            ], 404);
+        }
+
+        return response()->json(['ok' => true, 'pump' => $enginePump]);
+    }
+
+    /**
+     * Latest 100 raw HL7 messages for one registered pump, fetched RESTfully
+     * from the Qmed Infusion Engine (/api/messages?device_id=...&raw=1).
+     * Debug tool behind the "view raw HL7" action on the integration page.
+     */
+    public function pumpHl7Messages(InfusionPump $pump)
+    {
+        $client = InfusionEngineClient::fromSettings();
+
+        try {
+            $enginePump = $this->resolveEnginePump($pump, $client);
+            if (!$enginePump) {
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'This pump has not reported to the Infusion Engine yet '
+                        . '(no engine data for device "' . ($pump->device_id ?: $pump->serial_no) . '").',
+                ], 404);
+            }
+
+            $messages = $client->messages([
+                'device_id' => $enginePump['device_id'],
+                'limit' => 100,
+                'raw' => 1,
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Qmed Infusion Engine unreachable: ' . $e->getMessage(),
+            ], 503);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'device_id' => $enginePump['device_id'],
+            'messages' => $messages,
+        ]);
+    }
+
+    /**
+     * Look up a pump on the Qmed Infusion Engine by Serial No (pump label),
+     * mapped to registration-form fields. Backs the "Autofill from Engine"
+     * button in the Register Pump modal.
+     */
+    public function engineLookupPump(Request $request)
+    {
+        $serial = trim((string) $request->get('serial'));
+        if ($serial === '') {
+            return response()->json(['ok' => false, 'error' => 'Enter a Serial No first.'], 422);
+        }
+
+        $client = InfusionEngineClient::fromSettings();
+        try {
+            $pumps = collect($client->pumps());
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => 'Qmed Infusion Engine unreachable: ' . $e->getMessage(),
+            ], 503);
+        }
+
+        $match = $this->matchEnginePumpBySerial($pumps, $serial);
+
+        if (!$match) {
+            return response()->json([
+                'ok' => false,
+                'error' => "No pump with serial \"{$serial}\" has reported to the engine yet.",
+            ], 404);
+        }
+
+        // Same field mapping the automatic registry sync uses
+        $wardName = $match['ward'] ?? null;
+        $wardId = $wardName
+            ? \App\Models\Ward::whereRaw('UPPER(TRIM(ward_name)) = ?', [strtoupper(trim($wardName))])->value('id')
+            : null;
+        $label = $match['pump_label'] ?? null;
+
+        return response()->json([
+            'ok' => true,
+            'pump' => [
+                'serial_no' => $label ?: $serial,
+                'device_id' => $match['device_id'] ?? null,
+                'device_name' => $label ?: (($match['pump_model'] ?? null) ?: ($match['device_id'] ?? null)),
+                'device_type' => ($match['pump_type'] ?? null) === 'syringe' ? 'syringe_pump' : 'volumetric_pump',
+                'pump_model' => $match['pump_model'] ?? null,
+                'location' => trim(implode(' ', array_filter([$wardName, $match['facility'] ?? null]))) ?: null,
+                'ward' => $wardName,
+                'ward_id' => $wardId,
+                'last_seen_at' => $match['last_seen_at'] ?? null,
+            ],
+        ]);
+    }
+
+    /**
+     * Match one engine pump by Serial No / label / device id (case-insensitive,
+     * tolerates the bare-digits form of a serial like "51316" for "I51316").
+     */
+    protected function matchEnginePumpBySerial($pumps, string $serial): ?array
+    {
+        $needle = strtoupper(trim($serial));
+        if ($needle === '') {
+            return null;
+        }
+        return collect($pumps)->first(function (array $e) use ($needle) {
+            $label = strtoupper($e['pump_label'] ?? '');
+            $stripped = preg_replace('/^[A-Z]+/', '', $label);
+            return ($label !== '' && $label === $needle)
+                || ($stripped !== '' && $stripped === $needle)
+                || strtoupper($e['device_id'] ?? '') === $needle;
+        });
+    }
+
+    /**
+     * Find the engine's pump record for a registry row. Registry rows may be
+     * keyed by serial while the engine keys by EUI-64 device id - mirror
+     * EngineInfusionService::matchLocalPump. Throws when the engine is down.
+     */
+    protected function resolveEnginePump(InfusionPump $pump, InfusionEngineClient $client): ?array
+    {
+        // Serial No is the human-unique key printed on the pump, so it wins.
+        // Some registry rows historically stored the gateway/station EUI-64 as
+        // device_id, which must never be mistaken for the pump itself.
+        $serial = strtoupper(trim((string) $pump->serial_no));
+        if ($serial !== '') {
+            $hit = $this->matchEnginePumpBySerial($client->pumps(), $serial);
+            if ($hit) {
+                return $client->pump($hit['device_id']) ?? $hit;
+            }
+        }
+
+        foreach (array_filter([$pump->device_uuid, $pump->device_id]) as $key) {
+            $hit = $client->pump($key);
+            if (!$hit) {
+                continue;
+            }
+            $label = strtoupper((string) ($hit['pump_label'] ?? ''));
+            // Reject hits that are clearly not this pump: a conflicting label,
+            // or an identity-less shell row keyed by the bare station id.
+            $conflicting = $serial !== '' && $label !== '' && $label !== $serial
+                && preg_replace('/^[A-Z]+/', '', $label) !== preg_replace('/^[A-Z]+/', '', $serial);
+            $stationShell = $label === ''
+                && ($hit['station_id'] ?? null) === ($hit['device_id'] ?? null);
+            if ($conflicting || $stationShell) {
+                continue;
+            }
+            return $hit;
+        }
+
+        return null;
+    }
+
+    /**
      * Ward Infusion Overview (iframe content).
      */
     public function wardOverview(Request $request): View
@@ -522,8 +701,41 @@ class InfusionIntegrationController extends Controller
                 : collect();
         }
 
-        $activeInfusions = $infusions->filter(fn($i) => in_array($i->status, ['running', 'paused', 'alarming']));
-        $completedInfusions = $infusions->filter(fn($i) => $i->status === 'completed');
+        // Engine mode only carries each pump's LATEST state, so completed
+        // history for this admission lives in the local infusions table
+        // (rows are snapshotted there when a pump is unbound from the patient).
+        if ($dataSource === 'engine' && $patient) {
+            $infusions = $infusions->concat(
+                Infusion::with('infusionPump')
+                    ->where('patient_id', $patient->id)
+                    ->where('status', 'completed')
+                    ->latest('completed_at')
+                    ->get()
+            );
+        }
+
+        // Everything not completed is "current" - including stopped/standby
+        // pumps (fluid still remaining), which previously fell into neither
+        // bucket and were invisible despite the engine having data.
+        $statusOrder = ['alarming' => 0, 'running' => 1, 'paused' => 2, 'stopped' => 3, 'pending' => 4];
+        $activeInfusions = $infusions
+            ->reject(fn($i) => $i->status === 'completed')
+            ->sortBy(fn($i) => $statusOrder[$i->status] ?? 9)
+            ->values();
+
+        // Completed list is scoped to the current admission
+        $admittedAt = $patient?->admitted_at;
+        $completedInfusions = $infusions
+            ->filter(fn($i) => $i->status === 'completed')
+            ->filter(function ($i) use ($admittedAt) {
+                if (!$admittedAt) {
+                    return true;
+                }
+                $when = $i->completed_at ?? $i->last_updated_at;
+                return $when === null || $when->gte($admittedAt);
+            })
+            ->sortByDesc(fn($i) => $i->completed_at ?? $i->last_updated_at)
+            ->values();
 
         return view('wards.patient-infusions', compact(
             'patient', 'infusions', 'activeInfusions', 'completedInfusions',
@@ -538,6 +750,7 @@ class InfusionIntegrationController extends Controller
     {
         $patientId = $request->get('patient_id');
         $patient = Patient::find($patientId);
+        $showAllWards = $request->boolean('all');
 
         // Get pumps linked to this patient
         $linkedPumps = $patient
@@ -546,12 +759,19 @@ class InfusionIntegrationController extends Controller
                 ->get()
             : collect();
 
-        // Get available (unlinked) pumps
+        // Available pumps default to the patient's own ward (plus pumps not
+        // assigned to any ward yet) so e.g. Ward D6 staff only see their own
+        // fleet. ?all=1 lists every ward.
         $availablePumps = InfusionPump::with('ward')
             ->available()
+            ->when(!$showAllWards && $patient?->ward_id, fn($q) => $q->where(
+                fn($qq) => $qq->where('ward_id', $patient->ward_id)->orWhereNull('ward_id')))
+            ->orderBy('device_name')
             ->get();
 
-        return view('wards.patient-pump-link', compact('patient', 'linkedPumps', 'availablePumps'));
+        return view('wards.patient-pump-link', compact(
+            'patient', 'linkedPumps', 'availablePumps', 'showAllWards'
+        ));
     }
 
     /**
@@ -593,18 +813,59 @@ class InfusionIntegrationController extends Controller
             'device_id' => 'required|string|max:255',
         ]);
 
-        // Find or create the pump by device ID
-        $pump = InfusionPump::where('device_id', $validated['device_id'])->first();
+        $needle = trim($validated['device_id']);
+
+        // The scanned barcode is usually the Serial No printed on the pump
+        // (e.g. I51316) while the registry key is the pump's system uuid -
+        // match both (plus the bare-digits serial form), otherwise every
+        // scan auto-registers a duplicate row.
+        $stripped = preg_replace('/^[A-Za-z]+/', '', strtoupper($needle));
+        $pump = InfusionPump::where('device_id', $needle)
+            ->orWhereRaw('UPPER(serial_no) = ?', [strtoupper($needle)])
+            ->when($stripped !== '' && $stripped !== strtoupper($needle),
+                fn ($q) => $q->orWhereRaw('UPPER(serial_no) = ?', [$stripped]))
+            ->first();
 
         if (!$pump) {
-            // Auto-register the pump
             $patient = Patient::find($validated['patient_id']);
-            $pump = InfusionPump::create([
-                'device_id' => $validated['device_id'],
-                'device_name' => $validated['device_id'],
-                'ward_id' => $patient->ward_id ?? null,
-                'is_active' => true,
-            ]);
+
+            // Ask the Infusion Engine about this serial so the auto-registered
+            // row carries the real Device ID, type and ward (same data the
+            // "Autofill from Engine" button uses). Engine down => plain row.
+            $engine = null;
+            try {
+                $engine = $this->matchEnginePumpBySerial(
+                    InfusionEngineClient::fromSettings()->pumps(), $needle);
+            } catch (\Throwable $e) {
+                Log::info('Engine lookup during pump link failed: ' . $e->getMessage());
+            }
+
+            if ($engine) {
+                $wardName = $engine['ward'] ?? null;
+                $wardId = $wardName
+                    ? \App\Models\Ward::whereRaw(
+                        'UPPER(TRIM(ward_name)) = ?', [strtoupper(trim($wardName))])->value('id')
+                    : null;
+                $label = ($engine['pump_label'] ?? null) ?: $needle;
+                $pump = InfusionPump::where('device_id', $engine['device_id'])->first()
+                    ?? InfusionPump::create([
+                        'device_id' => $engine['device_id'],
+                        'serial_no' => $label,
+                        'device_name' => $label,
+                        'device_type' => ($engine['pump_type'] ?? null) === 'syringe'
+                            ? 'syringe_pump' : 'volumetric_pump',
+                        'ward_id' => $wardId ?? ($patient->ward_id ?? null),
+                        'is_active' => true,
+                    ]);
+            } else {
+                $pump = InfusionPump::create([
+                    'device_id' => $needle,
+                    'serial_no' => $needle,
+                    'device_name' => $needle,
+                    'ward_id' => $patient->ward_id ?? null,
+                    'is_active' => true,
+                ]);
+            }
         }
 
         // Unlink from any existing patient first
@@ -641,6 +902,33 @@ class InfusionIntegrationController extends Controller
                 'completed_at' => now(),
                 'notes' => ($activeInfusion->notes ? $activeInfusion->notes . "\n" : "") . "Auto-completed due to pump unbind at " . now()->format('Y-m-d H:i:s'),
             ]);
+        } elseif ($pump->patient_id && InfusionEngineClient::engineModeActive()) {
+            // Engine mode keeps no local infusion rows, and the engine itself
+            // only holds the pump's latest state - snapshot it here so the
+            // infusion stays in this admission's completed history.
+            try {
+                $engine = $this->resolveEnginePump($pump, InfusionEngineClient::fromSettings());
+                $hasData = $engine && (($engine['volume_infused'] ?? 0) > 0
+                    || !empty($engine['drug_name']) || !empty($engine['medication']));
+                if ($hasData) {
+                    Infusion::create([
+                        'patient_id' => $pump->patient_id,
+                        'infusion_pump_id' => $pump->id,
+                        'medication_name' => $engine['drug_name'] ?? $engine['medication'] ?? 'Unknown medication',
+                        'total_volume' => $engine['vtbi'] ?? null,
+                        'infused_volume' => $engine['volume_infused'] ?? 0,
+                        'remaining_volume' => $engine['volume_remaining'] ?? null,
+                        'flow_rate' => $engine['flow_rate'] ?? null,
+                        'status' => 'completed',
+                        'started_at' => $pump->linked_at,
+                        'completed_at' => now(),
+                        'last_updated_at' => $engine['last_seen_at'] ?? now(),
+                        'notes' => 'Saved from Infusion Engine on pump unbind at ' . now()->format('Y-m-d H:i:s'),
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Could not snapshot engine infusion on unbind: ' . $e->getMessage());
+            }
         }
 
         $pump->unlinkFromPatient();

@@ -38,6 +38,9 @@ RETENTION_DAYS = int(os.getenv('INFUSION_RETENTION_DAYS', '0'))
 # Demo pump simulator endpoints (disable in production if not wanted)
 DEMO_ENABLED = os.getenv('INFUSION_DEMO_ENABLED', 'true').lower() in ('1', 'true', 'yes')
 
+# Passphrase required by POST /api/admin/clear (wipe stored data from the UI)
+CLEAR_PASSPHRASE = os.getenv('INFUSION_CLEAR_PASSPHRASE', 'askdrtai')
+
 # SmartWard base URL (e.g. http://192.168.0.88:18080). When set, the demo tab
 # can list SmartWard's registered pumps so demo pumps use the same Device IDs.
 SMARTWARD_URL = os.getenv('INFUSION_SMARTWARD_URL', '').rstrip('/')
