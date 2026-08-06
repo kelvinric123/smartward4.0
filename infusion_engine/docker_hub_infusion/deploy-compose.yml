@@ -1,0 +1,95 @@
+# =============================================================================
+# Infusion Engine - standalone deployment compose (new server, no source code)
+# Pulls kelvinric/infusion_engine from Docker Hub; nothing is built locally.
+#
+#   mkdir -p ~/infusion && cp deploy-compose.yml ~/infusion/docker-compose.yml
+#   cd ~/infusion && docker compose pull && docker compose up -d
+#
+# Override defaults via environment or a .env file next to this compose file
+# (INFUSION_IMAGE, ports, DB password, INFUSION_SMARTWARD_URL, ...).
+# =============================================================================
+
+services:
+  infusion-db:
+    image: postgres:16-alpine
+    container_name: infusion-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${INFUSION_DB_NAME:-infusion}"
+      POSTGRES_USER: "${INFUSION_DB_USER:-infusion}"
+      POSTGRES_PASSWORD: "${INFUSION_DB_PASSWORD:-infusion_secret}"
+      TZ: "${TZ:-Asia/Kuala_Lumpur}"
+    volumes:
+      - infusion_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${INFUSION_DB_USER:-infusion} -d ${INFUSION_DB_NAME:-infusion}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+        tag: "infusion-db"
+
+  infusion-engine:
+    image: ${INFUSION_IMAGE:-kelvinric/infusion_engine:latest}
+    container_name: infusion-engine
+    restart: unless-stopped
+    depends_on:
+      infusion-db:
+        condition: service_healthy
+    ports:
+      # HL7 MLLP in (pump gateway sends here)
+      - "${INFUSION_MLLP_PORT:-6000}:6000"
+      # REST API + management page (SmartWard / browser)
+      - "${INFUSION_API_PORT:-6001}:6001"
+    environment:
+      TZ: "${TZ:-Asia/Kuala_Lumpur}"
+      PYTHONUNBUFFERED: "1"
+      INFUSION_MLLP_HOST: "0.0.0.0"
+      INFUSION_MLLP_PORT: "6000"
+      INFUSION_API_HOST: "0.0.0.0"
+      INFUSION_API_PORT: "6001"
+      INFUSION_DB_HOST: "infusion-db"
+      INFUSION_DB_PORT: "5432"
+      INFUSION_DB_NAME: "${INFUSION_DB_NAME:-infusion}"
+      INFUSION_DB_USER: "${INFUSION_DB_USER:-infusion}"
+      INFUSION_DB_PASSWORD: "${INFUSION_DB_PASSWORD:-infusion_secret}"
+      INFUSION_LOG_DIR: "/data/logs"
+      INFUSION_API_KEY: "${INFUSION_API_KEY:-}"
+      INFUSION_RETENTION_DAYS: "${INFUSION_RETENTION_DAYS:-0}"
+      INFUSION_DEMO_ENABLED: "${INFUSION_DEMO_ENABLED:-true}"
+      # SmartWard base URL so the demo tab can list registered pumps,
+      # e.g. http://192.168.0.88:8000
+      INFUSION_SMARTWARD_URL: "${INFUSION_SMARTWARD_URL:-}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+    volumes:
+      - infusion_logs:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://127.0.0.1:6001/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        tag: "infusion-engine"
+
+volumes:
+  infusion_pgdata:
+    driver: local
+  infusion_logs:
+    driver: local
+
+networks:
+  default:
+    name: infusion-network
+    driver: bridge
