@@ -34,18 +34,9 @@
 
             <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-blue-100">
                 <div class="p-8">
-                    <!-- Search Box -->
-                    <div class="mb-6">
-                        <div class="relative">
-                            <input type="text" id="searchInput" placeholder="Search specialties..." autocomplete="off"
-                                class="w-full md:w-80 pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
-                            <svg class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2"
-                                fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                        </div>
-                    </div>
+                    <x-list-search :route="route('specialties.index')" :value="$search"
+                        placeholder="Search name or description..." :paginator="$specialties"
+                        noun="specialties" />
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-blue-100" id="dataTable">
                             <thead>
@@ -149,8 +140,15 @@
                                                         d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                                                 </svg>
                                                 <p class="text-gray-500 font-medium">No specialties found</p>
-                                                <p class="text-gray-400 text-sm mt-1">Get started by adding your first
-                                                    specialty</p>
+                                                @if ($search !== '')
+                                                    <p class="text-gray-400 text-sm mt-1">Nothing in the specialties list matches
+                                                        <span class="font-medium text-gray-500">"{{ $search }}"</span>.</p>
+                                                    <a href="{{ route('specialties.index') }}"
+                                                        class="mt-3 inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition">
+                                                        Clear search</a>
+                                                @else
+                                                    <p class="text-gray-400 text-sm mt-1">Get started by adding your first specialty</p>
+                                                @endif
                                             </div>
                                         </td>
                                     </tr>
@@ -167,14 +165,6 @@
     </div>
 
     <script>
-        document.getElementById('searchInput').addEventListener('input', function (e) {
-            const searchTerm = e.target.value.toLowerCase();
-            const rows = document.querySelectorAll('#dataTable tbody tr');
-
-            rows.forEach(row => {
-                const text = row.textContent.toLowerCase();
-                row.style.display = text.includes(searchTerm) ? '' : 'none';
-            });
         });
     </script>
 </x-app-layout>

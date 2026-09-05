@@ -1364,13 +1364,40 @@
                                             </svg>
                                         </button>
                                         {{-- Button 4: Infusion Pump --}}
-                                        <button class="flex-1 p-2 text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                                            title="Infusion Pump"
+                                        @php
+                                            // Blue at rest, green while delivering, then the pump's own
+                                            // severity - the same yellow/red the notification bell uses.
+                                            $infusionState = $bed['infusion_state'] ?? 'none';
+                                            $infusionCount = $bed['infusion_count'] ?? 0;
+                                            $infusionStyles = [
+                                                'none' => ['text-blue-500 hover:bg-blue-50', 'bg-blue-500'],
+                                                'running' => ['text-green-600 hover:bg-green-50', 'bg-green-600'],
+                                                'warning' => ['text-yellow-600 hover:bg-yellow-50', 'bg-yellow-500'],
+                                                'urgent' => ['text-red-600 hover:bg-red-50', 'bg-red-600'],
+                                            ];
+                                            [$infusionBtnClass, $infusionBadgeClass] = $infusionStyles[$infusionState] ?? $infusionStyles['none'];
+                                            $infusionTitle = match ($infusionState) {
+                                                'running' => 'Infusion running',
+                                                'warning' => 'Infusion needs attention',
+                                                'urgent' => 'Infusion urgent',
+                                                default => 'Infusion Pump — none running',
+                                            };
+                                            if (!empty($bed['infusion_summary'])) {
+                                                $infusionTitle .= "\n" . $bed['infusion_summary'];
+                                            }
+                                        @endphp
+                                        <button class="flex-1 p-2 rounded transition-colors relative {{ $infusionBtnClass }}"
+                                            title="{{ $infusionTitle }}"
                                             onclick="window.dispatchEvent(new CustomEvent('open-infusion-pump-modal', { detail: { patientId: {{ $bed['patient_id'] }} } }))">
-                                            <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <svg class="w-4 h-4 mx-auto {{ $infusionState === 'urgent' ? 'animate-pulse' : '' }}"
+                                                fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                     d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                                             </svg>
+                                            @if($infusionCount > 0)
+                                                <span
+                                                    class="absolute top-0.5 right-1 min-w-[14px] h-[14px] px-1 flex items-center justify-center rounded-full text-[10px] font-bold text-white leading-none {{ $infusionBadgeClass }}">{{ $infusionCount }}</span>
+                                            @endif
                                         </button>
                                     </div>
                                 </div>
@@ -3777,6 +3804,13 @@
                                                 :class="notification.severity === 'urgent' ? 'bg-red-600' : 'bg-yellow-600'"
                                                 x-text="'EWS: ' + notification.ews_score"></span>
                                         </template>
+                                        <template x-if="eventLabel(notification)">
+                                            <span class="px-2 py-0.5 text-xs font-bold rounded border"
+                                                :class="notification.severity === 'urgent' ?
+                                                    'border-red-300 text-red-700 bg-white' :
+                                                    'border-yellow-300 text-yellow-700 bg-white'"
+                                                x-text="eventLabel(notification)"></span>
+                                        </template>
                                     </div>
                                     <p class="text-sm font-semibold text-gray-800" x-text="notification.patient_name">
                                     </p>
@@ -3784,9 +3818,18 @@
                                         Bed <span x-text="notification.bed_number"></span> • MRN: <span
                                             x-text="notification.patient_mrn"></span>
                                     </p>
-                                    <template x-if="notification.type === 'patient_request'">
+                                    <template x-if="notification.type !== 'ews'">
                                         <p class="text-sm text-gray-700 mt-1.5 font-medium"
                                             x-text="notification.message"></p>
+                                    </template>
+                                    <template x-if="(notification.detail_lines || []).length > 0">
+                                        <div class="flex flex-wrap gap-1 mt-1.5">
+                                            <template x-for="line in notification.detail_lines" :key="line">
+                                                <span
+                                                    class="px-1.5 py-0.5 text-[11px] font-medium rounded bg-white/80 text-gray-700 border border-gray-200"
+                                                    x-text="line"></span>
+                                            </template>
+                                        </div>
                                     </template>
                                     <p class="text-xs text-gray-500 mt-1" x-text="notification.created_at"></p>
                                 </div>
@@ -3827,11 +3870,21 @@
                                             <span class="text-xs text-gray-500"
                                                 x-text="'EWS: ' + notification.ews_score"></span>
                                         </template>
+                                        <template x-if="eventLabel(notification)">
+                                            <span class="text-xs text-gray-500"
+                                                x-text="eventLabel(notification)"></span>
+                                        </template>
+                                        <template x-if="notification.severity === 'urgent'">
+                                            <span class="w-2 h-2 rounded-full bg-red-400"></span>
+                                        </template>
+                                        <template x-if="notification.severity === 'warning'">
+                                            <span class="w-2 h-2 rounded-full bg-yellow-400"></span>
+                                        </template>
                                     </div>
                                     <p class="text-sm font-medium text-gray-700" x-text="notification.patient_name"></p>
                                     <p class="text-xs text-gray-500">Bed <span x-text="notification.bed_number"></span>
                                     </p>
-                                    <template x-if="notification.type === 'patient_request'">
+                                    <template x-if="notification.type !== 'ews'">
                                         <p class="text-xs text-gray-600 mt-1" x-text="notification.message"></p>
                                     </template>
                                 </div>
@@ -3870,6 +3923,17 @@
                 openModal() {
                     this.isOpen = true;
                     this.fetchNotifications();
+                },
+
+                // Which infusion event this is. The severity colour already says
+                // how urgent it is; this says what actually happened at the pump.
+                eventLabel(notification) {
+                    return ({
+                        infusion_alarm: 'PUMP ALARM',
+                        infusion_near_end: 'ENDING SOON',
+                        infusion_complete: 'COMPLETED',
+                        infusion_battery: 'BATTERY',
+                    })[notification.category] || '';
                 },
 
                 closeModal() {

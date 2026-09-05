@@ -87,9 +87,27 @@ class EngineInfusionService
      */
     public function infusions(): Collection
     {
+        return $this->linkedPairs()
+            ->map(fn (array $pair) => $pair['infusion'])
+            ->values();
+    }
+
+    /**
+     * Same set as infusions(), but keeping the raw engine snapshot alongside
+     * each infusion. Callers that need pump-level state the Infusion model
+     * does not carry - battery, mains/battery power, signal - read it from
+     * `engine`, which is live, rather than from the registry row, which is
+     * only as fresh as the last syncRegistry() call.
+     *
+     * Each item: ['engine' => array, 'local' => InfusionPump, 'infusion' => Infusion]
+     */
+    public function linkedPairs(): Collection
+    {
         return $this->pumpPairs()
             ->filter(fn (array $pair) => $pair['local'] && $pair['local']->patient)
-            ->map(fn (array $pair) => $this->toInfusion($pair['engine'], $pair['local']))
+            ->map(fn (array $pair) => $pair + [
+                'infusion' => $this->toInfusion($pair['engine'], $pair['local']),
+            ])
             ->values();
     }
 

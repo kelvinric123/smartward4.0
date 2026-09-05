@@ -7,10 +7,24 @@ use Illuminate\Http\Request;
 
 class SpecialtyController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $specialties = Specialty::withCount('consultants')->latest()->paginate(10);
-        return view('admin.specialties.index', compact('specialties'));
+        // Searched in the database, not in the rendered page: filtering the
+        // current page of 10 rows only ever found what was already on screen.
+        $search = trim((string) $request->input('search', ''));
+
+        $query = Specialty::withCount('consultants')->latest();
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
+            });
+        }
+
+        $specialties = $query->paginate(10)->withQueryString();
+
+        return view('admin.specialties.index', compact('specialties', 'search'));
     }
 
     public function create()

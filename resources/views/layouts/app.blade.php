@@ -64,6 +64,112 @@
         </div>
     </div>
     @include('components.delete-passphrase-modal')
+
+    <script>
+        /**
+         * Keep search and filter boxes empty until someone actually types.
+         *
+         * Chrome ignores autocomplete="off" and will drop the signed-in
+         * account's email into a lone text input it decides looks like a
+         * username field, so several search boxes came up pre-filled. The
+         * attributes below ask the browser and the common password managers
+         * to leave these fields alone; the watchdog is what guarantees it,
+         * by putting back whatever the server rendered whenever the value
+         * changes without a keystroke behind it.
+         *
+         * Server-rendered values (a search term kept across a page reload)
+         * live in `defaultValue`, which autofill does not touch - so they
+         * survive, and only the browser's guesses get wiped.
+         */
+        (function () {
+            const typed = new WeakSet();
+            const SEARCHY = /search|filter|query/i;
+
+            function isSearchBox(el) {
+                if (!(el instanceof HTMLInputElement)) return false;
+                if (!['text', 'search', ''].includes(el.type)) return false;
+
+                return SEARCHY.test(el.id) || SEARCHY.test(el.name)
+                    || SEARCHY.test(el.placeholder) || SEARCHY.test(el.className)
+                    || SEARCHY.test(el.getAttribute('x-model') || '');
+            }
+
+            function harden(el) {
+                if (el.dataset.autofillGuarded) return;
+                el.dataset.autofillGuarded = '1';
+                el.setAttribute('autocomplete', 'off');
+                el.setAttribute('data-lpignore', 'true');   // LastPass
+                el.setAttribute('data-form-type', 'other'); // Dashlane
+                el.setAttribute('data-1p-ignore', '');      // 1Password
+            }
+
+            // Browsers flag the fields they filled themselves. That is the one
+            // signal that separates the browser's guess from a value the app
+            // put there on purpose.
+            function isAutofilled(el) {
+                for (const selector of [':autofill', ':-webkit-autofill']) {
+                    try {
+                        if (el.matches(selector)) return true;
+                    } catch (e) {
+                        // Selector unsupported in this browser - try the next.
+                    }
+                }
+                return false;
+            }
+
+            function restore(el) {
+                if (typed.has(el)) return;
+
+                const rendered = el.defaultValue || '';
+                if (el.value === rendered) return;
+
+                // An x-model field's value belongs to Alpine, which sets it
+                // from its own state - only clear those when the browser has
+                // actually flagged them as autofilled, or we would wipe values
+                // the page deliberately put there.
+                if (el.hasAttribute('x-model') && !isAutofilled(el)) return;
+
+                el.value = rendered;
+                // Alpine and other x-model bindings track `input`, so tell them.
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+
+            function sweep(root) {
+                (root || document).querySelectorAll('input').forEach(function (el) {
+                    if (!isSearchBox(el)) return;
+                    harden(el);
+                    restore(el);
+                });
+            }
+
+            ['keydown', 'paste', 'compositionstart'].forEach(function (type) {
+                document.addEventListener(type, function (e) {
+                    if (isSearchBox(e.target)) typed.add(e.target);
+                }, true);
+            });
+
+            // Autofill lands at unpredictable moments - on paint, once the page
+            // settles, and again the first time a field is focused.
+            document.addEventListener('DOMContentLoaded', function () { sweep(); });
+            window.addEventListener('load', function () { sweep(); });
+            [50, 250, 700, 1500].forEach(function (ms) { setTimeout(function () { sweep(); }, ms); });
+
+            document.addEventListener('focusin', function (e) {
+                if (isSearchBox(e.target)) { harden(e.target); restore(e.target); }
+            });
+
+            // Fields inside modals and other late-rendered markup.
+            new MutationObserver(function (records) {
+                records.forEach(function (record) {
+                    record.addedNodes.forEach(function (node) {
+                        if (node.nodeType !== 1) return;
+                        if (isSearchBox(node)) { harden(node); restore(node); }
+                        else sweep(node);
+                    });
+                });
+            }).observe(document.documentElement, { childList: true, subtree: true });
+        })();
+    </script>
 </body>
 
 </html>

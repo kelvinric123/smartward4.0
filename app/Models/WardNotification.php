@@ -16,9 +16,11 @@ class WardNotification extends Model
         'bed_number',
         'type',
         'category',
+        'reference',
         'severity',
         'message',
         'ews_score',
+        'meta',
         'status',
         'responded_at',
         'responded_by',
@@ -27,6 +29,7 @@ class WardNotification extends Model
     protected $casts = [
         'responded_at' => 'datetime',
         'ews_score' => 'integer',
+        'meta' => 'array',
     ];
 
     // Severity constants
@@ -37,6 +40,27 @@ class WardNotification extends Model
     // Type constants
     const TYPE_EWS = 'ews';
     const TYPE_PATIENT_REQUEST = 'patient_request';
+    const TYPE_INFUSION = 'infusion';
+
+    // Infusion event categories
+    const CATEGORY_INFUSION_ALARM = 'infusion_alarm';
+    const CATEGORY_INFUSION_NEAR_END = 'infusion_near_end';
+    const CATEGORY_INFUSION_COMPLETE = 'infusion_complete';
+    const CATEGORY_INFUSION_BATTERY = 'infusion_battery';
+
+    /**
+     * Infusion categories whose notification is only meaningful while the
+     * condition still holds - once the pump stops reporting them they are
+     * closed automatically instead of sitting stale in the nurse's queue.
+     *
+     * A finished infusion is deliberately NOT in this list: the line still
+     * needs flushing or removing, so that one waits for a human.
+     */
+    const SELF_CLEARING_INFUSION_CATEGORIES = [
+        self::CATEGORY_INFUSION_ALARM,
+        self::CATEGORY_INFUSION_NEAR_END,
+        self::CATEGORY_INFUSION_BATTERY,
+    ];
 
     // Status constants
     const STATUS_PENDING = 'pending';
@@ -271,4 +295,5 @@ class WardNotification extends Model
             'status' => self::STATUS_PENDING,
         ]);
     }
+
 }

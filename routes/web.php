@@ -86,6 +86,8 @@ Route::middleware('auth')->group(function () {
     Route::get('nurses/{nurse}/dashboard', [WardDashboardController::class, 'nurseDashboard'])->name('nurses.dashboard');
     Route::put('nurses/{nurse}/ldap-binding', [NurseController::class, 'updateLdapBinding'])->name('nurses.update-ldap-binding');
     Route::post('nurses/{nurse}/deactivate', [NurseController::class, 'deactivate'])->name('nurses.deactivate');
+    Route::get('nurses-export', [NurseController::class, 'export'])->name('nurses.export');
+    Route::get('nurses-export/count', [NurseController::class, 'exportCount'])->name('nurses.export.count');
     Route::get('nurses-bulk-upload', [NurseController::class, 'bulkUploadForm'])->name('nurses.bulk-upload');
     Route::post('nurses-bulk-upload/preview', [NurseController::class, 'bulkUploadPreview'])->name('nurses.bulk-upload.preview');
     Route::post('nurses-bulk-upload/confirm', [NurseController::class, 'bulkUploadConfirm'])->name('nurses.bulk-upload.confirm');

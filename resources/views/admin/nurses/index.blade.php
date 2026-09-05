@@ -8,6 +8,14 @@
                 <p class="text-sm text-gray-500 mt-1">Manage nursing staff and their qualifications</p>
             </div>
             <div class="flex items-center gap-3">
+                <button type="button" onclick="window.dispatchEvent(new CustomEvent('open-nurse-export-modal'))"
+                    class="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-slate-600 to-gray-700 hover:from-slate-700 hover:to-gray-800 border border-transparent rounded-lg font-semibold text-sm text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    {{ __('Export') }}
+                </button>
                 <a href="{{ route('nurses.bulk-upload') }}"
                     class="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 border border-transparent rounded-lg font-semibold text-sm text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -44,18 +52,9 @@
 
             <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-blue-100">
                 <div class="p-8">
-                    <!-- Search Box -->
-                    <div class="mb-6">
-                        <div class="relative">
-                            <input type="text" id="searchInput" placeholder="Search nurses..." autocomplete="off"
-                                class="w-full md:w-80 pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
-                            <svg class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2"
-                                fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                        </div>
-                    </div>
+                    <x-list-search :route="route('nurses.index')" :value="$search"
+                        placeholder="Search name, code, registration, phone or email..." :paginator="$nurses"
+                        noun="nurses" />
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-blue-100" id="dataTable">
                             <thead>
@@ -198,8 +197,16 @@
                                                         d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                                                 </svg>
                                                 <p class="text-gray-500 font-medium">No nurses found</p>
-                                                <p class="text-gray-400 text-sm mt-1">Get started by adding your first nurse
-                                                </p>
+                                                @if ($search !== '')
+                                                    <p class="text-gray-400 text-sm mt-1">Nothing in the nurses list matches
+                                                        <span class="font-medium text-gray-500">"{{ $search }}"</span>.</p>
+                                                    <a href="{{ route('nurses.index') }}"
+                                                        class="mt-3 inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition">
+                                                        Clear search</a>
+                                                @else
+                                                    <p class="text-gray-400 text-sm mt-1">Get started by adding your first
+                                                        nurse</p>
+                                                @endif
                                             </div>
                                         </td>
                                     </tr>
@@ -273,7 +280,246 @@
         </div>
     </div>
 
+    <!-- Export Nurses Modal -->
+    <div x-data="nurseExportModal()" x-show="open" x-cloak @open-nurse-export-modal.window="openModal()"
+        class="fixed inset-0 z-50 overflow-y-auto" x-transition:enter="transition ease-out duration-200"
+        x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+        x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100"
+        x-transition:leave-end="opacity-0">
+        <div class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" @click="open = false"></div>
+
+        <div class="relative min-h-screen flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden" @click.stop>
+                <form method="GET" action="{{ route('nurses.export') }}" @submit="open = false">
+                    <!-- Header -->
+                    <div class="bg-gradient-to-r from-slate-600 to-gray-700 px-6 py-4 flex items-center justify-between">
+                        <div class="flex items-center">
+                            <svg class="w-6 h-6 text-white mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            <div>
+                                <h3 class="text-lg font-bold text-white">Export Nurses</h3>
+                                <p class="text-xs text-slate-200">CSV file — opens directly in Excel</p>
+                            </div>
+                        </div>
+                        <button type="button" @click="open = false"
+                            class="text-white hover:bg-white/20 rounded-lg p-2 transition">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="p-6 space-y-6 max-h-[65vh] overflow-y-auto">
+                        <!-- Which rows -->
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">Which nurses</h4>
+                            <div class="flex flex-wrap gap-2 mb-4">
+                                <template x-for="opt in statusOptions" :key="opt.value">
+                                    <label class="cursor-pointer">
+                                        <input type="radio" name="status" :value="opt.value" x-model="status"
+                                            class="sr-only" @change="refreshCount()">
+                                        <span class="inline-flex items-center px-4 py-2 rounded-lg border text-sm font-medium transition"
+                                            :class="status === opt.value
+                                                ? 'bg-blue-600 border-blue-600 text-white shadow'
+                                                : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'"
+                                            x-text="opt.label"></span>
+                                    </label>
+                                </template>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 mb-1">Ward</label>
+                                    <select name="ward_id" x-model="ward_id" @change="refreshCount()"
+                                        class="w-full text-sm border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="">All wards</option>
+                                        <option value="unassigned">No ward assigned</option>
+                                        @foreach($wards as $ward)
+                                            <option value="{{ $ward->id }}">{{ $ward->ward_name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 mb-1">Designation</label>
+                                    <select name="designation" x-model="designation" @change="refreshCount()"
+                                        class="w-full text-sm border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="">All designations</option>
+                                        @foreach(\App\Models\Nurse::DESIGNATIONS as $designation)
+                                            <option value="{{ $designation }}">{{ $designation }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 mb-1">Qualification</label>
+                                    <select name="qualification" x-model="qualification" @change="refreshCount()"
+                                        class="w-full text-sm border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="">All qualifications</option>
+                                        @foreach(['Diploma', 'Degree', 'Masters'] as $qualification)
+                                            <option value="{{ $qualification }}">{{ $qualification }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="mt-3">
+                                <label class="block text-xs font-semibold text-gray-600 mb-1">
+                                    Match text <span class="font-normal text-gray-400">— name, code, registration,
+                                        phone or email</span>
+                                </label>
+                                <input type="text" name="search" x-model="search" @input.debounce.400ms="refreshCount()"
+                                    placeholder="Leave blank to export everything matching the filters above"
+                                    autocomplete="off" data-lpignore="true" data-form-type="other"
+                                    class="w-full text-sm border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+
+                        <!-- Columns -->
+                        <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <h4 class="text-sm font-bold text-gray-700 uppercase tracking-wide">Columns</h4>
+                                <div class="flex gap-2 text-xs">
+                                    <button type="button" @click="selectAllColumns()"
+                                        class="px-2 py-1 text-blue-600 hover:bg-blue-50 rounded font-medium">Select
+                                        all</button>
+                                    <button type="button" @click="columns = []"
+                                        class="px-2 py-1 text-gray-500 hover:bg-gray-100 rounded font-medium">Clear</button>
+                                    <button type="button" @click="resetColumns()"
+                                        class="px-2 py-1 text-gray-500 hover:bg-gray-100 rounded font-medium">Reset</button>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                @foreach($exportColumns as $column)
+                                    <label
+                                        class="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 hover:bg-blue-50 cursor-pointer transition">
+                                        <input type="checkbox" name="columns[]" value="{{ $column['key'] }}"
+                                            x-model="columns"
+                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                        <span class="text-sm text-gray-700">{{ $column['label'] }}</span>
+                                    </label>
+                                @endforeach
+                            </div>
+                            <p x-show="columns.length === 0" class="mt-2 text-xs text-amber-600">
+                                No columns picked — the default set will be used.
+                            </p>
+                        </div>
+
+                        <!-- Sort -->
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">Sort by</h4>
+                            <select name="sort" x-model="sort"
+                                class="w-full sm:w-64 text-sm border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="name">Name (A–Z)</option>
+                                <option value="personnel_code">Personnel Code</option>
+                                <option value="registration_number">Registration No.</option>
+                                <option value="newest">Most recently added</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="bg-gray-50 px-6 py-4 flex items-center justify-between border-t border-gray-200">
+                        <div class="text-sm text-gray-600">
+                            <template x-if="counting">
+                                <span class="text-gray-400">Counting…</span>
+                            </template>
+                            <template x-if="!counting && count !== null">
+                                <span>
+                                    <span class="font-bold text-gray-800" x-text="count"></span>
+                                    <span x-text="count === 1 ? 'nurse' : 'nurses'"></span> will be exported
+                                </span>
+                            </template>
+                        </div>
+                        <div class="flex gap-3">
+                            <button type="button" @click="open = false"
+                                class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+                                Cancel
+                            </button>
+                            <button type="submit" :disabled="count === 0"
+                                class="inline-flex items-center px-5 py-2 text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-lg shadow transition disabled:opacity-50 disabled:cursor-not-allowed">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                Download CSV
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script>
+        function nurseExportModal() {
+            const defaults = @json(collect($exportColumns)->where('default', true)->pluck('key')->values());
+            const every = @json(collect($exportColumns)->pluck('key')->values());
+
+            return {
+                open: false,
+                status: 'all',
+                ward_id: '',
+                designation: '',
+                qualification: '',
+                search: '',
+                sort: 'name',
+                columns: [...defaults],
+                count: null,
+                counting: false,
+                statusOptions: [
+                    { value: 'all', label: 'All' },
+                    { value: 'active', label: 'Active only' },
+                    { value: 'inactive', label: 'Inactive only' },
+                ],
+
+                openModal() {
+                    // Carry the list's active search into the dialog, so
+                    // "export what I'm looking at" is one click.
+                    this.search = document.getElementById('listSearchInput')?.value.trim() || '';
+                    this.open = true;
+                    this.refreshCount();
+                },
+
+                selectAllColumns() {
+                    this.columns = [...every];
+                },
+
+                resetColumns() {
+                    this.columns = [...defaults];
+                },
+
+                // Live row count so the number on the button is the number in
+                // the file. Stale replies are dropped by comparing tokens.
+                async refreshCount() {
+                    const token = Symbol();
+                    this._token = token;
+                    this.counting = true;
+
+                    const params = new URLSearchParams({
+                        status: this.status,
+                        ward_id: this.ward_id,
+                        designation: this.designation,
+                        qualification: this.qualification,
+                        search: this.search,
+                    });
+
+                    try {
+                        const response = await fetch(`{{ route('nurses.export.count') }}?${params}`);
+                        const data = await response.json();
+                        if (this._token !== token) return;
+                        this.count = data.count;
+                    } catch (error) {
+                        if (this._token !== token) return;
+                        this.count = null;
+                    } finally {
+                        if (this._token === token) this.counting = false;
+                    }
+                },
+            };
+        }
+
         function openLdapBindingModal(nurseId, currentUserId, nurseName) {
             const modal = document.getElementById('ldapBindingModal');
             const form = document.getElementById('ldapBindingForm');
@@ -298,14 +544,5 @@
             modal.classList.add('hidden');
         }
 
-        document.getElementById('searchInput').addEventListener('input', function (e) {
-            const searchTerm = e.target.value.toLowerCase();
-            const rows = document.querySelectorAll('#dataTable tbody tr');
-
-            rows.forEach(row => {
-                const text = row.textContent.toLowerCase();
-                row.style.display = text.includes(searchTerm) ? '' : 'none';
-            });
-        });
     </script>
 </x-app-layout>

@@ -25,6 +25,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use App\Services\EkadService;
+use App\Services\InfusionNotificationService;
 use App\Models\WardSpecialDuty;
 
 class WardDashboardController extends Controller
@@ -104,8 +105,14 @@ class WardDashboardController extends Controller
             : $defaultClinicalSettings;
         $ewsSystem = $clinicalSettings['ews_system'] ?? 'ews_ihh';
 
+        // One service instance for the whole request: the bed boxes and the
+        // notification bell both read live pump state, and sharing it keeps
+        // that to a single call to the infusion engine per page load.
+        $infusionService = app(InfusionNotificationService::class);
+        $infusionIndicators = $infusionService->bedIndicators((int) $selectedWardId);
+
         // Generate bed data
-        $beds = $this->generateBedData($selectedWard, $wardPatients, $consultants, $nurses, $movementsByPatient, $ewsSystem);
+        $beds = $this->generateBedData($selectedWard, $wardPatients, $consultants, $nurses, $movementsByPatient, $ewsSystem, $infusionIndicators);
 
         // Calculate statistics based on admitted patients only
         $admittedPatients = Patient::where('ward_id', $selectedWardId)
@@ -121,6 +128,12 @@ class WardDashboardController extends Controller
         $anaesthetistPatients = $this->getAnaesthetistPatients($selectedWardId);
 
         $bedBoxVitalsMode = $userSettings ? ($userSettings->bed_box_vitals_mode ?? 'demo') : 'demo';
+
+        // Fold pump events in before counting, so the bell badge is right on
+        // first paint instead of only after the first 20s poll. Reuses the
+        // pump state already fetched for the bed boxes above.
+        $infusionService->syncWardThrottled((int) $selectedWardId);
+
         $notificationCount = WardNotification::forWard($selectedWardId)->pending()->count();
 
         $currentShift = ShiftSetting::getCurrentShift($selectedWardId);
@@ -374,7 +387,7 @@ class WardDashboardController extends Controller
         }
     }
 
-    private function generateBedData($ward, $wardPatients, $consultants, $nurses, $movementsByPatient, $ewsSystem = 'ews_ihh')
+    private function generateBedData($ward, $wardPatients, $consultants, $nurses, $movementsByPatient, $ewsSystem = 'ews_ihh', array $infusionIndicators = [])
     {
         $beds = [];
         // Use actual ward beds (aligns with Beds index)
@@ -555,6 +568,10 @@ class WardDashboardController extends Controller
                     'isolation_type' => $patient->isolation_type ?? 'none',
                     'isolation_type_name' => $patient->isolation_type && $patient->isolation_type !== 'none' ? IsolationType::getDisplayName($patient->isolation_type) : 'None',
                     'allergies' => $patient->allergies ?? [],
+                    // Live infusion state for the bed box pump icon
+                    'infusion_state' => $infusionIndicators[$patient->id]['state'] ?? 'none',
+                    'infusion_count' => $infusionIndicators[$patient->id]['count'] ?? 0,
+                    'infusion_summary' => $infusionIndicators[$patient->id]['summary'] ?? null,
                     // HGT (Blood Glucose) monitoring
                     'hgt_enabled' => $patient->hgt_enabled ?? false,
                     'hgt_frequency' => $patient->hgt_frequency ?? null,
@@ -635,6 +652,10 @@ class WardDashboardController extends Controller
                     'isolation_type' => null,
                     'isolation_type_name' => null,
                     'allergies' => null,
+                    // Live infusion state (no patient, so nothing infusing)
+                    'infusion_state' => 'none',
+                    'infusion_count' => 0,
+                    'infusion_summary' => null,
                     // HGT (Blood Glucose) monitoring
                     'hgt_enabled' => false,
                     'hgt_frequency' => null,
@@ -2376,6 +2397,11 @@ class WardDashboardController extends Controller
             return response()->json(['error' => 'Ward ID required'], 400);
         }
 
+        // Pump events are pulled in on the same 20s poll that refreshes the
+        // bell, so an alarm or an infusion running out shows up next to the
+        // EWS scores and patient calls without a separate watcher process.
+        app(InfusionNotificationService::class)->syncWardThrottled((int) $wardId);
+
         $pendingNotifications = WardNotification::forWard($wardId)
             ->pending()
             ->with('patient:id,name,mrn')
@@ -2393,6 +2419,8 @@ class WardDashboardController extends Controller
                     'severity_border_class' => $notification->severity_border_class,
                     'message' => $notification->message,
                     'ews_score' => $notification->ews_score,
+                    'meta' => $notification->meta,
+                    'detail_lines' => $this->notificationDetailLines($notification),
                     'bed_number' => $notification->bed_number,
                     'patient_name' => $notification->patient->name ?? 'Unknown',
                     'patient_mrn' => $notification->patient->mrn ?? 'N/A',
@@ -2416,10 +2444,12 @@ class WardDashboardController extends Controller
                     'severity' => $notification->severity,
                     'message' => $notification->message,
                     'ews_score' => $notification->ews_score,
+                    'meta' => $notification->meta,
+                    'detail_lines' => $this->notificationDetailLines($notification),
                     'bed_number' => $notification->bed_number,
                     'patient_name' => $notification->patient->name ?? 'Unknown',
-                    'responded_at' => $notification->responded_at->diffForHumans(),
-                    'responded_by' => $notification->responder->name ?? 'Unknown',
+                    'responded_at' => $notification->responded_at?->diffForHumans(),
+                    'responded_by' => $notification->responder->name ?? 'Auto-cleared',
                 ];
             });
 
@@ -2441,8 +2471,56 @@ class WardDashboardController extends Controller
         return match ($type) {
             WardNotification::TYPE_EWS => 'EWS',
             WardNotification::TYPE_PATIENT_REQUEST => 'PATIENT CALL',
+            WardNotification::TYPE_INFUSION => 'INFUSION',
             default => strtoupper(str_replace('_', ' ', (string) $type)),
         };
+    }
+
+    /**
+     * Short chips shown under an infusion notification, so a nurse can judge
+     * it from the bell panel without opening the infusion overview: what is
+     * running, how fast, and how much is left.
+     *
+     * @return array<int,string>
+     */
+    private function notificationDetailLines(WardNotification $notification): array
+    {
+        if ($notification->type !== WardNotification::TYPE_INFUSION) {
+            return [];
+        }
+
+        $meta = $notification->meta ?? [];
+        $lines = [];
+
+        if (!empty($meta['pump_label'])) {
+            $lines[] = 'Pump ' . $meta['pump_label'];
+        }
+
+        if (isset($meta['flow_rate']) && $meta['flow_rate'] !== null) {
+            $lines[] = rtrim(rtrim(number_format((float) $meta['flow_rate'], 1), '0'), '.') . ' mL/hr';
+        }
+
+        if (!empty($meta['dose_rate'])) {
+            $lines[] = $meta['dose_rate'];
+        }
+
+        if (isset($meta['remaining_minutes']) && $meta['remaining_minutes'] !== null) {
+            $lines[] = $meta['remaining_minutes'] . ' min left';
+        }
+
+        if (isset($meta['remaining_volume']) && $meta['remaining_volume'] !== null) {
+            $lines[] = rtrim(rtrim(number_format((float) $meta['remaining_volume'], 1), '0'), '.') . ' mL left';
+        }
+
+        if (isset($meta['battery_percent']) && $meta['battery_percent'] !== null) {
+            $lines[] = 'Battery ' . $meta['battery_percent'] . '%';
+        }
+
+        if (!empty($meta['alarm_priority_label'])) {
+            $lines[] = $meta['alarm_priority_label'];
+        }
+
+        return $lines;
     }
 
     public function respondNotification(Request $request, WardNotification $notification)
