@@ -103,12 +103,27 @@ class EngineInfusionService
      */
     public function linkedPairs(): Collection
     {
-        return $this->pumpPairs()
-            ->filter(fn (array $pair) => $pair['local'] && $pair['local']->patient)
-            ->map(fn (array $pair) => $pair + [
-                'infusion' => $this->toInfusion($pair['engine'], $pair['local']),
-            ])
+        return $this->overview()
+            ->filter(fn (array $pair) => $pair['infusion'])
             ->values();
+    }
+
+    /**
+     * Every pump the engine has seen, with an infusion attached to the ones
+     * that are bound to a patient and `infusion => null` for the ones that
+     * are not. One /api/pumps call answers both halves of the ward overview:
+     * the infusion cards, and the "seen but not linked" list that tells a
+     * nurse which pump still needs binding.
+     *
+     * Each item: ['engine' => array, 'local' => ?InfusionPump, 'infusion' => ?Infusion]
+     */
+    public function overview(): Collection
+    {
+        return $this->pumpPairs()->map(fn (array $pair) => $pair + [
+            'infusion' => $pair['local'] && $pair['local']->patient
+                ? $this->toInfusion($pair['engine'], $pair['local'])
+                : null,
+        ]);
     }
 
     /**
@@ -261,6 +276,7 @@ class EngineInfusionService
         return [
             'running' => $infusions->where('status', Infusion::STATUS_RUNNING)->count(),
             'paused' => $infusions->where('status', Infusion::STATUS_PAUSED)->count(),
+            'stopped' => $infusions->where('status', Infusion::STATUS_STOPPED)->count(),
             'completed' => $infusions->where('status', Infusion::STATUS_COMPLETED)->count(),
             'warnings' => $infusions
                 ->where('status', Infusion::STATUS_RUNNING)

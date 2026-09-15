@@ -21,12 +21,14 @@ class AdmissionLog extends Model
         'age',
         'notes',
         'admitted_at',
+        'discharged_at',
         'booked_at',
         'source', // 'manual' or 'adt'
     ];
 
     protected $casts = [
         'admitted_at' => 'datetime',
+        'discharged_at' => 'datetime',
         'booked_at' => 'datetime',
     ];
 

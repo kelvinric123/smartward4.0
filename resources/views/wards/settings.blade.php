@@ -30,6 +30,7 @@
             cursor: grabbing;
         }
     </style>
+    @include('components.autofill-guard')
 </head>
 
 <body class="bg-gray-50">

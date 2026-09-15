@@ -225,621 +225,51 @@
                 </div>
             @endif
 
-            <!-- Integration Mode Selection -->
-            <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-indigo-100"
-                 x-data="integrationModeCard()">
-                <div class="p-6 border-b border-indigo-100 bg-gradient-to-r from-indigo-50 to-purple-50">
-                    <div class="flex items-center justify-between flex-wrap gap-3">
-                        <div class="flex items-center">
-                            <div class="p-3 bg-indigo-600 rounded-xl mr-4">
-                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4"/>
-                                </svg>
-                            </div>
-                            <div>
-                                <h3 class="text-lg font-bold text-gray-800">Integration Mode</h3>
-                                <p class="text-sm text-gray-500">Choose how SmartWard connects to the infusion pumps</p>
-                            </div>
-                        </div>
-                        @if ($integrationMode === 'engine')
-                            @if ($engineStatus && ($engineStatus['ok'] ?? false))
-                                <span class="px-3 py-1.5 rounded-full text-sm font-medium bg-green-100 text-green-700">
-                                    <span class="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse mr-2"></span>
-                                    Qmed Engine Connected — v{{ $engineStatus['health']['version'] ?? '?' }},
-                                    {{ $engineStatus['health']['messages'] ?? 0 }} messages,
-                                    {{ $engineStatus['health']['pumps'] ?? 0 }} pumps
-                                </span>
-                            @else
-                                <span class="px-3 py-1.5 rounded-full text-sm font-medium bg-red-100 text-red-700">
-                                    <span class="inline-block w-2 h-2 rounded-full bg-red-500 mr-2"></span>
-                                    Qmed Engine Unreachable{{ $engineStatus ? ' — ' . ($engineStatus['error'] ?? '') : '' }}
-                                </span>
+            @include('integration.infusion.partials.stats')
+
+            {{-- ================= Section Navigation ================= --}}
+            <div class="bg-white/90 backdrop-blur-sm shadow-lg rounded-2xl border border-gray-100 p-2">
+                <nav class="flex flex-wrap gap-1" aria-label="Sections">
+                    @php
+                        $sections = [
+                            ['id' => 'pumps', 'label' => 'Registered Pumps', 'count' => $pumps->count(),
+                                'icon' => 'M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z'],
+                            ['id' => 'config', 'label' => 'Configuration', 'count' => null,
+                                'icon' => 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z'],
+                            ['id' => 'logs', 'label' => 'HL7 Logs', 'count' => $hl7Logs->count(),
+                                'icon' => 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'],
+                        ];
+                    @endphp
+                    @foreach($sections as $section)
+                        <button type="button" @click="setTab('{{ $section['id'] }}')"
+                            :class="mainTab === '{{ $section['id'] }}' ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md' : 'text-gray-600 hover:bg-gray-100'"
+                            class="flex-1 min-w-[9rem] inline-flex items-center justify-center px-4 py-2.5 rounded-xl text-sm font-semibold transition-all">
+                            <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ $section['icon'] }}" />
+                            </svg>
+                            {{ $section['label'] }}
+                            @if(!is_null($section['count']))
+                                <span :class="mainTab === '{{ $section['id'] }}' ? 'bg-white/25 text-white' : 'bg-gray-200 text-gray-600'"
+                                    class="ml-2 px-1.5 py-0.5 text-xs font-bold rounded-full">{{ $section['count'] }}</span>
                             @endif
-                        @else
-                            <span class="px-3 py-1.5 rounded-full text-sm font-medium bg-cyan-100 text-cyan-700">
-                                Built-in listener active
-                            </span>
-                        @endif
-                    </div>
-                </div>
-
-                <form action="{{ route('infusion-integration.settings.save') }}" method="POST" class="p-6">
-                    @csrf
-                    <input type="hidden" name="mode" :value="mode">
-
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <!-- Option 1: In the same project -->
-                        <div class="rounded-2xl border-2 transition-all cursor-pointer"
-                             :class="mode === 'local' ? 'border-cyan-500 bg-cyan-50/50 shadow-md' : 'border-gray-200 bg-white hover:border-cyan-300'"
-                             @click="mode = 'local'">
-                            <div class="p-5">
-                                <div class="flex items-start">
-                                    <div class="mt-0.5 mr-3 flex-shrink-0">
-                                        <span class="w-5 h-5 rounded-full border-2 inline-flex items-center justify-center"
-                                              :class="mode === 'local' ? 'border-cyan-600' : 'border-gray-300'">
-                                            <span class="w-2.5 h-2.5 rounded-full bg-cyan-600" x-show="mode === 'local'"></span>
-                                        </span>
-                                    </div>
-                                    <div class="flex-1">
-                                        <div class="font-bold text-gray-800">1) In the same project <span class="text-xs font-medium text-gray-500">(current / built-in)</span></div>
-                                        <p class="text-sm text-gray-600 mt-1">
-                                            The B.Braun MLLP listener runs alongside SmartWard and writes HL7 data
-                                            directly into the SmartWard database.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div class="mt-4 pt-4 border-t border-cyan-100 space-y-3" x-show="mode === 'local'" x-cloak>
-                                    <div class="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Listener Host</label>
-                                            <input type="text" name="local_host" value="{{ $localConfig['host'] ?? '0.0.0.0' }}"
-                                                   class="w-full rounded-lg border-gray-300 text-sm font-mono focus:border-cyan-500 focus:ring-cyan-500" @click.stop>
-                                        </div>
-                                        <div>
-                                            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Listener Port</label>
-                                            <input type="number" name="local_port" value="{{ $localConfig['port'] ?? '5001' }}"
-                                                   class="w-full rounded-lg border-gray-300 text-sm font-mono focus:border-cyan-500 focus:ring-cyan-500" @click.stop>
-                                        </div>
-                                    </div>
-                                    <p class="text-xs text-gray-500">
-                                        Pumps send HL7/MLLP to this address. The values must match the running
-                                        <code class="bg-gray-100 px-1 rounded">bbraun</code> listener service
-                                        (container env <code class="bg-gray-100 px-1 rounded">BBRAUN_PORT</code>) —
-                                        changing them here updates what SmartWard displays and expects.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Option 2: Qmed Infusion Engine -->
-                        <div class="rounded-2xl border-2 transition-all cursor-pointer"
-                             :class="mode === 'engine' ? 'border-indigo-500 bg-indigo-50/50 shadow-md' : 'border-gray-200 bg-white hover:border-indigo-300'"
-                             @click="mode = 'engine'">
-                            <div class="p-5">
-                                <div class="flex items-start">
-                                    <div class="mt-0.5 mr-3 flex-shrink-0">
-                                        <span class="w-5 h-5 rounded-full border-2 inline-flex items-center justify-center"
-                                              :class="mode === 'engine' ? 'border-indigo-600' : 'border-gray-300'">
-                                            <span class="w-2.5 h-2.5 rounded-full bg-indigo-600" x-show="mode === 'engine'"></span>
-                                        </span>
-                                    </div>
-                                    <div class="flex-1">
-                                        <div class="font-bold text-gray-800">2) Qmed Infusion Engine <span class="text-xs font-medium text-gray-500">(via API)</span></div>
-                                        <p class="text-sm text-gray-600 mt-1">
-                                            A standalone engine receives, stores and parses all pump HL7 separately.
-                                            SmartWard reads the parsed data over a configurable REST API.
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <div class="mt-4 pt-4 border-t border-indigo-100 space-y-3" x-show="mode === 'engine'" x-cloak>
-                                    <div>
-                                        <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Engine API URL</label>
-                                        <input type="url" name="engine_url" x-model="engineUrl" placeholder="http://192.168.0.88:6001"
-                                               class="w-full rounded-lg border-gray-300 text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500" @click.stop>
-                                    </div>
-                                    <div class="grid grid-cols-3 gap-3">
-                                        <div class="col-span-1">
-                                            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">API Key <span class="normal-case">(optional)</span></label>
-                                            <input type="password" name="engine_api_key" x-model="engineApiKey" placeholder="X-API-Key"
-                                                   class="w-full rounded-lg border-gray-300 text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500" @click.stop>
-                                        </div>
-                                        <div>
-                                            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Timeout (s)</label>
-                                            <input type="number" name="engine_timeout" x-model="engineTimeout" min="1" max="60"
-                                                   class="w-full rounded-lg border-gray-300 text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500" @click.stop>
-                                        </div>
-                                        <div>
-                                            <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Refresh (s)</label>
-                                            <input type="number" name="engine_refresh_sec" x-model="engineRefreshSec" min="2" max="300"
-                                                   class="w-full rounded-lg border-gray-300 text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500" @click.stop>
-                                        </div>
-                                    </div>
-                                    <div class="flex items-center gap-3 flex-wrap">
-                                        <button type="button" @click.stop="testEngine()"
-                                                class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors"
-                                                :disabled="testing">
-                                            <svg class="w-4 h-4 mr-2" x-show="!testing" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                                            </svg>
-                                            <svg class="w-4 h-4 mr-2 animate-spin" x-show="testing" x-cloak fill="none" viewBox="0 0 24 24">
-                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-                                            </svg>
-                                            <span x-text="testing ? 'Testing…' : 'Test Connection'"></span>
-                                        </button>
-                                        <a :href="engineUrl" target="_blank" @click.stop
-                                           class="text-sm text-indigo-600 hover:text-indigo-800 font-medium underline">
-                                            Open engine management page ↗
-                                        </a>
-                                    </div>
-                                    <div x-show="testResult" x-cloak class="text-sm rounded-lg px-4 py-3"
-                                         :class="testResult && testResult.ok ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'">
-                                        <template x-if="testResult && testResult.ok">
-                                            <span>✓ Connected — engine v<span x-text="testResult.health.version"></span>,
-                                                <span x-text="testResult.health.messages"></span> messages,
-                                                <span x-text="testResult.health.pumps"></span> pumps,
-                                                <span x-text="testResult.health.alarms"></span> alarms stored.</span>
-                                        </template>
-                                        <template x-if="testResult && !testResult.ok">
-                                            <span>✗ <span x-text="testResult.error"></span></span>
-                                        </template>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mt-6 flex items-center justify-between flex-wrap gap-3">
-                        <p class="text-xs text-gray-500">
-                            The selected mode controls where SmartWard reads infusion data from.
-                            Both configurations are kept — you can switch back at any time.
-                        </p>
-                        <button type="submit"
-                                class="px-6 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold rounded-lg shadow transition-all">
-                            Save Integration Settings
                         </button>
-                    </div>
-                </form>
+                    @endforeach
+                </nav>
             </div>
 
-            <!-- MLLP Configuration Section -->
-            <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-cyan-100">
-                <div class="p-6 border-b border-cyan-100 bg-gradient-to-r from-cyan-50 to-blue-50">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center">
-                            <div class="p-3 bg-cyan-600 rounded-xl mr-4">
-                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
-                                </svg>
-                            </div>
-                            <div>
-                                <h3 class="text-lg font-bold text-gray-800">MLLP Listener Configuration</h3>
-                                <p class="text-sm text-gray-500">B.Braun HL7 message listener settings</p>
-                            </div>
-                        </div>
-                        @if($stats['active_pumps'] > 0)
-                            <div class="flex items-center">
-                                <span class="px-3 py-1.5 rounded-full text-sm font-medium bg-green-100 text-green-700">
-                                    <span class="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse mr-2"></span>
-                                    {{ $stats['active_pumps'] }} Pumps Online
-                                </span>
-                            </div>
-                        @endif
-                    </div>
-                </div>
-
-                <div class="p-6">
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-                        <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
-                            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Host Address</div>
-                            <div class="text-lg font-mono font-bold text-gray-800">{{ $mllpConfig['host'] }}</div>
-                        </div>
-                        <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
-                            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Port</div>
-                            <div class="text-lg font-mono font-bold text-cyan-600">{{ $mllpConfig['port'] }}</div>
-                        </div>
-                        <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
-                            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Protocol</div>
-                            <div class="text-sm font-semibold text-gray-800">{{ $mllpConfig['protocol'] }}</div>
-                        </div>
-                        <div class="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
-                            <div class="text-xs font-semibold text-gray-500 uppercase mb-1">HL7 Version</div>
-                            <div class="text-lg font-mono font-bold text-purple-600">{{ $mllpConfig['hl7_version'] }}</div>
-                        </div>
-                    </div>
-                    
-                    <div class="mt-6 pt-6 border-t border-gray-100">
-                        <div class="flex items-center mb-4">
-                            <div class="p-2 bg-orange-100 rounded-lg mr-3">
-                                <svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
-                                </svg>
-                            </div>
-                            <h4 class="text-sm font-bold text-gray-700 uppercase tracking-wider">Database Connection</h4>
-                        </div>
-                        
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-                            <div class="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl p-4 border border-orange-100">
-                                <div class="text-xs font-semibold text-gray-500 uppercase mb-1">DB Host</div>
-                                <div class="text-lg font-mono font-bold text-gray-800">{{ $dbConfig['host'] }}</div>
-                            </div>
-                            <div class="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl p-4 border border-orange-100">
-                                <div class="text-xs font-semibold text-gray-500 uppercase mb-1">DB Port</div>
-                                <div class="text-lg font-mono font-bold text-orange-600">{{ $dbConfig['port'] }}</div>
-                            </div>
-                            <div class="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl p-4 border border-orange-100">
-                                <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Database</div>
-                                <div class="text-sm font-bold text-gray-800">{{ $dbConfig['database'] }}</div>
-                            </div>
-                            <div class="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl p-4 border border-orange-100">
-                                <div class="text-xs font-semibold text-gray-500 uppercase mb-1">Username</div>
-                                <div class="text-lg font-mono font-bold text-gray-800">{{ $dbConfig['username'] }}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                        <div class="flex items-start">
-                            <svg class="w-5 h-5 text-blue-500 mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                            <div class="text-sm text-blue-700">
-                                <strong>Listener Service:</strong> The B.Braun HL7 listener runs as a separate Python service. 
-                                Configure settings in <code class="bg-blue-100 px-1 rounded">bbraun/.env</code> and start with 
-                                <code class="bg-blue-100 px-1 rounded">python bbraun/bbraun_hl7_listener.py</code>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            {{-- ================= Section Panels ================= --}}
+            <div x-show="mainTab === 'pumps'" x-cloak>
+                @include('integration.infusion.partials.tab-pumps')
             </div>
 
-            <!-- Stats Overview -->
-            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-                <div class="bg-white rounded-xl shadow-md p-4 border border-gray-100">
-                    <div class="flex items-center">
-                        <div class="p-2 bg-indigo-100 rounded-lg mr-3">
-                            <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <div class="text-xl font-bold text-gray-800">{{ $stats['total_pumps'] }}</div>
-                            <div class="text-xs text-gray-500">Total Pumps</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="bg-white rounded-xl shadow-md p-4 border border-gray-100">
-                    <div class="flex items-center">
-                        <div class="p-2 bg-green-100 rounded-lg mr-3">
-                            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <div class="text-xl font-bold text-gray-800">{{ $stats['active_pumps'] }}</div>
-                            <div class="text-xs text-gray-500">Active Pumps</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="bg-white rounded-xl shadow-md p-4 border border-gray-100">
-                    <div class="flex items-center">
-                        <div class="p-2 bg-blue-100 rounded-lg mr-3">
-                            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <div class="text-xl font-bold text-gray-800">{{ $stats['active_infusions'] }}</div>
-                            <div class="text-xs text-gray-500">Active Infusions</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="bg-white rounded-xl shadow-md p-4 border border-gray-100">
-                    <div class="flex items-center">
-                        <div class="p-2 bg-amber-100 rounded-lg mr-3">
-                            <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <div class="text-xl font-bold text-amber-600">{{ $stats['warnings'] }}</div>
-                            <div class="text-xs text-gray-500">Warnings</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="bg-white rounded-xl shadow-md p-4 border border-gray-100">
-                    <div class="flex items-center">
-                        <div class="p-2 bg-red-100 rounded-lg mr-3">
-                            <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <div class="text-xl font-bold text-red-600">{{ $stats['alarms'] }}</div>
-                            <div class="text-xs text-gray-500">Alarms</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="bg-white rounded-xl shadow-md p-4 border border-gray-100">
-                    <div class="flex items-center">
-                        <div class="p-2 bg-purple-100 rounded-lg mr-3">
-                            <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <div class="text-xl font-bold text-gray-800">{{ $stats['total_hl7_messages'] }}</div>
-                            <div class="text-xs text-gray-500">Total HL7 Msgs</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="bg-white rounded-xl shadow-md p-4 border border-gray-100">
-                    <div class="flex items-center">
-                        <div class="p-2 bg-cyan-100 rounded-lg mr-3">
-                            <svg class="w-5 h-5 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <div class="text-xl font-bold text-gray-800">{{ $stats['messages_today'] }}</div>
-                            <div class="text-xs text-gray-500">Today</div>
-                        </div>
-                    </div>
-                </div>
-                <div class="bg-white rounded-xl shadow-md p-4 border border-gray-100">
-                    <div class="flex items-center">
-                        <div class="p-2 bg-rose-100 rounded-lg mr-3">
-                            <svg class="w-5 h-5 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-                            </svg>
-                        </div>
-                        <div>
-                            <div class="text-xl font-bold text-rose-600">{{ $stats['error_messages'] }}</div>
-                            <div class="text-xs text-gray-500">Errors</div>
-                        </div>
-                    </div>
-                </div>
+            <div x-show="mainTab === 'config'" x-cloak>
+                @include('integration.infusion.partials.tab-config')
             </div>
 
-            <!-- Registered Pumps Section -->
-            <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-purple-100">
-                <div class="p-6 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-pink-50">
-                    <div class="flex justify-between items-center">
-                        <div class="flex items-center">
-                            <div class="p-3 bg-purple-600 rounded-xl mr-4">
-                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
-                                </svg>
-                            </div>
-                            <div>
-                                <h3 class="text-lg font-bold text-gray-800">Registered Pump Users</h3>
-                                <p class="text-sm text-gray-500">Pumps are auto-registered when they first send HL7 data</p>
-                            </div>
-                        </div>
-                        <button @click="showAddPumpModal = true" class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-semibold rounded-lg shadow-md hover:shadow-lg transition-all">
-                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                            </svg>
-                            Add Pump
-                        </button>
-                    </div>
-                </div>
-
-                <div class="p-6">
-                    @if($pumps->count() > 0)
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead>
-                                    <tr class="bg-gray-50">
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Serial No</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Device ID</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Asset No</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Name</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Type</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Location</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Ward</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Status</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Last Seen</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="bg-white divide-y divide-gray-100">
-                                    @foreach($pumps as $pump)
-                                        <tr class="hover:bg-gray-50 transition-colors">
-                                            <td class="px-4 py-3 text-sm font-bold text-gray-800">{{ $pump->serial_no ?? '-' }}</td>
-                                            <td class="px-4 py-3 text-sm font-mono text-gray-600">{{ $pump->device_id }}</td>
-                                            <td class="px-4 py-3 text-sm text-gray-700">{{ $pump->asset_no ?? '-' }}</td>
-                                            <td class="px-4 py-3 text-sm text-gray-700">{{ $pump->device_name ?? '-' }}</td>
-                                            <td class="px-4 py-3 text-sm text-gray-600">{{ $pump->device_type ?? 'Unknown' }}</td>
-                                            <td class="px-4 py-3 text-sm text-gray-600">{{ $pump->location ?? '-' }}</td>
-                                            <td class="px-4 py-3 text-sm text-gray-600">{{ $pump->ward->ward_name ?? '-' }}</td>
-                                            <td class="px-4 py-3">
-                                                <span class="text-xs font-medium px-2 py-0.5 rounded {{ $pump->is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' }}">
-                                                    {{ $pump->is_active ? 'Active' : 'Inactive' }}
-                                                </span>
-                                            </td>
-                                            <td class="px-4 py-3 text-sm text-gray-600">{{ $pump->last_seen_at ? $pump->last_seen_at->diffForHumans() : 'Never' }}</td>
-                                            <td class="px-4 py-3">
-                                                <div class="flex items-center space-x-2">
-                                                    <button @click="viewPumpStatus({{ json_encode($pump) }})" title="View live status (Infusion Engine)" class="text-emerald-600 hover:text-emerald-800 transition-colors">
-                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                                                        </svg>
-                                                    </button>
-                                                    <button @click="viewPumpHl7({{ json_encode($pump) }})" title="View raw HL7 messages (debug)" class="text-indigo-600 hover:text-indigo-800 transition-colors">
-                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
-                                                        </svg>
-                                                    </button>
-                                                    <button @click="editPump({{ json_encode($pump) }})" class="text-blue-600 hover:text-blue-800 transition-colors">
-                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                                                        </svg>
-                                                    </button>
-                                                    <form action="{{ route('infusion-integration.pump.destroy', $pump) }}" method="POST" class="inline" >
-                                                        @csrf
-                                                        @method('DELETE')
-                                                        <button type="button" onclick="confirmDelete(event, 'Are you sure you want to delete this item?')" class="text-red-600 hover:text-red-800 transition-colors">
-                                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                                            </svg>
-                                                        </button>
-                                                    </form>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-                    @else
-                        <div class="text-center py-8">
-                            <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
-                            </svg>
-                            <p class="text-gray-500">No pumps registered yet.</p>
-                            <p class="text-sm text-gray-400 mt-1">Pumps will appear here when they send their first HL7 message, or you can add them manually.</p>
-                        </div>
-                    @endif
-                </div>
+            <div x-show="mainTab === 'logs'" x-cloak>
+                @include('integration.infusion.partials.tab-logs')
             </div>
 
-            <!-- Recent HL7 Logs Section -->
-            <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-blue-100">
-                <div class="p-6 border-b border-blue-100 bg-gradient-to-r from-blue-50 to-cyan-50">
-                    <div class="flex justify-between items-center">
-                        <div class="flex items-center">
-                            <div class="p-3 bg-blue-600 rounded-xl mr-4">
-                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                                </svg>
-                            </div>
-                            <div>
-                                <h3 class="text-lg font-bold text-gray-800">Recent HL7 Messages</h3>
-                                <p class="text-sm text-gray-500">HL7 messages received from B.Braun pumps</p>
-                            </div>
-                        </div>
-                    <div class="flex items-center space-x-2">
-                        <!-- Duration Filter -->
-                        <form action="{{ route('infusion-integration.index') }}" method="GET" class="flex items-center no-print">
-                            <input type="hidden" name="status_filter" value="{{ $statusFilter }}">
-                            <select name="duration" onchange="this.form.submit()" class="text-sm border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg shadow-sm mr-2">
-                                <option value="30m" {{ $duration == '30m' ? 'selected' : '' }}>Last 30 Minutes</option>
-                                <option value="1h" {{ $duration == '1h' ? 'selected' : '' }}>Last 1 Hour</option>
-                                <option value="2h" {{ $duration == '2h' ? 'selected' : '' }}>Last 2 Hours</option>
-                                <option value="6h" {{ $duration == '6h' ? 'selected' : '' }}>Last 6 Hours</option>
-                                <option value="12h" {{ $duration == '12h' ? 'selected' : '' }}>Last 12 Hours</option>
-                                <option value="24h" {{ $duration == '24h'  ? 'selected' : '' }}>Last 24 Hours</option>
-                                <option value="48h" {{ $duration == '48h'  ? 'selected' : '' }}>Last 48 Hours</option>
-                                <option value="7d" {{ $duration == '7d'  ? 'selected' : '' }}>Last 7 Days</option>
-                                <option value="30d" {{ $duration == '30d'  ? 'selected' : '' }}>Last 30 Days</option>
-                                <option value="all" {{ $duration == 'all' ? 'selected' : '' }}>All Time</option>
-                            </select>
-                        </form>
-
-                        <!-- Status Filter -->
-                        <form action="{{ route('infusion-integration.index') }}" method="GET" class="flex items-center no-print">
-                            <input type="hidden" name="duration" value="{{ $duration }}">
-                            <select name="status_filter" onchange="this.form.submit()" class="text-sm border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg shadow-sm mr-2">
-                                <option value="mapped" {{ $statusFilter == 'mapped' ? 'selected' : '' }}>Mapped Only</option>
-                                <option value="all" {{ $statusFilter == 'all' ? 'selected' : '' }}>All Messages</option>
-                                <option value="error" {{ $statusFilter == 'error' ? 'selected' : '' }}>Errors Only</option>
-                            </select>
-                        </form>
-
-                        <!-- Print Button -->
-                        <button onclick="window.print()" class="no-print inline-flex items-center px-3 py-1.5 bg-white border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-50 focus:outline-none transition-colors">
-                            <svg class="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
-                            </svg>
-                            Print
-                        </button>
-
-                        <!-- Export Button -->
-                        <a href="{{ route('infusion-integration.export', ['duration' => $duration]) }}" class="no-print inline-flex items-center px-3 py-1.5 bg-green-50 border border-green-200 text-green-700 hover:bg-green-100 rounded-lg transition-colors text-sm font-medium">
-                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                            </svg>
-                            Save to Excel
-                        </a>
-
-                        <form action="{{ route('infusion-integration.logs.clear') }}" method="POST" onsubmit="return confirm('Are you sure you want to clear all HL7 message logs?');" class="no-print">
-                            @csrf
-                            <button type="submit" class="inline-flex items-center px-3 py-1.5 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 rounded-lg transition-colors text-sm font-medium">
-                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                </svg>
-                                Clear Logs
-                            </button>
-                        </form>
-                    </div>
-                    </div>
-                </div>
-
-                <div class="p-6">
-                    @if($hl7Logs->count() > 0)
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead>
-                                    <tr class="bg-gray-50">
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Time</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Message Type</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Device</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Patient MRN</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Medication</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Pump Status</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Status</th>
-                                        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase">Source IP</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="bg-white divide-y divide-gray-100">
-                                    @foreach($hl7Logs as $log)
-                                        <tr class="hover:bg-gray-50 transition-colors cursor-pointer" @click="viewLogDetails({{ json_encode($log) }})">
-                                            <td class="px-4 py-3 text-sm text-gray-600">{{ $log->created_at->format('M d, H:i:s') }}</td>
-                                            <td class="px-4 py-3">
-                                                <span class="text-xs font-medium px-2 py-0.5 rounded bg-purple-100 text-purple-700">{{ $log->message_type ?? 'N/A' }}</span>
-                                                @if($log->event_type)
-                                                    <span class="text-xs text-gray-500 ml-1">^{{ $log->event_type }}</span>
-                                                @endif
-                                            </td>
-                                            <td class="px-4 py-3 text-sm font-mono text-gray-800">{{ $log->device_id ?? '-' }}</td>
-                                            <td class="px-4 py-3 text-sm font-medium text-gray-700">{{ $log->patient_mrn ?? '-' }}</td>
-                                            <td class="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{{ $log->medication_name ?? '-' }}</td>
-                                            <td class="px-4 py-3">
-                                                @if($log->pump_status)
-                                                    <span class="text-xs font-medium px-2 py-0.5 rounded {{ $log->pump_status_color }}">
-                                                        {{ ucfirst($log->pump_status) }}
-                                                    </span>
-                                                @else
-                                                    <span class="text-xs text-gray-400">-</span>
-                                                @endif
-                                            </td>
-                                            <td class="px-4 py-3">
-                                                <span class="text-xs font-medium px-2 py-0.5 rounded {{ $log->status_color }}">
-                                                    {{ ucfirst($log->status) }}
-                                                </span>
-                                            </td>
-                                            <td class="px-4 py-3 text-sm text-gray-500 font-mono">{{ $log->source_ip ?? '-' }}</td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-                    @else
-                        <div class="text-center py-8">
-                            <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                            </svg>
-                            <p class="text-gray-500">No HL7 messages received yet.</p>
-                            <p class="text-sm text-gray-400 mt-1">Messages will appear here when pumps send HL7 data via MLLP.</p>
-                        </div>
-                    @endif
-                </div>
-            </div>
         </div>
 
         <!-- Add/Edit Pump Modal -->
@@ -1393,6 +823,55 @@
 
         function infusionIntegration() {
             return {
+                // ---- Layout ----
+                mainTab: 'pumps',
+                pumpView: 'panel',   // 'panel' (tiles by ward) | 'details' (table)
+                pumpSearch: '',
+                pumpHaystacks: @js($pumps->map(fn($p) => Str::lower(implode(' ', array_filter([
+                    $p->device_name, $p->serial_no, $p->asset_no, $p->device_id,
+                    $p->device_type, $p->location, $p->pump_model,
+                    $p->ward->ward_name ?? 'Unassigned',
+                    $p->patient->name ?? null,
+                ]))))->values()),
+
+                init() {
+                    // Come back to the section and view last used.
+                    try {
+                        const tab = localStorage.getItem('ii_main_tab');
+                        if (tab) this.mainTab = tab;
+                        const view = localStorage.getItem('ii_pump_view');
+                        if (view) this.pumpView = view;
+                    } catch (e) {}
+
+                    @if(request()->has('duration') || request()->has('status_filter'))
+                        // Arriving with a log filter applied means the logs are
+                        // what the user came for.
+                        this.mainTab = 'logs';
+                    @endif
+                },
+
+                setTab(tab) {
+                    this.mainTab = tab;
+                    try { localStorage.setItem('ii_main_tab', tab); } catch (e) {}
+                },
+
+                setPumpView(view) {
+                    this.pumpView = view;
+                    try { localStorage.setItem('ii_pump_view', view); } catch (e) {}
+                },
+
+                // Rows and tiles carry their searchable text in data-search and
+                // test it inline, so no pump data is duplicated into JavaScript
+                // twice. The term is passed in rather than read off `this`:
+                // Alpine tracks what a template expression reads, not what a
+                // method reaches for once it is inside.
+                matchingPumps(search) {
+                    const term = (search || '').trim().toLowerCase();
+                    if (term === '') return this.pumpHaystacks.length;
+                    return this.pumpHaystacks.filter(h => h.includes(term)).length;
+                },
+
+                // ---- Pump registry ----
                 showAddPumpModal: false,
                 showEditPumpModal: false,
                 showLogDetailsModal: false,

@@ -10,6 +10,7 @@ use App\Http\Controllers\PatientController;
 use App\Http\Controllers\WardController;
 use App\Http\Controllers\BedController;
 use App\Http\Controllers\WardDashboardController;
+use App\Http\Controllers\DischargeSummaryController;
 use App\Http\Controllers\WardScheduleController;
 use App\Http\Controllers\VitalSignController;
 use App\Http\Controllers\LdapConfigurationController;
@@ -124,6 +125,12 @@ Route::middleware('auth')->group(function () {
     // Bed Management Routes
     Route::resource('beds', BedController::class)->except(['show']);
     Route::post('beds/{bed}/deactivate', [BedController::class, 'deactivate'])->name('beds.deactivate');
+
+    // Discharge Summary Routes
+    // {admission} is the admit / check-in admission_logs row that opened the stay.
+    Route::get('/discharge-summaries', [DischargeSummaryController::class, 'index'])->name('discharge-summaries.index');
+    Route::get('/discharge-summaries/{admission}', [DischargeSummaryController::class, 'show'])->name('discharge-summaries.show');
+    Route::get('/discharge-summaries/{admission}/print', [DischargeSummaryController::class, 'print'])->name('discharge-summaries.print');
 
     // Ward Schedule Routes
     Route::get('/ward-schedule', [WardScheduleController::class, 'index'])

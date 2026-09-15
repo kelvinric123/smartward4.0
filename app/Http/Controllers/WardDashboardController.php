@@ -2170,6 +2170,7 @@ class WardDashboardController extends Controller
             'gender' => $patient->gender,
             'age' => $patient->age,
             'notes' => implode(' | ', $notesParts),
+            'discharged_at' => $dischargedAt,
             'source' => 'manual',
         ]);
 

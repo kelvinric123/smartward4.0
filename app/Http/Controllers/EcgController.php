@@ -4,12 +4,17 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Patient;
+use App\Services\EcgArchive;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
 class EcgController extends Controller
 {
+    public function __construct(private EcgArchive $ecgArchive)
+    {
+    }
+
     /**
      * Display ECG Admin page with all ECG files
      */
@@ -261,116 +266,7 @@ class EcgController extends Controller
      */
     private function findEcgFilesForPatient(?string $mrn, ?string $rn = null, ?int $patientId = null): array
     {
-        $ecgStorePath = config('services.ecg.store_path');
-        $ecgFiles = [];
-
-        // Clean the identifiers for comparison (trim whitespace)
-        $mrn = $mrn ? trim($mrn) : null;
-        $rn = $rn ? trim($rn) : null;
-
-        if (empty($mrn) && empty($rn) && empty($patientId)) {
-            Log::warning('ECG search: Empty MRN, RN and patient ID provided');
-            return [];
-        }
-
-        if (!is_dir($ecgStorePath)) {
-            Log::warning('ECG store directory not found', ['path' => $ecgStorePath]);
-            return [];
-        }
-
-        // Scan the ECG store directory for XML files
-        $files = scandir($ecgStorePath);
-
-        foreach ($files as $file) {
-            if ($file === '.' || $file === '..') {
-                continue;
-            }
-
-            // Manually uploaded PDFs are matched by patient ID in the filename
-            if ($patientId && preg_match('/^manual_pid(\d+)_.*\.pdf$/i', $file, $matches)) {
-                if ((int) $matches[1] === $patientId) {
-                    $pdfPath = $ecgStorePath . '/' . $file;
-                    $timestamp = $this->getTimestampFromFilename($file, $pdfPath);
-
-                    $ecgFiles[] = [
-                        'xml_file' => null,
-                        'pdf_file' => $file,
-                        'has_pdf' => true,
-                        'mrn' => $mrn,
-                        'timestamp' => $timestamp,
-                        'recorded_at' => $timestamp,
-                        'source' => 'manual',
-                    ];
-                }
-                continue;
-            }
-
-            // Only process XML files
-            if (!preg_match('/\.xml$/i', $file)) {
-                continue;
-            }
-
-            if (empty($mrn) && empty($rn)) {
-                continue;
-            }
-
-            $xmlPath = $ecgStorePath . '/' . $file;
-
-            // Parse XML to get PatientID (which could be MRN or RN)
-            $ecgPatientId = $this->getEcgPatientId($xmlPath);
-
-            // Match by MRN or RN (PatientID in ECG XML can be either)
-            $isMatch = false;
-            if ($ecgPatientId !== null) {
-                $trimmedEcgId = trim($ecgPatientId);
-                // Check if ECG PatientID matches MRN or RN
-                if (($mrn && $trimmedEcgId === $mrn) || ($rn && $trimmedEcgId === $rn)) {
-                    $isMatch = true;
-                }
-            }
-
-            if ($isMatch) {
-                // Check if there's an extracted PDF for this XML
-                $baseName = pathinfo($file, PATHINFO_FILENAME);
-                $pdfFile = $baseName . '_extracted.pdf';
-                $pdfPath = $ecgStorePath . '/' . $pdfFile;
-
-                $hasPdf = file_exists($pdfPath);
-
-                // Get timestamp from filename
-                $timestamp = $this->getTimestampFromFilename($file, $xmlPath);
-
-                $ecgFiles[] = [
-                    'xml_file' => $file,
-                    'pdf_file' => $hasPdf ? $pdfFile : null,
-                    'has_pdf' => $hasPdf,
-                    'mrn' => $ecgPatientId,  // The MRN from ECG (PatientID)
-                    'timestamp' => $timestamp,
-                    'recorded_at' => $timestamp,
-                    'source' => 'gateway',
-                ];
-
-                Log::debug('ECG file matched', [
-                    'file' => $file,
-                    'ecg_patient_id' => $ecgPatientId,
-                    'patient_mrn' => $mrn,
-                    'patient_rn' => $rn,
-                ]);
-            }
-        }
-
-        // Sort by timestamp descending (newest first)
-        usort($ecgFiles, function ($a, $b) {
-            return strtotime($b['timestamp'] ?? '1970-01-01') - strtotime($a['timestamp'] ?? '1970-01-01');
-        });
-
-        Log::info('ECG search completed', [
-            'mrn' => $mrn,
-            'rn' => $rn,
-            'files_found' => count($ecgFiles),
-        ]);
-
-        return $ecgFiles;
+        return $this->ecgArchive->filesForPatient($mrn, $rn, $patientId);
     }
 
     /**
@@ -545,38 +441,7 @@ class EcgController extends Controller
      */
     private function getEcgPatientId(string $xmlPath): ?string
     {
-        try {
-            $data = file_get_contents($xmlPath);
-
-            if (empty($data)) {
-                return null;
-            }
-
-            // Decode XML content (handle UTF-16 encoding)
-            if (substr($data, 0, 2) === "\xff\xfe") {
-                $xmlContent = mb_convert_encoding($data, 'UTF-8', 'UTF-16LE');
-            } elseif (substr($data, 0, 2) === "\xfe\xff") {
-                $xmlContent = mb_convert_encoding($data, 'UTF-8', 'UTF-16BE');
-            } else {
-                $xmlContent = $data;
-            }
-
-            // Parse XML
-            libxml_use_internal_errors(true);
-            $xml = simplexml_load_string($xmlContent);
-
-            if ($xml === false) {
-                return null;
-            }
-
-            // Return PatientID (this can be MRN or RN in the ECG)
-            $patientId = (string) ($xml->PatientID ?? '');
-
-            return !empty($patientId) ? trim($patientId) : null;
-
-        } catch (\Exception $e) {
-            return null;
-        }
+        return $this->ecgArchive->patientIdFromXml($xmlPath);
     }
 
     /**
@@ -584,19 +449,7 @@ class EcgController extends Controller
      */
     private function getTimestampFromFilename(string $filename, string $xmlPath): string
     {
-        $baseName = pathinfo($filename, PATHINFO_FILENAME);
-
-        // Try to extract timestamp from filename (format: ecg_upload_YYYYMMDD_HHMMSS)
-        if (preg_match('/(\d{8}_\d{6})/', $baseName, $matches)) {
-            $dateStr = $matches[1];
-            $timestamp = \DateTime::createFromFormat('Ymd_His', $dateStr);
-            if ($timestamp) {
-                return $timestamp->format('Y-m-d H:i:s');
-            }
-        }
-
-        // Fallback to file modification time
-        return date('Y-m-d H:i:s', filemtime($xmlPath));
+        return $this->ecgArchive->timestampFor($filename, $xmlPath);
     }
 
     /**

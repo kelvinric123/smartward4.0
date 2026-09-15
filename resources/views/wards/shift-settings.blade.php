@@ -11,6 +11,7 @@
             font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
         }
     </style>
+    @include('components.autofill-guard')
 </head>
 
 <body class="bg-gray-50 min-h-screen">

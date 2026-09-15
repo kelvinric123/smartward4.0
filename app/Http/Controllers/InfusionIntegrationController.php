@@ -9,9 +9,11 @@ use App\Models\InfusionApiUser;
 use App\Models\InfusionPump;
 use App\Models\IntegrationSetting;
 use App\Models\Patient;
+use App\Models\Ward;
 use App\Services\EngineInfusionService;
 use App\Services\InfusionEngineClient;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -96,8 +98,12 @@ class InfusionIntegrationController extends Controller
             }
         }
 
-        // Fetched after the engine sync so newly auto-registered pumps appear
-        $pumps = InfusionPump::with('ward')->latest()->get();
+        // Fetched after the engine sync so newly auto-registered pumps appear.
+        // The registry list groups by ward and shows the bound patient, so both
+        // relations come along; ordering by name keeps the tiles predictable.
+        $pumps = InfusionPump::with(['ward', 'patient'])
+            ->orderByRaw('COALESCE(NULLIF(device_name, ""), NULLIF(serial_no, ""), device_id)')
+            ->get();
 
         // MLLP Configuration from environment
         $mllpConfig = [
@@ -524,51 +530,170 @@ class InfusionIntegrationController extends Controller
 
     /**
      * Ward Infusion Overview (iframe content).
+     *
+     * In engine mode the whole panel is built from one GET /api/pumps: the
+     * infusion cards for pumps bound to a patient, and the "seen but not
+     * linked" list for the rest. The local database is only the fallback for
+     * when the engine cannot be reached.
+     *
+     * ?fragment=1 returns just the infusions panel. The page polls that so a
+     * refresh does not reload the iframe and throw away the open filter,
+     * the scroll position, or the devices table.
      */
     public function wardOverview(Request $request): View
     {
         $wardId = $request->get('ward_id');
         $tab = $request->get('tab', 'infusions'); // infusions, devices
-        $filter = $request->get('filter', 'active'); // active, completed, all, warnings
+        $filter = $request->get('filter', 'active'); // active, completed, all, warnings, alarms
 
-        // Qmed Infusion Engine mode: pull live data from the engine API,
-        // mapped to patients through the local pump registry. Falls back to
-        // the local database (with a warning) if the engine is unreachable.
         $engineError = null;
+        $data = null;
+
         if (InfusionEngineClient::engineModeActive()) {
             try {
-                return $this->wardOverviewFromEngine($request, $wardId, $tab, $filter);
+                $data = $this->wardOverviewFromEngine($wardId, $filter);
             } catch (\Throwable $e) {
                 Log::warning('Infusion engine unreachable, falling back to local data: ' . $e->getMessage());
                 $engineError = 'Qmed Infusion Engine unreachable (' . $e->getMessage() . ') — showing local database data.';
             }
         }
 
-        $query = Infusion::with(['patient', 'infusionPump']);
+        $data ??= $this->wardOverviewFromDatabase($wardId, $filter);
 
+        $data += [
+            'filter' => $filter,
+            'wardId' => $wardId,
+            'tab' => $tab,
+            'engineError' => $engineError,
+            'refreshSec' => $this->overviewRefreshSeconds(),
+        ];
+
+        return $request->boolean('fragment')
+            ? view('wards.partials.infusion-panel', $data)
+            : view('wards.infusion-overview', $data);
+    }
+
+    /**
+     * How often the overview re-polls itself, from the engine settings.
+     */
+    protected function overviewRefreshSeconds(): int
+    {
+        $config = IntegrationSetting::get(InfusionEngineClient::CONFIG_KEY, []);
+
+        return max(5, min(120, (int) ($config['refresh_sec'] ?? 10)));
+    }
+
+    /**
+     * Ward infusion overview built from the Qmed Infusion Engine API.
+     * Pump -> patient mapping comes from the local pump registry.
+     */
+    protected function wardOverviewFromEngine($wardId, string $filter): array
+    {
+        $service = EngineInfusionService::make();
+        $overview = $service->overview();
+
+        $all = $overview->pluck('infusion')->filter();
+        if ($wardId) {
+            $all = $all->filter(fn ($i) => ($i->patient->ward_id ?? null) == $wardId);
+        }
+        $all = $all->values();
+
+        $stats = $service->stats($all) + ['pumps' => $overview->count()];
+
+        $infusions = $this->filterInfusions($all, $filter);
+
+        // The engine keeps the latest state per pump, so "recently completed"
+        // is a completed pump that reported within the last 24 hours.
+        $recentlyCompleted = collect();
+        if ($filter === 'active') {
+            $recentlyCompleted = $all
+                ->where('status', 'completed')
+                ->filter(fn ($i) => $i->last_updated_at && $i->last_updated_at->gte(now()->subHours(24)))
+                ->sortByDesc('last_updated_at')
+                ->values();
+        }
+
+        // Pumps the engine can see that no patient is bound to yet. These are
+        // the ones a nurse has to act on, so they get their own list rather
+        // than being invisible until someone opens the devices tab.
+        $unlinked = $overview->filter(fn (array $pair) => !$pair['infusion']);
+        if ($wardId) {
+            $wardName = strtoupper(trim((string) optional(Ward::find($wardId))->ward_name));
+            $unlinked = $unlinked->filter(function (array $pair) use ($wardId, $wardName) {
+                $local = $pair['local'];
+                if ($local && $local->ward_id) {
+                    return (int) $local->ward_id === (int) $wardId;
+                }
+                // No ward on the registry row: fall back to the ward the pump
+                // reports, and keep pumps with no ward anywhere - an unplaced
+                // pump is exactly what someone needs to see and assign.
+                $engineWard = strtoupper(trim((string) ($pair['engine']['ward'] ?? '')));
+
+                return $engineWard === '' || ($wardName !== '' && $engineWard === $wardName);
+            });
+        }
+
+        $unlinkedPumps = $unlinked
+            ->map(fn (array $pair) => $pair['engine'] + ['local_pump' => $pair['local']])
+            ->sortBy(fn (array $p) => $p['pump_label'] ?? $p['device_id'])
+            ->values();
+
+        // Live pump state, keyed by registry id: battery, power source and
+        // last contact come from the engine snapshot, not from the registry
+        // row, which is only as fresh as the last sync.
+        $pumpStates = $overview
+            ->filter(fn (array $pair) => $pair['local'])
+            ->mapWithKeys(fn (array $pair) => [$pair['local']->id => $pair['engine']])
+            ->all();
+
+        $lastSeen = $overview
+            ->map(fn (array $pair) => $pair['engine']['last_seen_at'] ?? null)
+            ->filter()
+            ->map(fn ($t) => \Carbon\Carbon::parse($t))
+            ->max();
+
+        return [
+            'infusions' => $infusions,
+            'stats' => $stats,
+            'pumps' => $this->registryPumps($wardId),
+            'recentlyCompleted' => $recentlyCompleted,
+            'dataSource' => 'engine',
+            'unlinkedPumps' => $unlinkedPumps,
+            'pumpStates' => $pumpStates,
+            'engineMeta' => [
+                'pump_count' => $overview->count(),
+                'linked_count' => $overview->filter(fn (array $p) => $p['infusion'])->count(),
+                'last_seen_at' => $lastSeen,
+            ],
+        ];
+    }
+
+    /**
+     * Ward infusion overview from SmartWard's own infusions table. Used when
+     * the integration is in local mode, and as the fallback when the engine
+     * is unreachable.
+     */
+    protected function wardOverviewFromDatabase($wardId, string $filter): array
+    {
+        $query = Infusion::with(['patient', 'infusionPump']);
         if ($wardId) {
             $query->inWard($wardId);
         }
 
-        switch ($filter) {
-            case 'active':
-                $query->active();
-                break;
-            case 'completed':
-                $query->completed();
-                break;
-            case 'warnings':
-                $query->running()->withWarnings();
-                break;
-            case 'alarms':
-                $query->alarming();
-                break;
-        }
+        match ($filter) {
+            'active' => $query->active(),
+            'running' => $query->running(),
+            'paused' => $query->where('status', 'paused'),
+            'completed' => $query->completed(),
+            'warnings' => $query->running()->withWarnings(),
+            'alarms' => $query->alarming(),
+            default => null,
+        };
 
-        $infusions = $query->latest('last_updated_at')->get();
+        $infusions = $this->sortInfusionsBySeverity($query->latest('last_updated_at')->get());
 
-        // If filtering by active, also get recently completed infusions (last 24 hours)
-        // so we can show them in a separate section
+        // When showing what is running, recently finished infusions still
+        // belong on screen - just below, and visibly done.
         $recentlyCompleted = collect();
         if ($filter === 'active') {
             $completedQuery = Infusion::with(['patient', 'infusionPump'])
@@ -582,86 +707,89 @@ class InfusionIntegrationController extends Controller
             $recentlyCompleted = $completedQuery->latest('completed_at')->get();
         }
 
-        // Get summary stats
-        $stats = [
-            'running' => Infusion::when($wardId, fn($q) => $q->inWard($wardId))->running()->count(),
-            'paused' => Infusion::when($wardId, fn($q) => $q->inWard($wardId))->where('status', 'paused')->count(),
-            'completed' => Infusion::when($wardId, fn($q) => $q->inWard($wardId))->completed()->count(),
-            'warnings' => Infusion::when($wardId, fn($q) => $q->inWard($wardId))->running()->withWarnings()->count(),
-            'alarms' => Infusion::when($wardId, fn($q) => $q->inWard($wardId))->alarming()->count(),
+        $scoped = fn () => Infusion::when($wardId, fn ($q) => $q->inWard($wardId));
+
+        return [
+            'infusions' => $infusions,
+            'stats' => [
+                'running' => $scoped()->running()->count(),
+                'paused' => $scoped()->where('status', 'paused')->count(),
+                'stopped' => $scoped()->where('status', 'stopped')->count(),
+                'completed' => $scoped()->completed()->count(),
+                'warnings' => $scoped()->running()->withWarnings()->count(),
+                'alarms' => $scoped()->alarming()->count(),
+                'pumps' => InfusionPump::when($wardId, fn ($q) => $q->where('ward_id', $wardId))->count(),
+            ],
+            'pumps' => $this->registryPumps($wardId),
+            'recentlyCompleted' => $recentlyCompleted,
+            'dataSource' => 'local',
+            'unlinkedPumps' => collect(),
+            'pumpStates' => [],
+            'engineMeta' => null,
         ];
-
-        // Get all pumps with patient binding information for devices tab
-        $pumpsQuery = InfusionPump::with(['patient', 'ward'])
-            ->orderByRaw('patient_id IS NULL')  // Show linked pumps first
-            ->orderBy('device_id');
-
-        if ($wardId) {
-            $pumpsQuery->where('ward_id', $wardId);
-        }
-
-        $pumps = $pumpsQuery->get();
-
-        $dataSource = 'local';
-
-        return view('wards.infusion-overview', compact(
-            'infusions', 'stats', 'filter', 'wardId', 'tab', 'pumps',
-            'recentlyCompleted', 'dataSource', 'engineError'
-        ));
     }
 
     /**
-     * Ward infusion overview built from the Qmed Infusion Engine API.
-     * Pump -> patient mapping comes from the local pump registry.
+     * The pump registry rows behind the devices tab - it is the registry that
+     * holds the patient links, in either mode.
      */
-    protected function wardOverviewFromEngine(Request $request, $wardId, string $tab, string $filter): View
+    protected function registryPumps($wardId)
     {
-        $service = EngineInfusionService::make();
+        return InfusionPump::with(['patient', 'ward'])
+            ->when($wardId, fn ($q) => $q->where('ward_id', $wardId))
+            ->orderByRaw('patient_id IS NULL')  // linked pumps first
+            ->orderBy('device_id')
+            ->get();
+    }
 
-        $all = $service->infusions();
-
-        if ($wardId) {
-            $all = $all->filter(fn($i) => ($i->patient->ward_id ?? null) == $wardId)->values();
-        }
-
-        $stats = $service->stats($all);
-
-        $infusions = match ($filter) {
-            'active' => $all->filter(fn($i) => in_array($i->status, ['running', 'paused', 'alarming'])),
-            'completed' => $all->where('status', 'completed'),
-            'warnings' => $all->where('status', 'running')->where('is_warning', true),
-            'alarms' => $all->where('status', 'alarming'),
-            default => $all,
+    /**
+     * Apply one of the overview's filters to a collection of infusions.
+     */
+    protected function filterInfusions(Collection $infusions, string $filter): Collection
+    {
+        $filtered = match ($filter) {
+            'active' => $infusions->filter(fn ($i) => in_array($i->status, ['running', 'paused', 'alarming'])),
+            'running' => $infusions->where('status', 'running'),
+            'paused' => $infusions->where('status', 'paused'),
+            'completed' => $infusions->where('status', 'completed'),
+            'warnings' => $infusions->where('status', 'running')->where('is_warning', true),
+            'alarms' => $infusions->where('status', 'alarming'),
+            default => $infusions,
         };
-        $infusions = $infusions->sortByDesc('last_updated_at')->values();
 
-        // Engine keeps the latest state per pump, so "recently completed" =
-        // completed pumps that reported within the last 24 hours
-        $recentlyCompleted = collect();
-        if ($filter === 'active') {
-            $recentlyCompleted = $all
-                ->where('status', 'completed')
-                ->filter(fn($i) => $i->last_updated_at && $i->last_updated_at->gte(now()->subHours(24)))
-                ->sortByDesc('last_updated_at')
-                ->values();
-        }
+        return $this->sortInfusionsBySeverity($filtered);
+    }
 
-        // Devices tab keeps showing the local registry (it holds the patient links)
-        $pumpsQuery = InfusionPump::with(['patient', 'ward'])
-            ->orderByRaw('patient_id IS NULL')
-            ->orderBy('device_id');
-        if ($wardId) {
-            $pumpsQuery->where('ward_id', $wardId);
-        }
-        $pumps = $pumpsQuery->get();
+    /**
+     * Worst first. On a ward screen the card that needs someone at the bedside
+     * has to be the one at the top, not whichever pump reported most recently.
+     */
+    protected function sortInfusionsBySeverity(Collection $infusions): Collection
+    {
+        $rank = [
+            'alarming' => 0,
+            'running' => 2,
+            'paused' => 3,
+            'stopped' => 4,
+            'pending' => 5,
+            'completed' => 6,
+        ];
 
-        $dataSource = 'engine';
-        $engineError = null;
+        // One composite key rather than sortBy([...closures]): the multi-key
+        // form compares each closure as a property name and gets the
+        // tie-break backwards.
+        return $infusions
+            ->sortBy(function ($i) use ($rank) {
+                // A running infusion minutes from empty outranks a calm one.
+                $severity = $i->status === 'running' && $i->is_warning
+                    ? 1
+                    : ($rank[$i->status] ?? 9);
 
-        return view('wards.infusion-overview', compact(
-            'infusions', 'stats', 'filter', 'wardId', 'tab', 'pumps',
-            'recentlyCompleted', 'dataSource', 'engineError'
-        ));
+                $minutes = min(999999, max(0, (int) ($i->remaining_minutes ?? 999999)));
+
+                return sprintf('%d-%06d', $severity, $minutes);
+            })
+            ->values();
     }
 
     /**

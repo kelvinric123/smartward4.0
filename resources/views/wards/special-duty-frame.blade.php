@@ -50,6 +50,7 @@
             color: #92400e;
         }
     </style>
+    @include('components.autofill-guard')
 </head>
 <body class="antialiased" x-data="specialDutyApp()">
     <div class="p-6">

@@ -38,7 +38,9 @@ class NurseController extends Controller
         // current page of 10 rows only ever found what was already on screen.
         $search = trim((string) $request->input('search', ''));
 
-        $query = Nurse::latest();
+        // The list row shows the ward and the expanded panel shows the LDAP
+        // account and tagging nurses, so pull all three in one go.
+        $query = Nurse::with(['user', 'ward', 'taggingNurses'])->latest();
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
