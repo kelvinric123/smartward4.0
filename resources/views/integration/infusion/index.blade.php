@@ -342,7 +342,7 @@
                                     <div class="grid grid-cols-3 gap-3">
                                         <div class="col-span-1">
                                             <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">API Key <span class="normal-case">(optional)</span></label>
-                                            <input type="password" name="engine_api_key" x-model="engineApiKey" placeholder="X-API-Key"
+                                            <input type="password" name="engine_api_key" x-model="engineApiKey" placeholder="X-API-Key" autocomplete="new-password"
                                                    class="w-full rounded-lg border-gray-300 text-sm font-mono focus:border-indigo-500 focus:ring-indigo-500" @click.stop>
                                         </div>
                                         <div>

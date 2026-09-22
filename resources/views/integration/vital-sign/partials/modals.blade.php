@@ -53,7 +53,7 @@
                             Password <span x-show="!showEditUserModal">*</span>
                             <span x-show="showEditUserModal" class="text-gray-400 font-normal">(leave empty to keep current)</span>
                         </label>
-                        <input type="password" name="password" x-model="userFormData.password" :required="!showEditUserModal"
+                        <input type="password" name="password" x-model="userFormData.password" :required="!showEditUserModal" autocomplete="new-password"
                             class="w-full rounded-lg border-gray-300 shadow-sm focus:border-emerald-500 focus:ring-emerald-500"
                             placeholder="Minimum 8 characters">
                     </div>

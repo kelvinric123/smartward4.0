@@ -59,13 +59,10 @@
                     <label for="delete-passphrase-input" class="block text-sm font-medium text-gray-700 mb-1.5">
                         Passphrase <span class="text-red-500">*</span>
                     </label>
-                    <input 
-                        type="password" 
-                        id="delete-passphrase-input"
-                        placeholder="Enter passphrase to delete"
-                        autocomplete="off"
-                        class="w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors"
-                    >
+                    {{-- The password field is created only while the modal is open. A password input sitting in
+                         every page makes browsers treat the page as a login form, so they autofill the saved
+                         username into the first text box on the page - usually a search box. --}}
+                    <div id="delete-passphrase-slot"></div>
                     <p class="mt-1.5 text-xs text-gray-400">Contact your administrator if you don't know the passphrase.</p>
                 </div>
             </div>
@@ -100,6 +97,38 @@
     let pendingDeleteForm = null;
 
     /**
+     * Builds the passphrase field when the modal opens, and drops it again when it closes,
+     * so no password input is present during normal page use (see the note in the markup above).
+     */
+    function buildPassphraseInput() {
+        const slot = document.getElementById('delete-passphrase-slot');
+        slot.innerHTML = '';
+
+        const input = document.createElement('input');
+        input.type = 'password';
+        input.id = 'delete-passphrase-input';
+        input.placeholder = 'Enter passphrase to delete';
+        input.className = 'w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors';
+        // Keep browser and third party password managers away from this field
+        input.setAttribute('autocomplete', 'new-password');
+        input.setAttribute('data-lpignore', 'true');
+        input.setAttribute('data-1p-ignore', '');
+        input.setAttribute('data-form-type', 'other');
+
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                submitDeleteForm();
+            }
+            // Remove error styling on type
+            input.classList.remove('border-red-500', 'ring-2', 'ring-red-200');
+        });
+
+        slot.appendChild(input);
+        return input;
+    }
+
+    /**
      * Called by delete buttons. Shows the passphrase modal instead of browser confirm.
      * Usage: <button onclick="confirmDelete(event, 'Are you sure?')">Delete</button>
      * The button must be inside a <form>.
@@ -126,28 +155,28 @@
         // Show modal
         const modal = document.getElementById('delete-passphrase-modal');
         modal.classList.remove('hidden');
-        
-        // Focus input
-        setTimeout(() => {
-            const input = document.getElementById('delete-passphrase-input');
-            input.value = '';
-            input.focus();
-        }, 100);
+
+        // Build and focus the passphrase field
+        const input = buildPassphraseInput();
+        setTimeout(() => input.focus(), 100);
     }
 
     function closeDeleteModal() {
         const modal = document.getElementById('delete-passphrase-modal');
         modal.classList.add('hidden');
         pendingDeleteForm = null;
-        document.getElementById('delete-passphrase-input').value = '';
+        document.getElementById('delete-passphrase-slot').innerHTML = '';
     }
 
     function submitDeleteForm() {
-        const passphrase = document.getElementById('delete-passphrase-input').value;
+        const input = document.getElementById('delete-passphrase-input');
+        const passphrase = input ? input.value : '';
 
         if (!passphrase) {
-            document.getElementById('delete-passphrase-input').classList.add('border-red-500', 'ring-2', 'ring-red-200');
-            document.getElementById('delete-passphrase-input').focus();
+            if (input) {
+                input.classList.add('border-red-500', 'ring-2', 'ring-red-200');
+                input.focus();
+            }
             return;
         }
 
@@ -168,21 +197,6 @@
 
         closeDeleteModal();
     }
-
-    // Handle Enter key in passphrase input
-    document.addEventListener('DOMContentLoaded', function() {
-        const input = document.getElementById('delete-passphrase-input');
-        if (input) {
-            input.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    submitDeleteForm();
-                }
-                // Remove error styling on type
-                input.classList.remove('border-red-500', 'ring-2', 'ring-red-200');
-            });
-        }
-    });
 
     // Close modal on Escape key
     document.addEventListener('keydown', function(e) {

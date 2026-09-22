@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 
 class VitalSign extends Model
 {
@@ -26,11 +27,53 @@ class VitalSign extends Model
         'spo2_min',
         'spo2_max',
         'respiratory_rate',
+        'oxygen_delivery',
+        'oxygen_flow_rate',
+        'fio2_percent',
         'reading_type',
         'notes',
         'recorded_at',
         'operator_id',
         'deleted_by',
+    ];
+
+    /**
+     * How the patient is receiving oxygen at the time of the reading (value => label).
+     * "room_air" means no supplemental oxygen.
+     */
+    const OXYGEN_ROOM_AIR = 'room_air';
+
+    const OXYGEN_DELIVERY_OPTIONS = [
+        'room_air' => 'Room Air',
+        'nasal_cannula' => 'Nasal Cannula / Prongs',
+        'simple_mask' => 'Simple Face Mask',
+        'venturi_mask' => 'Venturi Mask',
+        'non_rebreather' => 'Non-Rebreather Mask',
+        'high_flow_mask' => 'High Flow Mask',
+        'hfnc' => 'High Flow Nasal Cannula (HFNC)',
+        'cpap' => 'CPAP',
+        'bipap' => 'BiPAP / NIV',
+        'tracheostomy' => 'Tracheostomy Mask',
+        'ventilator' => 'Mechanical Ventilation',
+        'other' => 'Other',
+    ];
+
+    /**
+     * Short labels for the clinical chart, where a column is only a few characters wide
+     */
+    const OXYGEN_DELIVERY_SHORT = [
+        'room_air' => 'RA',
+        'nasal_cannula' => 'NP',
+        'simple_mask' => 'FM',
+        'venturi_mask' => 'VM',
+        'non_rebreather' => 'NRM',
+        'high_flow_mask' => 'HFM',
+        'hfnc' => 'HFNC',
+        'cpap' => 'CPAP',
+        'bipap' => 'BIPAP',
+        'tracheostomy' => 'TM',
+        'ventilator' => 'MV',
+        'other' => 'OTH',
     ];
 
     protected $casts = [
@@ -44,6 +87,8 @@ class VitalSign extends Model
         'spo2_min' => 'integer',
         'spo2_max' => 'integer',
         'respiratory_rate' => 'integer',
+        'oxygen_flow_rate' => 'decimal:1',
+        'fio2_percent' => 'integer',
         'recorded_at' => 'datetime',
     ];
 
@@ -112,6 +157,56 @@ class VitalSign extends Model
     public function getPulseRateDisplayAttribute(): ?string
     {
         return $this->rangeDisplay($this->pulse_rate_min, $this->pulse_rate_max, $this->pulse_rate);
+    }
+
+    /**
+     * Oxygen delivery label, e.g. "Nasal Cannula / Prongs". Null when nothing was recorded.
+     */
+    public function oxygenDeliveryLabel(): ?string
+    {
+        if (!$this->oxygen_delivery) {
+            return null;
+        }
+
+        return self::OXYGEN_DELIVERY_OPTIONS[$this->oxygen_delivery] ?? Str::headline($this->oxygen_delivery);
+    }
+
+    /**
+     * Short chart label, e.g. "NP 2L" or "VM 40%". Null when nothing was recorded.
+     */
+    public function oxygenShortLabel(): ?string
+    {
+        if (!$this->oxygen_delivery) {
+            return null;
+        }
+
+        $label = self::OXYGEN_DELIVERY_SHORT[$this->oxygen_delivery] ?? strtoupper(substr($this->oxygen_delivery, 0, 4));
+
+        if ($this->oxygen_flow_rate !== null) {
+            $label .= ' ' . rtrim(rtrim(number_format((float) $this->oxygen_flow_rate, 1), '0'), '.') . 'L';
+        } elseif ($this->fio2_percent !== null) {
+            $label .= ' ' . $this->fio2_percent . '%';
+        }
+
+        return $label;
+    }
+
+    /**
+     * On supplemental oxygen: anything recorded other than room air.
+     * Display only - the EWS score deliberately does not use this.
+     */
+    public function isOnOxygen(): bool
+    {
+        return $this->oxygen_delivery !== null && $this->oxygen_delivery !== self::OXYGEN_ROOM_AIR;
+    }
+
+    /**
+     * Entered by a person rather than pushed in by a monitor gateway.
+     * Only these can be edited or removed from the patient details vitals tab.
+     */
+    public function isManualEntry(): bool
+    {
+        return $this->gateway_id === null && $this->gateway_event_id === null;
     }
 
     /**

@@ -8,8 +8,12 @@ use App\Http\Controllers\AnaesthetistController;
 use App\Http\Controllers\NurseController;
 use App\Http\Controllers\PatientController;
 use App\Http\Controllers\WardController;
+use App\Http\Controllers\WardTypeController;
+use App\Http\Controllers\ClinicalIndicatorController;
 use App\Http\Controllers\BedController;
 use App\Http\Controllers\WardDashboardController;
+use App\Http\Controllers\MedicationMonitoringController;
+use App\Http\Controllers\FluidBalanceController;
 use App\Http\Controllers\WardScheduleController;
 use App\Http\Controllers\VitalSignController;
 use App\Http\Controllers\LdapConfigurationController;
@@ -112,12 +116,20 @@ Route::middleware('auth')->group(function () {
     Route::post('isolation-types/{isolation_type}/toggle-active', [IsolationTypeController::class, 'toggleActive'])->name('isolation-types.toggle-active');
 
     // Patient Routes
-    Route::resource('patients', PatientController::class)->except(['show']);
+    Route::resource('patients', PatientController::class);
     Route::post('patients/{patient}/deactivate', [PatientController::class, 'deactivate'])->name('patients.deactivate');
 
     // Ward Management Routes
     Route::resource('wards', WardController::class)->except(['show']);
     Route::post('wards/{ward}/deactivate', [WardController::class, 'deactivate'])->name('wards.deactivate');
+
+    // Ward Type Routes (the index also hosts the Clinical Indicators tab)
+    Route::resource('ward-types', WardTypeController::class)->except(['show']);
+    Route::post('ward-types/{ward_type}/toggle-active', [WardTypeController::class, 'toggleActive'])->name('ward-types.toggle-active');
+
+    // Clinical Indicator Routes
+    Route::resource('clinical-indicators', ClinicalIndicatorController::class)->except(['show', 'index']);
+    Route::post('clinical-indicators/{clinical_indicator}/toggle-active', [ClinicalIndicatorController::class, 'toggleActive'])->name('clinical-indicators.toggle-active');
 
     // Bed Management Routes
     Route::resource('beds', BedController::class)->except(['show']);
@@ -148,7 +160,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/ward-dashboard/prebook-patient', [WardDashboardController::class, 'prebookPatient'])->name('ward.prebook-patient');
     Route::post('/ward-dashboard/check-in-prebook/{patient}', [WardDashboardController::class, 'checkInPrebook'])->name('ward.check-in-prebook');
     Route::post('/ward-dashboard/cancel-prebook/{patient}', [WardDashboardController::class, 'cancelPrebook'])->name('ward.cancel-prebook');
-    Route::get('/ward-dashboard/admission-logs', [WardDashboardController::class, 'admissionLogs'])->name('ward.admission-logs');
+    Route::get('/ward-dashboard/admission-logs', [\App\Http\Controllers\AdmissionLogController::class, 'index'])->name('ward.admission-logs');
+    Route::get('/ward-dashboard/admission-logs/summary', [\App\Http\Controllers\AdmissionLogController::class, 'summary'])->name('ward.admission-logs.summary');
+    Route::get('/ward-dashboard/admission-logs/print', [\App\Http\Controllers\AdmissionLogController::class, 'print'])->name('ward.admission-logs.print');
     Route::get('/ward-dashboard/patients', [WardDashboardController::class, 'patientsList'])->name('ward.patients-list');
     Route::get('/ward-dashboard/patient-details', [WardDashboardController::class, 'patientDetails'])->name('ward.patient-details');
     Route::get('/ward-dashboard/settings', [WardDashboardController::class, 'settings'])->name('ward.settings');
@@ -162,9 +176,36 @@ Route::middleware('auth')->group(function () {
     Route::post('/ward-dashboard/schedule-discharge', [WardDashboardController::class, 'scheduleDischarge'])->name('ward.schedule-discharge');
     Route::post('/ward-dashboard/cancel-scheduled-discharge', [WardDashboardController::class, 'cancelScheduledDischarge'])->name('ward.cancel-scheduled-discharge');
     Route::post('/ward-dashboard/care-providers', [WardDashboardController::class, 'storeCareProvider'])->name('ward.care-providers.store');
+    Route::post('/ward-dashboard/care-providers/anaesthetist', [WardDashboardController::class, 'storeAnaesthetistCareProvider'])->name('ward.care-providers.store-anaesthetist');
     Route::delete('/ward-dashboard/care-providers/{careProvider}', [WardDashboardController::class, 'destroyCareProvider'])->name('ward.care-providers.destroy');
     Route::post('/ward-dashboard/update-patient-clinical', [WardDashboardController::class, 'updatePatientClinical'])->name('ward.update-patient-clinical');
     Route::post('/ward-dashboard/save-sugar-reading', [WardDashboardController::class, 'saveSugarReading'])->name('ward.save-sugar-reading');
+    Route::post('/ward-dashboard/clinical-indicator-score', [WardDashboardController::class, 'storeClinicalIndicatorScore'])->name('ward.clinical-indicator-score.store');
+
+    // Blood Transfusion Routes
+    Route::post('/ward-dashboard/blood-transfusions', [WardDashboardController::class, 'storeBloodTransfusion'])->name('ward.blood-transfusions.store');
+    Route::post('/ward-dashboard/blood-transfusions/{transfusion}/checklist', [WardDashboardController::class, 'updateBloodTransfusionChecklist'])->name('ward.blood-transfusions.checklist');
+    Route::post('/ward-dashboard/blood-transfusions/{transfusion}/start', [WardDashboardController::class, 'startBloodTransfusion'])->name('ward.blood-transfusions.start');
+    Route::post('/ward-dashboard/blood-transfusions/{transfusion}/finish', [WardDashboardController::class, 'finishBloodTransfusion'])->name('ward.blood-transfusions.finish');
+
+    // Consultant Orders Routes (Patient Details > Consultant Orders tab)
+    Route::post('/ward-dashboard/consultant-orders', [\App\Http\Controllers\ConsultantOrderController::class, 'store'])->name('ward.consultant-orders.store');
+    Route::post('/ward-dashboard/consultant-orders/handover', [\App\Http\Controllers\ConsultantOrderController::class, 'handover'])->name('ward.consultant-orders.handover');
+    Route::post('/ward-dashboard/consultant-orders/{consultantOrder}/complete', [\App\Http\Controllers\ConsultantOrderController::class, 'complete'])->name('ward.consultant-orders.complete');
+    Route::post('/ward-dashboard/consultant-orders/{consultantOrder}/cancel', [\App\Http\Controllers\ConsultantOrderController::class, 'cancel'])->name('ward.consultant-orders.cancel');
+
+    // Medication Monitoring Routes (Patient Details > Medications tab)
+    Route::post('/ward-dashboard/medications', [MedicationMonitoringController::class, 'store'])->name('ward.medications.store');
+    Route::post('/ward-dashboard/medications/{patientMedication}/administer', [MedicationMonitoringController::class, 'administer'])->name('ward.medications.administer');
+    Route::post('/ward-dashboard/medications/{patientMedication}/stop', [MedicationMonitoringController::class, 'stop'])->name('ward.medications.stop');
+    Route::post('/ward-dashboard/medication-administrations/{administration}/undo', [MedicationMonitoringController::class, 'undo'])->name('ward.medications.undo');
+
+    // I/O Chart Routes (Patient Details > I/O Chart tab)
+    Route::post('/ward-dashboard/fluid-balance/entries', [FluidBalanceController::class, 'store'])->name('ward.fluid-balance.store');
+    Route::post('/ward-dashboard/fluid-balance/entries/{entry}/void', [FluidBalanceController::class, 'void'])->name('ward.fluid-balance.void');
+    Route::post('/ward-dashboard/fluid-balance/plan', [FluidBalanceController::class, 'savePlan'])->name('ward.fluid-balance.plan');
+    Route::post('/ward-dashboard/fluid-balance/assessments', [FluidBalanceController::class, 'storeAssessment'])->name('ward.fluid-balance.assessments.store');
+
     Route::post('/ward-dashboard/settings/clinical-options', [WardDashboardController::class, 'updateClinicalIndicatorOptions'])->name('ward.settings.clinical-options');
     Route::get('/ward-dashboard/slideshow-viewer', [WardDashboardController::class, 'slideshowViewer'])->name('ward.slideshow-viewer');
 
@@ -175,6 +216,7 @@ Route::middleware('auth')->group(function () {
     // Vital Signs Routes
     Route::get('/vital-signs', [VitalSignController::class, 'index'])->name('vital-signs.index');
     Route::post('/vital-signs', [VitalSignController::class, 'store'])->name('vital-signs.store');
+    Route::put('/vital-signs/{vitalSign}', [VitalSignController::class, 'update'])->name('vital-signs.update');
     Route::delete('/vital-signs/{vitalSign}', [VitalSignController::class, 'destroy'])->name('vital-signs.destroy');
     Route::get('/vital-signs/patient', [VitalSignController::class, 'patientVitals'])->name('vital-signs.patient');
     Route::get('/vital-signs/latest', [VitalSignController::class, 'latestVitals'])->name('vital-signs.latest');

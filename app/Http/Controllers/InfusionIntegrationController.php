@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\BbraunHl7Log;
+use App\Models\BloodTransfusion;
 use App\Models\Infusion;
 use App\Models\InfusionApiLog;
 use App\Models\InfusionApiUser;
@@ -525,6 +526,35 @@ class InfusionIntegrationController extends Controller
     /**
      * Ward Infusion Overview (iframe content).
      */
+
+    /**
+     * Blood units to show alongside the infusions. Blood is not pump driven,
+     * so these stay in their own section rather than being folded into the
+     * infusion list, and they come from the local database in both local and
+     * engine modes because the engine knows nothing about them.
+     */
+    protected function bloodTransfusionsForWard($wardId)
+    {
+        return BloodTransfusion::with('patient')
+            ->where('status', BloodTransfusion::STATUS_IN_PROGRESS)
+            ->when($wardId, fn ($q) => $q->where('ward_id', $wardId))
+            ->orderBy('started_at')
+            ->get();
+    }
+
+    protected function bloodTransfusionsForPatient($patientId)
+    {
+        if (!$patientId) {
+            return collect();
+        }
+
+        return BloodTransfusion::where('patient_id', $patientId)
+            ->whereIn('status', [BloodTransfusion::STATUS_IN_PROGRESS, BloodTransfusion::STATUS_PENDING])
+            ->orderByRaw("FIELD(status, 'in_progress', 'pending')")
+            ->orderBy('started_at')
+            ->get();
+    }
+
     public function wardOverview(Request $request): View
     {
         $wardId = $request->get('ward_id');
@@ -603,10 +633,11 @@ class InfusionIntegrationController extends Controller
         $pumps = $pumpsQuery->get();
 
         $dataSource = 'local';
+        $bloodTransfusions = $this->bloodTransfusionsForWard($wardId);
 
         return view('wards.infusion-overview', compact(
             'infusions', 'stats', 'filter', 'wardId', 'tab', 'pumps',
-            'recentlyCompleted', 'dataSource', 'engineError'
+            'recentlyCompleted', 'dataSource', 'engineError', 'bloodTransfusions'
         ));
     }
 
@@ -657,10 +688,11 @@ class InfusionIntegrationController extends Controller
 
         $dataSource = 'engine';
         $engineError = null;
+        $bloodTransfusions = $this->bloodTransfusionsForWard($wardId);
 
         return view('wards.infusion-overview', compact(
             'infusions', 'stats', 'filter', 'wardId', 'tab', 'pumps',
-            'recentlyCompleted', 'dataSource', 'engineError'
+            'recentlyCompleted', 'dataSource', 'engineError', 'bloodTransfusions'
         ));
     }
 
@@ -737,9 +769,11 @@ class InfusionIntegrationController extends Controller
             ->sortByDesc(fn($i) => $i->completed_at ?? $i->last_updated_at)
             ->values();
 
+        $bloodTransfusions = $this->bloodTransfusionsForPatient($patient?->id);
+
         return view('wards.patient-infusions', compact(
             'patient', 'infusions', 'activeInfusions', 'completedInfusions',
-            'dataSource', 'engineError'
+            'dataSource', 'engineError', 'bloodTransfusions'
         ));
     }
 

@@ -37,6 +37,8 @@ class DatabaseSeeder extends Seeder
             AdminManagementSeeder::class,
             DietTypeSeeder::class,        // Patient Additional Fields - Diet Types
             IsolationTypeSeeder::class,   // Patient Additional Fields - Isolation Types
+            MedicationSeeder::class,      // Medication Monitoring - demo formulary (30 medications)
+            WardTypeSeeder::class,          // Ward Management - Ward Types
             WardSeeder::class,
             BedSeeder::class,
             PatientSeeder::class,

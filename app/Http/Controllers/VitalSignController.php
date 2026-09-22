@@ -6,8 +6,10 @@ use Illuminate\Http\Request;
 use App\Models\VitalSign;
 use App\Models\Patient;
 use App\Models\AdmissionLog;
+use App\Http\Middleware\RequireDeletePassphrase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class VitalSignController extends Controller
@@ -103,7 +105,7 @@ class VitalSignController extends Controller
             'reading_type' => 'nullable|in:single,full',
             'notes' => 'nullable|string|max:500',
             'recorded_at' => 'nullable|date',
-        ]);
+        ] + $this->oxygenRules());
 
         $patient = Patient::findOrFail($request->patient_id);
 
@@ -142,7 +144,7 @@ class VitalSignController extends Controller
             'reading_type' => $readingType,
             'notes' => $request->notes,
             'recorded_at' => $request->recorded_at ?? now(),
-        ]);
+        ] + $this->oxygenValues($request));
 
         Log::info('Vital sign recorded', [
             'vital_sign_id' => $vitalSign->id,
@@ -207,6 +209,9 @@ class VitalSignController extends Controller
         }
 
         return view('vital-signs.patient-vitals', [
+            // The same panel is shown read-only in the ward dashboard modal and
+            // editable in the patient details vitals tab (?edit=1)
+            'editable' => $request->boolean('edit'),
             'patient' => $patient,
             'vitalSigns' => $vitalSigns,
             'admissions' => $admissions,
@@ -373,6 +378,96 @@ class VitalSignController extends Controller
     /**
      * Remove the specified vital sign from storage (soft delete).
      */
+    /**
+     * Validation rules for the oxygen fields, shared by create and update.
+     */
+    private function oxygenRules(): array
+    {
+        return [
+            'oxygen_delivery' => ['nullable', Rule::in(array_keys(VitalSign::OXYGEN_DELIVERY_OPTIONS))],
+            'oxygen_flow_rate' => 'nullable|numeric|min:0|max:100',
+            'fio2_percent' => 'nullable|integer|min:21|max:100',
+        ];
+    }
+
+    /**
+     * Oxygen columns to write. Room air carries no flow rate or FiO2.
+     */
+    private function oxygenValues(Request $request): array
+    {
+        $delivery = $request->input('oxygen_delivery') ?: null;
+        $onOxygen = $delivery !== null && $delivery !== VitalSign::OXYGEN_ROOM_AIR;
+
+        return [
+            'oxygen_delivery' => $delivery,
+            'oxygen_flow_rate' => $onOxygen ? $request->input('oxygen_flow_rate') : null,
+            'fio2_percent' => $onOxygen ? $request->input('fio2_percent') : null,
+        ];
+    }
+
+    /**
+     * Correct a manually entered reading.
+     *
+     * Readings pushed in by a monitor gateway stay read-only, and the same passphrase
+     * that protects deletions is required here.
+     */
+    public function update(Request $request, VitalSign $vitalSign)
+    {
+        if (!$vitalSign->isManualEntry()) {
+            return back()->with('error', 'Readings received from a monitor cannot be edited.');
+        }
+
+        if (!RequireDeletePassphrase::matches($request->input('delete_passphrase'))) {
+            return back()->with('error', 'Edit failed: Invalid or missing passphrase.');
+        }
+
+        $validated = $request->validate([
+            'systolic_bp' => 'nullable|integer|min:40|max:300',
+            'diastolic_bp' => 'nullable|integer|min:20|max:200',
+            'pulse_rate' => 'nullable|integer|min:20|max:250',
+            'temperature' => 'nullable|numeric|min:30|max:45',
+            'spo2' => 'nullable|integer|min:50|max:100',
+            'respiratory_rate' => 'nullable|integer|min:5|max:60',
+            'notes' => 'nullable|string|max:500',
+            'recorded_at' => 'nullable|date',
+        ] + $this->oxygenRules());
+
+        $vitalSign->fill([
+            'systolic_bp' => $validated['systolic_bp'] ?? null,
+            'diastolic_bp' => $validated['diastolic_bp'] ?? null,
+            'pulse_rate' => $validated['pulse_rate'] ?? null,
+            'temperature' => $validated['temperature'] ?? null,
+            'spo2' => $validated['spo2'] ?? null,
+            'respiratory_rate' => $validated['respiratory_rate'] ?? null,
+            'notes' => $validated['notes'] ?? null,
+            'recorded_by' => Auth::id(),
+        ] + $this->oxygenValues($request));
+
+        if (!empty($validated['recorded_at'])) {
+            $vitalSign->recorded_at = $validated['recorded_at'];
+        }
+
+        $filledCount = collect([
+            $vitalSign->systolic_bp,
+            $vitalSign->diastolic_bp,
+            $vitalSign->pulse_rate,
+            $vitalSign->temperature,
+            $vitalSign->spo2,
+            $vitalSign->respiratory_rate,
+        ])->filter(fn ($value) => $value !== null)->count();
+        $vitalSign->reading_type = $filledCount >= 5 ? 'full' : 'single';
+
+        $vitalSign->save();
+
+        Log::info('Vital sign updated', [
+            'vital_sign_id' => $vitalSign->id,
+            'patient_id' => $vitalSign->patient_id,
+            'updated_by' => Auth::id(),
+        ]);
+
+        return back()->with('success', 'Vital signs updated successfully.');
+    }
+
     public function destroy(VitalSign $vitalSign)
     {
         // Record who deleted it before soft deleting

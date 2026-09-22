@@ -167,7 +167,7 @@
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                            <input type="password" x-model="password"
+                            <input type="password" x-model="password" autocomplete="new-password"
                                 class="w-full rounded-lg border-gray-300 shadow-sm focus:border-teal-500 focus:ring-teal-500">
                         </div>
                         <div>
@@ -1007,7 +1007,7 @@
                             <label class="block text-sm font-medium text-gray-700 mb-1">
                                 Passphrase <span class="text-red-500">*</span>
                             </label>
-                            <input type="password" required x-model="deleteMappingPassphrase" placeholder="Enter passphrase to delete" autocomplete="off" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 text-sm">
+                            <input type="password" required x-model="deleteMappingPassphrase" placeholder="Enter passphrase to delete" autocomplete="new-password" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 text-sm">
                             <p class="mt-1.5 text-xs text-gray-400">Contact your administrator if you don't know the passphrase.</p>
                         </div>
 

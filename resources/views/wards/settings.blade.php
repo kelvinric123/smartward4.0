@@ -75,7 +75,7 @@
 
                     <form @submit.prevent="verifyPasscode()" class="space-y-4">
                         <div>
-                            <input type="password" x-model="passcode" placeholder="Enter passcode"
+                            <input type="password" x-model="passcode" placeholder="Enter passcode" autocomplete="new-password"
                                 class="w-full px-4 py-3 text-center text-lg tracking-widest border-2 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors"
                                 :class="error ? 'border-red-500 bg-red-50' : 'border-gray-300'" autofocus>
                             <p x-show="error" class="mt-2 text-sm text-red-600 text-center">
@@ -140,6 +140,11 @@
                             :class="activeTab === 'patient-info' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
                             class="whitespace-nowrap py-2 px-3 border-b-2 font-medium transition-colors">
                             Patient Info
+                        </button>
+                        <button type="button" @click="activeTab = 'patient-additional-info'"
+                            :class="activeTab === 'patient-additional-info' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-2 px-3 border-b-2 font-medium transition-colors">
+                            Patient Additional Info
                         </button>
                         <button type="button" @click="activeTab = 'clinical-setting'"
                             :class="activeTab === 'clinical-setting' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
@@ -488,8 +493,12 @@
                                 'info' => 'Patient Info',
                                 'additional' => 'Additional Info',
                                 'vitals' => 'Vital Signs',
+                                'io' => 'I/O Chart',
+                                'medications' => 'Medication Monitoring',
                                 'movement' => 'Patient Movement',
-                                'careprovider' => 'Care Provider',
+                                'careprovider' => 'Consultant',
+                                'anaesthetist' => 'Anaesthetist',
+                                'nurses' => 'Nurses',
                                 'infusion' => 'Infusion Management',
                                 'transfer' => 'Transfer Bed',
                                 'discharge' => 'Discharge',
@@ -499,8 +508,12 @@
                                 'info' => 'Basic demographics and admission details.',
                                 'additional' => 'Extended details, contacts, and allergies.',
                                 'vitals' => 'Vital signs charts and tables.',
+                                'io' => 'Intake and output, a daily fluid limit and urine target, and signs of fluid overload such as edema. Adds an I/O button to the bed boxes.',
+                                'medications' => 'Medication orders and doses given, with overdue dose warnings here and on the bed boxes. Off by default.',
                                 'movement' => 'Schedule procedures outside the ward.',
-                                'careprovider' => 'Attending, referring, and consulting doctors from ADT.',
+                                'careprovider' => 'Attending, referring and consulting doctors from ADT, plus consultants added by hand.',
+                                'anaesthetist' => 'Anaesthetists from ADT or admission, plus any added by hand.',
+                                'nurses' => 'Nurses rostered to the patient\'s bed for each shift, from the ward roster.',
                                 'infusion' => 'IV fluids and medication management.',
                                 'transfer' => 'Move patient to another bed or ward.',
                                 'discharge' => 'Process patient discharge.',
@@ -638,7 +651,7 @@
                                             </div>
                                         </div>
 
-                                        <!-- Footer Buttons: 1-Patient Details, 2-Vital Signs, 3-ECG, 4-Clinical -->
+                                        <!-- Footer Buttons: 1-Patient Details, 2-Vital Signs, 3-I/O Chart, 4-ECG, 5-Clinical -->
                                         <div
                                             class="flex items-center space-x-1 border-t px-3 py-2 flex-shrink-0 mt-auto">
                                             {{-- Button 1: Patient Details --}}
@@ -664,7 +677,19 @@
                                                         clip-rule="evenodd" />
                                                 </svg>
                                             </button>
-                                            {{-- Button 3: ECG --}}
+                                            {{-- Button 3: I/O Chart (shown while the I/O Chart tab is on) --}}
+                                            @if($tabs['io'] ?? true)
+                                                <button type="button"
+                                                    class="flex-1 p-2 text-sky-600 hover:bg-sky-50 rounded transition-colors"
+                                                    title="I/O Chart">
+                                                    <svg class="w-4 h-4 mx-auto" fill="none" stroke="currentColor"
+                                                        viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round"
+                                                        stroke-linejoin="round">
+                                                        <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+                                                    </svg>
+                                                </button>
+                                            @endif
+                                            {{-- Button 4: ECG --}}
                                             <button type="button"
                                                 class="flex-1 p-2 text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
                                                 title="ECG">
@@ -677,7 +702,7 @@
                                                         stroke-width="2" d="M3 12h4l3-9 4 18 3-9h4" />
                                                 </svg>
                                             </button>
-                                            {{-- Button 4: Clinical --}}
+                                            {{-- Button 5: Clinical --}}
                                             <button type="button"
                                                 class="flex-1 p-2 text-cyan-600 hover:bg-cyan-50 rounded transition-colors"
                                                 title="Clinical">
@@ -777,7 +802,8 @@
                             Vital Signs Data Mode
                         </h4>
                         <p class="text-xs text-gray-500 mb-4">
-                            Configure the data source for vital signs displayed on bed cards and in patient details.
+                            Configure the sample data shown on bed cards. The patient details vitals tab and the
+                            dashboard vitals window always show recorded readings; "Off" hides them everywhere.
                         </p>
 
                         <form method="POST" action="{{ route('ward.settings.update') }}">
@@ -801,7 +827,7 @@
                                     </div>
                                     <span class="text-sm font-semibold text-gray-700">Demo</span>
                                     <span class="text-xs text-gray-500 text-center mt-1">Show demo/sample vital signs
-                                        data</span>
+                                        on bed cards</span>
                                 </label>
 
                                 <label
@@ -1133,6 +1159,72 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Patient Additional Info Tab Panel: who maintains each field -->
+                @php
+                    $infoSourceHints = [
+                        'nursing_level' => 'Patient care level classification',
+                        'diet' => 'Nil By Mouth, tube / parenteral feeding (NGT, TPN), diet types and diet orders',
+                        'fall_risk' => 'Patient fall risk',
+                        'isolation' => 'Infection control measures',
+                        'allergies' => 'Medical allergies',
+                    ];
+                @endphp
+                <div x-show="activeTab === 'patient-additional-info'" x-transition
+                    class="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-1">Patient Additional Info</h3>
+                    <p class="text-sm text-gray-600 mb-3">
+                        Choose where each field in Patient Details &gt; Additional Info comes from.
+                    </p>
+                    <div class="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 space-y-1">
+                        <p><span class="font-semibold">Applies to all users and wards.</span></p>
+                        <p><span class="font-semibold">From ADT</span> &mdash; shown read-only; the ADT feed keeps it up to date.</p>
+                        <p><span class="font-semibold">Manage directly</span> &mdash; staff edit it in Patient Details. If the ADT feed
+                            also sends the field, its updates still apply and the most recent change is what shows.</p>
+                    </div>
+
+                    <form method="POST" action="{{ route('ward.settings.update') }}">
+                        @csrf
+                        <input type="hidden" name="setting_type" value="patient_info_sources">
+
+                        <div class="divide-y divide-gray-100 border border-gray-200 rounded-lg">
+                            @foreach (\App\Services\PatientInfoSources::FIELDS as $field => [$fieldLabel, $fieldDefault, $sentByAdt])
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4"
+                                    x-data="{ source: @js($infoSources[$field] ?? $fieldDefault) }">
+                                    <div class="min-w-0">
+                                        <p class="text-sm font-semibold text-gray-800">{{ $fieldLabel }}</p>
+                                        <p class="text-xs text-gray-500">{{ $infoSourceHints[$field] ?? '' }}</p>
+                                        <p class="text-[11px] text-gray-400 mt-0.5">
+                                            Default: {{ $fieldDefault === \App\Services\PatientInfoSources::ADT ? 'From ADT' : 'Manage directly' }}
+                                            @unless ($sentByAdt)
+                                                &middot; not sent by the ADT feed, so "From ADT" only makes it read-only
+                                            @endunless
+                                        </p>
+                                    </div>
+                                    <div class="inline-flex shrink-0 rounded-lg border border-gray-300 overflow-hidden text-sm font-medium">
+                                        <label class="px-3 py-1.5 cursor-pointer transition-colors"
+                                            :class="source === 'adt' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'">
+                                            <input type="radio" class="sr-only" name="sources[{{ $field }}]" value="adt" x-model="source">
+                                            From ADT
+                                        </label>
+                                        <label class="px-3 py-1.5 cursor-pointer border-l border-gray-300 transition-colors"
+                                            :class="source === 'manual' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'">
+                                            <input type="radio" class="sr-only" name="sources[{{ $field }}]" value="manual" x-model="source">
+                                            Manage directly
+                                        </label>
+                                    </div>
+                                </div>
+                            @endforeach
+                        </div>
+
+                        <div class="pt-4 flex justify-end">
+                            <button type="submit"
+                                class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                Save Sources
+                            </button>
+                        </div>
+                    </form>
                 </div>
 
                 <!-- Clinical Setting Tab Panel -->
@@ -1785,7 +1877,7 @@
                     const savedBedBoxVitalsMode = @json($bedBoxVitalsMode ?? 'demo');
 
                     return {
-                        activeTab: 'dashboard-display',
+                        activeTab: @json(session('settings_tab', 'dashboard-display')),
                         activeOptionsTab: 'nursing_level',
                         bedBoxItems: bedBoxItems,
                         patientInfoItems: patientInfoItems,

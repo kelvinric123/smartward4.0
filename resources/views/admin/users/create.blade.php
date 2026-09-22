@@ -1,14 +1,14 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+        <h2 class="font-bold text-2xl text-gray-800 leading-tight">
             {{ __('Create User') }}
         </h2>
     </x-slot>
 
-    <div class="py-12">
+    <div class="py-8">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
-                <div class="p-6 text-gray-900">
+            <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-blue-100">
+                <div class="p-8 text-gray-900">
                     <form method="POST" action="{{ route('users.store') }}">
                         @csrf
 
@@ -32,7 +32,7 @@
                         <div class="mt-4">
                             <x-input-label for="role" :value="__('Role')" />
                             <select id="role" name="role"
-                                class="block mt-1 w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm">
+                                class="block mt-1 w-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 rounded-md shadow-sm">
                                 @foreach(App\Models\User::getRoles() as $value => $label)
                                     @if($value !== App\Models\User::ROLE_SUPERADMIN)
                                         <option value="{{ $value }}" {{ old('role') == $value ? 'selected' : '' }}>{{ $label }}
@@ -61,7 +61,7 @@
 
                         <div class="flex items-center justify-end mt-4">
                             <a href="{{ route('users.index') }}"
-                                class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
                                 {{ __('Cancel') }}
                             </a>
                             <x-primary-button class="ml-4">

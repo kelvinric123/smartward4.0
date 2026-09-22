@@ -31,7 +31,7 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                        <input type="password" x-model="testLogin.password"
+                        <input type="password" x-model="testLogin.password" autocomplete="new-password"
                             class="w-full rounded-lg border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500"
                             placeholder="Enter API password">
                     </div>

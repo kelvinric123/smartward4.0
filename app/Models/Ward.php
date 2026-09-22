@@ -13,6 +13,7 @@ class Ward extends Model
         'hospital_id',
         'ward_code',
         'ward_name',
+        'ward_type_id',
         'capacity',
         'specialties',
         'description',
@@ -26,6 +27,11 @@ class Ward extends Model
     public function hospital()
     {
         return $this->belongsTo(Hospital::class);
+    }
+
+    public function wardType()
+    {
+        return $this->belongsTo(WardType::class);
     }
 
     public function beds()

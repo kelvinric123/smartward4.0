@@ -543,6 +543,71 @@
                 <!-- Separator -->
                 <div class="w-px h-6 bg-gray-300 mx-1"></div>
 
+                <!-- Medication doses overdue / due soon on this ward (when monitoring is switched on) -->
+                @if($medicationMonitoring ?? false)
+                    @php
+                        $medBedsWith = fn ($key) => collect($beds ?? [])->filter(
+                            fn ($bed) => $bed['status'] === 'occupied'
+                                && ((($medicationAlerts ?? [])[$bed['patient_id']] ?? [])[$key] ?? 0) > 0
+                        );
+                        $medOverdueBeds = $medBedsWith('overdue');
+                        $medDueSoonBeds = $medBedsWith('due_soon');
+                        $medOverdueDoses = $medOverdueBeds->sum(fn ($bed) => $medicationAlerts[$bed['patient_id']]['overdue']);
+                        $medDueSoonDoses = $medDueSoonBeds->sum(fn ($bed) => $medicationAlerts[$bed['patient_id']]['due_soon']);
+                        $medFlagBeds = ($medOverdueDoses > 0 ? $medOverdueBeds : $medDueSoonBeds)->pluck('number')->values();
+                    @endphp
+                    @if($medOverdueDoses > 0 || $medDueSoonDoses > 0)
+                        <button onclick='highlightAndFilterBeds(@json($medFlagBeds), "medication")'
+                            class="px-3 py-1.5 {{ $medOverdueDoses > 0 ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-500 hover:bg-amber-600' }} text-white rounded-lg font-medium shadow flex items-center text-sm"
+                            title="Show the beds with medication doses {{ $medOverdueDoses > 0 ? 'overdue' : 'due in the next ' . \App\Models\PatientMedication::DUE_SOON_MINUTES . ' minutes' }}">
+                            @if($medOverdueDoses > 0)
+                                <span class="w-2 h-2 mr-1.5 rounded-full bg-white animate-pulse"></span>
+                            @endif
+                            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M10.5 20.5l10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7z" />
+                                <path d="M8.5 8.5l7 7" />
+                            </svg>
+                            @if($medOverdueDoses > 0)
+                                {{ $medOverdueDoses }} {{ \Illuminate\Support\Str::plural('dose', $medOverdueDoses) }} overdue
+                            @else
+                                {{ $medDueSoonDoses }} {{ \Illuminate\Support\Str::plural('dose', $medDueSoonDoses) }} due soon
+                            @endif
+                        </button>
+                    @endif
+                @endif
+
+                <!-- Assessments past their suggested interval / warning level on this ward -->
+                @php
+                    $assessBedsWith = fn ($key) => collect($beds ?? [])->filter(
+                        fn ($bed) => $bed['status'] === 'occupied'
+                            && ((($assessmentAlerts ?? [])[$bed['patient_id']] ?? [])[$key] ?? 0) > 0
+                    );
+                    $assessOverdueBeds = $assessBedsWith('overdue');
+                    $assessDueBeds = $assessBedsWith('due');
+                    $assessOverdue = $assessOverdueBeds->sum(fn ($bed) => $assessmentAlerts[$bed['patient_id']]['overdue']);
+                    $assessDue = $assessDueBeds->sum(fn ($bed) => $assessmentAlerts[$bed['patient_id']]['due']);
+                    $assessFlagBeds = ($assessOverdue > 0 ? $assessOverdueBeds : $assessDueBeds)->pluck('number')->values();
+                @endphp
+                @if($assessOverdue > 0 || $assessDue > 0)
+                    <button onclick='highlightAndFilterBeds(@json($assessFlagBeds), "assessment")'
+                        class="px-3 py-1.5 {{ $assessOverdue > 0 ? 'bg-red-600 hover:bg-red-700' : 'bg-amber-500 hover:bg-amber-600' }} text-white rounded-lg font-medium shadow flex items-center text-sm"
+                        title="Show the beds with assessments past their {{ $assessOverdue > 0 ? 'warning level' : 'suggested interval' }}">
+                        @if($assessOverdue > 0)
+                            <span class="w-2 h-2 mr-1.5 rounded-full bg-white animate-pulse"></span>
+                        @endif
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                        </svg>
+                        @if($assessOverdue > 0)
+                            {{ $assessOverdue }} {{ \Illuminate\Support\Str::plural('assessment', $assessOverdue) }} overdue
+                        @else
+                            {{ $assessDue }} {{ \Illuminate\Support\Str::plural('assessment', $assessDue) }} due
+                        @endif
+                    </button>
+                @endif
+
                 <!-- Action Buttons -->
                 <button onclick="window.dispatchEvent(new CustomEvent('open-notifications-modal'))"
                     class="px-3 py-1.5 bg-yellow-500 text-white rounded-lg font-medium shadow hover:bg-yellow-600 flex items-center relative text-sm">
@@ -960,9 +1025,52 @@
                                             };
                                         @endphp
 
+                                        @php
+                                            // Status popovers are teleported to <body>: inside the card they were clipped by
+                                            // the card's overflow and hidden behind neighbouring bed boxes.
+                                            $popoverBase = 'fixed z-[9999] -translate-x-1/2 w-max min-w-[9rem] max-w-[18rem] break-words bg-white rounded-lg shadow-2xl border border-gray-200';
+                                            // Fade in only: a leave transition can leave the popover on screen if the
+                                            // transition never completes (background tab, throttled rendering).
+                                            $popoverTransition = 'x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"';
+                                        @endphp
+
                                         <!-- Clinical Indicators Row - Touch Screen Friendly -->
                                         <div class="flex items-center justify-between pt-2 overflow-visible"
-                                            x-data="{ openPopover: null }">
+                                            x-on:scroll.window.capture="openPopover && place()"
+                                            x-on:resize.window="openPopover && place()"
+                                            x-data="{
+                                                openPopover: null,
+                                                trigger: null,
+                                                popX: 0,
+                                                popY: 0,
+                                                flipped: false,
+                                                toggle(id, el) {
+                                                    if (this.openPopover === id) { this.close(); return; }
+                                                    this.trigger = el;
+                                                    this.openPopover = id;
+                                                    this.place();
+                                                    // Measure once it is on screen, so tall popovers flip correctly
+                                                    this.$nextTick(() => this.place());
+                                                },
+                                                place() {
+                                                    if (!this.trigger) return;
+                                                    const box = this.trigger.getBoundingClientRect();
+                                                    // Centre on the chip, but keep the widest popover inside the viewport
+                                                    this.popX = Math.min(Math.max(box.left + box.width / 2, 152), window.innerWidth - 152);
+                                                    const popover = document.querySelector(`[data-status-popover='${this.openPopover}']`);
+                                                    const height = popover ? popover.offsetHeight : 150;
+                                                    // Sits above the chip, or below it when the card is near the top of the screen
+                                                    this.flipped = box.top < height + 16;
+                                                    this.popY = this.flipped ? box.bottom + 8 : box.top - 8;
+                                                },
+                                                close() { this.openPopover = null; this.trigger = null; },
+                                                closeOnAway(event) {
+                                                    // Another chip on this same card switches popovers; anything else closes it
+                                                    const chip = event.target.closest('[data-popover-trigger]');
+                                                    if (chip && this.$root.contains(chip)) return;
+                                                    this.close();
+                                                },
+                                            }">
                                             {{-- Left side: EWS/No Vitals + Pending Discharge --}}
                                             <div class="flex items-center gap-1 shrink-0">
                                                 @if($isVisible('ews'))
@@ -1014,7 +1122,8 @@
                                                     @endphp
                                                     <div class="relative">
                                                         <button type="button"
-                                                            @click="openPopover = openPopover === 'nursing_{{ $bed['patient_id'] }}' ? null : 'nursing_{{ $bed['patient_id'] }}'"
+                                                            @click="toggle('nursing_{{ $bed['patient_id'] }}', $event.currentTarget)"
+                                                            data-popover-trigger
                                                             class="w-6 h-6 {{ $currentLevel['bg'] }} {{ $currentLevel['text'] }} text-xs rounded flex items-center justify-center cursor-pointer border {{ $currentLevel['border'] }}"
                                                             title="Nursing Level">
                                                             <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
@@ -1022,16 +1131,21 @@
                                                                     d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
                                                             </svg>
                                                         </button>
-                                                        <div x-show="openPopover === 'nursing_{{ $bed['patient_id'] }}'"
-                                                            @click.away="openPopover = null" x-transition
-                                                            class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-40 bg-white rounded-lg shadow-2xl border border-gray-200 p-2 whitespace-nowrap">
-                                                            <div class="text-xs font-bold text-gray-800 mb-1">Nursing Level
-                                                                {{ $levelNum[$bed['nursing_level']] ?? '?' }}
+                                                        <template x-teleport="body">
+                                                            <div x-show="openPopover === 'nursing_{{ $bed['patient_id'] }}'"
+                                                                @click.away="closeOnAway($event)" {!! $popoverTransition !!}
+                                                                :style="{ left: popX + 'px', top: popY + 'px' }"
+                                                                :class="flipped ? '' : '-translate-y-full'"
+                                                                data-status-popover="nursing_{{ $bed['patient_id'] }}"
+                                                                class="{{ $popoverBase }} p-2">
+                                                                <div class="text-xs font-bold text-gray-800 mb-1">Nursing Level
+                                                                    {{ $levelNum[$bed['nursing_level']] ?? '?' }}
+                                                                </div>
+                                                                <div class="text-xs text-gray-600">
+                                                                    {{ $levelDesc[$bed['nursing_level']] ?? 'Unknown Level' }}
+                                                                </div>
                                                             </div>
-                                                            <div class="text-xs text-gray-600">
-                                                                {{ $levelDesc[$bed['nursing_level']] ?? 'Unknown Level' }}
-                                                            </div>
-                                                        </div>
+                                                        </template>
                                                     </div>
                                                 @else
                                                     <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
@@ -1047,7 +1161,8 @@
                                                 @if($showPatientInfo('diet_type') && ($bed['has_nbm'] ?? false))
                                                     <div class="relative">
                                                         <button type="button"
-                                                            @click="openPopover = openPopover === 'nbm_{{ $bed['patient_id'] }}' ? null : 'nbm_{{ $bed['patient_id'] }}'"
+                                                            @click="toggle('nbm_{{ $bed['patient_id'] }}', $event.currentTarget)"
+                                                            data-popover-trigger
                                                             class="w-6 h-6 bg-pink-500 text-white text-xs rounded flex items-center justify-center cursor-pointer border border-pink-600"
                                                             title="NBM">
                                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor"
@@ -1057,13 +1172,18 @@
                                                                 <path d="M15 3h4v6a3 3 0 01-3 3h-1M17 12v9" />
                                                             </svg>
                                                         </button>
-                                                        <div x-show="openPopover === 'nbm_{{ $bed['patient_id'] }}'"
-                                                            @click.away="openPopover = null" x-transition
-                                                            class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-36 bg-white rounded-lg shadow-2xl border border-gray-200 p-2 whitespace-nowrap">
-                                                            <div class="text-xs font-bold text-pink-700 mb-1">⚠️ NBM</div>
-                                                            <div class="text-xs text-gray-600">Nil By Mouth</div>
-                                                            <div class="text-xs text-gray-500 mt-1">No food or drink</div>
-                                                        </div>
+                                                        <template x-teleport="body">
+                                                            <div x-show="openPopover === 'nbm_{{ $bed['patient_id'] }}'"
+                                                                @click.away="closeOnAway($event)" {!! $popoverTransition !!}
+                                                                :style="{ left: popX + 'px', top: popY + 'px' }"
+                                                                :class="flipped ? '' : '-translate-y-full'"
+                                                                data-status-popover="nbm_{{ $bed['patient_id'] }}"
+                                                                class="{{ $popoverBase }} p-2">
+                                                                <div class="text-xs font-bold text-pink-700 mb-1">⚠️ NBM</div>
+                                                                <div class="text-xs text-gray-600">Nil By Mouth</div>
+                                                                <div class="text-xs text-gray-500 mt-1">No food or drink</div>
+                                                            </div>
+                                                        </template>
                                                     </div>
                                                 @else
                                                     <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
@@ -1100,7 +1220,8 @@
                                                     @endphp
                                                     <div class="relative">
                                                         <button type="button"
-                                                            @click="openPopover = openPopover === 'fall_{{ $bed['patient_id'] }}' ? null : 'fall_{{ $bed['patient_id'] }}'"
+                                                            @click="toggle('fall_{{ $bed['patient_id'] }}', $event.currentTarget)"
+                                                            data-popover-trigger
                                                             class="w-6 h-6 {{ $currentFall['bg'] }} {{ $currentFall['text'] }} text-xs rounded flex items-center justify-center cursor-pointer border {{ $currentFall['border'] }}"
                                                             title="Fall Risk">
                                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor"
@@ -1111,16 +1232,21 @@
                                                                 <path d="M3 20h18" stroke-width="1.5" />
                                                             </svg>
                                                         </button>
-                                                        <div x-show="openPopover === 'fall_{{ $bed['patient_id'] }}'"
-                                                            @click.away="openPopover = null" x-transition
-                                                            class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-white rounded-lg shadow-2xl border border-gray-200 p-2 whitespace-nowrap">
-                                                            <div class="text-xs font-bold text-gray-800 mb-1">⚠️ Fall Risk Level
-                                                                {{ $currentFall['level'] }}
+                                                        <template x-teleport="body">
+                                                            <div x-show="openPopover === 'fall_{{ $bed['patient_id'] }}'"
+                                                                @click.away="closeOnAway($event)" {!! $popoverTransition !!}
+                                                                :style="{ left: popX + 'px', top: popY + 'px' }"
+                                                                :class="flipped ? '' : '-translate-y-full'"
+                                                                data-status-popover="fall_{{ $bed['patient_id'] }}"
+                                                                class="{{ $popoverBase }} p-2">
+                                                                <div class="text-xs font-bold text-gray-800 mb-1">⚠️ Fall Risk Level
+                                                                    {{ $currentFall['level'] }}
+                                                                </div>
+                                                                <div class="text-xs text-gray-600">
+                                                                    {{ $fallDesc[$bed['fall_risk']] ?? 'Unknown Risk' }}
+                                                                </div>
                                                             </div>
-                                                            <div class="text-xs text-gray-600">
-                                                                {{ $fallDesc[$bed['fall_risk']] ?? 'Unknown Risk' }}
-                                                            </div>
-                                                        </div>
+                                                        </template>
                                                     </div>
                                                 @else
                                                     <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
@@ -1145,7 +1271,8 @@
                                                     @endphp
                                                     <div class="relative">
                                                         <button type="button"
-                                                            @click="openPopover = openPopover === 'iso_{{ $bed['patient_id'] }}' ? null : 'iso_{{ $bed['patient_id'] }}'"
+                                                            @click="toggle('iso_{{ $bed['patient_id'] }}', $event.currentTarget)"
+                                                            data-popover-trigger
                                                             class="w-6 h-6 {{ $isoColors['bg'] }} {{ $isoColors['text'] }} text-xs rounded flex items-center justify-center cursor-pointer border {{ $isoColors['border'] }}"
                                                             title="Isolation">
                                                             <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
@@ -1160,16 +1287,21 @@
                                                                 <circle cx="18.4" cy="5.6" r="1.2" />
                                                             </svg>
                                                         </button>
-                                                        <div x-show="openPopover === 'iso_{{ $bed['patient_id'] }}'"
-                                                            @click.away="openPopover = null" x-transition
-                                                            class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-white rounded-lg shadow-2xl border border-gray-200 p-2 whitespace-nowrap">
-                                                            <div class="text-xs font-bold text-purple-700 mb-1">
-                                                                🦠 Isolation Required</div>
-                                                            <div class="text-xs text-gray-800 font-semibold">{{ $isoDisplayName }}</div>
-                                                            @if($isCriticalIso)
-                                                                <div class="text-xs text-red-600 mt-1">⚠️ Critical - Full PPE required</div>
-                                                            @endif
-                                                        </div>
+                                                        <template x-teleport="body">
+                                                            <div x-show="openPopover === 'iso_{{ $bed['patient_id'] }}'"
+                                                                @click.away="closeOnAway($event)" {!! $popoverTransition !!}
+                                                                :style="{ left: popX + 'px', top: popY + 'px' }"
+                                                                :class="flipped ? '' : '-translate-y-full'"
+                                                                data-status-popover="iso_{{ $bed['patient_id'] }}"
+                                                                class="{{ $popoverBase }} p-2">
+                                                                <div class="text-xs font-bold text-purple-700 mb-1">
+                                                                    🦠 Isolation Required</div>
+                                                                <div class="text-xs text-gray-800 font-semibold">{{ $isoDisplayName }}</div>
+                                                                @if($isCriticalIso)
+                                                                    <div class="text-xs text-red-600 mt-1">⚠️ Critical - Full PPE required</div>
+                                                                @endif
+                                                            </div>
+                                                        </template>
                                                     </div>
                                                 @else
                                                     <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
@@ -1213,7 +1345,8 @@
                                                     @endphp
                                                     <div class="relative">
                                                         <button type="button"
-                                                            @click="openPopover = openPopover === 'allergy_{{ $bed['patient_id'] }}' ? null : 'allergy_{{ $bed['patient_id'] }}'"
+                                                            @click="toggle('allergy_{{ $bed['patient_id'] }}', $event.currentTarget)"
+                                                            data-popover-trigger
                                                             class="w-6 h-6 text-xs rounded flex items-center justify-center cursor-pointer border {{ $btnClass }}"
                                                             title="Allergies ({{ $hasActive ? $activeCount . ' Active' : 'Resolved' }})">
                                                             <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
@@ -1221,33 +1354,37 @@
                                                                     d="M12 2L1 21h22L12 2zm0 3.5L19.5 19h-15L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z" />
                                                             </svg>
                                                         </button>
-                                                        <div x-show="openPopover === 'allergy_{{ $bed['patient_id'] }}'"
-                                                            @click.away="openPopover = null" x-transition
-                                                            class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 bg-white rounded-lg shadow-2xl border border-gray-200 p-3">
-                                                            <div class="text-xs font-bold mb-2 flex justify-between items-center"
-                                                                class="{{ $hasActive ? 'text-red-700' : 'text-green-700' }}">
-                                                                <span>Allergies</span>
-                                                                <span
-                                                                    class="text-[10px] px-1.5 py-0.5 rounded-full {{ $hasActive ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800' }}">
-                                                                    {{ $totalCount }} Total
-                                                                </span>
-                                                            </div>
-                                                            <ul class="space-y-1.5 max-h-48 overflow-y-auto">
-                                                                @foreach($processedAllergies as $allergy)
-                                                                    <li class="text-xs text-gray-700 flex items-start">
-                                                                        <span
-                                                                            class="w-1.5 h-1.5 mt-1.5 rounded-full mr-2 shrink-0 {{ ($allergy['status'] ?? 'Active') === 'Resolved' ? 'bg-green-500' : 'bg-red-500' }}"></span>
-                                                                        <div class="flex-1">
-                                                                            <span class="block font-medium">{{ $allergy['name'] }}</span>
+                                                        <template x-teleport="body">
+                                                            <div x-show="openPopover === 'allergy_{{ $bed['patient_id'] }}'"
+                                                                @click.away="closeOnAway($event)" {!! $popoverTransition !!}
+                                                                :style="{ left: popX + 'px', top: popY + 'px' }"
+                                                                :class="flipped ? '' : '-translate-y-full'"
+                                                                data-status-popover="allergy_{{ $bed['patient_id'] }}"
+                                                                class="{{ $popoverBase }} p-3">
+                                                                <div class="text-xs font-bold mb-2 flex justify-between items-center {{ $hasActive ? 'text-red-700' : 'text-green-700' }}">
+                                                                    <span>Allergies</span>
+                                                                    <span
+                                                                        class="text-[10px] px-1.5 py-0.5 rounded-full {{ $hasActive ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800' }}">
+                                                                        {{ $totalCount }} Total
+                                                                    </span>
+                                                                </div>
+                                                                <ul class="space-y-1.5 max-h-48 overflow-y-auto">
+                                                                    @foreach($processedAllergies as $allergy)
+                                                                        <li class="text-xs text-gray-700 flex items-start">
                                                                             <span
-                                                                                class="block text-[10px] {{ ($allergy['status'] ?? 'Active') === 'Resolved' ? 'text-green-600' : 'text-red-600' }}">
-                                                                                {{ $allergy['status'] }}
-                                                                            </span>
-                                                                        </div>
-                                                                    </li>
-                                                                @endforeach
-                                                            </ul>
-                                                        </div>
+                                                                                class="w-1.5 h-1.5 mt-1.5 rounded-full mr-2 shrink-0 {{ ($allergy['status'] ?? 'Active') === 'Resolved' ? 'bg-green-500' : 'bg-red-500' }}"></span>
+                                                                            <div class="flex-1">
+                                                                                <span class="block font-medium">{{ $allergy['name'] }}</span>
+                                                                                <span
+                                                                                    class="block text-[10px] {{ ($allergy['status'] ?? 'Active') === 'Resolved' ? 'text-green-600' : 'text-red-600' }}">
+                                                                                    {{ $allergy['status'] }}
+                                                                                </span>
+                                                                            </div>
+                                                                        </li>
+                                                                    @endforeach
+                                                                </ul>
+                                                            </div>
+                                                        </template>
                                                     </div>
                                                 @else
                                                     <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
@@ -1284,7 +1421,8 @@
                                                     @endphp
                                                     <div class="relative">
                                                         <button type="button"
-                                                            @click="openPopover = openPopover === 'hgt_{{ $bed['patient_id'] }}' ? null : 'hgt_{{ $bed['patient_id'] }}'"
+                                                            @click="toggle('hgt_{{ $bed['patient_id'] }}', $event.currentTarget)"
+                                                            data-popover-trigger
                                                             class="w-6 h-6 bg-{{ $hgtColor }}-500 text-white text-xs rounded flex items-center justify-center cursor-pointer border border-{{ $hgtColor }}-600"
                                                             title="HGT">
                                                             <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
@@ -1292,21 +1430,26 @@
                                                                     d="M12 2c-1.1 0-2 .9-2 2v8c-2.2 1.2-3.5 3.5-3.5 6 0 3.6 2.9 6.5 6.5 6.5s6.5-2.9 6.5-6.5c0-2.5-1.3-4.8-3.5-6V4c0-1.1-.9-2-2-2zm-1 14.7c-1.3.5-2.2 1.8-2.2 3.3h6.4c0-1.5-.9-2.8-2.2-3.3V4h-2v12.7z" />
                                                             </svg>
                                                         </button>
-                                                        <div x-show="openPopover === 'hgt_{{ $bed['patient_id'] }}'"
-                                                            @click.away="openPopover = null" x-transition
-                                                            class="absolute z-[9999] bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-white rounded-lg shadow-2xl border border-gray-200 p-2 whitespace-nowrap">
-                                                            <div class="text-xs font-bold text-teal-700 mb-1">🩸 HGT Monitoring</div>
-                                                            <div class="text-xs text-gray-600">Frequency: {{ $hgtFrequencyLabel }}</div>
-                                                            @if($hgtValue !== null)
-                                                                <div class="mt-1 text-xs">
-                                                                    <span class="font-semibold text-{{ $hgtColor }}-600">{{ $hgtValue }}
-                                                                        mmol/L</span>
-                                                                    <span class="text-gray-400">@ {{ $hgtTime }}</span>
-                                                                </div>
-                                                            @else
-                                                                <div class="text-xs text-gray-400 mt-1">No readings yet</div>
-                                                            @endif
-                                                        </div>
+                                                        <template x-teleport="body">
+                                                            <div x-show="openPopover === 'hgt_{{ $bed['patient_id'] }}'"
+                                                                @click.away="closeOnAway($event)" {!! $popoverTransition !!}
+                                                                :style="{ left: popX + 'px', top: popY + 'px' }"
+                                                                :class="flipped ? '' : '-translate-y-full'"
+                                                                data-status-popover="hgt_{{ $bed['patient_id'] }}"
+                                                                class="{{ $popoverBase }} p-2">
+                                                                <div class="text-xs font-bold text-teal-700 mb-1">🩸 HGT Monitoring</div>
+                                                                <div class="text-xs text-gray-600">Frequency: {{ $hgtFrequencyLabel }}</div>
+                                                                @if($hgtValue !== null)
+                                                                    <div class="mt-1 text-xs">
+                                                                        <span class="font-semibold text-{{ $hgtColor }}-600">{{ $hgtValue }}
+                                                                            mmol/L</span>
+                                                                        <span class="text-gray-400">@ {{ $hgtTime }}</span>
+                                                                    </div>
+                                                                @else
+                                                                    <div class="text-xs text-gray-400 mt-1">No readings yet</div>
+                                                                @endif
+                                                            </div>
+                                                        </template>
                                                     </div>
                                                 @else
                                                     <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
@@ -1318,14 +1461,175 @@
                                                     </div>
                                                 @endif
 
-                                                <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
-                                                    title="Reserved">
-                                                    <span class="text-gray-400 text-xs">-</span>
-                                                </div>
-                                                <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
-                                                    title="Reserved">
-                                                    <span class="text-gray-400 text-xs">-</span>
-                                                </div>
+                                                {{-- Medications: overdue / due-soon doses, for users who switched monitoring on --}}
+                                                @php
+                                                    $medAlert = ($medicationMonitoring ?? false)
+                                                        ? (($medicationAlerts ?? [])[$bed['patient_id']] ?? null)
+                                                        : null;
+                                                @endphp
+                                                @if($medAlert)
+                                                    @php
+                                                        if ($medAlert['overdue'] > 0) {
+                                                            $medChipClass = 'bg-red-600 text-white border-red-700 animate-pulse';
+                                                            $medSummary = $medAlert['overdue'] . ' overdue';
+                                                        } elseif ($medAlert['due_soon'] > 0) {
+                                                            $medChipClass = 'bg-amber-400 text-white border-amber-500';
+                                                            $medSummary = $medAlert['due_soon'] . ' due soon';
+                                                        } else {
+                                                            $medChipClass = 'bg-indigo-500 text-white border-indigo-600';
+                                                            $medSummary = $medAlert['active'] . ' active';
+                                                        }
+                                                        $medDotClasses = ['overdue' => 'bg-red-500', 'due_soon' => 'bg-amber-400', 'scheduled' => 'bg-indigo-400', 'prn' => 'bg-purple-400'];
+                                                        $medTextClasses = ['overdue' => 'text-red-600 font-semibold', 'due_soon' => 'text-amber-700 font-semibold', 'scheduled' => 'text-gray-500', 'prn' => 'text-purple-600'];
+                                                    @endphp
+                                                    <div class="relative">
+                                                        <button type="button"
+                                                            @click="toggle('med_{{ $bed['patient_id'] }}', $event.currentTarget)"
+                                                            data-popover-trigger
+                                                            class="w-6 h-6 text-xs rounded flex items-center justify-center cursor-pointer border {{ $medChipClass }}"
+                                                            title="Medications ({{ $medSummary }})">
+                                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                                                stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                                                <path d="M10.5 20.5l10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7z" />
+                                                                <path d="M8.5 8.5l7 7" />
+                                                            </svg>
+                                                        </button>
+                                                        @if($medAlert['overdue'] > 0)
+                                                            <span class="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-white border border-red-600 text-red-600 text-[9px] font-bold leading-[12px] text-center pointer-events-none">{{ $medAlert['overdue'] }}</span>
+                                                        @endif
+                                                        <template x-teleport="body">
+                                                            <div x-show="openPopover === 'med_{{ $bed['patient_id'] }}'"
+                                                                @click.away="closeOnAway($event)" {!! $popoverTransition !!}
+                                                                :style="{ left: popX + 'px', top: popY + 'px' }"
+                                                                :class="flipped ? '' : '-translate-y-full'"
+                                                                data-status-popover="med_{{ $bed['patient_id'] }}"
+                                                                class="{{ $popoverBase }} p-3">
+                                                                <div class="text-xs font-bold mb-2 flex justify-between items-center gap-3 {{ $medAlert['overdue'] > 0 ? 'text-red-700' : 'text-indigo-700' }}">
+                                                                    <span>💊 Medications</span>
+                                                                    <span class="text-[10px] px-1.5 py-0.5 rounded-full {{ $medAlert['overdue'] > 0 ? 'bg-red-100 text-red-800' : 'bg-indigo-100 text-indigo-800' }}">
+                                                                        {{ $medSummary }}
+                                                                    </span>
+                                                                </div>
+                                                                <ul class="space-y-1.5 max-h-48 overflow-y-auto">
+                                                                    @foreach(array_slice($medAlert['items'], 0, 6) as $medItem)
+                                                                        <li class="text-xs text-gray-700 flex items-start">
+                                                                            <span class="w-1.5 h-1.5 mt-1.5 rounded-full mr-2 shrink-0 {{ $medDotClasses[$medItem['state']] ?? 'bg-gray-400' }}"></span>
+                                                                            <div class="flex-1 min-w-0">
+                                                                                <span class="block font-medium">{{ $medItem['name'] }}
+                                                                                    <span class="font-normal text-gray-500">{{ $medItem['summary'] }}</span></span>
+                                                                                <span class="block text-[10px] {{ $medTextClasses[$medItem['state']] ?? 'text-gray-500' }}">
+                                                                                    {{ $medItem['label'] }}{{ $medItem['due_time'] ? ' · ' . $medItem['due_time'] : '' }}
+                                                                                </span>
+                                                                            </div>
+                                                                        </li>
+                                                                    @endforeach
+                                                                </ul>
+                                                                @if(count($medAlert['items']) > 6)
+                                                                    <div class="text-[10px] text-gray-400 mt-1">+ {{ count($medAlert['items']) - 6 }} more</div>
+                                                                @endif
+                                                                <button type="button"
+                                                                    @click="close(); window.dispatchEvent(new CustomEvent('open-patient-details-modal', { detail: { patientId: {{ $bed['patient_id'] }}, tab: 'medications' } }))"
+                                                                    class="mt-2 text-[11px] font-semibold text-blue-700 hover:underline">
+                                                                    Open Medications &rarr;
+                                                                </button>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                @elseif($medicationMonitoring ?? false)
+                                                    <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
+                                                        title="Medications (none active)">
+                                                        <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                            <path d="M10.5 20.5l10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7z" />
+                                                            <path d="M8.5 8.5l7 7" />
+                                                        </svg>
+                                                    </div>
+                                                @else
+                                                    <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
+                                                        title="Reserved">
+                                                        <span class="text-gray-400 text-xs">-</span>
+                                                    </div>
+                                                @endif
+
+                                                {{-- Assessments: monitored clinical indicators past their suggested interval (amber) or warning level (red) --}}
+                                                @php
+                                                    $assessAlert = ($assessmentAlerts ?? [])[$bed['patient_id']] ?? null;
+                                                @endphp
+                                                @if($assessAlert)
+                                                    @php
+                                                        if ($assessAlert['overdue'] > 0) {
+                                                            $assessChipClass = 'bg-red-600 text-white border-red-700 animate-pulse';
+                                                            $assessHeaderClass = 'text-red-700';
+                                                            $assessPillClass = 'bg-red-100 text-red-800';
+                                                            $assessSummary = $assessAlert['overdue'] . ' overdue';
+                                                            $assessBadge = ['count' => $assessAlert['overdue'], 'class' => 'border-red-600 text-red-600'];
+                                                        } elseif ($assessAlert['due'] > 0) {
+                                                            $assessChipClass = 'bg-amber-400 text-white border-amber-500';
+                                                            $assessHeaderClass = 'text-amber-700';
+                                                            $assessPillClass = 'bg-amber-100 text-amber-800';
+                                                            $assessSummary = $assessAlert['due'] . ' due';
+                                                            $assessBadge = ['count' => $assessAlert['due'], 'class' => 'border-amber-500 text-amber-600'];
+                                                        } else {
+                                                            $assessChipClass = 'bg-emerald-500 text-white border-emerald-600';
+                                                            $assessHeaderClass = 'text-emerald-700';
+                                                            $assessPillClass = 'bg-emerald-100 text-emerald-800';
+                                                            $assessSummary = 'up to date';
+                                                            $assessBadge = null;
+                                                        }
+                                                        $assessDotClasses = ['overdue' => 'bg-red-500', 'due' => 'bg-amber-400', 'ok' => 'bg-emerald-500'];
+                                                        $assessTextClasses = ['overdue' => 'text-red-600 font-semibold', 'due' => 'text-amber-700 font-semibold', 'ok' => 'text-gray-500'];
+                                                    @endphp
+                                                    <div class="relative">
+                                                        <button type="button"
+                                                            @click="toggle('assess_{{ $bed['patient_id'] }}', $event.currentTarget)"
+                                                            data-popover-trigger
+                                                            class="w-6 h-6 text-xs rounded flex items-center justify-center cursor-pointer border {{ $assessChipClass }}"
+                                                            title="Assessments ({{ $assessSummary }})">
+                                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2"
+                                                                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                                                            </svg>
+                                                        </button>
+                                                        @if($assessBadge)
+                                                            <span class="absolute -top-1.5 -right-1.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-white border {{ $assessBadge['class'] }} text-[9px] font-bold leading-[12px] text-center pointer-events-none">{{ $assessBadge['count'] }}</span>
+                                                        @endif
+                                                        <template x-teleport="body">
+                                                            <div x-show="openPopover === 'assess_{{ $bed['patient_id'] }}'"
+                                                                @click.away="closeOnAway($event)" {!! $popoverTransition !!}
+                                                                :style="{ left: popX + 'px', top: popY + 'px' }"
+                                                                :class="flipped ? '' : '-translate-y-full'"
+                                                                data-status-popover="assess_{{ $bed['patient_id'] }}"
+                                                                class="{{ $popoverBase }} p-3">
+                                                                <div class="text-xs font-bold mb-2 flex justify-between items-center gap-3 {{ $assessHeaderClass }}">
+                                                                    <span>📋 Assessments</span>
+                                                                    <span class="text-[10px] px-1.5 py-0.5 rounded-full {{ $assessPillClass }}">{{ $assessSummary }}</span>
+                                                                </div>
+                                                                <ul class="space-y-0.5 max-h-48 overflow-y-auto">
+                                                                    @foreach($assessAlert['items'] as $assessItem)
+                                                                        <li>
+                                                                            <button type="button"
+                                                                                @click="close(); window.dispatchEvent(new CustomEvent('open-patient-details-modal', { detail: { patientId: {{ $bed['patient_id'] }}, tab: 'indicator-{{ $assessItem['indicator_id'] }}' } }))"
+                                                                                class="w-full text-left text-xs text-gray-700 flex items-start rounded px-1 py-0.5 hover:bg-gray-100"
+                                                                                title="Open {{ $assessItem['name'] }}">
+                                                                                <span class="w-1.5 h-1.5 mt-1.5 rounded-full mr-2 shrink-0 {{ $assessDotClasses[$assessItem['state']] }}"></span>
+                                                                                <span class="flex-1 min-w-0">
+                                                                                    <span class="block font-medium">{{ $assessItem['code'] }}
+                                                                                        <span class="font-normal text-gray-500">every {{ $assessItem['interval'] }}</span></span>
+                                                                                    <span class="block text-[10px] {{ $assessTextClasses[$assessItem['state']] }}">{{ $assessItem['label'] }}</span>
+                                                                                </span>
+                                                                            </button>
+                                                                        </li>
+                                                                    @endforeach
+                                                                </ul>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                @else
+                                                    <div class="w-6 h-6 bg-gray-200 rounded flex items-center justify-center"
+                                                        title="Reserved">
+                                                        <span class="text-gray-400 text-xs">-</span>
+                                                    </div>
+                                                @endif
                                             </div>
                                         </div>
                                     </div>
@@ -1352,7 +1656,36 @@
                                                     clip-rule="evenodd" />
                                             </svg>
                                         </button>
-                                        {{-- Button 3: ECG --}}
+                                        {{-- Button 3: I/O Chart, with a dot when over the fluid limit, low on urine or showing overload --}}
+                                        @if($fluidBalanceEnabled ?? false)
+                                            @php
+                                                $ioAlert = ($fluidBalanceAlerts ?? [])[$bed['patient_id']] ?? null;
+                                                $ioLevel = $ioAlert['level'] ?? null;
+                                                $ioTitle = 'I/O Chart';
+                                                if ($ioAlert) {
+                                                    $ioTitle .= ' - in ' . number_format($ioAlert['intake'])
+                                                        . ($ioAlert['limit'] ? ' of ' . number_format($ioAlert['limit']['limit']) : '')
+                                                        . ' mL, out ' . number_format($ioAlert['output']) . ' mL today';
+                                                    foreach ($ioAlert['alerts'] as $ioFlag) {
+                                                        $ioTitle .= ' - ' . $ioFlag['title'];
+                                                    }
+                                                }
+                                            @endphp
+                                            <button class="flex-1 p-2 text-sky-600 hover:bg-sky-50 rounded transition-colors"
+                                                title="{{ $ioTitle }}"
+                                                onclick="window.dispatchEvent(new CustomEvent('open-patient-details-modal', { detail: { patientId: {{ $bed['patient_id'] }}, tab: 'io' } }))">
+                                                <span class="relative block w-4 h-4 mx-auto">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+                                                    </svg>
+                                                    @if(in_array($ioLevel, ['critical', 'warning'], true))
+                                                        <span class="absolute -top-1 -right-1.5 w-2 h-2 rounded-full ring-2 ring-white {{ $ioLevel === 'critical' ? 'bg-red-500 animate-pulse' : 'bg-amber-400' }}"></span>
+                                                    @endif
+                                                </span>
+                                            </button>
+                                        @endif
+                                        {{-- Button 4: ECG --}}
                                         <button class="flex-1 p-2 text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
                                             title="ECG"
                                             onclick="window.dispatchEvent(new CustomEvent('open-ecg-modal', { detail: { patientId: {{ $bed['patient_id'] }} } }))">
@@ -1363,7 +1696,7 @@
                                                     d="M3 12h4l3-9 4 18 3-9h4" />
                                             </svg>
                                         </button>
-                                        {{-- Button 4: Infusion Pump --}}
+                                        {{-- Button 5: Infusion Pump --}}
                                         <button class="flex-1 p-2 text-purple-600 hover:bg-purple-50 rounded transition-colors"
                                             title="Infusion Pump"
                                             onclick="window.dispatchEvent(new CustomEvent('open-infusion-pump-modal', { detail: { patientId: {{ $bed['patient_id'] }} } }))">
@@ -2432,29 +2765,14 @@
                 x-transition:leave="ease-in duration-200"
                 x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
                 x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-6xl sm:w-full">
+                class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-7xl sm:w-full">
 
-                <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                    <div class="sm:flex sm:items-start">
-                        <div
-                            class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
-                            <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                        </div>
-                        <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left flex-1">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">
-                                Admission Logs
-                            </h3>
-
-                            <div class="mt-2">
-                                <iframe src="{{ route('ward.admission-logs') }}?ward_id={{ $selectedWard->id ?? '' }}"
-                                    class="w-full h-[600px] border-0 rounded-lg" title="Admission Logs">
-                                </iframe>
-                            </div>
-                        </div>
-                    </div>
+                {{-- The log page has its own title, filters, column picker and print button,
+                     so the frame gets the whole width and most of the height --}}
+                <div class="bg-white p-2 sm:p-3">
+                    <iframe src="{{ route('ward.admission-logs') }}?ward_id={{ $selectedWard->id ?? '' }}"
+                        class="w-full h-[78vh] min-h-[480px] border-0 rounded-lg" title="Admission Logs">
+                    </iframe>
                 </div>
                 <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
                     <button @click="open = false" x-on:click="open = false" type="button"
@@ -2561,9 +2879,10 @@
     </div>
 
     <!-- Patient Details Modal -->
-    <div x-data="{ 
-            open: false, 
+    <div x-data="{
+            open: false,
             patientId: null,
+            tab: null,
             closeAndRefresh() {
                 this.open = false;
                 // Refresh the page after a short delay to allow modal to close
@@ -2571,7 +2890,7 @@
                     window.location.reload();
                 }, 200);
             }
-         }" @open-patient-details-modal.window="open = true; patientId = $event.detail.patientId" x-show="open"
+         }" @open-patient-details-modal.window="open = true; patientId = $event.detail.patientId; tab = $event.detail.tab || null" x-show="open"
         class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
         <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
             <div x-show="open" @click="closeAndRefresh()" x-transition:enter="ease-out duration-300"
@@ -2607,7 +2926,7 @@
 
                             <div class="mt-2">
                                 <template x-if="patientId">
-                                    <iframe :src="'{{ route('ward.patient-details') }}?patient_id=' + patientId"
+                                    <iframe :src="'{{ route('ward.patient-details') }}?patient_id=' + patientId + (tab ? '&open_tab=' + tab : '')"
                                         class="w-full h-[650px] border-0 rounded-lg" title="Patient Details">
                                     </iframe>
                                 </template>

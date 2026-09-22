@@ -9,9 +9,17 @@ use Symfony\Component\HttpFoundation\Response;
 class RequireDeletePassphrase
 {
     /**
-     * The passphrase required for all DELETE operations.
+     * The passphrase required for all DELETE operations, and for the edits that reuse it.
      */
     private const PASSPHRASE = 'askdrtai';
+
+    /**
+     * Check a passphrase supplied by a non-DELETE request (e.g. correcting a vital sign).
+     */
+    public static function matches(?string $passphrase): bool
+    {
+        return $passphrase !== null && hash_equals(self::PASSPHRASE, $passphrase);
+    }
 
     /**
      * Handle an incoming request.
@@ -29,7 +37,10 @@ class RequireDeletePassphrase
                     ], 403);
                 }
 
-                return redirect()->back()->with('error', 'Delete failed: Invalid or missing passphrase. Please enter the correct passphrase to delete.');
+                // Keep the tab the form was on (Patient Details reads it back from the old input)
+                return redirect()->back()
+                    ->withInput($request->only('active_tab'))
+                    ->with('error', 'Delete failed: Invalid or missing passphrase. Please enter the correct passphrase to delete.');
             }
         }
 

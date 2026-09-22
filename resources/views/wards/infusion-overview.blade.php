@@ -73,7 +73,8 @@
             </div>
 
             <!-- Quick Stats (Only show on Infusions tab) -->
-            <div x-show="tab === 'infusions'" class="grid grid-cols-5 gap-2 mb-4">
+            <div x-show="tab === 'infusions'"
+                class="grid {{ ($bloodTransfusions ?? collect())->isNotEmpty() ? 'grid-cols-6' : 'grid-cols-5' }} gap-2 mb-4">
                 <a href="?ward_id={{ $wardId }}&filter=active" 
                    class="p-3 rounded-lg text-center transition-all {{ $filter === 'active' ? 'bg-green-100 border-2 border-green-500' : 'bg-white border border-gray-200 hover:border-green-300' }}">
                     <div class="text-xl font-bold text-green-600">{{ $stats['running'] }}</div>
@@ -99,11 +100,33 @@
                     <div class="text-xl font-bold text-blue-600">{{ $stats['completed'] }}</div>
                     <div class="text-xs text-gray-600">Completed</div>
                 </a>
+                @if (($bloodTransfusions ?? collect())->isNotEmpty())
+                    <div class="p-3 rounded-lg text-center bg-white border border-rose-200">
+                        <div class="text-xl font-bold text-rose-600">{{ $bloodTransfusions->count() }}</div>
+                        <div class="text-xs text-gray-600">Transfusing</div>
+                    </div>
+                @endif
             </div>
         </div>
 
         <!-- Infusions Tab Content -->
         <div x-show="tab === 'infusions'">
+        {{-- Blood units running in this ward. Kept separate from the pump
+             infusions above: blood has no pump, no device and no alarm feed. --}}
+        @if (($bloodTransfusions ?? collect())->isNotEmpty())
+            <div class="mb-6">
+                <h3 class="text-lg font-bold text-gray-700 mb-3 flex items-center">
+                    <span class="w-3 h-3 bg-rose-500 rounded-full mr-2"></span>
+                    Blood Transfusions in Progress
+                    <span class="ml-2 text-xs font-medium text-gray-500">({{ $bloodTransfusions->count() }})</span>
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    @foreach ($bloodTransfusions as $transfusion)
+                        <x-transfusion-card :transfusion="$transfusion" :show-patient="true" />
+                    @endforeach
+                </div>
+            </div>
+        @endif
         @if($infusions->count() > 0)
             <!-- Infusion Grid -->
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">

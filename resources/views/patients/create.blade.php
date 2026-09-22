@@ -34,6 +34,17 @@
                                 @enderror
                             </div>
 
+                            <!-- Alias / Also Known As -->
+                            <div class="col-span-2">
+                                <label for="alias_name" class="block text-sm font-semibold text-gray-700 mb-2">Alias / Also Known As <span class="font-normal text-gray-400">(optional)</span></label>
+                                <input id="alias_name" type="text" name="alias_name" value="{{ old('alias_name') }}"
+                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all @error('alias_name') border-red-500 @enderror"
+                                    placeholder="Preferred or other name">
+                                @error('alias_name')
+                                    <p class="mt-2 text-sm text-red-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+
                             <!-- MRN -->
                             <div>
                                 <label for="mrn" class="block text-sm font-semibold text-gray-700 mb-2">Medical Record Number (MRN)</label>

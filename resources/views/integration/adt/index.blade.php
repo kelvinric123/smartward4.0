@@ -164,9 +164,9 @@
                             <p class="text-sm text-gray-500 mt-1">Enter the passphrase to access ADT replay</p>
                         </div>
                         <div class="max-w-sm mx-auto">
-                            <input type="password" x-model="rerunPassphrase" 
+                            <input type="password" x-model="rerunPassphrase"
                                    @keydown.enter="checkRerunPassphrase()"
-                                   placeholder="Enter passphrase..." 
+                                   placeholder="Enter passphrase..." autocomplete="new-password"
                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 text-center text-lg tracking-widest">
                             <p x-show="rerunPassphraseError" x-text="rerunPassphraseError" class="text-red-500 text-sm text-center mt-2"></p>
                             <button @click="checkRerunPassphrase()" 
@@ -865,7 +865,7 @@
                             <label class="block text-sm font-medium text-gray-700 mb-1">
                                 Passphrase <span class="text-red-500">*</span>
                             </label>
-                            <input type="password" name="delete_passphrase" required x-model="clearLogsPassphrase" placeholder="Enter passphrase to delete" autocomplete="off" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 text-sm">
+                            <input type="password" name="delete_passphrase" required x-model="clearLogsPassphrase" placeholder="Enter passphrase to delete" autocomplete="new-password" class="w-full rounded-lg border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 text-sm">
                             <p class="mt-1.5 text-xs text-gray-400">Contact your administrator if you don't know the passphrase.</p>
                         </div>
 

@@ -105,9 +105,59 @@
     </style>
 </head>
 <body class="bg-gray-50">
-    <div class="p-4" x-data='{ 
+    @php
+        // Values the edit form loads when a recorded reading is picked
+        $editorPayload = fn ($vital) => [
+            'id' => $vital->id,
+            'recorded_at' => $vital->recorded_at?->format('Y-m-d\TH:i') ?? '',
+            'systolic_bp' => $vital->systolic_bp ?? '',
+            'diastolic_bp' => $vital->diastolic_bp ?? '',
+            'pulse_rate' => $vital->pulse_rate ?? '',
+            'temperature' => $vital->temperature ?? '',
+            'spo2' => $vital->spo2 ?? '',
+            'respiratory_rate' => $vital->respiratory_rate ?? '',
+            'oxygen_delivery' => $vital->oxygen_delivery ?? '',
+            'oxygen_flow_rate' => $vital->oxygen_flow_rate ?? '',
+            'fio2_percent' => $vital->fio2_percent ?? '',
+            'notes' => $vital->notes ?? '',
+        ];
+    @endphp
+    <div class="p-4" x-data='{
         view: "ihh",
         chartInstance: null,
+        editorMode: null,
+        deleteId: null,
+        passphrase: "",
+        editorForm: {},
+        blankForm() {
+            return { id: null, recorded_at: "", systolic_bp: "", diastolic_bp: "", pulse_rate: "", temperature: "",
+                     spo2: "", respiratory_rate: "", oxygen_delivery: "", oxygen_flow_rate: "", fio2_percent: "", notes: "" };
+        },
+        startAdd() {
+            this.editorForm = this.blankForm();
+            this.passphrase = "";
+            this.deleteId = null;
+            this.editorMode = "add";
+        },
+        startEdit(vital) {
+            this.editorForm = Object.assign(this.blankForm(), vital);
+            this.passphrase = "";
+            this.deleteId = null;
+            this.editorMode = "edit";
+        },
+        startDelete(id) {
+            this.deleteId = id;
+            this.passphrase = "";
+            this.editorMode = "delete";
+        },
+        closeEditor() {
+            this.editorMode = null;
+            this.deleteId = null;
+            this.passphrase = "";
+        },
+        onOxygen() {
+            return this.editorForm.oxygen_delivery && this.editorForm.oxygen_delivery !== "room_air";
+        },
         renderChart() {
             if (this.chartInstance) {
                 this.chartInstance.destroy();
@@ -188,6 +238,17 @@
                 @endif
             </div>
 
+            <div class="flex items-center gap-2">
+            @if($editable && $patient)
+                <button type="button" @click="startAdd()"
+                    class="inline-flex items-center px-3 py-1.5 rounded-md bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm">
+                    <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Record Reading
+                </button>
+            @endif
+
             <!-- View Toggle -->
             <div class="inline-flex rounded-md shadow-sm border border-gray-200 bg-white overflow-hidden text-xs">
                 <button type="button"
@@ -215,14 +276,40 @@
                     <span>Graph</span>
                 </button>
             </div>
+            </div>
         </div>
 
+        @if (session('success'))
+            <div class="mb-4 rounded-lg border-l-4 border-green-500 bg-green-50 px-4 py-3 text-sm font-medium text-green-800">
+                {{ session('success') }}
+            </div>
+        @endif
+        @if (session('error'))
+            <div class="mb-4 rounded-lg border-l-4 border-red-500 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+                {{ session('error') }}
+            </div>
+        @endif
+        @if ($errors->any())
+            <div class="mb-4 rounded-lg border-l-4 border-red-500 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <p class="font-medium mb-1">The reading was not saved:</p>
+                <ul class="list-disc list-inside text-xs">
+                    @foreach ($errors->all() as $message)
+                        <li>{{ $message }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        @endif
+
         @if($patient)
+            @if($editable)
+                @include('vital-signs.partials.reading-editor', ['patient' => $patient])
+            @endif
+
             <!-- Admission Filter -->
             @if(count($admissions) > 0)
             <div class="mb-4">
                 <form method="GET" action="{{ route('vital-signs.patient') }}" class="flex items-center space-x-2">
-                    <input type="hidden" name="patient_id" value="{{ $patient->id }}">
+                    <input type="hidden" name="patient_id" value="{{ $patient->id }}">@if($editable)<input type="hidden" name="edit" value="1">@endif
                     <label class="text-sm font-semibold text-gray-700">Filter by Admission:</label>
                     <select name="admission_id" onchange="this.form.submit()" class="rounded-lg border-gray-300 shadow-sm text-sm focus:border-rose-500 focus:ring-rose-500">
                         <option value="">All Admissions</option>
@@ -239,7 +326,7 @@
             <!-- Latest Vitals Summary -->
             @if($vitalSigns->count() > 0)
                 @php $latest = $vitalSigns->first(); @endphp
-                <div class="grid grid-cols-5 gap-3 mb-4">
+                <div class="grid grid-cols-6 gap-3 mb-4">
                     <div class="bg-gradient-to-br from-red-50 to-red-100 border border-red-200 rounded-lg p-3 text-center">
                         <div class="text-xs text-red-600 font-semibold mb-1">Blood Pressure</div>
                         <div class="text-xl font-bold text-gray-900">
@@ -271,6 +358,25 @@
                         <div class="text-xl font-bold text-gray-900">{{ $latest->respiratory_rate ?? '-' }}</div>
                         <div class="text-xs text-gray-500">/min</div>
                     </div>
+                    <div class="bg-gradient-to-br from-sky-50 to-sky-100 border border-sky-200 rounded-lg p-3 text-center">
+                        <div class="text-xs text-sky-600 font-semibold mb-1">Oxygen</div>
+                        <div class="text-base font-bold leading-tight {{ $latest->isOnOxygen() ? 'text-sky-700' : 'text-gray-900' }}">
+                            {{ $latest->oxygenDeliveryLabel() ?? '-' }}
+                        </div>
+                        <div class="text-xs text-gray-500">
+                            @if($latest->oxygen_flow_rate !== null)
+                                {{ rtrim(rtrim(number_format($latest->oxygen_flow_rate, 1), '0'), '.') }} L/min
+                            @elseif($latest->fio2_percent !== null)
+                                FiO₂ {{ $latest->fio2_percent }}%
+                            @elseif($latest->oxygen_delivery === \App\Models\VitalSign::OXYGEN_ROOM_AIR)
+                                No supplemental O₂
+                            @elseif($latest->oxygen_delivery)
+                                On oxygen
+                            @else
+                                Not recorded
+                            @endif
+                        </div>
+                    </div>
                 </div>
                 <div class="text-xs text-gray-500 mb-4">
                     Last recorded: {{ $latest->recorded_at->format('Y-m-d H:i') }} ({{ $latest->recorded_at->diffForHumans() }})
@@ -290,8 +396,12 @@
                                     <th class="px-3 py-2 text-center font-semibold text-gray-600">Temp</th>
                                     <th class="px-3 py-2 text-center font-semibold text-gray-600">SpO2</th>
                                     <th class="px-3 py-2 text-center font-semibold text-gray-600">RR</th>
+                                    <th class="px-3 py-2 text-center font-semibold text-gray-600">O₂</th>
                                     <th class="px-3 py-2 text-center font-semibold text-gray-600">Type</th>
                                     <th class="px-3 py-2 text-left font-semibold text-gray-600">Admission</th>
+                                    @if($editable)
+                                        <th class="px-3 py-2 text-right font-semibold text-gray-600">Actions</th>
+                                    @endif
                                 </tr>
                             </thead>
                             <tbody class="bg-white divide-y divide-gray-100">
@@ -300,7 +410,7 @@
                                     @if($vital->admission_id !== $currentAdm)
                                         @php $currentAdm = $vital->admission_id; @endphp
                                         <tr class="bg-rose-50">
-                                            <td colspan="8" class="px-3 py-2 text-xs font-bold text-rose-700">
+                                            <td colspan="{{ $editable ? 10 : 9 }}" class="px-3 py-2 text-xs font-bold text-rose-700">
                                                 <svg class="w-3 h-3 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5"/>
                                                 </svg>
@@ -328,6 +438,16 @@
                                         <td class="px-3 py-2 text-center font-bold text-cyan-600">
                                             {{ $vital->respiratory_rate ?? '-' }}
                                         </td>
+                                        <td class="px-3 py-2 text-center whitespace-nowrap">
+                                            @if($vital->oxygen_delivery)
+                                                <span class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold {{ $vital->isOnOxygen() ? 'bg-sky-100 text-sky-700' : 'bg-gray-100 text-gray-600' }}"
+                                                    title="{{ $vital->oxygenDeliveryLabel() }}">
+                                                    {{ $vital->oxygenShortLabel() }}
+                                                </span>
+                                            @else
+                                                <span class="text-gray-300">-</span>
+                                            @endif
+                                        </td>
                                         <td class="px-3 py-2 text-center">
                                             <span class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold {{ $vital->reading_type === 'full' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600' }}">
                                                 {{ ucfirst($vital->reading_type) }}
@@ -336,6 +456,18 @@
                                         <td class="px-3 py-2 text-gray-500 text-[10px]">
                                             {{ Str::limit($vital->admission_id ?? 'General', 20) }}
                                         </td>
+                                        @if($editable)
+                                            <td class="px-3 py-2 text-right whitespace-nowrap">
+                                                @if($vital->isManualEntry())
+                                                    <button type="button" @click="startEdit(@js($editorPayload($vital)))"
+                                                        class="px-2 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold">Edit</button>
+                                                    <button type="button" @click="startDelete({{ $vital->id }})"
+                                                        class="px-2 py-1 rounded bg-red-50 text-red-700 hover:bg-red-100 font-semibold">Delete</button>
+                                                @else
+                                                    <span class="text-[10px] text-gray-400" title="Received from a monitor">From monitor</span>
+                                                @endif
+                                            </td>
+                                        @endif
                                     </tr>
                                 @endforeach
                             </tbody>
@@ -374,7 +506,7 @@
                 <!-- Date Navigation for IHH Chart -->
                 <div class="flex items-center justify-between mb-3 bg-gray-50 rounded-lg p-2 border border-gray-200">
                     <form method="GET" action="{{ route('vital-signs.patient') }}" class="flex items-center space-x-2">
-                        <input type="hidden" name="patient_id" value="{{ $patient->id }}">
+                        <input type="hidden" name="patient_id" value="{{ $patient->id }}">@if($editable)<input type="hidden" name="edit" value="1">@endif
                         @if($selectedAdmissionId)
                             <input type="hidden" name="admission_id" value="{{ $selectedAdmissionId }}">
                         @endif
@@ -405,7 +537,7 @@
                     <div class="flex items-center space-x-2">
                         @if(!$selectedDate->isToday())
                             <form method="GET" action="{{ route('vital-signs.patient') }}">
-                                <input type="hidden" name="patient_id" value="{{ $patient->id }}">
+                                <input type="hidden" name="patient_id" value="{{ $patient->id }}">@if($editable)<input type="hidden" name="edit" value="1">@endif
                                 @if($selectedAdmissionId)
                                     <input type="hidden" name="admission_id" value="{{ $selectedAdmissionId }}">
                                 @endif
@@ -417,7 +549,7 @@
                         @endif
 
                         <form method="GET" action="{{ route('vital-signs.patient') }}">
-                            <input type="hidden" name="patient_id" value="{{ $patient->id }}">
+                            <input type="hidden" name="patient_id" value="{{ $patient->id }}">@if($editable)<input type="hidden" name="edit" value="1">@endif
                             @if($selectedAdmissionId)
                                 <input type="hidden" name="admission_id" value="{{ $selectedAdmissionId }}">
                             @endif
@@ -657,6 +789,23 @@
                                         @endforeach
                                     </tr>
                                 @endforeach
+
+                                <!-- OXYGEN SECTION (recorded for reference; it does not change the EWS score) -->
+                                <tr>
+                                    <td class="section-header" colspan="{{ 2 + count($chartVitals) }}">
+                                        <span class="text-blue-700">Oxygen Delivery</span>
+                                        <span class="text-[9px] font-normal text-gray-500">(not scored)</span>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="ihh-label-col">O₂</td>
+                                    <td class="score-col">-</td>
+                                    @foreach($chartVitals as $vital)
+                                        <td class="{{ $vital->isOnOxygen() ? 'ihh-temp-low1' : '' }}" title="{{ $vital->oxygenDeliveryLabel() }}">
+                                            <span class="text-[8px] font-semibold">{{ $vital->oxygenShortLabel() ?? '' }}</span>
+                                        </td>
+                                    @endforeach
+                                </tr>
 
                                 <!-- TOTAL SCORE ROW -->
                                 <tr class="bg-gray-200 font-bold">

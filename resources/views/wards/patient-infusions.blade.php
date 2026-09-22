@@ -30,6 +30,22 @@
             </div>
         @endif
         @if($patient)
+            {{-- Blood units for this patient. Separate from the pump infusions
+                 below: blood has no pump and no device feed. --}}
+            @if (($bloodTransfusions ?? collect())->isNotEmpty())
+                <div class="mb-6">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                        <div class="w-2 h-2 bg-rose-500 rounded-full mr-2 animate-pulse"></div>
+                        Blood Transfusions ({{ $bloodTransfusions->count() }})
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        @foreach ($bloodTransfusions as $transfusion)
+                            <x-transfusion-card :transfusion="$transfusion" />
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
             <!-- Active Infusions -->
             <div class="mb-6">
                 <h3 class="text-lg font-semibold text-gray-800 mb-3 flex items-center">

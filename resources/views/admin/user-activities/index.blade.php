@@ -1,14 +1,14 @@
 <x-app-layout>
     <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+        <h2 class="font-bold text-2xl text-gray-800 leading-tight">
             {{ __('Application Logs') }}
         </h2>
     </x-slot>
 
-    <div class="py-12" x-data="{ activeTab: 'user_activities' }">
+    <div class="py-8" x-data="{ activeTab: 'user_activities' }">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
-                <div class="p-6 text-gray-900">
+            <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-blue-100">
+                <div class="p-8 text-gray-900">
 
                     <!-- Tabs -->
                     <div class="mb-6 border-b border-gray-200 flex justify-between items-center">

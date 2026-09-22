@@ -18,13 +18,23 @@ use App\Models\ShiftSetting;
 use App\Models\WardScheduleAssignment;
 use App\Models\DietType;
 use App\Models\IsolationType;
+use App\Models\BloodTransfusion;
+use App\Models\Medication;
+use App\Models\PatientMedication;
+use App\Models\ClinicalIndicator;
+use App\Models\ClinicalIndicatorScore;
+use App\Support\ClinicalIndicatorLibrary;
+use App\Support\ClinicalIndicatorMonitoring;
+use App\Support\FluidBalanceChart;
 use App\Models\PatientCareProvider;
 use App\Models\Infusion;
 use App\Models\WardNotification;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use App\Services\EkadService;
+use App\Services\PatientInfoSources;
 use App\Models\WardSpecialDuty;
 
 class WardDashboardController extends Controller
@@ -107,6 +117,25 @@ class WardDashboardController extends Controller
         // Generate bed data
         $beds = $this->generateBedData($selectedWard, $wardPatients, $consultants, $nurses, $movementsByPatient, $ewsSystem);
 
+        // Medication monitoring: overdue and due-soon doses per patient, for users who have it switched on
+        $medicationMonitoring = PatientMedication::monitoringEnabledFor($userSettings);
+        $medicationAlerts = $medicationMonitoring
+            ? PatientMedication::alertsForPatients($wardPatients->pluck('id'))
+            : [];
+
+        // Clinical indicator reassessments past their suggested interval or warning level, per patient
+        $assessmentAlerts = ClinicalIndicatorMonitoring::forPatients(
+            $wardPatients->whereIn('status', [Patient::STATUS_ADMITTED, Patient::STATUS_PENDING_DISCHARGE])
+        );
+
+        // I/O chart: today's intake against the limit and signs of overload, for users with the tab on
+        $fluidBalanceEnabled = FluidBalanceChart::enabledFor($userSettings);
+        $fluidBalanceAlerts = $fluidBalanceEnabled
+            ? FluidBalanceChart::alertsForPatients(
+                $wardPatients->whereIn('status', [Patient::STATUS_ADMITTED, Patient::STATUS_PENDING_DISCHARGE])
+            )
+            : [];
+
         // Calculate statistics based on admitted patients only
         $admittedPatients = Patient::where('ward_id', $selectedWardId)
             ->where('is_active', true)
@@ -167,7 +196,12 @@ class WardDashboardController extends Controller
             'notificationCount',
             'currentShift',
             'specialDuties',
-            'dutyTypes'
+            'dutyTypes',
+            'medicationMonitoring',
+            'medicationAlerts',
+            'assessmentAlerts',
+            'fluidBalanceEnabled',
+            'fluidBalanceAlerts'
         ));
     }
 
@@ -1087,64 +1121,7 @@ class WardDashboardController extends Controller
         }
     }
 
-    public function admissionLogs(Request $request)
-    {
-        $wardId = $request->input('ward_id');
-        $action = $request->input('action');
-        $source = $request->input('source');
-        $bedNumber = trim((string) $request->input('bed_number', ''));
-        $search = trim((string) $request->input('search', ''));
-        $fromDate = $request->input('from_date');
-        $toDate = $request->input('to_date');
-
-        $query = AdmissionLog::with(['patient', 'ward', 'user'])
-            ->orderBy('created_at', 'desc');
-
-        if ($wardId) {
-            $query->where('ward_id', $wardId);
-        }
-
-        if ($action) {
-            $query->where('action', $action);
-        }
-
-        if ($source) {
-            $query->where('source', $source);
-        }
-
-        if ($bedNumber !== '') {
-            $query->where('bed_number', 'like', '%' . $bedNumber . '%');
-        }
-
-        if ($search !== '') {
-            $query->where(function ($q) use ($search) {
-                $q->where('mrn', 'like', '%' . $search . '%')
-                    ->orWhere('patient_name', 'like', '%' . $search . '%');
-            });
-        }
-
-        if ($fromDate) {
-            $query->whereDate('created_at', '>=', $fromDate);
-        }
-
-        if ($toDate) {
-            $query->whereDate('created_at', '<=', $toDate);
-        }
-
-        $logs = $query->paginate(50)->withQueryString();
-        $wards = Ward::where('is_active', true)->get();
-        $actions = AdmissionLog::select('action')->distinct()->pluck('action')->filter()->values();
-        $sources = AdmissionLog::select('source')->distinct()->pluck('source')->filter()->values();
-
-        return view('wards.admission-logs', [
-            'logs' => $logs,
-            'wards' => $wards,
-            'wardId' => $wardId,
-            'actions' => $actions,
-            'sources' => $sources,
-            'selectedSource' => $source,
-        ]);
-    }
+    // Admission Logs moved to AdmissionLogController (list, print dialog count, printable report)
 
     /**
      * Simple patients list view (for iframe) with MRN / name search.
@@ -1187,12 +1164,18 @@ class WardDashboardController extends Controller
     public function patientDetails(Request $request): View
     {
         $patientId = $request->input('patient_id');
-        $activeTab = $request->input('active_tab', session()->getOldInput('active_tab', 'info'));
+        // A form just posted from a tab comes back to that tab, even when the page URL still
+        // names the tab an earlier save returned to; then ?active_tab=, then ?open_tab= (the
+        // tab to open on, e.g. Medications from a bed box)
+        $activeTab = session()->getOldInput('active_tab')
+            ?? $request->input('active_tab')
+            ?? $request->input('open_tab', 'info');
 
         $patient = null;
         if ($patientId) {
             $patient = Patient::with([
                 'ward',
+                'ward.wardType.clinicalIndicators',
                 'consultant',
                 'nurse',
                 'anaesthetist',
@@ -1229,6 +1212,22 @@ class WardDashboardController extends Controller
         }
 
         $displayNames = $this->getPatientDisplayNames($patient);
+        $wardClinicalIndicators = $this->wardClinicalIndicators($patient);
+        $bloodTransfusions = $patient
+            ? BloodTransfusion::where('patient_id', $patient->id)
+                ->with('checkedBy:id,name')
+                ->orderByRaw("FIELD(status, 'in_progress', 'pending', 'completed', 'stopped')")
+                ->orderByDesc('id')
+                ->get()
+            : collect();
+
+        // Medication monitoring is only loaded for users who have the tab switched on
+        $medicationMonitoring = (bool) ($patientDetailsTabs[PatientMedication::SETTINGS_TAB] ?? false);
+
+        // I/O chart for the chart day asked for (?io_day=, the date it starts on), or today's
+        $fluidBalance = $patient && ($patientDetailsTabs[FluidBalanceChart::SETTINGS_TAB] ?? false)
+            ? FluidBalanceChart::forPatient($patient, $request->input('io_day'))
+            : null;
 
         return view('wards.patient-details', [
             'patient' => $patient,
@@ -1243,7 +1242,281 @@ class WardDashboardController extends Controller
             'consultantName' => $displayNames['consultant'],
             'nurseName' => $displayNames['nurse'],
             'anaesthetistName' => $displayNames['anaesthetist'],
+            'wardClinicalIndicators' => $wardClinicalIndicators,
+            'bloodTransfusions' => $bloodTransfusions,
+            'infoSources' => PatientInfoSources::all(),
+            'dietTypeOptions' => DietType::where('is_active', true)
+                ->whereNotIn('code', Patient::NBM_DIET_CODES)
+                ->orderBy('name')
+                ->get(['code', 'name']),
+            'medicationOrders' => $medicationMonitoring && $patient
+                ? PatientMedication::forPatient($patient->id)
+                : collect(),
+            'medicationFormulary' => $medicationMonitoring
+                ? Medication::active()->orderBy('category')->orderBy('name')->get()
+                : collect(),
+            'fluidBalance' => $fluidBalance,
         ]);
+    }
+
+    /**
+     * The assessment scales this patient's ward is set up for: the active
+     * clinical indicators bound to the ward's ward type, each paired with its
+     * clinical content from the library. Empty when the ward has no ward type,
+     * which is the case for every ward until one is bound.
+     */
+    private function wardClinicalIndicators(?Patient $patient)
+    {
+        $wardType = $patient?->ward?->wardType;
+
+        if (!$wardType || !$wardType->is_active) {
+            return collect();
+        }
+
+        $indicators = $wardType->clinicalIndicators->where('is_active', true);
+
+        $scores = ClinicalIndicatorScore::where('patient_id', $patient->id)
+            ->whereIn('clinical_indicator_id', $indicators->pluck('id'))
+            ->with('recordedBy:id,name')
+            ->orderByDesc('recorded_at')
+            ->orderByDesc('id')
+            ->get()
+            ->groupBy('clinical_indicator_id');
+
+        return $indicators
+            ->map(function ($indicator) use ($scores, $patient) {
+                $definition = $indicator->definition();
+                $history = $scores->get($indicator->id, collect());
+
+                return [
+                    'id' => $indicator->id,
+                    'code' => $indicator->code,
+                    'name' => $indicator->name,
+                    'definition' => $definition,
+                    'scorable' => ClinicalIndicatorLibrary::isScorable($definition),
+                    'latest' => $history->first(),
+                    'history' => $history->take(10),
+                    // When it is next due, for scales with a monitoring interval switched on
+                    'monitoring' => $indicator->isMonitored()
+                        ? ClinicalIndicatorMonitoring::status(
+                            $indicator,
+                            $history->first()?->recorded_at,
+                            $patient->admitted_at ?? $patient->created_at
+                        )
+                        : null,
+                ];
+            })
+            ->values();
+    }
+
+    /**
+     * Record a score for one of the clinical indicators bound to the patient's
+     * ward type. Item-by-item scales are totalled from the item values on the
+     * server rather than trusting the total the browser posted.
+     */
+    public function storeClinicalIndicatorScore(Request $request)
+    {
+        $validated = $request->validate([
+            'patient_id' => 'required|exists:patients,id',
+            'clinical_indicator_id' => 'required|exists:clinical_indicators,id',
+            'score' => 'nullable|integer|min:0',
+            'item_scores' => 'nullable|array',
+            'item_scores.*' => 'nullable|integer',
+            'notes' => 'nullable|string|max:1000',
+        ]);
+
+        $patient = Patient::findOrFail($validated['patient_id']);
+        $indicator = ClinicalIndicator::findOrFail($validated['clinical_indicator_id']);
+
+        // Only scales this patient's ward is actually set up for may be scored.
+        $allowed = $patient->ward?->wardType?->clinicalIndicators
+            ->where('is_active', true)
+            ->contains('id', $indicator->id);
+
+        if (!$allowed) {
+            return back()->withInput()->with('error', 'That clinical indicator is not bound to this ward.');
+        }
+
+        $definition = $indicator->definition();
+        $itemScores = null;
+
+        if (ClinicalIndicatorLibrary::isScorable($definition)) {
+            $items = $definition['items'];
+            $posted = $validated['item_scores'] ?? [];
+
+            if (count(array_filter($posted, fn ($v) => $v !== null)) !== count($items)) {
+                return back()->withInput()->with('error', 'Score every item before saving.');
+            }
+
+            $itemScores = [];
+            $total = 0;
+
+            foreach ($items as $index => $item) {
+                $value = (int) $posted[$index];
+                $permitted = array_column($item['options'], 'value');
+
+                if (!in_array($value, $permitted, true)) {
+                    return back()->withInput()->with('error', 'That is not a valid option for ' . $item['name'] . '.');
+                }
+
+                $label = collect($item['options'])->firstWhere('value', $value)['label'] ?? null;
+                $entry = ['name' => $item['name'], 'label' => $label, 'value' => $value];
+                if (!empty($item['abbr'])) {
+                    $entry['abbr'] = $item['abbr'];
+                }
+                $itemScores[] = $entry;
+                $total += $value;
+            }
+
+            $score = $total;
+        } else {
+            if ($validated['score'] === null) {
+                return back()->withInput()->with('error', 'Enter a score before saving.');
+            }
+            $score = (int) $validated['score'];
+        }
+
+        $record = new ClinicalIndicatorScore([
+            'patient_id' => $patient->id,
+            'clinical_indicator_id' => $indicator->id,
+            'ward_id' => $patient->ward_id,
+            'score' => $score,
+            'item_scores' => $itemScores,
+            'notes' => $validated['notes'] ?? null,
+            'recorded_by' => Auth::id(),
+            'recorded_at' => now(),
+        ]);
+
+        $record->applyBand($indicator->code)->save();
+        $breakdown = $record->breakdown();
+
+        return back()->withInput()->with('success', $indicator->name . ' scored ' . $score
+            . ($breakdown ? ' (' . $breakdown . ')' : '')
+            . ($record->band_label ? ' - ' . $record->band_label : '') . '.');
+    }
+
+    /**
+     * Register a unit for this patient. It starts pending: nothing runs until
+     * the bedside checks are recorded and the unit is explicitly started.
+     */
+    public function storeBloodTransfusion(Request $request)
+    {
+        $validated = $request->validate([
+            'patient_id' => 'required|exists:patients,id',
+            'unit_number' => 'required|string|max:64',
+            'product_type' => ['required', Rule::in(BloodTransfusion::PRODUCT_TYPES)],
+            'unit_blood_group' => ['nullable', Rule::in(BloodTransfusion::BLOOD_GROUPS)],
+            'patient_blood_group' => ['nullable', Rule::in(BloodTransfusion::BLOOD_GROUPS)],
+            'crossmatch_reference' => 'nullable|string|max:64',
+            'unit_expires_at' => 'nullable|date',
+            'volume_ml' => 'nullable|integer|min:' . BloodTransfusion::VOLUME_MIN . '|max:' . BloodTransfusion::VOLUME_MAX,
+            'prescribed_minutes' => 'nullable|integer|min:' . BloodTransfusion::MINUTES_MIN . '|max:' . BloodTransfusion::MAX_RUNNING_MINUTES,
+            'notes' => 'nullable|string|max:1000',
+        ]);
+
+        $patient = Patient::findOrFail($validated['patient_id']);
+
+        BloodTransfusion::create($validated + [
+            'ward_id' => $patient->ward_id,
+            'status' => BloodTransfusion::STATUS_PENDING,
+            'created_by' => Auth::id(),
+        ]);
+
+        return back()->withInput()->with('success', 'Unit ' . $validated['unit_number'] . ' registered.');
+    }
+
+    /**
+     * Confirm or undo a single pre-start check. The checks run as a sequence,
+     * so a step is only accepted once everything before it is confirmed, and
+     * only the most recent step can be undone.
+     */
+    public function updateBloodTransfusionChecklist(Request $request, BloodTransfusion $transfusion)
+    {
+        $validated = $request->validate([
+            'step' => ['required', Rule::in(['check_crossmatch', 'check_product', 'check_expiry', 'check_identity'])],
+            'action' => ['required', Rule::in(['confirm', 'undo'])],
+        ]);
+
+        if ($transfusion->isFinished()) {
+            return back()->withInput()->with('error', 'That unit is already finished.');
+        }
+
+        $step = collect($transfusion->checklistSteps())->firstWhere('key', $validated['step']);
+
+        if ($validated['action'] === 'confirm') {
+            if (!$step['unlocked']) {
+                return back()->withInput()->with('error', 'Confirm the earlier checks first.');
+            }
+            $transfusion->{$validated['step']} = true;
+        } else {
+            if (!$step['canUndo']) {
+                return back()->withInput()->with('error', 'Only the last confirmed check can be undone.');
+            }
+            $transfusion->{$validated['step']} = false;
+        }
+
+        $transfusion->checked_by = Auth::id();
+        $transfusion->checked_at = now();
+        $transfusion->save();
+
+        $done = $transfusion->completedStepCount();
+
+        return back()->withInput()->with('success', $validated['action'] === 'confirm'
+            ? $step['label'] . ' confirmed (' . $done . ' of 4).'
+            : $step['label'] . ' undone (' . $done . ' of 4).');
+    }
+
+    /**
+     * Start the unit running. Refused while any check is outstanding or any
+     * critical exception is open, so an expired or mismatched unit cannot be
+     * started from this screen.
+     */
+    public function startBloodTransfusion(Request $request, BloodTransfusion $transfusion)
+    {
+        if (!$transfusion->canStart()) {
+            $reason = $transfusion->checksComplete()
+                ? 'Resolve the flagged problems before starting this unit.'
+                : 'Complete every pre-start check before starting this unit.';
+
+            return back()->withInput()->with('error', $reason);
+        }
+
+        $transfusion->update([
+            'status' => BloodTransfusion::STATUS_IN_PROGRESS,
+            'started_at' => now(),
+        ]);
+
+        return back()->withInput()->with('success', 'Unit ' . $transfusion->unit_number . ' started.');
+    }
+
+    /**
+     * Finish a running unit, either completed or stopped early.
+     */
+    public function finishBloodTransfusion(Request $request, BloodTransfusion $transfusion)
+    {
+        $validated = $request->validate([
+            'outcome' => ['required', Rule::in(['completed', 'stopped'])],
+            'stop_reason' => 'nullable|string|max:255',
+        ]);
+
+        if (!$transfusion->isRunning()) {
+            return back()->withInput()->with('error', 'That unit is not running.');
+        }
+
+        if ($validated['outcome'] === 'stopped' && empty($validated['stop_reason'])) {
+            return back()->withInput()->with('error', 'Give a reason when stopping a unit early.');
+        }
+
+        $transfusion->update([
+            'status' => $validated['outcome'] === 'completed'
+                ? BloodTransfusion::STATUS_COMPLETED
+                : BloodTransfusion::STATUS_STOPPED,
+            'completed_at' => now(),
+            'stop_reason' => $validated['stop_reason'] ?? null,
+        ]);
+
+        return back()->withInput()->with('success', 'Unit ' . $transfusion->unit_number . ' '
+            . $validated['outcome'] . '.');
     }
 
     /**
@@ -1255,8 +1528,12 @@ class WardDashboardController extends Controller
             'info' => true,
             'additional' => true,
             'vitals' => true,
+            'io' => true, // I/O chart (fluid balance)
+            'medications' => false, // Medication monitoring: off until a user switches it on
             'movement' => true,
-            'careprovider' => true,
+            'careprovider' => true, // shown as "Consultant"
+            'anaesthetist' => true,
+            'nurses' => true, // from the ward roster
             'infusion' => true,
             'transfer' => true,
             'discharge' => true,
@@ -1369,6 +1646,7 @@ class WardDashboardController extends Controller
             'patientVitalsMode' => $patientVitalsMode,
             'bedBoxVitalsMode' => $bedBoxVitalsMode,
             'additionalInfoReadOnly' => $additionalInfoReadOnly,
+            'infoSources' => PatientInfoSources::all(),
         ]);
     }
 
@@ -1465,13 +1743,36 @@ class WardDashboardController extends Controller
             return back()->with('success', 'Additional Info read-only setting updated successfully.');
         }
 
+        if ($settingType === 'patient_info_sources') {
+            // System-wide: decides whether ADT or the ward maintains each field
+            $request->validate([
+                'sources' => 'required|array',
+                'sources.*' => ['required', Rule::in([PatientInfoSources::ADT, PatientInfoSources::MANUAL])],
+            ]);
+
+            PatientInfoSources::save($request->input('sources'));
+
+            Log::info('Patient additional info sources updated', [
+                'sources' => PatientInfoSources::all(),
+                'user_id' => Auth::id(),
+            ]);
+
+            return back()
+                ->with('success', 'Patient additional info sources updated. This applies to all users.')
+                ->with('settings_tab', 'patient-additional-info');
+        }
+
         // Handle patient details tabs settings (default)
         $defaultTabs = [
             'info' => true,
             'additional' => true,
             'vitals' => true,
+            'io' => true,
+            'medications' => false,
             'movement' => true,
-            'careprovider' => true,
+            'careprovider' => true, // shown as "Consultant"
+            'anaesthetist' => true,
+            'nurses' => true, // from the ward roster
             'infusion' => true,
             'transfer' => true,
             'discharge' => true,
@@ -1488,7 +1789,9 @@ class WardDashboardController extends Controller
         $settings->patient_details_tabs = $tabs;
         $settings->save();
 
-        return back()->with('success', 'Settings updated successfully.');
+        return back()
+            ->with('success', 'Settings updated successfully.')
+            ->with('settings_tab', 'patient-details');
     }
 
     /**
@@ -1877,6 +2180,59 @@ class WardDashboardController extends Controller
     }
 
     /**
+     * Manually add an anaesthetist to the patient's care team (Anaesthetist tab).
+     *
+     * Stored the way ADT stores a PV1 doctor that matches an anaesthetist: a
+     * consulting care provider linked to the anaesthetist. The bedside patient
+     * app and the E-Ink display therefore pick it up like an ADT one, and ADT
+     * messages leave it in place because they only replace ADT entries.
+     */
+    public function storeAnaesthetistCareProvider(Request $request)
+    {
+        $validated = $request->validate([
+            'patient_id' => 'required|exists:patients,id',
+            'anaesthetist_id' => 'required|exists:anaesthetists,id',
+        ]);
+
+        $patient = Patient::where('is_active', true)->findOrFail($validated['patient_id']);
+        $anaesthetist = Anaesthetist::findOrFail($validated['anaesthetist_id']);
+
+        $redirect = redirect()->route('ward.patient-details', [
+            'patient_id' => $patient->id,
+            'active_tab' => 'anaesthetist',
+        ]);
+
+        $alreadyAssigned = (int) $patient->anaesthetist_id === $anaesthetist->id
+            || PatientCareProvider::where('patient_id', $patient->id)
+                ->where('anaesthetist_id', $anaesthetist->id)
+                ->where('is_active', true)
+                ->exists();
+
+        if ($alreadyAssigned) {
+            return $redirect->with('error', "{$anaesthetist->name} is already on this patient's care team.");
+        }
+
+        PatientCareProvider::create([
+            'patient_id' => $patient->id,
+            'role' => PatientCareProvider::ROLE_CONSULTING,
+            'doctor_code' => $anaesthetist->personnel_code ?: 'ANAES-' . $anaesthetist->id,
+            'doctor_name' => $anaesthetist->name,
+            'anaesthetist_id' => $anaesthetist->id,
+            'source' => PatientCareProvider::SOURCE_MANUAL,
+            'assigned_at' => now(),
+            'is_active' => true,
+        ]);
+
+        Log::info('Anaesthetist added to care team manually', [
+            'patient_id' => $patient->id,
+            'anaesthetist_id' => $anaesthetist->id,
+            'added_by' => Auth::id(),
+        ]);
+
+        return $redirect->with('success', "{$anaesthetist->name} added to the care team.");
+    }
+
+    /**
      * Remove a manually added care provider. ADT-sourced providers are left
      * alone so the next ADT message stays the source of truth.
      */
@@ -1884,9 +2240,10 @@ class WardDashboardController extends Controller
     {
         $patientId = $careProvider->patient_id;
 
+        // Back to the tab the provider is listed on
         $redirect = redirect()->route('ward.patient-details', [
             'patient_id' => $patientId,
-            'active_tab' => 'careprovider',
+            'active_tab' => $careProvider->anaesthetist_id ? 'anaesthetist' : 'careprovider',
         ]);
 
         if ($careProvider->source !== PatientCareProvider::SOURCE_MANUAL) {
@@ -2231,44 +2588,82 @@ class WardDashboardController extends Controller
         $request->validate([
             'patient_id' => 'required|exists:patients,id',
             'nursing_level' => 'nullable|string',
-            'diet_types' => 'nullable|array',
-            'diet_types.*' => 'nullable|string',
             'fall_risk' => 'nullable|string',
             'isolation_type' => 'nullable|string',
-            'allergies' => 'nullable|array',
+            'nbm' => 'nullable|boolean',
+            'diet_types' => 'nullable|array',
+            'diet_types.*' => 'nullable|string|max:20',
+            'feeding_routes' => 'nullable|array',
+            'feeding_routes.*' => ['string', Rule::in(array_keys(Patient::FEEDING_ROUTES))],
+            'diet_orders' => 'nullable|string|max:1000',
+            'allergies_kept' => 'nullable|array',
+            'allergies_kept.*' => 'nullable|string',
             'new_allergy' => 'nullable|string|max:100',
             'hgt_enabled' => 'nullable|boolean',
             'hgt_frequency' => 'nullable|string|in:bd,tds,qid,pid',
         ]);
 
         $patient = Patient::where('is_active', true)->findOrFail($request->patient_id);
+        $manual = fn (string $field) => PatientInfoSources::isManual($field);
 
-        // Handle allergies
-        $allergies = $request->input('allergies', []);
-        if ($request->filled('new_allergy')) {
-            $newAllergy = trim($request->new_allergy);
-            if (!empty($newAllergy) && !in_array($newAllergy, $allergies)) {
-                $allergies[] = $newAllergy;
-            }
-        }
-
-        // Handle diet_types array
-        $dietTypes = $request->input('diet_types', []);
-
-        $patient->update([
-            'nursing_level' => $request->nursing_level,
-            'diet_types' => !empty($dietTypes) ? $dietTypes : null,
-            'fall_risk' => $request->fall_risk,
-            'isolation_type' => $request->isolation_type,
-            'allergies' => !empty($allergies) ? $allergies : null,
+        // Only fields the ward manages are written. ADT-managed ones are left exactly as the
+        // feed set them (previously saving this form cleared diet, fall risk and allergies).
+        $changes = [
             'hgt_enabled' => $request->boolean('hgt_enabled'),
             'hgt_frequency' => $request->hgt_frequency,
-        ]);
+        ];
+
+        if ($manual('nursing_level') && $request->has('nursing_level')) {
+            $changes['nursing_level'] = $request->nursing_level;
+        }
+
+        if ($manual('isolation') && $request->has('isolation_type')) {
+            $changes['isolation_type'] = $request->isolation_type;
+        }
+
+        if ($manual('fall_risk') && $request->has('fall_risk')) {
+            $changes['fall_risk'] = $request->fall_risk;
+        }
+
+        // The *_managed markers confirm the editable section was on the page; an empty
+        // selection would otherwise be indistinguishable from a section that was not shown
+        if ($manual('diet') && $request->has('diet_managed')) {
+            $dietTypes = collect($request->input('diet_types', []))
+                ->map(fn ($code) => strtoupper(trim((string) $code)))
+                ->reject(fn ($code) => $code === '' || in_array($code, Patient::NBM_DIET_CODES, true));
+
+            // NBM is kept as a diet code so the bed box, EKad and patient screens pick it up
+            if ($request->boolean('nbm')) {
+                $dietTypes->prepend(Patient::NBM_DIET_CODES[0]);
+            }
+
+            $changes['diet_types'] = $dietTypes->unique()->values()->all() ?: null;
+            $changes['feeding_routes'] = array_values(array_unique($request->input('feeding_routes', []))) ?: null;
+            $changes['diet_orders'] = $request->diet_orders;
+        }
+
+        if ($manual('allergies') && $request->has('allergies_managed')) {
+            // Kept entries come back exactly as stored (ADT entries keep their status)
+            $allergies = collect($request->input('allergies_kept', []))
+                ->map(fn ($entry) => json_decode((string) $entry, true))
+                ->filter(fn ($entry) => $entry !== null && $entry !== '');
+
+            $newAllergy = trim((string) $request->input('new_allergy', ''));
+            if ($newAllergy !== '') {
+                $allergies->push($newAllergy);
+            }
+
+            $changes['allergies'] = $allergies->values()->all() ?: null;
+        }
+
+        $patient->update($changes);
 
         Log::info('Patient clinical indicators updated', [
             'patient_id' => $patient->id,
+            'fields' => array_keys($changes),
             'nursing_level' => $patient->nursing_level,
             'diet_types' => $patient->diet_types,
+            'feeding_routes' => $patient->feeding_routes,
             'fall_risk' => $patient->fall_risk,
             'isolation_type' => $patient->isolation_type,
             'allergies' => $patient->allergies,
@@ -3170,8 +3565,12 @@ class WardDashboardController extends Controller
             'info' => true,
             'additional' => true,
             'vitals' => true,
+            'io' => true,
+            'medications' => false,
             'movement' => true,
-            'careprovider' => true,
+            'careprovider' => true, // shown as "Consultant"
+            'anaesthetist' => true,
+            'nurses' => true, // from the ward roster
             'infusion' => true,
             'transfer' => true,
             'discharge' => true,
