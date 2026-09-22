@@ -16,6 +16,9 @@ import StatCard from '../components/StatCard';
 import BedCard from '../components/BedCard';
 import { fetchNurseDashboard } from '../api/endpoints';
 import * as mock from '../data/mockData';
+import { demoBadgesFor } from '../data/mockPatient';
+import PatientScreen from './PatientScreen';
+import { CountBadge } from '../components/ui';
 
 const REFRESH_INTERVAL_MS = 60000;
 
@@ -54,6 +57,8 @@ export default function NurseDashboard({ session, onLogout }) {
   const selectedWard = data?.ward ?? null;
   const summary = data?.summary ?? EMPTY_SUMMARY;
   const assignedBeds = data?.beds ?? [];
+  // The bed whose chart is open (orders, I/O, meds, infusion, alerts), if any
+  const [openBed, setOpenBed] = useState(null);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const total = assignedBeds.length;
@@ -66,12 +71,20 @@ export default function NurseDashboard({ session, onLogout }) {
 
   const load = useCallback(async (isRefresh = false) => {
     if (isDemo) {
+      // Demo beds carry the same "what needs doing" badges the server sends
+      const beds = mock.assignedBeds.map((b) => ({ ...b, badges: demoBadgesFor(b) }));
+      const total = (key) => beds.reduce((n, b) => n + (b.badges?.[key] ?? 0), 0);
       setData({
         nurse: mock.nurse,
         current_shift: mock.currentShift,
         ward: mock.selectedWard,
-        summary: mock.summary,
-        beds: mock.assignedBeds,
+        summary: {
+          ...mock.summary,
+          open_orders: total('orders_open'),
+          doses_overdue: total('meds_overdue'),
+          pending_alerts: total('alerts_pending'),
+        },
+        beds,
       });
       setLoadError(null);
       setLoading(false);
@@ -107,6 +120,26 @@ export default function NurseDashboard({ session, onLogout }) {
       if (timer) clearInterval(timer);
     };
   }, [load, isDemo]);
+
+  if (openBed) {
+    return (
+      <PatientScreen
+        session={session}
+        bed={openBed}
+        onClose={() => {
+          setOpenBed(null);
+          load(); // badges may have changed
+        }}
+        onSessionExpired={onLogout}
+      />
+    );
+  }
+
+  const bedTodo = (b) =>
+    b.badges
+      ? b.badges.orders_open + b.badges.meds_overdue + b.badges.alerts_pending
+        + (b.badges.transfusions_running ?? 0) + (b.badges.transfusions_pending ?? 0)
+      : 0;
 
   return (
     <View style={styles.root}>
@@ -202,6 +235,24 @@ export default function NurseDashboard({ session, onLogout }) {
             tone="amber"
           />
           <StatCard
+            label="ORDERS"
+            value={summary.open_orders ?? 0}
+            sub="Open consultant orders"
+            tone={summary.open_orders ? 'amber' : 'default'}
+          />
+          <StatCard
+            label="DOSES"
+            value={summary.doses_overdue ?? 0}
+            sub="Overdue now"
+            tone={summary.doses_overdue ? 'rose' : 'default'}
+          />
+          <StatCard
+            label="CALLS"
+            value={summary.pending_alerts ?? 0}
+            sub="Unanswered alerts"
+            tone={summary.pending_alerts ? 'amber' : 'default'}
+          />
+          <StatCard
             label="OCCUPANCY"
             value={`${summary.ward_occupancy}%`}
             sub="Whole ward"
@@ -234,13 +285,17 @@ export default function NurseDashboard({ session, onLogout }) {
                   <Text style={[styles.tabText, active && styles.tabTextActive]}>
                     Bed {b.number}
                   </Text>
+                  <CountBadge
+                    count={bedTodo(b)}
+                    toneName={b.badges?.orders_stat || b.badges?.meds_overdue || b.badges?.transfusions_running ? 'critical' : 'warning'}
+                  />
                 </TouchableOpacity>
               );
             })}
           </ScrollView>
         </View>
 
-        {bed ? <BedCard bed={bed} fallbackNurse={nurse.name} /> : (
+        {bed ? <BedCard bed={bed} fallbackNurse={nurse.name} onOpen={() => setOpenBed(bed)} /> : (
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>No beds assigned right now</Text>
             <Text style={styles.emptyMeta}>
@@ -499,6 +554,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     backgroundColor: colors.slate100,
     borderRadius: 999,
     paddingHorizontal: 12,

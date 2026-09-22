@@ -121,6 +121,30 @@ export async function postNote(patientId, text) {
   return data?.notes ?? [];
 }
 
+// Patient chart (DoctorAppPatientController): the I/O chart, medications and
+// consultant orders. Every call answers { success, message, chart }, where
+// `chart` is the whole refreshed chart, so the screen redraws from it.
+//
+//   GET  /api/doctor/patients/{id}/chart?io_day=Y-m-d
+//   POST /api/doctor/patients/{id}/orders               { instruction, urgency, fluid_limit_ml?, urine_min_ml_per_hour? }
+//   POST /api/doctor/patients/{id}/orders/{o}/cancel    { reason }
+
+export async function fetchPatientChart(patientId, { ioDay } = {}) {
+  const query = ioDay ? `?io_day=${encodeURIComponent(ioDay)}` : '';
+  return apiFetch(`/api/doctor/patients/${patientId}/chart${query}`);
+}
+
+export async function createOrder(patientId, body) {
+  return apiFetch(`/api/doctor/patients/${patientId}/orders`, { method: 'POST', body });
+}
+
+export async function cancelOrder(patientId, orderId, reason) {
+  return apiFetch(`/api/doctor/patients/${patientId}/orders/${orderId}/cancel`, {
+    method: 'POST',
+    body: { reason },
+  });
+}
+
 export async function logout(token) {
   try {
     await apiFetch('/api/doctor/logout', { method: 'POST', token });

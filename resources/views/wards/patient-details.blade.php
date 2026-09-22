@@ -110,6 +110,8 @@
             'infusion' => true,
             'transfer' => true,
             'discharge' => true,
+            'discharge_summary' => true,
+            'nursing_plan' => true,
         ];
 
         // Map old 'referral' key to 'careprovider' for backwards compatibility
@@ -372,6 +374,30 @@
                                 title="{{ $openOrderCount }} open{{ $openStatOrderCount > 0 ? ', ' . $openStatOrderCount . ' STAT' : '' }}">{{ $openOrderCount }}</span>
                         @endif
                     </button>
+                    @if($patientTabs['nursing_plan'] ?? false)
+                        @php
+                            // Loaded once here for the badge, and reused by the tab (wards.partials.nursing-plan)
+                            $nursingPlanTab = [
+                                'care_plan' => \App\Services\NursingPlan\NursingCarePlan::forPatient($patient),
+                                'shift' => \App\Services\NursingPlan\ShiftTasks::forPatient($patient),
+                            ];
+                            $shiftOverdueCount = $nursingPlanTab['shift']['counts']['overdue'];
+                            $carePlanDueCount = $nursingPlanTab['care_plan']['due_evaluations'];
+                        @endphp
+                        <button type="button"
+                            @click="activeTab = 'nursing_plan'"
+                            :class="activeTab === 'nursing_plan' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-2 px-3 border-b-2 font-medium">
+                            Nursing Plan
+                            @if($shiftOverdueCount > 0)
+                                <span class="ml-1 inline-flex items-center justify-center min-w-[1.25rem] px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-600 text-white"
+                                    title="{{ $shiftOverdueCount }} overdue this shift">{{ $shiftOverdueCount }}</span>
+                            @elseif($carePlanDueCount > 0)
+                                <span class="ml-1 inline-flex items-center justify-center min-w-[1.25rem] px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800"
+                                    title="{{ $carePlanDueCount }} to evaluate this shift">{{ $carePlanDueCount }}</span>
+                            @endif
+                        </button>
+                    @endif
                     <button type="button"
                         @click="activeTab = 'transfer'"
                         x-show="patientTabs.transfer"
@@ -386,6 +412,14 @@
                         class="whitespace-nowrap py-2 px-3 border-b-2 font-medium">
                         Discharge
                     </button>
+                    @if($patientTabs['discharge_summary'] ?? false)
+                        <button type="button"
+                            @click="activeTab = 'discharge_summary'"
+                            :class="activeTab === 'discharge_summary' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-2 px-3 border-b-2 font-medium">
+                            Discharge Summary
+                        </button>
+                    @endif
 
                     {{-- One tab per clinical indicator bound to this ward's ward type --}}
                     @foreach ($wardClinicalIndicators ?? [] as $indicator)
@@ -2847,6 +2881,12 @@
                         </div>
                     @endif
                 </div>
+
+                {{-- Discharge Summary (loaded when the tab is first opened) --}}
+                @include('wards.partials.discharge-summary-tab')
+
+                {{-- Nursing Plan: this shift's tasks and the nursing care plan --}}
+                @include('wards.partials.nursing-plan')
 
                 {{-- One panel per clinical indicator bound to this ward's ward type --}}
                 @foreach ($wardClinicalIndicators ?? [] as $indicator)

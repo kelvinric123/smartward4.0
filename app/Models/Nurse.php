@@ -161,4 +161,20 @@ class Nurse extends Model
         return $this->belongsToMany(Nurse::class, 'nurse_tagging_nurses', 'tagging_nurse_id', 'nurse_id')
             ->withTimestamps();
     }
+
+    /**
+     * Licences and certificates (Credentialing and Privileging tab)
+     */
+    public function credentials()
+    {
+        return $this->hasMany(NurseCredential::class);
+    }
+
+    /**
+     * Clinical privileges: the procedures this nurse is cleared to perform
+     */
+    public function privileges()
+    {
+        return $this->hasMany(NursePrivilege::class);
+    }
 }

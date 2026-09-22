@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Nurse;
 use App\Models\User;
 use App\Models\Ward;
+use App\Support\NurseCredentialing;
 use Illuminate\Http\Request;
 
 class NurseController extends Controller
@@ -264,8 +265,9 @@ class NurseController extends Controller
             ->get();
         $wards = Ward::where('is_active', true)->orderBy('ward_name')->get();
         $nurses = Nurse::where('is_active', true)->where('id', '!=', $nurse->id)->orderBy('name')->get();
+        $credentialing = NurseCredentialing::forNurse($nurse);
 
-        return view('admin.nurses.edit', compact('nurse', 'users', 'wards', 'nurses'));
+        return view('admin.nurses.edit', compact('nurse', 'users', 'wards', 'nurses', 'credentialing'));
     }
 
     public function update(Request $request, Nurse $nurse)

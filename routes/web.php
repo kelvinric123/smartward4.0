@@ -6,6 +6,7 @@ use App\Http\Controllers\SpecialtyController;
 use App\Http\Controllers\ConsultantController;
 use App\Http\Controllers\AnaesthetistController;
 use App\Http\Controllers\NurseController;
+use App\Http\Controllers\NurseCredentialingController;
 use App\Http\Controllers\PatientController;
 use App\Http\Controllers\WardController;
 use App\Http\Controllers\WardTypeController;
@@ -97,6 +98,17 @@ Route::middleware('auth')->group(function () {
     Route::post('nurses-bulk-upload/preview', [NurseController::class, 'bulkUploadPreview'])->name('nurses.bulk-upload.preview');
     Route::post('nurses-bulk-upload/confirm', [NurseController::class, 'bulkUploadConfirm'])->name('nurses.bulk-upload.confirm');
 
+    // Credentialing and Privileging tab of the nurse edit page (a record only resolves under its own nurse)
+    Route::scopeBindings()->group(function () {
+        Route::post('nurses/{nurse}/credentials', [NurseCredentialingController::class, 'storeCredential'])->name('nurses.credentials.store');
+        Route::put('nurses/{nurse}/credentials/{credential}', [NurseCredentialingController::class, 'updateCredential'])->name('nurses.credentials.update');
+        Route::delete('nurses/{nurse}/credentials/{credential}', [NurseCredentialingController::class, 'destroyCredential'])->name('nurses.credentials.destroy');
+        Route::post('nurses/{nurse}/privileges', [NurseCredentialingController::class, 'storePrivilege'])->name('nurses.privileges.store');
+        Route::put('nurses/{nurse}/privileges/{privilege}', [NurseCredentialingController::class, 'updatePrivilege'])->name('nurses.privileges.update');
+        Route::delete('nurses/{nurse}/privileges/{privilege}', [NurseCredentialingController::class, 'destroyPrivilege'])->name('nurses.privileges.destroy');
+        Route::post('nurses/{nurse}/privilege-checklist', [NurseCredentialingController::class, 'saveChecklist'])->name('nurses.privileges.checklist');
+    });
+
     Route::resource('users', \App\Http\Controllers\UsersController::class)->except(['show']);
     Route::post('users/{user}/update-role', [\App\Http\Controllers\UsersController::class, 'updateRole'])->name('users.update-role');
     Route::post('users/{user}/toggle-status', [\App\Http\Controllers\UsersController::class, 'toggleStatus'])->name('users.toggle-status');
@@ -137,12 +149,22 @@ Route::middleware('auth')->group(function () {
     // Bed Management Routes
     Route::resource('beds', BedController::class)->except(['show']);
     Route::post('beds/{bed}/deactivate', [BedController::class, 'deactivate'])->name('beds.deactivate');
+    Route::post('beds/{bed}/maintenance', [BedController::class, 'maintenance'])->name('beds.maintenance');
 
     // Discharge Summary Routes
     // {admission} is the admit / check-in admission_logs row that opened the stay.
     Route::get('/discharge-summaries', [DischargeSummaryController::class, 'index'])->name('discharge-summaries.index');
     Route::get('/discharge-summaries/{admission}', [DischargeSummaryController::class, 'show'])->name('discharge-summaries.show');
     Route::get('/discharge-summaries/{admission}/print', [DischargeSummaryController::class, 'print'])->name('discharge-summaries.print');
+    // The same summary by patient, for the Patient Details "Discharge Summary" tab
+    // (latest admission, or ?admission=<admission log id>)
+    Route::get('/ward-dashboard/patients/{patient}/discharge-summary', [\App\Http\Controllers\PatientDischargeSummaryController::class, 'panel'])->name('ward.discharge-summary.panel');
+    Route::get('/ward-dashboard/patients/{patient}/discharge-summary/print', [\App\Http\Controllers\PatientDischargeSummaryController::class, 'print'])->name('ward.discharge-summary.print');
+    // Nursing Plan tab: the care plan (diagnoses, goals, interventions, per-shift evaluation)
+    Route::post('/ward-dashboard/patients/{patient}/care-plan', [\App\Http\Controllers\NursingCarePlanController::class, 'store'])->name('ward.nursing-plan.store');
+    Route::post('/ward-dashboard/care-plan/{item}/update', [\App\Http\Controllers\NursingCarePlanController::class, 'update'])->name('ward.nursing-plan.update');
+    Route::post('/ward-dashboard/care-plan/{item}/evaluate', [\App\Http\Controllers\NursingCarePlanController::class, 'evaluate'])->name('ward.nursing-plan.evaluate');
+    Route::post('/ward-dashboard/care-plan/{item}/close', [\App\Http\Controllers\NursingCarePlanController::class, 'close'])->name('ward.nursing-plan.close');
 
     // Ward Schedule Routes
     Route::get('/ward-schedule', [WardScheduleController::class, 'index'])
@@ -157,6 +179,22 @@ Route::middleware('auth')->group(function () {
     Route::get('/ward-schedule/print', [WardScheduleController::class, 'printSchedule'])->name('ward.schedule.print');
     Route::get('/ward-schedule/special-duty', [WardScheduleController::class, 'specialDutyFrame'])->name('ward.schedule.special-duty');
     Route::post('/ward-schedule/special-duty', [WardScheduleController::class, 'saveSpecialDuty'])->name('ward.schedule.special-duty.save');
+
+    // AI Nurse Schedule Routes (Schedule > AI Nurse Schedule): staff roster, bed assignment by workload, leave
+    Route::get('/ward-schedule/ai', [\App\Http\Controllers\AiNurseScheduleController::class, 'index'])->name('ward.ai-schedule');
+    Route::post('/ward-schedule/ai/generate', [\App\Http\Controllers\AiNurseScheduleController::class, 'generate'])->name('ward.ai-schedule.generate');
+    Route::post('/ward-schedule/ai/cell', [\App\Http\Controllers\AiNurseScheduleController::class, 'updateCell'])->name('ward.ai-schedule.cell');
+    Route::post('/ward-schedule/ai/clear', [\App\Http\Controllers\AiNurseScheduleController::class, 'clear'])->name('ward.ai-schedule.clear');
+    Route::post('/ward-schedule/ai/import', [\App\Http\Controllers\AiNurseScheduleController::class, 'importSchedule'])->name('ward.ai-schedule.import');
+    Route::post('/ward-schedule/ai/assign', [\App\Http\Controllers\AiNurseScheduleController::class, 'applyAssignments'])->name('ward.ai-schedule.assign');
+    Route::post('/ward-schedule/ai/assign-week', [\App\Http\Controllers\AiNurseScheduleController::class, 'applyWeek'])->name('ward.ai-schedule.assign-week');
+    Route::post('/ward-schedule/ai/rules', [\App\Http\Controllers\AiNurseScheduleController::class, 'updateRules'])->name('ward.ai-schedule.rules');
+    Route::post('/ward-schedule/ai/weights', [\App\Http\Controllers\AiNurseScheduleController::class, 'updateWeights'])->name('ward.ai-schedule.weights');
+    Route::post('/ward-schedule/ai/weights/reset', [\App\Http\Controllers\AiNurseScheduleController::class, 'resetWeights'])->name('ward.ai-schedule.weights.reset');
+    Route::post('/ward-schedule/ai/leaves', [\App\Http\Controllers\AiNurseScheduleController::class, 'storeLeave'])->name('ward.ai-schedule.leaves.store');
+    Route::delete('/ward-schedule/ai/leaves/{leave}', [\App\Http\Controllers\AiNurseScheduleController::class, 'destroyLeave'])->name('ward.ai-schedule.leaves.destroy');
+    Route::post('/ward-schedule/ai/holidays', [\App\Http\Controllers\AiNurseScheduleController::class, 'storeHoliday'])->name('ward.ai-schedule.holidays.store');
+    Route::delete('/ward-schedule/ai/holidays/{holiday}', [\App\Http\Controllers\AiNurseScheduleController::class, 'destroyHoliday'])->name('ward.ai-schedule.holidays.destroy');
 
     // Shift Settings Routes
     Route::get('/ward-schedule/shift-settings', [ShiftSettingController::class, 'index'])->name('ward.shift-settings');
@@ -395,6 +433,10 @@ Route::prefix('api/doctor')->group(function () {
     Route::get('/dashboard', [\App\Http\Controllers\DoctorAppApiController::class, 'dashboard']);
     Route::get('/patients/{patient}/notes', [\App\Http\Controllers\DoctorAppApiController::class, 'listNotes']);
     Route::post('/patients/{patient}/notes', [\App\Http\Controllers\DoctorAppApiController::class, 'addNote']);
+    // Patient chart: I/O, medications and consultant orders
+    Route::get('/patients/{patient}/chart', [\App\Http\Controllers\DoctorAppPatientController::class, 'show']);
+    Route::post('/patients/{patient}/orders', [\App\Http\Controllers\DoctorAppPatientController::class, 'storeOrder']);
+    Route::post('/patients/{patient}/orders/{order}/cancel', [\App\Http\Controllers\DoctorAppPatientController::class, 'cancelOrder']);
 });
 
 // Public API Routes for the Nurse mobile app (token auth, no CSRF)
@@ -404,6 +446,28 @@ Route::prefix('api/nurse')->group(function () {
     Route::post('/login', [\App\Http\Controllers\NurseAppApiController::class, 'login']);
     Route::post('/logout', [\App\Http\Controllers\NurseAppApiController::class, 'logout']);
     Route::get('/dashboard', [\App\Http\Controllers\NurseAppApiController::class, 'dashboard']);
+
+    // One patient: orders, I/O chart, doses, infusions, alerts, stay timeline
+    Route::get('/patients/{patient}', [\App\Http\Controllers\NurseAppPatientController::class, 'show']);
+    Route::get('/patients/{patient}/timeline', [\App\Http\Controllers\NurseAppPatientController::class, 'timeline']);
+    Route::post('/patients/{patient}/orders', [\App\Http\Controllers\NurseAppPatientController::class, 'storeOrder']);
+    Route::post('/patients/{patient}/orders/handover', [\App\Http\Controllers\NurseAppPatientController::class, 'handoverOrders']);
+    Route::post('/patients/{patient}/orders/{order}/complete', [\App\Http\Controllers\NurseAppPatientController::class, 'completeOrder']);
+    Route::post('/patients/{patient}/orders/{order}/cancel', [\App\Http\Controllers\NurseAppPatientController::class, 'cancelOrder']);
+    Route::post('/patients/{patient}/io/entries', [\App\Http\Controllers\NurseAppPatientController::class, 'storeIoEntry']);
+    Route::post('/patients/{patient}/io/entries/{entry}/void', [\App\Http\Controllers\NurseAppPatientController::class, 'voidIoEntry']);
+    Route::post('/patients/{patient}/io/plan', [\App\Http\Controllers\NurseAppPatientController::class, 'saveIoPlan']);
+    Route::post('/patients/{patient}/io/assessments', [\App\Http\Controllers\NurseAppPatientController::class, 'storeIoAssessment']);
+    Route::post('/patients/{patient}/medications/{medication}/doses', [\App\Http\Controllers\NurseAppPatientController::class, 'recordDose']);
+    Route::post('/patients/{patient}/transfusions', [\App\Http\Controllers\NurseAppPatientController::class, 'storeTransfusion']);
+    Route::post('/patients/{patient}/transfusions/{transfusion}/checklist', [\App\Http\Controllers\NurseAppPatientController::class, 'updateTransfusionChecklist']);
+    Route::post('/patients/{patient}/transfusions/{transfusion}/start', [\App\Http\Controllers\NurseAppPatientController::class, 'startTransfusion']);
+    Route::post('/patients/{patient}/transfusions/{transfusion}/finish', [\App\Http\Controllers\NurseAppPatientController::class, 'finishTransfusion']);
+    Route::post('/patients/{patient}/care-plan', [\App\Http\Controllers\NurseAppPatientController::class, 'storeCarePlanItem']);
+    Route::post('/patients/{patient}/care-plan/{item}/update', [\App\Http\Controllers\NurseAppPatientController::class, 'updateCarePlanItem']);
+    Route::post('/patients/{patient}/care-plan/{item}/evaluate', [\App\Http\Controllers\NurseAppPatientController::class, 'evaluateCarePlanItem']);
+    Route::post('/patients/{patient}/care-plan/{item}/close', [\App\Http\Controllers\NurseAppPatientController::class, 'closeCarePlanItem']);
+    Route::post('/notifications/{notification}/respond', [\App\Http\Controllers\NurseAppPatientController::class, 'respondNotification']);
 });
 
 // Public API Routes for the bedside Patient Information Terminal (no CSRF)

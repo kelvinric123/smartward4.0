@@ -34,13 +34,21 @@ class FluidBalancePlan extends Model
         'intake_limit_ml',
         'urine_min_ml_per_hour',
         'notes',
+        'consultant_order_id',
         'set_by',
     ];
 
     protected $casts = [
         'intake_limit_ml' => 'integer',
         'urine_min_ml_per_hour' => 'integer',
+        'consultant_order_id' => 'integer',
     ];
+
+    /** The consultant order whose fluid restriction set this plan, if one did. */
+    public function consultantOrder(): BelongsTo
+    {
+        return $this->belongsTo(ConsultantOrder::class);
+    }
 
     public function patient(): BelongsTo
     {

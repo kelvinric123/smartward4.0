@@ -2,14 +2,19 @@
 
 namespace App\Services;
 
+use App\Http\Controllers\WardDashboardController;
 use App\Models\AdmissionLog;
 use App\Models\Bed;
 use App\Models\Infusion;
+use App\Models\Patient;
 use App\Models\PatientCareProvider;
 use App\Models\ShiftSetting;
 use App\Models\VitalSign;
+use App\Models\WardDashboardSetting;
+use App\Models\WardNotification;
 use App\Models\WardScheduleAssignment;
 use App\Support\AdmissionEpisode;
+use App\Support\AdmissionTimeline;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -44,15 +49,36 @@ class DischargeSummaryService
         'patient' => 'Patient',
         'admission' => 'Admission',
         'discharge' => 'Discharge',
+        'highlights' => 'Stay at a glance',
+        'alerts' => 'Clinical alerts',
         'care-team' => 'Doctor & care team',
         'nursing' => 'Nursing roster',
+        'timeline' => 'Clinical timeline',
         'vitals' => 'Vital signs',
-        'ecg' => 'ECG recordings',
+        'fluid' => 'Intake / output',
+        'medications' => 'Medications',
         'infusions' => 'Infusions',
+        'transfusions' => 'Blood transfusion',
+        'orders' => 'Orders & notes',
+        'assessments' => 'Assessments & HGT',
+        'ecg' => 'ECG recordings',
+        'movements' => 'Transfers & movements',
+        'signoff' => 'Sign-off',
     ];
 
-    public function __construct(private EcgArchive $ecgArchive)
-    {
+    /** Early warning systems the ward dashboard can score with (clinical_settings.ews_system). */
+    public const EWS_LABELS = [
+        'ews_ihh' => 'EWS',
+        'news2' => 'NEWS2',
+        'news' => 'NEWS',
+        'mews' => 'MEWS',
+        'pews' => 'PEWS',
+    ];
+
+    public function __construct(
+        private EcgArchive $ecgArchive,
+        private DischargeSummaryRecords $records,
+    ) {
     }
 
     // ------------------------------------------------------------------ list
@@ -237,10 +263,21 @@ class DischargeSummaryService
      */
     public function summary(AdmissionLog $admission): array
     {
-        $episode = $this->episodeFor($admission);
-        $vitalSigns = $this->vitalSigns($episode);
+        return $this->summaryForEpisode($this->episodeFor($admission));
+    }
 
-        return [
+    /**
+     * Everything the discharge summary prints for one episode: the sections
+     * read here, the records DischargeSummaryRecords collects, and the
+     * timeline built from all of them.
+     */
+    public function summaryForEpisode(AdmissionEpisode $episode): array
+    {
+        $admission = $episode->admissionLog;
+        $vitalSigns = $this->vitalSigns($episode);
+        $ewsSystem = $this->ewsSystem();
+
+        $summary = [
             'episode' => $episode,
             'admission' => $admission,
             'patient' => $admission->patient,
@@ -249,9 +286,162 @@ class DischargeSummaryService
             'nursingRoster' => $this->nursingRoster($episode),
             'vitalSigns' => $vitalSigns,
             'vitalRanges' => $this->vitalRanges($vitalSigns),
+            'vitalEws' => $this->ewsScores($vitalSigns, $ewsSystem),
+            'ews' => ['system' => $ewsSystem, 'label' => self::EWS_LABELS[$ewsSystem] ?? 'EWS'],
             'ecgFiles' => $this->ecgFiles($episode),
             'infusions' => $this->infusions($episode),
+            'admissionEvents' => $this->records->admissionEvents($episode),
+            'fluidBalance' => $this->records->fluidBalance($episode),
+            'medications' => $this->records->medications($episode),
+            'consultantOrders' => $this->records->consultantOrders($episode),
+            'consultantNotes' => $this->records->consultantNotes($episode),
+            'referrals' => $this->records->referrals($episode),
+            'transfusions' => $this->records->transfusions($episode),
+            'assessmentScores' => $this->records->assessmentScores($episode),
+            'glucoseReadings' => $this->records->glucoseReadings($episode),
+            'movements' => $this->records->movements($episode),
+            'wardAlerts' => $this->records->wardAlerts($episode),
+            'clinicalAlerts' => $this->records->clinicalAlerts($admission->patient),
+            'generatedAt' => now(),
         ];
+
+        $summary['timeline'] = AdmissionTimeline::build($episode, $summary);
+        $summary['highlights'] = $this->highlights($episode, $summary);
+
+        return $summary;
+    }
+
+    /**
+     * Every admission of one patient, newest first, each with its episode.
+     */
+    public function admissionsFor(Patient $patient): Collection
+    {
+        $admissions = AdmissionLog::with(['ward', 'user'])
+            ->where('patient_id', $patient->id)
+            ->whereIn('action', self::ADMISSION_ACTIONS)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get();
+
+        $admissions->each(fn(AdmissionLog $admission) => $admission->setRelation('patient', $patient));
+        $this->attachEpisodes($admissions);
+
+        return $admissions;
+    }
+
+    /**
+     * An episode for a patient who is (or was) admitted but has no admission
+     * log - admitted before logs were kept, or by a route that never wrote
+     * one. It is built from the patient record's own admission time and is
+     * never saved. Null for a patient who was never admitted (a pre-booking).
+     */
+    public function unloggedEpisodeFor(Patient $patient): ?AdmissionEpisode
+    {
+        if (!in_array($patient->status, ['admitted', 'pending_discharge', 'discharged'], true)) {
+            return null;
+        }
+
+        $admittedAt = $patient->admitted_at ?? $patient->created_at;
+
+        if (!$admittedAt) {
+            return null;
+        }
+
+        $admission = new AdmissionLog();
+        $admission->forceFill([
+            'patient_id' => $patient->id,
+            'ward_id' => $patient->ward_id,
+            'bed_number' => $patient->bed_number,
+            'action' => 'admit',
+            'patient_name' => $patient->name,
+            'mrn' => $patient->mrn,
+            'consultant_name' => $patient->consultant?->name,
+            'nurse_name' => $patient->nurse?->name,
+            'gender' => $patient->gender,
+            'age' => $patient->age,
+            'admitted_at' => $admittedAt,
+            'source' => 'manual',
+        ]);
+        $admission->created_at = $admittedAt;
+        $admission->setRelation('patient', $patient);
+        $admission->setRelation('user', null);
+
+        return $this->resolveEpisode($admission, collect());
+    }
+
+    /**
+     * The numbers the "Stay at a glance" block leads with.
+     */
+    protected function highlights(AdmissionEpisode $episode, array $summary): array
+    {
+        $vitalSigns = $summary['vitalSigns'];
+        $scores = array_filter($summary['vitalEws'], fn($score) => $score !== null);
+        $latestVital = $vitalSigns->last();
+        $medications = $summary['medications'];
+        $orders = $summary['consultantOrders'];
+        $alerts = $summary['wardAlerts'];
+        $patientCalls = $alerts->where('type', WardNotification::TYPE_PATIENT_REQUEST);
+
+        return [
+            'lengthOfStay' => $episode->lengthOfStay(),
+            'transfers' => $summary['admissionEvents']->where('action', 'transfer')->count(),
+            'vitals' => $vitalSigns->count(),
+            'latestVitalAt' => $latestVital?->recorded_at,
+            'latestEws' => $latestVital ? ($summary['vitalEws'][$latestVital->id] ?? null) : null,
+            'highestEws' => $scores ? max($scores) : null,
+            'fluid' => $summary['fluidBalance']['entries']->isNotEmpty() ? $summary['fluidBalance']['totals'] : null,
+            'medicationOrders' => $medications->count(),
+            'activeMedications' => $medications->where('state', 'active')->count(),
+            'dosesGiven' => $medications->sum('given'),
+            'dosesNotGiven' => $medications->sum('held') + $medications->sum('refused'),
+            'infusions' => $summary['infusions']->count(),
+            'transfusions' => $summary['transfusions']->count(),
+            'orders' => $orders->count(),
+            'openOrders' => $orders->where('status', 'open')->count(),
+            'assessments' => $summary['assessmentScores']->count(),
+            'glucose' => $summary['glucoseReadings']->count(),
+            'ecg' => $summary['ecgFiles']->count(),
+            'patientCalls' => $patientCalls->count(),
+            'alerts' => $alerts->count(),
+            'events' => $summary['timeline']['total'],
+        ];
+    }
+
+    /**
+     * The early warning system this user's ward dashboard scores with, so the
+     * summary shows the same numbers as the bed boxes.
+     */
+    protected function ewsSystem(): string
+    {
+        $settings = auth()->check()
+            ? WardDashboardSetting::where('user_id', auth()->id())->first()
+            : null;
+
+        $system = is_array($settings?->clinical_settings)
+            ? ($settings->clinical_settings['ews_system'] ?? 'ews_ihh')
+            : 'ews_ihh';
+
+        return array_key_exists($system, self::EWS_LABELS) ? $system : 'ews_ihh';
+    }
+
+    /**
+     * Early warning score of each reading, keyed by vital sign id. Scored by
+     * the ward dashboard's own calculator so the two can never disagree.
+     */
+    protected function ewsScores(Collection $vitalSigns, string $system): array
+    {
+        if ($vitalSigns->isEmpty()) {
+            return [];
+        }
+
+        $dashboard = app(WardDashboardController::class);
+        $scores = [];
+
+        foreach ($vitalSigns as $vital) {
+            $scores[$vital->id] = $dashboard->calculateEWS($vital, $system)['score'] ?? null;
+        }
+
+        return $scores;
     }
 
     /**
@@ -270,6 +460,7 @@ class DischargeSummaryService
         $empty = [
             'beds' => $beds,
             'nurses' => collect(),
+            'assignments' => collect(),
             'assignmentCount' => 0,
             'shiftLabels' => $this->shiftLabels($episode->admissionLog->ward_id),
         ];
@@ -320,6 +511,8 @@ class DischargeSummaryService
         return [
             'beds' => $beds,
             'nurses' => $nurses,
+            // Each shift as rostered, for the timeline's "on duty" line per day
+            'assignments' => $assignments->values(),
             'assignmentCount' => $assignments->count(),
             'shiftLabels' => $this->shiftLabels($episode->admissionLog->ward_id),
         ];

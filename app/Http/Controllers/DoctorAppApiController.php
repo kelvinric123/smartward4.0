@@ -14,6 +14,10 @@ use App\Models\PatientMovement;
 use App\Models\ShiftSetting;
 use App\Models\VitalSign;
 use App\Models\WardScheduleAssignment;
+use App\Models\ConsultantOrder;
+use App\Models\PatientMedication;
+use App\Support\DoctorAppAccess;
+use App\Support\FluidBalanceChart;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -102,6 +106,7 @@ class DoctorAppApiController extends Controller
 
         $patients = $this->patientsUnderCare($consultant);
         $beds = [];
+        $linked = $this->linkedData($patients);
 
         // Per-ward caches for shift + nurse-on-duty lookups
         $shiftByWard = [];
@@ -127,7 +132,7 @@ class DoctorAppApiController extends Controller
                 $assignmentsByWard[$wardId] = $assignments;
             }
 
-            $beds[] = $this->bedPayload($patient, $consultant, $assignmentsByWard[$wardId]);
+            $beds[] = $this->bedPayload($patient, $consultant, $assignmentsByWard[$wardId], $linked);
         }
 
         // Sort by ward name then bed number (natural order)
@@ -151,7 +156,7 @@ class DoctorAppApiController extends Controller
                 'critical_patients' => $criticalCount,
                 'pending_discharge' => $pendingDischarge,
                 'pending_reviews' => 0,
-                'pending_orders' => 0,
+                'pending_orders' => array_sum(array_column($beds, 'pending_orders')),
             ],
             'wards' => $wards,
             'beds' => $beds,
@@ -215,12 +220,7 @@ class DoctorAppApiController extends Controller
 
     private function authenticate(Request $request): ?Consultant
     {
-        $token = $request->bearerToken() ?: $request->input('token');
-        if (!$token) {
-            return null;
-        }
-
-        return Consultant::findByAppToken($token);
+        return DoctorAppAccess::consultant($request);
     }
 
     private function unauthorized(): JsonResponse
@@ -284,23 +284,7 @@ class DoctorAppApiController extends Controller
 
     private function isUnderCare(Consultant $consultant, Patient $patient): bool
     {
-        if ($patient->consultant_id === $consultant->id) {
-            return true;
-        }
-
-        $viaCareProvider = PatientCareProvider::where('consultant_id', $consultant->id)
-            ->where('patient_id', $patient->id)
-            ->where('is_active', true)
-            ->exists();
-        if ($viaCareProvider) {
-            return true;
-        }
-
-        return DB::table('bed_consultant')
-            ->join('beds', 'beds.id', '=', 'bed_consultant.bed_id')
-            ->where('bed_consultant.consultant_id', $consultant->id)
-            ->where('beds.patient_id', $patient->id)
-            ->exists();
+        return DoctorAppAccess::isUnderCare($consultant, $patient);
     }
 
     private function wardsPayload($patients): array
@@ -331,9 +315,32 @@ class DoctorAppApiController extends Controller
             ->first();
     }
 
-    private function bedPayload(Patient $patient, Consultant $consultant, array $nurseAssignments): array
+    /**
+     * Today's I/O, the active medication orders and the open consultant
+     * orders of every patient on the dashboard, fetched for all of them at
+     * once rather than bed by bed.
+     */
+    private function linkedData($patients): array
+    {
+        $ids = $patients->pluck('id');
+
+        return [
+            'io' => FluidBalanceChart::alertsForPatients($patients),
+            'medications' => PatientMedication::alertsForPatients($ids),
+            'orders' => ConsultantOrder::whereIn('patient_id', $ids)
+                ->where('status', ConsultantOrder::STATUS_OPEN)
+                ->selectRaw('patient_id, COUNT(*) as open_count')
+                ->groupBy('patient_id')
+                ->pluck('open_count', 'patient_id')
+                ->all(),
+        ];
+    }
+
+    private function bedPayload(Patient $patient, Consultant $consultant, array $nurseAssignments, array $linked = []): array
     {
         $dashboard = app(WardDashboardController::class);
+        $io = $linked['io'][$patient->id] ?? null;
+        $medications = $linked['medications'][$patient->id] ?? null;
         $bed = $this->findBedForPatient($patient);
 
         // Vitals: latest 20 readings, oldest -> newest for the trend chart
@@ -437,7 +444,7 @@ class DoctorAppApiController extends Controller
             'current_movement_location' => $currentMovement?->location,
             'is_pending_discharge' => $isPendingDischarge,
             'pending_review' => false,
-            'pending_orders' => 0,
+            'pending_orders' => (int) ($linked['orders'][$patient->id] ?? 0),
             'last_hgt' => $patient->latestSugarReading ? [
                 'value' => number_format((float) $patient->latestSugarReading->value, 1) . ' mmol/L',
                 'recorded_at' => $patient->latestSugarReading->recorded_at?->format('d M H:i'),
@@ -452,7 +459,25 @@ class DoctorAppApiController extends Controller
                 'temperature' => $latestVitals->temperature !== null ? (float) $latestVitals->temperature : null,
             ] : null,
             'vitals_history' => $vitalsHistory,
-            'active_medications' => [],
+            // Most urgent first: "Ceftriaxone 1 g IV TDS · Due in 2h"
+            'active_medications' => collect($medications['items'] ?? [])
+                ->map(fn (array $item) => $item['name'] . ' ' . $item['summary'] . ' · ' . $item['label'])
+                ->values()
+                ->all(),
+            'medication_counts' => [
+                'active' => $medications['active'] ?? 0,
+                'overdue' => $medications['overdue'] ?? 0,
+                'due_soon' => $medications['due_soon'] ?? 0,
+            ],
+            // Today's I/O against the fluid plan; null when nothing is charted or planned
+            'io' => $io ? [
+                'intake' => $io['intake'],
+                'output' => $io['output'],
+                'balance' => $io['balance'],
+                'limit' => $io['limit'],
+                'level' => $io['level'],
+                'alerts' => array_column($io['alerts'], 'title'),
+            ] : null,
             'infusions' => $infusions,
         ];
     }

@@ -712,6 +712,12 @@ class WardDashboardController extends Controller
         ]);
 
         try {
+            // A bed under maintenance is out of service
+            if (Bed::isUnderMaintenanceAt($request->ward_id, $request->bed_number)) {
+                return back()->with('error', 'Bed ' . $request->bed_number
+                    . ' is under maintenance. End maintenance on the Beds page before admitting a patient to it.');
+            }
+
             // Check if bed is already occupied
             $existingPatient = Patient::where('ward_id', $request->ward_id)
                 ->where('bed_number', $request->bed_number)
@@ -829,6 +835,12 @@ class WardDashboardController extends Controller
         ]);
 
         try {
+            // A bed under maintenance is out of service
+            if (Bed::isUnderMaintenanceAt($request->ward_id, $request->bed_number)) {
+                return back()->with('error', 'Bed ' . $request->bed_number
+                    . ' is under maintenance. End maintenance on the Beds page before prebooking it.');
+            }
+
             // Check if bed is already occupied or prebooked
             $existingPatient = Patient::where('ward_id', $request->ward_id)
                 ->where('bed_number', $request->bed_number)
@@ -1482,9 +1494,10 @@ class WardDashboardController extends Controller
 
         $done = $transfusion->completedStepCount();
 
+        // The step labels already read as done ("Crossmatch confirmed")
         return back()->withInput()->with('success', $validated['action'] === 'confirm'
-            ? $step['label'] . ' confirmed (' . $done . ' of 4).'
-            : $step['label'] . ' undone (' . $done . ' of 4).');
+            ? 'Check ' . $step['number'] . ' of 4 done: ' . $step['label'] . '.'
+            : 'Check ' . $step['number'] . ' undone: ' . $step['label'] . '. ' . $done . ' of 4 done.');
     }
 
     /**
@@ -1558,6 +1571,8 @@ class WardDashboardController extends Controller
             'infusion' => true,
             'transfer' => true,
             'discharge' => true,
+            'discharge_summary' => true, // read-only, viewable before discharge
+            'nursing_plan' => true, // care plan + this shift's tasks
         ];
 
         $defaultBedBoxDisplay = [
@@ -1797,6 +1812,8 @@ class WardDashboardController extends Controller
             'infusion' => true,
             'transfer' => true,
             'discharge' => true,
+            'discharge_summary' => true,
+            'nursing_plan' => true,
         ];
 
         $inputTabs = $request->input('tabs', []);
@@ -2044,6 +2061,15 @@ class WardDashboardController extends Controller
                 'active_tab' => 'transfer',
             ])
                 ->with('error', 'Only admitted patients can be transferred.');
+        }
+
+        // A bed under maintenance is out of service
+        if (Bed::isUnderMaintenanceAt($request->ward_id, $request->bed_number)) {
+            return redirect()->route('ward.patient-details', [
+                'patient_id' => $patient->id,
+                'active_tab' => 'transfer',
+            ])
+                ->with('error', 'Bed ' . $request->bed_number . ' is under maintenance, so nobody can be transferred to it.');
         }
 
         // Prevent transferring into an occupied/prebooked bed
@@ -3653,6 +3679,8 @@ class WardDashboardController extends Controller
             'infusion' => true,
             'transfer' => true,
             'discharge' => true,
+            'discharge_summary' => true, // read-only, viewable before discharge
+            'nursing_plan' => true, // care plan + this shift's tasks
         ];
 
         $patientDetailsTabs = $defaultTabs;

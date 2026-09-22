@@ -298,6 +298,11 @@
                                     ? (intake ? 'bg-sky-600 border-sky-600 text-white' : 'bg-amber-500 border-amber-500 text-white')
                                     : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'"></button>
                         </template>
+                        {{-- These come in by themselves (FluidBalanceLinks); entering them again would count them twice --}}
+                        <p x-show="intake && ['blood', 'iv', 'iv_med'].includes(category)" x-cloak class="basis-full text-[11px] text-cyan-800">
+                            Finished blood units, IV doses with a volume and pump infusions are added automatically (marked "Auto").
+                            Only enter what they do not cover.
+                        </p>
                     </div>
                 </div>
 
@@ -432,7 +437,15 @@
                                 {{ $voided ? '' : $signed($row['running']) }}
                             </td>
                             <td class="px-3 py-1.5 text-xs {{ $voided ? '' : 'text-gray-500' }}">
-                                {{ $entry->recordedBy?->name ?? '-' }}
+                                @if ($entry->isAuto())
+                                    <span class="inline-flex items-center rounded bg-cyan-50 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-800 border border-cyan-200"
+                                        title="Added automatically from the {{ $entry->sourceLabel() }}">Auto &middot; {{ $entry->sourceLabel() }}</span>
+                                    @if ($entry->recordedBy)
+                                        <span class="block">{{ $entry->recordedBy->name }}</span>
+                                    @endif
+                                @else
+                                    {{ $entry->recordedBy?->name ?? '-' }}
+                                @endif
                                 @if ($voided)
                                     <span class="block text-[11px] text-red-600 no-underline">
                                         Struck out{{ $entry->voidedBy ? ' by ' . $entry->voidedBy->name : '' }}: {{ $entry->void_reason }}
@@ -551,6 +564,11 @@
                         </dd>
                     </div>
                 </dl>
+                @if ($currentPlan->consultant_order_id)
+                    <p class="mt-2 inline-flex items-center rounded bg-cyan-50 px-1.5 py-0.5 text-[11px] font-semibold text-cyan-800 border border-cyan-200">
+                        Set by a consultant order (Orders tab)
+                    </p>
+                @endif
                 @if ($currentPlan->notes)
                     <p class="mt-2 text-xs text-gray-700 bg-gray-50 rounded px-2 py-1.5">{{ $currentPlan->notes }}</p>
                 @endif

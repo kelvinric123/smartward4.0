@@ -5,6 +5,7 @@
         'profile' => ['personnel_code', 'name', 'registration_number', 'phone', 'email', 'qualification', 'designation', 'years_of_experience'],
         'assignment' => ['ward_id', 'is_tagging', 'tagging_nurse_ids', 'tagging_nurse_ids.*'],
         'access' => ['app_username', 'app_password', 'user_id'],
+        'credentialing' => ['credential.*', 'privilege.*', 'checklist.*'],
     ];
 
     $activeTab = 'profile';
@@ -15,10 +16,20 @@
         }
     }
 
+    // Credentialing saves come back with ?tab=credentialing, and a delete
+    // refused for a wrong passphrase with the tab in its old input.
+    if (!$errors->any()) {
+        $requestedTab = old('active_tab', request('tab'));
+        if (is_string($requestedTab) && array_key_exists($requestedTab, $tabFields)) {
+            $activeTab = $requestedTab;
+        }
+    }
+
     $tabs = [
         'profile' => ['label' => 'Profile', 'hint' => 'Identity and qualifications'],
         'assignment' => ['label' => 'Assignment', 'hint' => 'Ward and tagging'],
         'access' => ['label' => 'Access', 'hint' => 'App login and LDAP'],
+        'credentialing' => ['label' => 'Credentialing and Privileging', 'hint' => 'Licences, certificates, privileges'],
     ];
 
     $field = 'mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500';
@@ -71,12 +82,21 @@
                 </div>
             @endif
 
-            <div class="bg-white/90 backdrop-blur-sm shadow-lg rounded-2xl border border-blue-100 overflow-hidden"
-                x-data="{ tab: '{{ $activeTab }}' }">
+            <div class="bg-white/90 backdrop-blur-sm shadow-lg rounded-2xl border border-blue-100 overflow-clip"
+                x-data="{
+                    tab: '{{ $activeTab }}',
+                    dirty: false,
+                    {{-- The credentialing forms reload the page, which would drop
+                         anything typed into the nurse form and not yet saved --}}
+                    discardChanges() {
+                        return !this.dirty || confirm('You have unsaved changes on the other tabs. Saving here reloads the page and they will be lost. Continue?');
+                    },
+                }">
 
                 {{-- One long form split into sections: everything stays in the DOM
                      (x-show, not x-if) so a save posts the whole nurse, whichever
-                     section happens to be open. --}}
+                     section happens to be open. Credentialing and Privileging is
+                     the exception: it has forms of its own, below this one. --}}
                 <nav class="flex flex-wrap gap-1 border-b border-blue-100 bg-blue-50/70 px-3 pt-3"
                     aria-label="Nurse sections">
                     @foreach($tabs as $key => $meta)
@@ -95,6 +115,9 @@
                                 @if($errors->hasAny($tabFields[$key]))
                                     <span class="ml-1 inline-flex h-2 w-2 rounded-full bg-red-500 align-middle"
                                         title="This section has an error"></span>
+                                @elseif($key === 'credentialing' && $credentialing['attention'])
+                                    <span class="ml-1 inline-flex h-2 w-2 rounded-full align-middle {{ $credentialing['attention']['level'] === 'red' ? 'bg-red-500' : 'bg-amber-400' }}"
+                                        title="{{ ucfirst($credentialing['attention']['text']) }}"></span>
                                 @endif
                             </span>
                             <span class="block text-[11px]"
@@ -103,7 +126,8 @@
                     @endforeach
                 </nav>
 
-                <form method="POST" action="{{ route('nurses.update', $nurse) }}">
+                <form method="POST" action="{{ route('nurses.update', $nurse) }}" x-show="tab !== 'credentialing'" x-cloak
+                    @input="dirty = true" @change="dirty = true">
                     @csrf
                     @method('PUT')
 
@@ -394,6 +418,11 @@
                         </button>
                     </div>
                 </form>
+
+                {{-- ------------------------------ Credentialing and Privileging --}}
+                <div x-show="tab === 'credentialing'" x-cloak>
+                    @include('admin.nurses.partials.credentialing')
+                </div>
             </div>
         </div>
     </div>

@@ -26,10 +26,17 @@ set "PATH=%JAVA_HOME%\bin;%PATH%"
 echo [1/5] Using JAVA_HOME=%JAVA_HOME%
 
 REM --- 2. Locate Android SDK --------------------------------------------------
-if "%ANDROID_HOME%"=="" set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
+REM ANDROID_HOME, else ANDROID_SDK_ROOT, else the first usual folder with adb in it
+if "%ANDROID_HOME%"=="" if not "%ANDROID_SDK_ROOT%"=="" set "ANDROID_HOME=%ANDROID_SDK_ROOT%"
+if "%ANDROID_HOME%"=="" (
+    for %%S in ("%LOCALAPPDATA%\Android\Sdk" "C:\Android\Sdk" "%USERPROFILE%\Android\Sdk" "C:\Android\android-sdk") do (
+        if "!ANDROID_HOME!"=="" if exist "%%~S\platform-tools\adb.exe" set "ANDROID_HOME=%%~S"
+    )
+)
 if not exist "%ANDROID_HOME%\platform-tools\adb.exe" (
-    echo [ERROR] Android SDK not found at %ANDROID_HOME%.
-    echo         Install it via Android Studio or edit ANDROID_HOME in this script.
+    echo [ERROR] Android SDK not found. Looked at ANDROID_HOME, ANDROID_SDK_ROOT,
+    echo         %LOCALAPPDATA%\Android\Sdk and C:\Android\Sdk.
+    echo         Install it via Android Studio, or set ANDROID_HOME to the SDK folder.
     goto :fail
 )
 echo [2/5] Using ANDROID_HOME=%ANDROID_HOME%

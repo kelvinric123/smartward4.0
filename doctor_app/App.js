@@ -5,6 +5,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import DoctorDashboard from './src/screens/DoctorDashboard';
 import { logout } from './src/api/endpoints';
 import { setDemoMode } from './src/data/notesStore';
+import { resetDemoCharts } from './src/data/mockChart';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -19,6 +20,7 @@ export default function App() {
     const wasDemo = !!session?.demo;
     setSession(null);
     setDemoMode(false);
+    resetDemoCharts();
     // Best-effort server-side token invalidation (real sessions only)
     if (!wasDemo && token) {
       logout(token);

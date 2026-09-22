@@ -3,17 +3,22 @@
 namespace App\Http\Controllers;
 
 use App\Models\Bed;
+use App\Models\BloodTransfusion;
+use App\Models\ConsultantOrder;
 use App\Models\DietType;
 use App\Models\Infusion;
 use App\Models\IsolationType;
 use App\Models\Nurse;
 use App\Models\Patient;
 use App\Models\PatientCareProvider;
+use App\Models\PatientMedication;
 use App\Models\PatientMovement;
 use App\Models\ShiftSetting;
 use App\Models\VitalSign;
 use App\Models\Ward;
+use App\Models\WardNotification;
 use App\Models\WardScheduleAssignment;
+use App\Support\FluidBalanceChart;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -155,12 +160,15 @@ class NurseAppApiController extends Controller
             $patients->push([$bed, $patient]);
         }
 
+        // What needs doing per patient, for the badges on each bed
+        $badges = $this->badgesFor($patients->map(fn($pair) => $pair[1])->filter()->values());
+
         // Build bed payloads (skip empty schedule beds with no patient only
         // if we have at least something better to show; keep them so the
         // nurse sees their full assignment).
         $beds = [];
         foreach ($patients as [$bed, $patient]) {
-            $beds[] = $this->bedPayload($nurse, $bed, $patient);
+            $beds[] = $this->bedPayload($nurse, $bed, $patient, $patient ? ($badges[$patient->id] ?? []) : []);
         }
 
         usort($beds, fn($a, $b) => strnatcmp((string) ($a['number'] ?? ''), (string) ($b['number'] ?? '')));
@@ -211,9 +219,64 @@ class NurseAppApiController extends Controller
                 'active_infusions' => $allInfusions->count(),
                 'infusion_alerts' => $alerts,
                 'ward_occupancy' => $occupancy,
+                'open_orders' => collect($beds)->sum(fn($b) => $b['badges']['orders_open']),
+                'doses_overdue' => collect($beds)->sum(fn($b) => $b['badges']['meds_overdue']),
+                'pending_alerts' => collect($beds)->sum(fn($b) => $b['badges']['alerts_pending']),
             ],
             'beds' => $beds,
         ]);
+    }
+
+    /**
+     * Per patient: open consultant orders (and how many STAT), overdue and
+     * due-soon doses, today's I/O flag, and unanswered alerts. Four queries
+     * for the whole list, whatever its length.
+     *
+     * @return array<int, array>
+     */
+    private function badgesFor(\Illuminate\Support\Collection $patients): array
+    {
+        if ($patients->isEmpty()) {
+            return [];
+        }
+
+        $ids = $patients->pluck('id')->all();
+
+        $orders = ConsultantOrder::whereIn('patient_id', $ids)
+            ->open()
+            ->selectRaw("patient_id, COUNT(*) AS open_count, SUM(urgency = 'stat') AS stat_count")
+            ->groupBy('patient_id')
+            ->get()
+            ->keyBy('patient_id');
+        $medications = PatientMedication::alertsForPatients($ids);
+        $io = FluidBalanceChart::alertsForPatients($patients);
+        $alerts = WardNotification::whereIn('patient_id', $ids)
+            ->pending()
+            ->selectRaw('patient_id, COUNT(*) AS pending_count')
+            ->groupBy('patient_id')
+            ->pluck('pending_count', 'patient_id');
+        $transfusions = BloodTransfusion::whereIn('patient_id', $ids)
+            ->whereIn('status', [BloodTransfusion::STATUS_PENDING, BloodTransfusion::STATUS_IN_PROGRESS])
+            ->selectRaw("patient_id, SUM(status = 'in_progress') AS running_count, SUM(status = 'pending') AS pending_count")
+            ->groupBy('patient_id')
+            ->get()
+            ->keyBy('patient_id');
+
+        $badges = [];
+        foreach ($ids as $id) {
+            $badges[$id] = [
+                'orders_open' => (int) ($orders[$id]->open_count ?? 0),
+                'orders_stat' => (int) ($orders[$id]->stat_count ?? 0),
+                'meds_overdue' => (int) ($medications[$id]['overdue'] ?? 0),
+                'meds_due_soon' => (int) ($medications[$id]['due_soon'] ?? 0),
+                'io_level' => $io[$id]['level'] ?? null,
+                'alerts_pending' => (int) ($alerts[$id] ?? 0),
+                'transfusions_running' => (int) ($transfusions[$id]->running_count ?? 0),
+                'transfusions_pending' => (int) ($transfusions[$id]->pending_count ?? 0),
+            ];
+        }
+
+        return $badges;
     }
 
     // ------------------------------------------------------------------
@@ -240,8 +303,19 @@ class NurseAppApiController extends Controller
         ];
     }
 
-    private function bedPayload(Nurse $nurse, ?Bed $bed, ?Patient $patient): array
+    private function bedPayload(Nurse $nurse, ?Bed $bed, ?Patient $patient, array $badges = []): array
     {
+        $badges += [
+            'orders_open' => 0,
+            'orders_stat' => 0,
+            'meds_overdue' => 0,
+            'meds_due_soon' => 0,
+            'io_level' => null,
+            'alerts_pending' => 0,
+            'transfusions_running' => 0,
+            'transfusions_pending' => 0,
+        ];
+
         if (!$patient) {
             return [
                 'id' => $bed?->id,
@@ -269,6 +343,7 @@ class NurseAppApiController extends Controller
                 'last_hgt' => null,
                 'vitals' => null,
                 'infusions' => [],
+                'badges' => $badges,
             ];
         }
 
@@ -360,6 +435,7 @@ class NurseAppApiController extends Controller
                 'temperature' => $latestVitals->temperature !== null ? (float) $latestVitals->temperature : null,
             ] : null,
             'infusions' => $infusions,
+            'badges' => $badges,
         ];
     }
 }

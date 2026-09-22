@@ -9,7 +9,7 @@
         $openSection = 'admin';
     } elseif (request()->routeIs('wards.*') || request()->routeIs('ward-types.*') || request()->routeIs('clinical-indicators.*') || request()->routeIs('beds.*')) {
         $openSection = 'wardManagement';
-    } elseif (request()->routeIs('ward.schedule')) {
+    } elseif (request()->routeIs('ward.schedule') || request()->routeIs('ward.ai-schedule')) {
         $openSection = 'schedule';
     } elseif (request()->routeIs('vital-signs.*')) {
         $openSection = 'vitalSign';
@@ -28,7 +28,7 @@
     isSectionOpen(section) { return this.openSection === section; },
     toggleSection(section) { this.openSection = this.openSection === section ? null : section; }
 }" @toggle-sidebar.window="sidebarOpen = $event.detail.open"
-    class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 transition-all duration-300 min-h-screen flex flex-col flex-shrink-0 shadow-xl"
+    class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 transition-all duration-300 h-screen flex flex-col flex-shrink-0 shadow-xl"
     :class="sidebarOpen ? 'w-64' : 'w-20'">
     <!-- Logo & Toggle -->
     <div
@@ -48,8 +48,9 @@
         </button>
     </div>
 
-    <!-- Navigation Links -->
-    <div class="flex-1 px-2 py-4 space-y-2 overflow-y-auto">
+    <!-- Navigation Links: scroll on their own, so the profile and log out below stay on screen -->
+    <div class="flex-1 min-h-0 px-2 py-4 space-y-2 overflow-y-auto overscroll-contain [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.35)_transparent]"
+        x-init="$nextTick(() => $el.querySelector('.bg-white\\/25')?.scrollIntoView({ block: 'nearest' }))">
         <!-- Dashboard -->
         @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD))
             <a href="{{ route('dashboard') }}"
@@ -291,7 +292,7 @@
         <!-- Schedule Section -->
         <div class="pt-2">
             <button @click="toggleSection('schedule')"
-                class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ward.schedule') ? 'bg-white/20' : '' }}">
+                class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ward.schedule') || request()->routeIs('ward.ai-schedule') ? 'bg-white/20' : '' }}">
                 <div class="flex items-center">
                     <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -314,6 +315,14 @@
                             d="M3 7h18M3 12h18M3 17h18" />
                     </svg>
                     <span class="ml-2">Ward Schedule</span>
+                </a>
+                <a href="{{ route('ward.ai-schedule') }}"
+                    class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ward.ai-schedule') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                    </svg>
+                    <span class="ml-2">AI Nurse Schedule</span>
                 </a>
             </div>
         </div>
@@ -496,7 +505,7 @@
     </div>
 
     <!-- User Profile & Footer (Bottom) -->
-    <div class="border-t border-blue-400/30 backdrop-blur-sm bg-white/10">
+    <div class="shrink-0 border-t border-blue-400/30 backdrop-blur-sm bg-white/10">
         <div x-show="sidebarOpen" x-transition class="p-4">
             <div class="flex items-center mb-4">
                 <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold">

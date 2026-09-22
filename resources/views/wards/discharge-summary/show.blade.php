@@ -5,12 +5,17 @@
      * by partials/section-toggle.
      */
     $tabs = [
-        'overview' => ['label' => 'Overview', 'keys' => ['patient', 'admission', 'discharge'], 'count' => null],
+        'overview' => ['label' => 'Overview', 'keys' => ['patient', 'admission', 'discharge', 'highlights', 'alerts'], 'count' => null],
+        'timeline' => ['label' => 'Timeline', 'keys' => ['timeline'], 'count' => $timeline['total'] ?: null],
         'care-team' => ['label' => 'Doctor & care team', 'keys' => ['care-team'], 'count' => $careTeam['careProviders']->count() ?: null],
         'nursing' => ['label' => 'Nursing team', 'keys' => ['nursing'], 'count' => $nursingRoster['nurses']->count() ?: null],
         'vitals' => ['label' => 'Vital signs', 'keys' => ['vitals'], 'count' => $vitalSigns->count() ?: null],
-        'ecg' => ['label' => 'ECG', 'keys' => ['ecg'], 'count' => $ecgFiles->count() ?: null],
-        'infusions' => ['label' => 'Infusions', 'keys' => ['infusions'], 'count' => $infusions->count() ?: null],
+        'fluid' => ['label' => 'I/O', 'keys' => ['fluid'], 'count' => $fluidBalance['entries']->count() ?: null],
+        'medications' => ['label' => 'Medications', 'keys' => ['medications'], 'count' => $medications->count() ?: null],
+        'infusions' => ['label' => 'Infusions', 'keys' => ['infusions', 'transfusions'], 'count' => ($infusions->count() + $transfusions->count()) ?: null],
+        'orders' => ['label' => 'Orders & notes', 'keys' => ['orders'], 'count' => ($consultantOrders->count() + $consultantNotes->count()) ?: null],
+        'assessments' => ['label' => 'Assessments', 'keys' => ['assessments', 'ecg'], 'count' => ($assessmentScores->count() + $glucoseReadings->count() + $ecgFiles->count()) ?: null],
+        'movements' => ['label' => 'Movements', 'keys' => ['movements'], 'count' => $movements->count() ?: null],
         'all' => ['label' => 'All sections', 'keys' => array_keys($sections), 'count' => null],
     ];
 @endphp

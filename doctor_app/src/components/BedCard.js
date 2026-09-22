@@ -4,6 +4,7 @@ import { colors, radius } from '../theme';
 import Pill from './Pill';
 import VitalsTrendModal from './VitalsTrendModal';
 import ConsultantNotesSection from './ConsultantNotesSection';
+import PatientChartModal from './chart/PatientChartModal';
 
 function ewsTone(ews) {
   if (ews == null) return { bg: 'rgba(255,255,255,0.18)', color: '#fff', label: 'No vitals' };
@@ -60,7 +61,18 @@ function DetailRow({ label, value, valueColor }) {
   );
 }
 
-export default function BedCard({ bed, doctorName }) {
+function signedMl(ml) {
+  const n = Number(ml ?? 0);
+  return `${n > 0 ? '+' : n < 0 ? '-' : ''}${Math.abs(n).toLocaleString('en-US')} mL`;
+}
+
+const LIMIT_COLORS = { ok: colors.emerald500, near: colors.amber500, over: colors.rose600 };
+
+export default function BedCard({ bed, doctorName, demo, onChartChanged }) {
+  const [chartTab, setChartTab] = useState(null);
+  const openChart = (tab) => setChartTab(tab);
+  const io = bed.io ?? null;
+  const medCounts = bed.medication_counts ?? { active: bed.active_medications?.length ?? 0, overdue: 0, due_soon: 0 };
   const [trendOpen, setTrendOpen] = useState(false);
   const [trendMetric, setTrendMetric] = useState('systolic_bp');
   const openTrend = (metricKey) => {
@@ -120,6 +132,35 @@ export default function BedCard({ bed, doctorName }) {
           ) : null}
         </View>
 
+        {/* The patient chart: the same I/O chart, medications and orders the ward works from */}
+        <View style={styles.chartRow}>
+          <TouchableOpacity style={styles.chartBtn} activeOpacity={0.8} onPress={() => openChart('io')}>
+            <Text style={styles.chartBtnLabel}>I/O CHART</Text>
+            <Text
+              style={[
+                styles.chartBtnValue,
+                io?.level === 'critical' && { color: colors.rose700 },
+                io?.level === 'warning' && { color: colors.amber700 },
+              ]}
+              numberOfLines={1}
+            >
+              {io ? signedMl(io.balance) : 'Open ›'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.chartBtn} activeOpacity={0.8} onPress={() => openChart('meds')}>
+            <Text style={styles.chartBtnLabel}>MEDICATIONS</Text>
+            <Text style={[styles.chartBtnValue, medCounts.overdue > 0 && { color: colors.rose700 }]} numberOfLines={1}>
+              {medCounts.overdue > 0 ? `${medCounts.overdue} overdue` : `${medCounts.active} active`}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.chartBtn} activeOpacity={0.8} onPress={() => openChart('orders')}>
+            <Text style={styles.chartBtnLabel}>ORDERS</Text>
+            <Text style={styles.chartBtnValue} numberOfLines={1}>
+              {bed.pending_orders > 0 ? `${bed.pending_orders} open` : 'Write ›'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.row2}>
           <View style={styles.miniBox}>
             <Text style={styles.miniLabel}>STAY</Text>
@@ -172,14 +213,71 @@ export default function BedCard({ bed, doctorName }) {
           </View>
         </View>
 
+        <TouchableOpacity style={styles.sectionBordered} activeOpacity={0.85} onPress={() => openChart('io')}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>I/O TODAY</Text>
+            <Text style={styles.chartLink}>Chart ›</Text>
+          </View>
+          {io ? (
+            <>
+              <View style={styles.row2}>
+                <View style={styles.miniBox}>
+                  <Text style={styles.miniLabel}>IN</Text>
+                  <Text style={[styles.miniValue, { color: colors.blue700 }]}>{Number(io.intake).toLocaleString('en-US')} mL</Text>
+                </View>
+                <View style={styles.miniBox}>
+                  <Text style={styles.miniLabel}>OUT</Text>
+                  <Text style={[styles.miniValue, { color: colors.amber700 }]}>{Number(io.output).toLocaleString('en-US')} mL</Text>
+                </View>
+                <View style={styles.miniBox}>
+                  <Text style={styles.miniLabel}>BALANCE</Text>
+                  <Text style={styles.miniValue}>{signedMl(io.balance)}</Text>
+                </View>
+              </View>
+              {io.limit ? (
+                <View style={{ marginTop: 10 }}>
+                  <View style={styles.limitTrack}>
+                    <View
+                      style={[
+                        styles.limitFill,
+                        { width: `${Math.min(100, io.limit.percent)}%`, backgroundColor: LIMIT_COLORS[io.limit.state] ?? colors.blue600 },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.limitText}>
+                    {io.limit.percent}% of the {Number(io.limit.limit).toLocaleString('en-US')} mL limit
+                  </Text>
+                </View>
+              ) : null}
+              {io.alerts.map((title) => (
+                <Text
+                  key={title}
+                  style={[styles.ioAlert, { color: io.level === 'critical' ? colors.rose700 : colors.amber700 }]}
+                >
+                  • {title}
+                </Text>
+              ))}
+            </>
+          ) : (
+            <Text style={styles.emptyText}>Nothing charted today and no fluid plan.</Text>
+          )}
+        </TouchableOpacity>
+
         <View style={styles.sectionBordered}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>ACTIVE MEDICATIONS</Text>
-            <Pill
-              label={`${bed.active_medications?.length ?? 0} items`}
-              bg={colors.slate100}
-              color={colors.slate600}
-            />
+            <View style={styles.pillRow}>
+              {medCounts.overdue > 0 ? (
+                <Pill label={`${medCounts.overdue} OVERDUE`} bg={colors.rose100} color={colors.rose700} />
+              ) : null}
+              <TouchableOpacity onPress={() => openChart('meds')} activeOpacity={0.8}>
+                <Pill
+                  label={`${bed.active_medications?.length ?? 0} items ›`}
+                  bg={colors.slate100}
+                  color={colors.slate600}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
           {!bed.active_medications || bed.active_medications.length === 0 ? (
             <Text style={styles.emptyText}>No active medications recorded.</Text>
@@ -264,6 +362,18 @@ export default function BedCard({ bed, doctorName }) {
         bed={bed}
         initialMetric={trendMetric}
       />
+
+      {bed.patient_id ? (
+        <PatientChartModal
+          visible={chartTab !== null}
+          initialTab={chartTab ?? 'io'}
+          onClose={() => setChartTab(null)}
+          bed={bed}
+          doctorName={doctorName}
+          demo={demo}
+          onChanged={onChartChanged}
+        />
+      ) : null}
     </View>
   );
 }
@@ -489,5 +599,56 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: colors.slate900,
+  },
+  chartRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  chartBtn: {
+    flex: 1,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.blue100,
+    backgroundColor: colors.blue50,
+    paddingVertical: 10,
+    paddingHorizontal: 10,
+  },
+  chartBtnLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: colors.blue700,
+  },
+  chartBtnValue: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: '800',
+    color: colors.slate900,
+  },
+  chartLink: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.blue700,
+  },
+  limitTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.slate100,
+    overflow: 'hidden',
+  },
+  limitFill: {
+    height: 8,
+    borderRadius: 4,
+  },
+  limitText: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.slate600,
+  },
+  ioAlert: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: '700',
   },
 });

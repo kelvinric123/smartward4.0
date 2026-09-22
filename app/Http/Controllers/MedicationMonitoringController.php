@@ -41,6 +41,7 @@ class MedicationMonitoringController extends Controller
             'dose_amount' => 'required|numeric|gt:0|max:100000',
             'dose_unit' => ['required', Rule::in(PatientMedication::DOSE_UNITS)],
             'route' => ['required', Rule::in(array_keys(PatientMedication::ROUTES))],
+            'infusion_volume_ml' => 'nullable|integer|min:1|max:' . \App\Models\FluidBalanceEntry::VOLUME_MAX,
             'frequency' => ['required', Rule::in(array_keys(PatientMedication::FREQUENCIES))],
             'interval_hours' => [
                 'nullable',
@@ -79,6 +80,10 @@ class MedicationMonitoringController extends Controller
             'dose_amount' => $validated['dose_amount'],
             'dose_unit' => $validated['dose_unit'],
             'route' => $validated['route'],
+            // Only an IV dose carries fluid onto the I/O chart
+            'infusion_volume_ml' => $validated['route'] === \App\Services\FluidBalanceLinks::IV_ROUTE
+                ? ($validated['infusion_volume_ml'] ?? null)
+                : null,
             'frequency' => $validated['frequency'],
             'interval_minutes' => PatientMedication::intervalMinutesFor(
                 $validated['frequency'],

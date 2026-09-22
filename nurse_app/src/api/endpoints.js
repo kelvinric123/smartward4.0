@@ -14,6 +14,9 @@
 //   GET   {BASE_URL}/api/nurse/dashboard
 //         resp:  { nurse, current_shift, ward, summary, beds: [...] }
 //
+//   Patient chart (orders, I/O, doses, infusions, alerts, stay timeline):
+//   see src/api/patient.js.
+//
 //   POST  {BASE_URL}/api/nurse/logout
 //   POST  {BASE_URL}/api/nurse/ping
 
@@ -32,7 +35,7 @@ export function getSessionToken() {
   return sessionToken;
 }
 
-async function apiFetch(path, { method = 'GET', body, token } = {}) {
+export async function apiFetch(path, { method = 'GET', body, token } = {}) {
   await ensureConfigLoaded();
   const url = `${getBaseUrl()}${path}`;
   const controller = new AbortController();
@@ -56,8 +59,8 @@ async function apiFetch(path, { method = 'GET', body, token } = {}) {
     const aborted = e?.name === 'AbortError';
     const err = new Error(
       aborted
-        ? 'Server did not respond. Check the API path in Settings.'
-        : 'Cannot reach the server. Check your network and the API path in Settings.'
+        ? `Server did not respond at ${getBaseUrl()}. Check the API path in Settings.`
+        : `Cannot reach the server at ${getBaseUrl()}. Check your network and the API path in Settings.`
     );
     err.cause = e;
     throw err;
@@ -73,8 +76,11 @@ async function apiFetch(path, { method = 'GET', body, token } = {}) {
   }
 
   if (!res.ok) {
+    // Validation errors (422) carry one message per field; the first one is
+    // the clearest thing to show on a phone.
+    const fieldErrors = data?.errors ? Object.values(data.errors).flat() : [];
     const err = new Error(
-      data?.message ?? `Request failed (HTTP ${res.status}).`
+      fieldErrors[0] ?? data?.message ?? `Request failed (HTTP ${res.status}).`
     );
     err.status = res.status;
     err.data = data;

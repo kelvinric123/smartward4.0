@@ -71,5 +71,12 @@ class AppServiceProvider extends ServiceProvider
         AdtConfiguration::observe(ConfigObserver::class);
         WardDashboardSetting::observe(ConfigObserver::class);
         ShiftSetting::observe(ConfigObserver::class);
+
+        // The I/O chart fills itself from blood units, IV doses, pump infusions
+        // and consultant orders with a fluid restriction (App\Services\FluidBalanceLinks)
+        \App\Models\BloodTransfusion::observe(\App\Observers\FluidBalance\BloodTransfusionObserver::class);
+        \App\Models\MedicationAdministration::observe(\App\Observers\FluidBalance\MedicationAdministrationObserver::class);
+        \App\Models\Infusion::observe(\App\Observers\FluidBalance\InfusionObserver::class);
+        \App\Models\ConsultantOrder::observe(\App\Observers\FluidBalance\ConsultantOrderObserver::class);
     }
 }

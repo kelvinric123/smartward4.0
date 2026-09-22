@@ -6,6 +6,12 @@
       "runtimeExecutable": "C:/laragon/bin/php/php-8.4/php.exe",
       "runtimeArgs": ["artisan", "serve", "--port=8000"],
       "port": 8000
+    },
+    {
+      "name": "nurse-app-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "nurse_app", "run", "web", "--", "--port", "8082"],
+      "port": 8082
     }
   ]
 }

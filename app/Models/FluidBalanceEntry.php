@@ -72,12 +72,17 @@ class FluidBalanceEntry extends Model
         'voided_at',
         'voided_by',
         'void_reason',
+        'source',
+        'source_id',
+        'source_reading',
     ];
 
     protected $casts = [
         'volume_ml' => 'integer',
         'recorded_at' => 'datetime',
         'voided_at' => 'datetime',
+        'source_id' => 'integer',
+        'source_reading' => 'float',
     ];
 
     public function patient(): BelongsTo
@@ -119,6 +124,18 @@ class FluidBalanceEntry extends Model
     public function isVoided(): bool
     {
         return $this->voided_at !== null;
+    }
+
+    /** Added by SmartWard from a blood unit, a dose or a pump (FluidBalanceLinks), not typed in. */
+    public function isAuto(): bool
+    {
+        return $this->source !== null;
+    }
+
+    /** "blood unit", "medication dose" or "infusion pump", for an automatic entry. */
+    public function sourceLabel(): ?string
+    {
+        return $this->source ? (\App\Services\FluidBalanceLinks::SOURCE_LABELS[$this->source] ?? $this->source) : null;
     }
 
     public function typeLabel(): string

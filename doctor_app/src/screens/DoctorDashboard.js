@@ -229,7 +229,7 @@ export default function DoctorDashboard({ session, onLogout }) {
           <StatCard
             label="ORDERS"
             value={summary.pending_orders}
-            sub="Awaiting your action"
+            sub="Open on the ward"
             tone="indigo"
           />
           <StatCard
@@ -308,7 +308,9 @@ export default function DoctorDashboard({ session, onLogout }) {
           </ScrollView>
         </View>
 
-        {bed ? <BedCard bed={bed} doctorName={doctor.name} /> : (
+        {bed ? (
+          <BedCard bed={bed} doctorName={doctor.name} demo={isDemo} onChartChanged={() => load(true)} />
+        ) : (
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>
               {loading ? 'Loading...' : wardFilter === 'all' ? 'No patients under your care' : 'No beds in this ward'}

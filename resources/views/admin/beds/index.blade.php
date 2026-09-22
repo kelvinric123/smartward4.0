@@ -29,6 +29,17 @@
                 </div>
             @endif
 
+            @if (session('error'))
+                <div class="mb-6 bg-gradient-to-r from-red-50 to-pink-50 border-l-4 border-red-500 text-red-800 px-6 py-4 rounded-lg shadow-md" role="alert">
+                    <div class="flex items-center">
+                        <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span class="font-medium">{{ session('error') }}</span>
+                    </div>
+                </div>
+            @endif
+
             <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-blue-100">
                 <div class="p-8">
                     <div class="overflow-x-auto">
@@ -77,15 +88,82 @@
                                                 </svg>
                                                 Edit
                                             </a>
-                                            <form action="{{ route('beds.deactivate', $bed) }}" method="POST" class="inline">
-                                                @csrf
-                                                <button type="submit" class="inline-flex items-center px-3 py-1.5 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 rounded-lg transition-colors mr-2">
+                                            {{-- Manage: deactivate / activate, and maintenance. The menu is moved
+                                                 to <body> so the table's scroll container cannot clip it. --}}
+                                            @php
+                                                // After the sync in index(), occupied/reserved means a patient is in or booked into the bed
+                                                $bedTaken = in_array($bed->status, ['occupied', 'reserved'], true);
+                                            @endphp
+                                            <div class="relative inline-block mr-2" x-data="{
+                                                    open: false,
+                                                    above: false,
+                                                    top: 0,
+                                                    left: 0,
+                                                    toggle() {
+                                                        if (this.open) { this.open = false; return; }
+                                                        const box = this.$refs.trigger.getBoundingClientRect();
+                                                        this.above = window.innerHeight - box.bottom < 160;
+                                                        this.top = this.above ? box.top - 4 : box.bottom + 4;
+                                                        this.left = box.right;
+                                                        this.open = true;
+                                                    },
+                                                }"
+                                                @keydown.escape.window="open = false"
+                                                @scroll.window.capture="open = false"
+                                                @resize.window="open = false">
+                                                <button type="button" x-ref="trigger" @click="toggle()" aria-haspopup="menu" :aria-expanded="open.toString()"
+                                                    class="inline-flex items-center px-3 py-1.5 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 rounded-lg transition-colors">
                                                     <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                                                     </svg>
-                                                    {{ $bed->is_active ? 'Deactivate' : 'Activate' }}
+                                                    Manage
+                                                    <svg class="w-3.5 h-3.5 ml-1 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                                    </svg>
                                                 </button>
-                                            </form>
+                                                <template x-teleport="body">
+                                                    <div x-show="open" x-cloak role="menu"
+                                                        @click.outside="if (!$refs.trigger.contains($event.target)) open = false"
+                                                        :style="{ top: top + 'px', left: left + 'px' }"
+                                                        :class="above ? '-translate-y-full' : ''"
+                                                        class="fixed z-50 -translate-x-full w-64 rounded-lg bg-white shadow-xl border border-gray-200 py-1 text-left text-sm">
+                                                        <form action="{{ route('beds.deactivate', $bed) }}" method="POST">
+                                                            @csrf
+                                                            <button type="submit" role="menuitem" class="w-full flex items-start gap-2 px-4 py-2 text-left text-gray-700 hover:bg-yellow-50">
+                                                                <svg class="w-4 h-4 mt-0.5 text-yellow-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                                                                </svg>
+                                                                <span>
+                                                                    <span class="block font-medium">{{ $bed->is_active ? 'Deactivate' : 'Activate' }}</span>
+                                                                    <span class="block text-xs text-gray-500">{{ $bed->is_active ? 'Hide this bed from use' : 'Put this bed back in use' }}</span>
+                                                                </span>
+                                                            </button>
+                                                        </form>
+                                                        <form action="{{ route('beds.maintenance', $bed) }}" method="POST">
+                                                            @csrf
+                                                            <button type="submit" role="menuitem" class="w-full flex items-start gap-2 px-4 py-2 text-left text-gray-700 hover:bg-gray-50">
+                                                                <svg class="w-4 h-4 mt-0.5 text-gray-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085"/>
+                                                                </svg>
+                                                                <span>
+                                                                    @if ($bed->isUnderMaintenance())
+                                                                        <span class="block font-medium">End maintenance</span>
+                                                                        <span class="block text-xs text-gray-500">Put this bed back in service</span>
+                                                                    @else
+                                                                        <span class="block font-medium">Maintenance</span>
+                                                                        @if ($bedTaken)
+                                                                            <span class="block text-xs text-red-600">A patient is in or booked into this bed: discharge, transfer or move them first</span>
+                                                                        @else
+                                                                            <span class="block text-xs text-gray-500">Take this bed out of service</span>
+                                                                        @endif
+                                                                    @endif
+                                                                </span>
+                                                            </button>
+                                                        </form>
+                                                    </div>
+                                                </template>
+                                            </div>
                                             <form action="{{ route('beds.destroy', $bed) }}" method="POST" class="inline">
                                                 @csrf
                                                 @method('DELETE')

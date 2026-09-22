@@ -45,9 +45,9 @@
 
     // Only errors from this tab's own forms, which post active_tab=orders
     $ownErrors = old('active_tab') === 'orders';
-    $orderFormErrors = $ownErrors && $errors->hasAny(['instruction', 'urgency', 'consultant_id', 'ordered_at']);
+    $orderFormErrors = $ownErrors && $errors->hasAny(['instruction', 'fluid_limit_ml', 'urine_min_ml_per_hour', 'urgency', 'consultant_id', 'ordered_at']);
     $orderErrors = $ownErrors
-        ? collect(['instruction', 'urgency', 'consultant_id', 'ordered_at', 'outcome_note', 'order_ids', 'note', 'to'])
+        ? collect(['instruction', 'fluid_limit_ml', 'urine_min_ml_per_hour', 'urgency', 'consultant_id', 'ordered_at', 'outcome_note', 'order_ids', 'note', 'to'])
             ->flatMap(fn ($field) => $errors->get($field))
         : collect();
 
@@ -192,6 +192,32 @@
                         class="block w-full rounded-lg border-gray-300 shadow-sm text-sm focus:border-blue-500 focus:ring-blue-500">{{ old('instruction') }}</textarea>
                 </div>
 
+                {{-- A fluid restriction here becomes the patient's I/O fluid plan when the order is saved --}}
+                <div class="sm:col-span-2 rounded-lg border border-cyan-200 bg-white px-3 py-2"
+                    x-data="{ fluid: {{ old('fluid_limit_ml') || old('urine_min_ml_per_hour') ? 'true' : 'false' }} }">
+                    <label class="flex cursor-pointer items-center gap-2 text-xs font-semibold text-gray-700">
+                        <input type="checkbox" x-model="fluid" class="rounded border-gray-300 text-cyan-600 focus:ring-cyan-500">
+                        Includes a fluid restriction
+                        <span class="font-normal text-gray-500">(sets the I/O chart's fluid plan)</span>
+                    </label>
+                    <div x-show="fluid" x-cloak class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div>
+                            <label for="co_fluid_limit" class="block text-xs font-medium text-gray-600 mb-1">Intake up to (mL per day)</label>
+                            <input type="number" id="co_fluid_limit" name="fluid_limit_ml" :disabled="!fluid"
+                                min="{{ \App\Models\FluidBalancePlan::LIMIT_MIN }}" max="{{ \App\Models\FluidBalancePlan::LIMIT_MAX }}" step="50"
+                                value="{{ old('fluid_limit_ml') }}" placeholder="e.g. 1500"
+                                class="block w-full rounded-lg border-gray-300 shadow-sm text-sm focus:border-cyan-500 focus:ring-cyan-500">
+                        </div>
+                        <div>
+                            <label for="co_urine_min" class="block text-xs font-medium text-gray-600 mb-1">Urine at least (mL/h)</label>
+                            <input type="number" id="co_urine_min" name="urine_min_ml_per_hour" :disabled="!fluid"
+                                min="{{ \App\Models\FluidBalancePlan::URINE_MIN }}" max="{{ \App\Models\FluidBalancePlan::URINE_MAX }}"
+                                value="{{ old('urine_min_ml_per_hour') }}" placeholder="e.g. 30"
+                                class="block w-full rounded-lg border-gray-300 shadow-sm text-sm focus:border-cyan-500 focus:ring-cyan-500">
+                        </div>
+                    </div>
+                </div>
+
                 <div class="sm:col-span-2">
                     <span class="block text-xs font-semibold text-gray-700 mb-1">Urgency</span>
                     <div class="flex flex-wrap gap-2">
@@ -286,6 +312,11 @@
                         </span>
                     </div>
                     <p class="mt-1 whitespace-pre-line text-sm text-gray-900">{{ $order->instruction }}</p>
+                    @if ($restriction = \App\Services\FluidBalanceLinks::restrictionSummary($order))
+                        <p class="mt-1 inline-flex items-center gap-1 rounded-md border border-cyan-200 bg-cyan-50 px-2 py-0.5 text-xs font-medium text-cyan-800">
+                            {{ $restriction }} &middot; set on the I/O chart
+                        </p>
+                    @endif
 
                     <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
                         <span class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 {{ $order->assignedNurse ? 'border-pink-200 bg-pink-50 text-pink-800' : 'border-amber-200 bg-amber-50 text-amber-800' }}">
@@ -452,6 +483,9 @@
                                 </td>
                                 <td class="px-3 py-2 text-gray-800">
                                     <p class="whitespace-pre-line">{{ $order->instruction }}</p>
+                                    @if ($restriction = \App\Services\FluidBalanceLinks::restrictionSummary($order))
+                                        <p class="text-xs font-medium text-cyan-800">{{ $restriction }}</p>
+                                    @endif
                                     <div class="text-xs text-gray-500">
                                         {{ $order->consultant_name ?? 'Consultant not recorded' }}
                                         @if ($order->assignedNurse)

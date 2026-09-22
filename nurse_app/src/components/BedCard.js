@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors, radius } from '../theme';
 import Pill from './Pill';
 
@@ -48,7 +48,27 @@ function DetailRow({ label, value, valueColor }) {
   );
 }
 
-export default function BedCard({ bed, fallbackNurse }) {
+/** What is waiting for this patient, as short labels with a tone. */
+function todoItems(badges) {
+  if (!badges) return [];
+  const items = [];
+  if (badges.orders_open) {
+    items.push({
+      label: `${badges.orders_open} ${badges.orders_open === 1 ? 'order' : 'orders'}${badges.orders_stat ? ` (${badges.orders_stat} STAT)` : ''}`,
+      critical: badges.orders_stat > 0,
+    });
+  }
+  if (badges.meds_overdue) items.push({ label: `${badges.meds_overdue} ${badges.meds_overdue === 1 ? 'dose' : 'doses'} overdue`, critical: true });
+  else if (badges.meds_due_soon) items.push({ label: `${badges.meds_due_soon} due soon`, critical: false });
+  if (badges.io_level) items.push({ label: 'I/O alert', critical: badges.io_level === 'critical' });
+  if (badges.transfusions_running) items.push({ label: `${badges.transfusions_running === 1 ? 'Blood unit' : `${badges.transfusions_running} blood units`} running`, critical: true });
+  else if (badges.transfusions_pending) items.push({ label: 'Blood unit to check', critical: false });
+  if (badges.alerts_pending) items.push({ label: `${badges.alerts_pending} ${badges.alerts_pending === 1 ? 'call' : 'calls'}`, critical: false });
+  return items;
+}
+
+export default function BedCard({ bed, fallbackNurse, onOpen }) {
+  const todo = todoItems(bed.badges);
   const ews = bed.ews_has_vitals ? bed.ews : null;
   const ewsBadge = ewsTone(ews);
   const headerBg = headerGradientFor(bed.status);
@@ -80,6 +100,29 @@ export default function BedCard({ bed, fallbackNurse }) {
       </View>
 
       <View style={styles.body}>
+        {bed.patient_id && onOpen ? (
+          <TouchableOpacity activeOpacity={0.85} onPress={onOpen} style={styles.openBtn}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.openTitle}>Open patient chart</Text>
+              {todo.length ? (
+                <View style={styles.todoRow}>
+                  {todo.map((item, i) => (
+                    <Pill
+                      key={i}
+                      label={item.label}
+                      bg={item.critical ? colors.rose100 : colors.amber100}
+                      color={item.critical ? colors.rose700 : colors.amber700}
+                    />
+                  ))}
+                </View>
+              ) : (
+                <Text style={styles.openMeta}>Orders · I/O chart · Meds · Infusion · Alerts</Text>
+              )}
+            </View>
+            <Text style={styles.openArrow}>›</Text>
+          </TouchableOpacity>
+        ) : null}
+
         <View style={styles.row2}>
           <View style={styles.miniBox}>
             <Text style={styles.miniLabel}>STAY</Text>
@@ -246,6 +289,39 @@ const styles = StyleSheet.create({
   row2: {
     flexDirection: 'row',
     gap: 10,
+  },
+  openBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.lg,
+    backgroundColor: colors.cyan50,
+    borderWidth: 1,
+    borderColor: colors.cyan200,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  openTitle: {
+    color: colors.cyan900,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  openMeta: {
+    marginTop: 2,
+    color: colors.cyan700,
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  todoRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  openArrow: {
+    marginLeft: 8,
+    color: colors.cyan700,
+    fontSize: 26,
+    fontWeight: '800',
   },
   miniBox: {
     flex: 1,

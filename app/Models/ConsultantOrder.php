@@ -35,6 +35,8 @@ class ConsultantOrder extends Model
         'consultant_id',
         'consultant_name',
         'instruction',
+        'fluid_limit_ml',
+        'urine_min_ml_per_hour',
         'urgency',
         'ordered_at',
         'assigned_nurse_id',
@@ -51,6 +53,9 @@ class ConsultantOrder extends Model
         'ordered_at' => 'datetime',
         'shift_date' => 'date',
         'closed_at' => 'datetime',
+        // A fluid restriction the order carries; it sets the I/O fluid plan (FluidBalanceLinks)
+        'fluid_limit_ml' => 'integer',
+        'urine_min_ml_per_hour' => 'integer',
     ];
 
     public function patient(): BelongsTo

@@ -405,7 +405,7 @@ class BloodTransfusion extends Model
                 'level' => 'warning',
                 'title' => 'Past predicted end time',
                 'detail' => 'Expected to finish ' . $end->format('d M H:i')
-                    . ', ' . $end->diffInMinutes(now()) . ' min ago.',
+                    . ', ' . (int) round($end->diffInMinutes(now())) . ' min ago.',
             ];
         }
 

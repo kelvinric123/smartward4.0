@@ -48,7 +48,7 @@
                 </p>
                 <p class="mt-1 text-sm text-amber-800">
                     This summary covers an admission that is still open, so it may not be correct or complete.
-                    Readings, ECGs and infusions recorded between now and the actual discharge will not appear here.
+                    Anything recorded between now and the actual discharge will not appear here.
                     Print it only as an interim record.
                 </p>
             </div>
@@ -134,6 +134,9 @@
         </dl>
     </section>
 </div>
+
+@include('wards.discharge-summary.partials.sections.highlights')
+@include('wards.discharge-summary.partials.sections.alerts')
 
 {{-- Doctors --}}
 <section data-section="care-team" class="mb-5 {{ $sectionBox }}">
@@ -290,6 +293,8 @@
     @endif
 </section>
 
+@include('wards.discharge-summary.partials.sections.timeline')
+
 {{-- Vital signs --}}
 <section data-section="vitals" class="mb-5 rounded-lg border border-gray-300 bg-white">
     <h3 class="{{ $sectionHeading }}">
@@ -331,6 +336,8 @@
                         <th class="px-2 py-1.5 font-semibold">Temp</th>
                         <th class="px-2 py-1.5 font-semibold">SpO2</th>
                         <th class="px-2 py-1.5 font-semibold">RR</th>
+                        <th class="px-2 py-1.5 font-semibold">O&#8322;</th>
+                        <th class="px-2 py-1.5 font-semibold" title="Scored with the ward dashboard's {{ $ews['label'] }} settings">{{ $ews['label'] }}</th>
                         <th class="px-2 py-1.5 font-semibold">Type</th>
                         <th class="px-4 py-1.5 font-semibold">By</th>
                     </tr>
@@ -347,6 +354,11 @@
                             </td>
                             <td class="px-2 py-1.5">{{ $vital->spo2_display ?? '—' }}</td>
                             <td class="px-2 py-1.5">{{ $vital->respiratory_rate ?? '—' }}</td>
+                            <td class="whitespace-nowrap px-2 py-1.5 text-gray-600">{{ $vital->oxygen_delivery ? $vital->oxygenShortLabel() : '—' }}</td>
+                            @php $vitalEwsScore = $vitalEws[$vital->id] ?? null; @endphp
+                            <td class="px-2 py-1.5 font-semibold {{ $vitalEwsScore === null ? 'text-gray-400' : ($vitalEwsScore >= 5 ? 'text-red-700' : ($vitalEwsScore >= 3 ? 'text-amber-700' : 'text-gray-900')) }}">
+                                {{ $vitalEwsScore ?? '—' }}
+                            </td>
                             <td class="px-2 py-1.5 capitalize text-gray-600">{{ $vital->reading_type ?? '—' }}</td>
                             <td class="px-4 py-1.5 text-gray-600">
                                 {{ $vital->operator?->name ?? $vital->recordedBy?->name ?? ($vital->gateway_id ? 'Gateway ' . $vital->gateway_id : '—') }}
@@ -359,29 +371,8 @@
     @endif
 </section>
 
-{{-- ECG: how many were taken, and when. The traces themselves stay in the ECG
-     store as their own reports - this summary counts them, it does not
-     reproduce them. --}}
-<section data-section="ecg" class="mb-5 {{ $sectionBox }}">
-    <h3 class="{{ $sectionHeading }}">ECG recordings</h3>
-
-    @if ($ecgFiles->isEmpty())
-        <p class="px-4 py-3 text-sm text-gray-500">No ECG was recorded during this admission.</p>
-    @else
-        <div class="flex flex-wrap items-baseline gap-x-8 gap-y-2 px-4 py-3">
-            <p class="text-gray-900">
-                <span class="text-2xl font-bold">{{ $ecgFiles->count() }}</span>
-                {{-- Str::plural would shout "ECGS" back at an all-caps word --}}
-                <span class="ml-1 text-sm font-semibold">ECG{{ $ecgFiles->count() === 1 ? '' : 's' }} taken</span>
-                <span class="text-sm text-gray-500">during this admission</span>
-            </p>
-            <p class="text-sm text-gray-600">
-                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Recorded</span>
-                {{ $ecgFiles->map(fn($ecg) => \Carbon\Carbon::parse($ecg['recorded_at'])->format('d M Y, H:i'))->implode(' · ') }}
-            </p>
-        </div>
-    @endif
-</section>
+@include('wards.discharge-summary.partials.sections.fluid')
+@include('wards.discharge-summary.partials.sections.medications')
 
 {{-- Infusions --}}
 <section data-section="infusions" class="mb-5 rounded-lg border border-gray-300 bg-white">
@@ -471,3 +462,34 @@
         @endif
     @endif
 </section>
+
+@include('wards.discharge-summary.partials.sections.transfusions')
+@include('wards.discharge-summary.partials.sections.orders')
+@include('wards.discharge-summary.partials.sections.assessments')
+
+{{-- ECG: how many were taken, and when. The traces themselves stay in the ECG
+     store as their own reports - this summary counts them, it does not
+     reproduce them. --}}
+<section data-section="ecg" class="mb-5 {{ $sectionBox }}">
+    <h3 class="{{ $sectionHeading }}">ECG recordings</h3>
+
+    @if ($ecgFiles->isEmpty())
+        <p class="px-4 py-3 text-sm text-gray-500">No ECG was recorded during this admission.</p>
+    @else
+        <div class="flex flex-wrap items-baseline gap-x-8 gap-y-2 px-4 py-3">
+            <p class="text-gray-900">
+                <span class="text-2xl font-bold">{{ $ecgFiles->count() }}</span>
+                {{-- Str::plural would shout "ECGS" back at an all-caps word --}}
+                <span class="ml-1 text-sm font-semibold">ECG{{ $ecgFiles->count() === 1 ? '' : 's' }} taken</span>
+                <span class="text-sm text-gray-500">during this admission</span>
+            </p>
+            <p class="text-sm text-gray-600">
+                <span class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Recorded</span>
+                {{ $ecgFiles->map(fn($ecg) => \Carbon\Carbon::parse($ecg['recorded_at'])->format('d M Y, H:i'))->implode(' · ') }}
+            </p>
+        </div>
+    @endif
+</section>
+
+@include('wards.discharge-summary.partials.sections.movements')
+@include('wards.discharge-summary.partials.sections.signoff')

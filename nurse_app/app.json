@@ -2,7 +2,7 @@
   "expo": {
     "name": "Nurse Dashboard",
     "slug": "nurse-app",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,9 +13,10 @@
     },
     "android": {
       "package": "com.smartward.nurseapp",
-      "versionCode": 1,
+      "versionCode": 3,
       "permissions": [
-        "INTERNET"
+        "INTERNET",
+        "android.permission.CAMERA"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#0b2435",
@@ -34,6 +35,15 @@
           "android": {
             "usesCleartextTraffic": true
           }
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to use the camera to scan blood unit and crossmatch barcodes.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
         }
       ]
     ]

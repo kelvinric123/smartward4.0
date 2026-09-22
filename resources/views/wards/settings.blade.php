@@ -503,6 +503,8 @@
                                 'infusion' => 'Infusion Management',
                                 'transfer' => 'Transfer Bed',
                                 'discharge' => 'Discharge',
+                                'discharge_summary' => 'Discharge Summary',
+                                'nursing_plan' => 'Nursing Plan',
                             ];
 
                             $descs = [
@@ -518,6 +520,8 @@
                                 'infusion' => 'IV fluids and medication management.',
                                 'transfer' => 'Move patient to another bed or ward.',
                                 'discharge' => 'Process patient discharge.',
+                                'discharge_summary' => 'The admission as a printable discharge summary: stay at a glance, care team, a day-by-day timeline of every event (vitals, I/O, doses, orders, ...) and sign-off. Readable before discharge as a provisional copy.',
+                                'nursing_plan' => 'The nursing care plan (diagnoses, goals, interventions, evaluated each shift) and what is due this shift, gathered from doses, orders, assessments, I/O, blood and infusions. Shared with the nurse app.',
                             ];
                         @endphp
 

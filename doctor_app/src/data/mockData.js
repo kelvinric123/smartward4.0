@@ -59,6 +59,16 @@ export const consultantBeds = [
     pending_review: true,
     pending_orders: 2,
     last_hgt: { value: '8.2 mmol/L' },
+    // Today's I/O and medications, as the dashboard sends them (see mockChart.js for the full chart)
+    io: {
+      intake: 950,
+      output: 550,
+      balance: 400,
+      limit: { limit: 1500, taken: 950, percent: 63, remaining: 550, over_by: 0, state: 'ok' },
+      level: 'warning',
+      alerts: ['Signs of fluid overload'],
+    },
+    medication_counts: { active: 3, overdue: 1, due_soon: 1 },
     vitals: {
       recorded_at_label: '16 Jun 09:42',
       pulse_rate: 112,
@@ -131,6 +141,8 @@ export const consultantBeds = [
     pending_review: true,
     pending_orders: 1,
     current_movement_location: 'Radiology - CT scan',
+    io: { intake: 700, output: 550, balance: 150, limit: null, level: null, alerts: [] },
+    medication_counts: { active: 3, overdue: 1, due_soon: 1 },
     last_hgt: { value: '11.6 mmol/L' },
     vitals: {
       recorded_at_label: '16 Jun 09:15',

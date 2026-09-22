@@ -230,6 +230,20 @@
                         </select>
                     </div>
 
+                    {{-- Each IV dose given is charted on the I/O chart in this volume --}}
+                    <div x-show="route === '{{ \App\Services\FluidBalanceLinks::IV_ROUTE }}'" x-cloak class="sm:col-span-2">
+                        <label class="{{ $labelClass }}">IV volume per dose (mL)</label>
+                        <input type="number" name="infusion_volume_ml" min="1" max="{{ \App\Models\FluidBalanceEntry::VOLUME_MAX }}"
+                            :disabled="route !== '{{ \App\Services\FluidBalanceLinks::IV_ROUTE }}'"
+                            value="{{ $addFailed ? old('infusion_volume_ml') : '' }}" placeholder="e.g. 100 (the bag or syringe it is given in)"
+                            class="{{ $fieldClass }}">
+                        <p class="mt-1 text-[11px] text-gray-500">Optional. Each dose recorded as given adds this volume to the
+                            I/O chart as IV medication. A dose written in mL counts as its own volume.</p>
+                        @error('infusion_volume_ml')
+                            <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
+                        @enderror
+                    </div>
+
                     <div class="sm:col-span-2">
                         <label class="{{ $labelClass }}">Frequency <span class="text-red-500">*</span></label>
                         <select name="frequency" x-model="frequency" @change="syncFirstDose()" required class="{{ $fieldClass }}">
@@ -398,6 +412,9 @@
                         <span class="text-gray-400 mx-1">&middot;</span>{{ $order->routeLabel() }}
                         <span class="text-gray-400 mx-1">&middot;</span>{{ $order->frequencyLabel() }}
                     </div>
+                    @if ($ioVolume = \App\Services\FluidBalanceLinks::doseVolume($order))
+                        <div class="mt-1 text-xs text-cyan-700">Each dose given adds {{ number_format($ioVolume) }} mL to the I/O chart</div>
+                    @endif
                     @if ($order->instructions)
                         <div class="mt-1 text-xs text-gray-600">{{ $order->instructions }}</div>
                     @endif

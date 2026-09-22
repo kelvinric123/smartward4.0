@@ -139,6 +139,36 @@ class BedController extends Controller
         return redirect()->route('beds.index')->with('success', "Bed {$status} successfully.");
     }
 
+    /**
+     * Put a bed under maintenance, or bring it back into service. A bed can only
+     * go under maintenance while nobody is admitted to it or booked into it; the
+     * user is told who is there and what to do first.
+     */
+    public function maintenance(Bed $bed)
+    {
+        $label = $bed->bed_display_name ?: $bed->bed_number;
+
+        if ($bed->isUnderMaintenance()) {
+            $bed->update(['status' => 'available']);
+
+            return back()->with('success', "Bed {$label} is back in service.");
+        }
+
+        $occupant = $bed->occupant();
+        if ($occupant) {
+            $reason = in_array($occupant->status, [Patient::STATUS_PREBOOK, Patient::STATUS_PREBOOK_PENDING], true)
+                ? "it is prebooked for {$occupant->name}. Cancel or move the prebooking first."
+                : "{$occupant->name} is admitted to it. Discharge or transfer the patient first.";
+
+            return back()->with('error', "Bed {$label} cannot go under maintenance: {$reason}");
+        }
+
+        $bed->update(['status' => Bed::STATUS_MAINTENANCE, 'patient_id' => null]);
+
+        return back()->with('success', "Bed {$label} is now under maintenance. Nobody can be admitted, "
+            . 'prebooked or transferred to it until maintenance ends.');
+    }
+
     public function destroy(Bed $bed)
     {
         $bed->delete();

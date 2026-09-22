@@ -70,6 +70,7 @@ class PatientMedication extends Model
         'medication_name',
         'dose_amount',
         'dose_unit',
+        'infusion_volume_ml',
         'route',
         'frequency',
         'interval_minutes',
@@ -87,6 +88,8 @@ class PatientMedication extends Model
 
     protected $casts = [
         'dose_amount' => 'decimal:3',
+        // The volume an IV dose is given in; each dose given is charted as I/O intake (FluidBalanceLinks)
+        'infusion_volume_ml' => 'integer',
         'interval_minutes' => 'integer',
         'is_high_alert' => 'boolean',
         'start_at' => 'datetime',

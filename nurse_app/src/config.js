@@ -5,8 +5,17 @@
 // password protected). It persists across app restarts via AsyncStorage.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
-export const DEFAULT_BASE_URL = 'http://192.168.0.88:18080';
+// Phone / APK default: the ward's Smart Ward server.
+const DEVICE_DEFAULT_BASE_URL = 'http://192.168.0.88:18080';
+
+// In a browser (`npm run web`, for development) the Laravel dev server is on
+// the same machine, so default to it: port 8000, as `php artisan serve` uses.
+export const DEFAULT_BASE_URL =
+  Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.hostname
+    ? `${window.location.protocol}//${window.location.hostname}:8000`
+    : DEVICE_DEFAULT_BASE_URL;
 
 // Password required to open the settings dialog on the login screen.
 export const SETTINGS_PASSWORD = '1324';

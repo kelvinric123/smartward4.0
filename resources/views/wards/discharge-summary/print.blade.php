@@ -12,9 +12,16 @@
     $sectionSizes = [
         'care-team' => $careTeam['careProviders']->count(),
         'nursing' => $nursingRoster['nurses']->count(),
+        'timeline' => $timeline['total'],
         'vitals' => $vitalSigns->count(),
+        'fluid' => $fluidBalance['entries']->count(),
+        'medications' => $medications->count(),
         'ecg' => $ecgFiles->count(),
         'infusions' => $infusions->count(),
+        'transfusions' => $transfusions->count(),
+        'orders' => $consultantOrders->count() + $consultantNotes->count(),
+        'assessments' => $assessmentScores->count() + $glucoseReadings->count(),
+        'movements' => $movements->count(),
     ];
 @endphp
 
@@ -211,7 +218,12 @@
             document.querySelector('[data-no-sections]').hidden = chosen.length > 0;
 
             try {
-                localStorage.setItem(sectionChoiceKey, JSON.stringify(chosen));
+                // Saved with the sections that existed, so one added later
+                // starts out ticked instead of silently missing from print.
+                localStorage.setItem(sectionChoiceKey, JSON.stringify({
+                    chosen: chosen,
+                    known: checkboxes.map(function (box) { return box.dataset.printSection; }),
+                }));
             } catch (e) {
                 // Private browsing or blocked storage: the choice just will not
                 // be remembered for next time.
@@ -226,9 +238,14 @@
         function restoreSectionChoice() {
             try {
                 const stored = JSON.parse(localStorage.getItem(sectionChoiceKey) || 'null');
-                if (Array.isArray(stored) && stored.length) {
+                // Older copies saved a bare list, from when only these existed.
+                const legacyKnown = ['patient', 'admission', 'discharge', 'care-team', 'nursing', 'vitals', 'ecg', 'infusions'];
+                const chosen = Array.isArray(stored) ? stored : (stored && Array.isArray(stored.chosen) ? stored.chosen : null);
+                const known = Array.isArray(stored) ? legacyKnown : (stored && Array.isArray(stored.known) ? stored.known : []);
+                if (chosen && chosen.length) {
                     checkboxes.forEach(function (box) {
-                        box.checked = stored.includes(box.dataset.printSection);
+                        const key = box.dataset.printSection;
+                        box.checked = chosen.includes(key) || !known.includes(key);
                     });
                 }
             } catch (e) {

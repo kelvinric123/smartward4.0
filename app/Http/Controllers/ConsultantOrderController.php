@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Consultant;
 use App\Models\ConsultantOrder;
 use App\Models\ConsultantOrderHandover;
+use App\Models\FluidBalancePlan;
 use App\Models\Patient;
 use App\Services\ShiftHandover;
 use Illuminate\Http\Request;
@@ -28,6 +29,9 @@ class ConsultantOrderController extends Controller
         $validated = $request->validate([
             'patient_id' => 'required|exists:patients,id',
             'instruction' => 'required|string|max:2000',
+            // An optional fluid restriction, which becomes the I/O fluid plan (FluidBalanceLinks)
+            'fluid_limit_ml' => 'nullable|integer|between:' . FluidBalancePlan::LIMIT_MIN . ',' . FluidBalancePlan::LIMIT_MAX,
+            'urine_min_ml_per_hour' => 'nullable|integer|between:' . FluidBalancePlan::URINE_MIN . ',' . FluidBalancePlan::URINE_MAX,
             'urgency' => ['required', Rule::in(array_keys(ConsultantOrder::URGENCIES))],
             'consultant_id' => 'required|exists:consultants,id',
             'ordered_at' => [
@@ -50,6 +54,8 @@ class ConsultantOrderController extends Controller
             'consultant_id' => $consultant->id,
             'consultant_name' => $consultant->name,
             'instruction' => trim($validated['instruction']),
+            'fluid_limit_ml' => $validated['fluid_limit_ml'] ?? null,
+            'urine_min_ml_per_hour' => $validated['urine_min_ml_per_hour'] ?? null,
             'urgency' => $validated['urgency'],
             'ordered_at' => $validated['ordered_at'] ?? now(),
             'assigned_nurse_id' => $slot['nurse']?->id,
