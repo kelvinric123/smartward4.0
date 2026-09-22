@@ -11,6 +11,7 @@
             font-family: 'Inter', sans-serif;
         }
     </style>
+    @include('components.autofill-guard')
 </head>
 
 <body class="bg-gray-50">

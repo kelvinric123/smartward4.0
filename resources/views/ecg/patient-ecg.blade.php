@@ -43,6 +43,7 @@
             height: calc(100vh - 50px);
         }
     </style>
+    @include('components.autofill-guard')
 </head>
 
 <body class="bg-gray-100">

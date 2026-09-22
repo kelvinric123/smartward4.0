@@ -96,9 +96,13 @@
                     existingAssignments: @js($assignments),
                     nurses: @js($nurses),
                     sectionAssignSection: '',
+                    sectionAssignWard: '{{ $nurses->where('ward_id', $selectedWardId)->count() ? $selectedWardId : '' }}',
                     sectionAssignNurse: '',
                     sectionAssignShifts: [], // Default none selected
                     sectionAssignExcludedBeds: [],
+                    nurseSearch: '',
+                    nurseListOpen: false,
+                    nurseHighlight: -1,
 
                     submitFilters() {
                         if (this.$refs.filterForm) {
@@ -201,6 +205,68 @@
                         const nurse = this.nurses.find(n => n.id == nurseId);
                         if (!nurse || !nurse.is_tagging || !nurse.tagging_nurses || !nurse.tagging_nurses.length) return '-';
                         return nurse.tagging_nurses.map(tn => tn.name).join(', ');
+                    },
+
+                    // Section Assign - nurse picker (ward filter + text search)
+                    wardNurses() {
+                        const ward = this.sectionAssignWard;
+                        if (ward === '') return this.nurses;
+                        if (ward === 'unassigned') return this.nurses.filter(n => !n.ward_id);
+                        return this.nurses.filter(n => String(n.ward_id) === String(ward));
+                    },
+                    filteredNurses() {
+                        const term = this.nurseSearch.trim().toLowerCase();
+                        const list = this.wardNurses();
+                        if (!term) return list;
+                        return list.filter(n =>
+                            (n.name || '').toLowerCase().includes(term)
+                            || (n.registration_number || '').toLowerCase().includes(term)
+                            || (n.designation || '').toLowerCase().includes(term)
+                        );
+                    },
+                    nurseOptionLabel(nurse) {
+                        return nurse.name + (nurse.registration_number ? ' · ' + nurse.registration_number : '');
+                    },
+                    selectedNurseLabel() {
+                        const nurse = this.nurses.find(n => n.id == this.sectionAssignNurse);
+                        return nurse ? this.nurseOptionLabel(nurse) : '';
+                    },
+                    openNurseList() {
+                        if (!this.hasNurses) return;
+                        this.nurseListOpen = true;
+                        this.nurseHighlight = this.filteredNurses().findIndex(n => n.id == this.sectionAssignNurse);
+                        this.$nextTick(() => this.$refs.nurseSearchInput?.focus());
+                    },
+                    closeNurseList() {
+                        this.nurseListOpen = false;
+                        this.nurseSearch = '';
+                        this.nurseHighlight = -1;
+                    },
+                    chooseNurse(nurse) {
+                        this.sectionAssignNurse = String(nurse.id);
+                        this.closeNurseList();
+                    },
+                    moveNurseHighlight(step) {
+                        const count = this.filteredNurses().length;
+                        if (!count) { this.nurseHighlight = -1; return; }
+                        this.nurseHighlight = (this.nurseHighlight + step + count) % count;
+                        this.$nextTick(() => {
+                            const row = this.$refs.nurseListBox?.querySelectorAll('[data-nurse-option]')[this.nurseHighlight];
+                            row?.scrollIntoView({ block: 'nearest' });
+                        });
+                    },
+                    chooseHighlightedNurse() {
+                        const list = this.filteredNurses();
+                        const nurse = list[this.nurseHighlight] ?? (list.length === 1 ? list[0] : null);
+                        if (nurse) this.chooseNurse(nurse);
+                    },
+                    onNurseWardChange() {
+                        // A nurse the new ward filter hides must not stay selected,
+                        // or the button would name someone who is no longer listed.
+                        if (!this.wardNurses().some(n => n.id == this.sectionAssignNurse)) {
+                            this.sectionAssignNurse = '';
+                        }
+                        this.nurseHighlight = -1;
                     },
                     submitSectionAssign() {
                         this.assignError = '';
@@ -652,22 +718,91 @@
                                             </select>
                                         </div>
 
-                                        <!-- Nurse Select -->
+                                        <!-- Ward Filter (narrows the nurse list below) -->
+                                        <div>
+                                            <label class="block text-sm font-semibold text-gray-700">Filter by
+                                                Ward</label>
+                                            <select x-model="sectionAssignWard" @change="onNurseWardChange()"
+                                                class="w-full rounded-lg border-gray-200 shadow-sm focus:ring-blue-500 focus:border-blue-500 mt-1 disabled:bg-gray-100 disabled:text-gray-500"
+                                                :disabled="!hasNurses">
+                                                <option value="">All wards</option>
+                                                @foreach($wards as $ward)
+                                                    <option value="{{ $ward->id }}">
+                                                        {{ $ward->ward_name }}{{ $ward->ward_code ? ' (' . $ward->ward_code . ')' : '' }}
+                                                    </option>
+                                                @endforeach
+                                                <option value="unassigned">Unassigned</option>
+                                            </select>
+                                        </div>
+
+                                        <!-- Nurse Select (searchable) -->
                                         <div>
                                             <label class="block text-sm font-semibold text-gray-700">Select
                                                 Nurse</label>
-                                            <select x-model="sectionAssignNurse"
-                                                class="w-full rounded-lg border-gray-200 shadow-sm focus:ring-blue-500 focus:border-blue-500 mt-1 disabled:bg-gray-100 disabled:text-gray-500"
-                                                :disabled="!hasNurses">
-                                                <option value="">Choose a nurse...</option>
-                                                @forelse($nurses as $nurse)
-                                                    <option value="{{ $nurse->id }}">
-                                                        {{ $nurse->name }}{{ $nurse->registration_number ? ' · ' . $nurse->registration_number : '' }}
-                                                    </option>
-                                                @empty
-                                                    <option disabled>No active nurses available</option>
-                                                @endforelse
-                                            </select>
+                                            <div class="relative mt-1" @click.outside="closeNurseList()"
+                                                @keydown.escape.stop="closeNurseList()"
+                                                x-effect="if (!sectionAssignModal && nurseListOpen) closeNurseList()">
+                                                <button type="button" :disabled="!hasNurses"
+                                                    @click="nurseListOpen ? closeNurseList() : openNurseList()"
+                                                    class="w-full flex items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-left shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500">
+                                                    <span class="truncate"
+                                                        :class="sectionAssignNurse ? 'text-gray-900' : 'text-gray-400'"
+                                                        x-text="selectedNurseLabel() || 'Choose a nurse...'"></span>
+                                                    <svg class="w-4 h-4 shrink-0 text-gray-400" fill="none"
+                                                        stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                                            stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                                    </svg>
+                                                </button>
+
+                                                <!-- In flow rather than absolute: the modal panel scrolls its
+                                                     own overflow, so a floating list would be clipped by it. -->
+                                                <div x-show="nurseListOpen" style="display: none;"
+                                                    class="mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-sm">
+                                                    <div class="p-2 border-b border-gray-100">
+                                                        <input type="text" x-ref="nurseSearchInput" x-model="nurseSearch"
+                                                            @input="nurseHighlight = filteredNurses().length ? 0 : -1"
+                                                            @keydown.down.prevent="moveNurseHighlight(1)"
+                                                            @keydown.up.prevent="moveNurseHighlight(-1)"
+                                                            @keydown.enter.prevent="chooseHighlightedNurse()"
+                                                            placeholder="Search name or registration no."
+                                                            class="w-full rounded-md border-gray-200 text-sm shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                                                    </div>
+                                                    <ul x-ref="nurseListBox"
+                                                        class="max-h-56 overflow-y-auto py-1 text-sm">
+                                                        <template x-for="(nurse, index) in filteredNurses()"
+                                                            :key="nurse.id">
+                                                            <li>
+                                                                <button type="button" data-nurse-option
+                                                                    @click="chooseNurse(nurse)"
+                                                                    @mouseenter="nurseHighlight = index"
+                                                                    class="w-full flex items-center justify-between gap-2 px-3 py-2 text-left"
+                                                                    :class="{
+                                                                        'bg-purple-50': index === nurseHighlight,
+                                                                        'text-purple-700 font-semibold': nurse.id == sectionAssignNurse
+                                                                    }">
+                                                                    <span class="truncate" x-text="nurse.name"></span>
+                                                                    <span class="shrink-0 text-xs text-gray-400"
+                                                                        x-text="nurse.registration_number || ''"></span>
+                                                                </button>
+                                                            </li>
+                                                        </template>
+                                                        <template x-if="!filteredNurses().length">
+                                                            <li class="px-3 py-4 text-center text-xs text-gray-500">
+                                                                No nurses match this ward or search.
+                                                            </li>
+                                                        </template>
+                                                    </ul>
+                                                    <div
+                                                        class="border-t border-gray-100 px-3 py-1.5 text-[11px] text-gray-400">
+                                                        Showing <span x-text="filteredNurses().length"></span> of <span
+                                                            x-text="nurses.length"></span> nurses
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            @if(!$nurses->count())
+                                                <p class="mt-1 text-xs text-amber-600">No active nurses available.</p>
+                                            @endif
                                             <!-- Tagging Nurse Display -->
                                             <div class="mt-2 p-2 bg-gray-50 border border-gray-200 rounded-lg">
                                                 <p class="text-xs text-gray-600 font-medium flex items-center">

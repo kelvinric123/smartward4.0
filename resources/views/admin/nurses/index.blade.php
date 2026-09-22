@@ -8,6 +8,14 @@
                 <p class="text-sm text-gray-500 mt-1">Manage nursing staff and their qualifications</p>
             </div>
             <div class="flex items-center gap-3">
+                <button type="button" onclick="window.dispatchEvent(new CustomEvent('open-nurse-export-modal'))"
+                    class="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-slate-600 to-gray-700 hover:from-slate-700 hover:to-gray-800 border border-transparent rounded-lg font-semibold text-sm text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    {{ __('Export') }}
+                </button>
                 <a href="{{ route('nurses.bulk-upload') }}"
                     class="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 border border-transparent rounded-lg font-semibold text-sm text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -43,154 +51,234 @@
             @endif
 
             <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-blue-100">
-                <div class="p-8">
-                    <!-- Search Box -->
-                    <div class="mb-6">
-                        <div class="relative">
-                            <input type="text" id="searchInput" placeholder="Search nurses..." autocomplete="off"
-                                class="w-full md:w-80 pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all">
-                            <svg class="w-5 h-5 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2"
-                                fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                            </svg>
-                        </div>
-                    </div>
-                    <div class="overflow-x-auto">
+                <div class="p-6">
+                    <x-list-search :route="route('nurses.index')" :value="$search"
+                        placeholder="Search name, code, registration, phone or email..." :paginator="$nurses"
+                        noun="nurses" />
+                    {{-- The row keeps the columns a supervisor scans by - who, what
+                         grade, which ward, active or not - and hides the rest behind
+                         the chevron, so the actions stay on screen with the sidebar
+                         open instead of sitting past a sideways scroll. --}}
+                    <div class="overflow-x-auto xl:overflow-x-visible">
                         <table class="min-w-full divide-y divide-blue-100" id="dataTable">
                             <thead>
                                 <tr class="bg-gradient-to-r from-blue-50 to-cyan-50">
-                                    <th
-                                        class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                                        Personnel Code</th>
-                                    <th
-                                        class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                                        Name</th>
-                                    <th
-                                        class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                                        Registration No.</th>
-                                    <th
-                                        class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                                        Phone</th>
-                                    <th
-                                        class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                                        Qualification</th>
-                                    <th
-                                        class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                    <th scope="col" class="w-10 px-3 py-3.5">
+                                        <span class="sr-only">Details</span>
+                                    </th>
+                                    <th scope="col"
+                                        class="px-3 py-3.5 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                        Nurse</th>
+                                    <th scope="col"
+                                        class="px-3 py-3.5 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                                         Designation</th>
-                                    <th
-                                        class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                                        LDAP Link</th>
-                                    <th
-                                        class="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                    <th scope="col"
+                                        class="px-3 py-3.5 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                        Ward</th>
+                                    <th scope="col"
+                                        class="px-3 py-3.5 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                                         Status</th>
-                                    <th
-                                        class="px-6 py-4 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                    <th scope="col"
+                                        class="px-3 py-3.5 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
                                         Actions</th>
                                 </tr>
                             </thead>
-                            <tbody class="bg-white divide-y divide-blue-50">
+                            <tbody class="bg-white divide-y divide-blue-50" x-data="{ open: {} }">
                                 @forelse ($nurses as $nurse)
-                                    <tr class="hover:bg-blue-50 transition-colors">
-                                        <td class="px-6 py-4 text-gray-600 text-sm">
-                                            @if($nurse->personnel_code)
-                                                <span
-                                                    class="font-mono text-xs bg-gray-100 px-2 py-1 rounded">{{ $nurse->personnel_code }}</span>
-                                            @else
-                                                <span class="text-gray-400">-</span>
-                                            @endif
+                                    <tr class="transition-colors hover:bg-blue-50/70"
+                                        :class="{ 'bg-blue-50/70': open[{{ $nurse->id }}] }">
+                                        <td class="px-3 py-4 align-top">
+                                            <button type="button"
+                                                @click="open[{{ $nurse->id }}] = !open[{{ $nurse->id }}]"
+                                                :aria-expanded="open[{{ $nurse->id }}] ? 'true' : 'false'"
+                                                :title="open[{{ $nurse->id }}] ? 'Hide details' : 'Show details'"
+                                                class="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-100 transition-colors">
+                                                <svg class="w-4 h-4 transition-transform duration-200"
+                                                    :class="{ 'rotate-90': open[{{ $nurse->id }}] }" fill="none"
+                                                    stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2" d="M9 5l7 7-7 7" />
+                                                </svg>
+                                            </button>
                                         </td>
-                                        <td class="px-6 py-4">
-                                            <div class="flex items-center">
-                                                <div class="p-2 bg-purple-100 rounded-lg mr-3">
-                                                    <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor"
-                                                        viewBox="0 0 24 24">
+
+                                        <td class="px-3 py-4">
+                                            <button type="button"
+                                                @click="open[{{ $nurse->id }}] = !open[{{ $nurse->id }}]"
+                                                class="flex items-start gap-3 text-left group/name">
+                                                <span class="p-2 bg-purple-100 rounded-lg shrink-0">
+                                                    <svg class="w-5 h-5 text-purple-600" fill="none"
+                                                        stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round"
                                                             stroke-width="2"
                                                             d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                                                     </svg>
-                                                </div>
-                                                <span class="font-semibold text-gray-800">{{ $nurse->name }}</span>
-                                            </div>
-                                        </td>
-                                        <td class="px-6 py-4 text-gray-600 text-sm">{{ $nurse->registration_number }}</td>
-                                        <td class="px-6 py-4 text-gray-600 text-sm">{{ $nurse->phone ?? '-' }}</td>
-                                        <td class="px-6 py-4 text-gray-600 text-sm">
-                                            <span
-                                                class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-teal-100 text-teal-800">
-                                                {{ $nurse->qualification }}
-                                            </span>
-                                        </td>
-                                        <td class="px-6 py-4 text-gray-600 text-sm">
-                                            <span class="font-medium text-gray-700">{{ $nurse->designation ?? '-' }}</span>
-                                        </td>
-                                        <td class="px-6 py-4 text-gray-600 text-sm">
-                                            <button
-                                                onclick="openLdapBindingModal('{{ $nurse->id }}', '{{ $nurse->user_id }}', '{{ $nurse->name }}')"
-                                                class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $nurse->user ? 'bg-blue-100 text-blue-800 hover:bg-blue-200' : 'bg-gray-100 text-gray-800 hover:bg-gray-200' }} transition-colors">
-                                                {{ $nurse->user ? 'On' : 'Off' }}
+                                                </span>
+                                                <span class="min-w-0">
+                                                    <span
+                                                        class="block font-semibold text-gray-800 transition-colors group-hover/name:text-blue-700">{{ $nurse->name }}</span>
+                                                    <span
+                                                        class="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
+                                                        @if($nurse->personnel_code)
+                                                            <span
+                                                                class="font-mono bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{{ $nurse->personnel_code }}</span>
+                                                        @endif
+                                                        <span>Reg. {{ $nurse->registration_number }}</span>
+                                                    </span>
+                                                </span>
                                             </button>
                                         </td>
-                                        <td class="px-6 py-4 whitespace-nowrap">
+
+                                        <td class="px-3 py-4">
+                                            <div class="text-sm font-medium text-gray-700">
+                                                {{ $nurse->designation ?? '-' }}</div>
+                                            @if($nurse->qualification)
+                                                <span
+                                                    class="mt-1 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-teal-100 text-teal-800">
+                                                    {{ $nurse->qualification }}
+                                                </span>
+                                            @endif
+                                        </td>
+
+                                        <td class="px-3 py-4 text-sm text-gray-600">
+                                            {{ $nurse->ward->ward_name ?? '—' }}
+                                        </td>
+
+                                        <td class="px-3 py-4 whitespace-nowrap">
                                             <span
                                                 class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full {{ $nurse->is_active ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border border-green-200' : 'bg-gradient-to-r from-red-100 to-pink-100 text-red-800 border border-red-200' }}">
                                                 {{ $nurse->is_active ? 'Active' : 'Inactive' }}
                                             </span>
                                         </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <a href="{{ route('nurses.edit', $nurse) }}"
-                                                class="inline-flex items-center px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors mr-2">
-                                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor"
-                                                    viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                                </svg>
-                                                Edit
-                                            </a>
-                                            <a href="{{ route('nurses.dashboard', $nurse) }}" target="_blank" rel="noopener"
-                                                class="inline-flex items-center px-3 py-1.5 bg-cyan-100 hover:bg-cyan-200 text-cyan-800 rounded-lg transition-colors mr-2">
-                                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor"
-                                                    viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                        d="M9.75 3v5.25m4.5-5.25v5.25M4.5 9.75h15m-13.5 3h3m-3 3h5.25m5.742 2.258A7.5 7.5 0 1016.5 6a7.5 7.5 0 00.742 12.008zm0 0L21 21" />
-                                                </svg>
-                                                Nurse Dashboard
-                                            </a>
-                                            <form action="{{ route('nurses.deactivate', $nurse) }}" method="POST"
-                                                class="inline">
-                                                @csrf
-                                                <button type="submit"
-                                                    class="inline-flex items-center px-3 py-1.5 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 rounded-lg transition-colors mr-2">
-                                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor"
-                                                        viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                                            stroke-width="2"
-                                                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                                    </svg>
-                                                    {{ $nurse->is_active ? 'Deactivate' : 'Activate' }}
-                                                </button>
-                                            </form>
-                                            <form action="{{ route('nurses.destroy', $nurse) }}" method="POST"
-                                                class="inline"
-                                                >
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="button" onclick="confirmDelete(event, 'Are you sure you want to delete this item?')"
-                                                    class="inline-flex items-center px-3 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors">
-                                                    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor"
-                                                        viewBox="0 0 24 24">
-                                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                                            stroke-width="2"
-                                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                                    </svg>
-                                                    Delete
-                                                </button>
-                                            </form>
+
+                                        <td class="px-3 py-4 whitespace-nowrap text-right">
+                                            <div class="flex items-center justify-end gap-1">
+                                                <x-icon-tooltip label="Edit nurse">
+                                                    <a href="{{ route('nurses.edit', $nurse) }}" title="Edit nurse"
+                                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                                                            viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                                stroke-width="2"
+                                                                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                                        </svg>
+                                                    </a>
+                                                </x-icon-tooltip>
+
+                                                <x-icon-tooltip label="Nurse dashboard">
+                                                    <a href="{{ route('nurses.dashboard', $nurse) }}" target="_blank"
+                                                        rel="noopener" title="Nurse dashboard"
+                                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-cyan-100 text-cyan-800 hover:bg-cyan-200 transition-colors">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                                                            viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                                stroke-width="2"
+                                                                d="M9.75 3v5.25m4.5-5.25v5.25M4.5 9.75h15m-13.5 3h3m-3 3h5.25m5.742 2.258A7.5 7.5 0 1016.5 6a7.5 7.5 0 00.742 12.008zm0 0L21 21" />
+                                                        </svg>
+                                                    </a>
+                                                </x-icon-tooltip>
+
+                                                <x-icon-tooltip
+                                                    label="{{ $nurse->user ? 'LDAP linked — change' : 'Link LDAP account' }}">
+                                                    <button type="button"
+                                                        onclick="openLdapBindingModal('{{ $nurse->id }}', '{{ $nurse->user_id }}', @js($nurse->name))"
+                                                        title="{{ $nurse->user ? 'LDAP linked — change' : 'Link LDAP account' }}"
+                                                        class="inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors {{ $nurse->user ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200' }}">
+                                                        <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                                                            viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                                stroke-width="2"
+                                                                d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                                        </svg>
+                                                    </button>
+                                                </x-icon-tooltip>
+
+                                                <x-icon-tooltip
+                                                    label="{{ $nurse->is_active ? 'Deactivate' : 'Activate' }}">
+                                                    <form action="{{ route('nurses.deactivate', $nurse) }}"
+                                                        method="POST" class="inline-flex">
+                                                        @csrf
+                                                        <button type="submit"
+                                                            title="{{ $nurse->is_active ? 'Deactivate' : 'Activate' }}"
+                                                            class="inline-flex items-center justify-center w-8 h-8 rounded-lg transition-colors {{ $nurse->is_active ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-green-100 text-green-700 hover:bg-green-200' }}">
+                                                            @if($nurse->is_active)
+                                                                <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                                                                    viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round"
+                                                                        stroke-linejoin="round" stroke-width="2"
+                                                                        d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                                                                </svg>
+                                                            @else
+                                                                <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                                                                    viewBox="0 0 24 24">
+                                                                    <path stroke-linecap="round"
+                                                                        stroke-linejoin="round" stroke-width="2"
+                                                                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                </svg>
+                                                            @endif
+                                                        </button>
+                                                    </form>
+                                                </x-icon-tooltip>
+
+                                                <x-icon-tooltip label="Delete nurse" align="right">
+                                                    <form action="{{ route('nurses.destroy', $nurse) }}" method="POST"
+                                                        class="inline-flex">
+                                                        @csrf
+                                                        @method('DELETE')
+                                                        <button type="button" title="Delete nurse"
+                                                            onclick="confirmDelete(event, 'Are you sure you want to delete this item?')"
+                                                            class="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-100 text-red-700 hover:bg-red-200 transition-colors">
+                                                            <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                                                                viewBox="0 0 24 24">
+                                                                <path stroke-linecap="round" stroke-linejoin="round"
+                                                                    stroke-width="2"
+                                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                            </svg>
+                                                        </button>
+                                                    </form>
+                                                </x-icon-tooltip>
+                                            </div>
+                                        </td>
+                                    </tr>
+
+                                    {{-- Everything the row no longer shows, one click away. --}}
+                                    <tr x-show="open[{{ $nurse->id }}]" x-cloak class="bg-blue-50/40">
+                                        <td colspan="6" class="px-4 pb-5 pt-0">
+                                            <div class="rounded-xl border border-blue-100 bg-white p-4 shadow-sm">
+                                                <dl
+                                                    class="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
+                                                    @php
+                                                        $details = [
+                                                            'Phone' => $nurse->phone ?: '—',
+                                                            'Email' => $nurse->email ?: '—',
+                                                            'Registration No.' => $nurse->registration_number ?: '—',
+                                                            'Qualification' => $nurse->qualification ?: '—',
+                                                            'Department' => $nurse->department ?: '—',
+                                                            'Years of experience' => $nurse->years_of_experience !== null ? $nurse->years_of_experience : '—',
+                                                            'LDAP account' => $nurse->user ? $nurse->user->name . ' (' . $nurse->user->email . ')' : 'Not linked',
+                                                            'Nurse app login' => $nurse->hasAppLogin() ? 'Configured — ' . $nurse->app_username : 'Not configured',
+                                                            'Tagging nurse' => $nurse->is_tagging
+                                                                ? ($nurse->taggingNurses->pluck('name')->join(', ') ?: 'Yes — none selected')
+                                                                : 'No',
+                                                            'Added' => optional($nurse->created_at)->format('d M Y') ?: '—',
+                                                        ];
+                                                    @endphp
+                                                    @foreach($details as $label => $value)
+                                                        <div>
+                                                            <dt
+                                                                class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                                                                {{ $label }}</dt>
+                                                            <dd class="mt-0.5 text-sm text-gray-700 break-words">
+                                                                {{ $value }}</dd>
+                                                        </div>
+                                                    @endforeach
+                                                </dl>
+                                            </div>
                                         </td>
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="8" class="px-6 py-12 text-center">
+                                        <td colspan="6" class="px-6 py-12 text-center">
                                             <div class="flex flex-col items-center">
                                                 <svg class="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor"
                                                     viewBox="0 0 24 24">
@@ -198,8 +286,16 @@
                                                         d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                                                 </svg>
                                                 <p class="text-gray-500 font-medium">No nurses found</p>
-                                                <p class="text-gray-400 text-sm mt-1">Get started by adding your first nurse
-                                                </p>
+                                                @if ($search !== '')
+                                                    <p class="text-gray-400 text-sm mt-1">Nothing in the nurses list matches
+                                                        <span class="font-medium text-gray-500">"{{ $search }}"</span>.</p>
+                                                    <a href="{{ route('nurses.index') }}"
+                                                        class="mt-3 inline-flex items-center px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition">
+                                                        Clear search</a>
+                                                @else
+                                                    <p class="text-gray-400 text-sm mt-1">Get started by adding your first
+                                                        nurse</p>
+                                                @endif
                                             </div>
                                         </td>
                                     </tr>
@@ -273,7 +369,246 @@
         </div>
     </div>
 
+    <!-- Export Nurses Modal -->
+    <div x-data="nurseExportModal()" x-show="open" x-cloak @open-nurse-export-modal.window="openModal()"
+        class="fixed inset-0 z-50 overflow-y-auto" x-transition:enter="transition ease-out duration-200"
+        x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+        x-transition:leave="transition ease-in duration-150" x-transition:leave-start="opacity-100"
+        x-transition:leave-end="opacity-0">
+        <div class="absolute inset-0 bg-gray-900/50 backdrop-blur-sm" @click="open = false"></div>
+
+        <div class="relative min-h-screen flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden" @click.stop>
+                <form method="GET" action="{{ route('nurses.export') }}" @submit="open = false">
+                    <!-- Header -->
+                    <div class="bg-gradient-to-r from-slate-600 to-gray-700 px-6 py-4 flex items-center justify-between">
+                        <div class="flex items-center">
+                            <svg class="w-6 h-6 text-white mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            <div>
+                                <h3 class="text-lg font-bold text-white">Export Nurses</h3>
+                                <p class="text-xs text-slate-200">CSV file — opens directly in Excel</p>
+                            </div>
+                        </div>
+                        <button type="button" @click="open = false"
+                            class="text-white hover:bg-white/20 rounded-lg p-2 transition">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="p-6 space-y-6 max-h-[65vh] overflow-y-auto">
+                        <!-- Which rows -->
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">Which nurses</h4>
+                            <div class="flex flex-wrap gap-2 mb-4">
+                                <template x-for="opt in statusOptions" :key="opt.value">
+                                    <label class="cursor-pointer">
+                                        <input type="radio" name="status" :value="opt.value" x-model="status"
+                                            class="sr-only" @change="refreshCount()">
+                                        <span class="inline-flex items-center px-4 py-2 rounded-lg border text-sm font-medium transition"
+                                            :class="status === opt.value
+                                                ? 'bg-blue-600 border-blue-600 text-white shadow'
+                                                : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'"
+                                            x-text="opt.label"></span>
+                                    </label>
+                                </template>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 mb-1">Ward</label>
+                                    <select name="ward_id" x-model="ward_id" @change="refreshCount()"
+                                        class="w-full text-sm border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="">All wards</option>
+                                        <option value="unassigned">No ward assigned</option>
+                                        @foreach($wards as $ward)
+                                            <option value="{{ $ward->id }}">{{ $ward->ward_name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 mb-1">Designation</label>
+                                    <select name="designation" x-model="designation" @change="refreshCount()"
+                                        class="w-full text-sm border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="">All designations</option>
+                                        @foreach(\App\Models\Nurse::DESIGNATIONS as $designation)
+                                            <option value="{{ $designation }}">{{ $designation }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-gray-600 mb-1">Qualification</label>
+                                    <select name="qualification" x-model="qualification" @change="refreshCount()"
+                                        class="w-full text-sm border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                        <option value="">All qualifications</option>
+                                        @foreach(['Diploma', 'Degree', 'Masters'] as $qualification)
+                                            <option value="{{ $qualification }}">{{ $qualification }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="mt-3">
+                                <label class="block text-xs font-semibold text-gray-600 mb-1">
+                                    Match text <span class="font-normal text-gray-400">— name, code, registration,
+                                        phone or email</span>
+                                </label>
+                                <input type="text" name="search" x-model="search" @input.debounce.400ms="refreshCount()"
+                                    placeholder="Leave blank to export everything matching the filters above"
+                                    autocomplete="off" data-lpignore="true" data-form-type="other"
+                                    class="w-full text-sm border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                            </div>
+                        </div>
+
+                        <!-- Columns -->
+                        <div>
+                            <div class="flex items-center justify-between mb-3">
+                                <h4 class="text-sm font-bold text-gray-700 uppercase tracking-wide">Columns</h4>
+                                <div class="flex gap-2 text-xs">
+                                    <button type="button" @click="selectAllColumns()"
+                                        class="px-2 py-1 text-blue-600 hover:bg-blue-50 rounded font-medium">Select
+                                        all</button>
+                                    <button type="button" @click="columns = []"
+                                        class="px-2 py-1 text-gray-500 hover:bg-gray-100 rounded font-medium">Clear</button>
+                                    <button type="button" @click="resetColumns()"
+                                        class="px-2 py-1 text-gray-500 hover:bg-gray-100 rounded font-medium">Reset</button>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                @foreach($exportColumns as $column)
+                                    <label
+                                        class="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 hover:bg-blue-50 cursor-pointer transition">
+                                        <input type="checkbox" name="columns[]" value="{{ $column['key'] }}"
+                                            x-model="columns"
+                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                        <span class="text-sm text-gray-700">{{ $column['label'] }}</span>
+                                    </label>
+                                @endforeach
+                            </div>
+                            <p x-show="columns.length === 0" class="mt-2 text-xs text-amber-600">
+                                No columns picked — the default set will be used.
+                            </p>
+                        </div>
+
+                        <!-- Sort -->
+                        <div>
+                            <h4 class="text-sm font-bold text-gray-700 uppercase tracking-wide mb-3">Sort by</h4>
+                            <select name="sort" x-model="sort"
+                                class="w-full sm:w-64 text-sm border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="name">Name (A–Z)</option>
+                                <option value="personnel_code">Personnel Code</option>
+                                <option value="registration_number">Registration No.</option>
+                                <option value="newest">Most recently added</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="bg-gray-50 px-6 py-4 flex items-center justify-between border-t border-gray-200">
+                        <div class="text-sm text-gray-600">
+                            <template x-if="counting">
+                                <span class="text-gray-400">Counting…</span>
+                            </template>
+                            <template x-if="!counting && count !== null">
+                                <span>
+                                    <span class="font-bold text-gray-800" x-text="count"></span>
+                                    <span x-text="count === 1 ? 'nurse' : 'nurses'"></span> will be exported
+                                </span>
+                            </template>
+                        </div>
+                        <div class="flex gap-3">
+                            <button type="button" @click="open = false"
+                                class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+                                Cancel
+                            </button>
+                            <button type="submit" :disabled="count === 0"
+                                class="inline-flex items-center px-5 py-2 text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 rounded-lg shadow transition disabled:opacity-50 disabled:cursor-not-allowed">
+                                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                                Download CSV
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script>
+        function nurseExportModal() {
+            const defaults = @json(collect($exportColumns)->where('default', true)->pluck('key')->values());
+            const every = @json(collect($exportColumns)->pluck('key')->values());
+
+            return {
+                open: false,
+                status: 'all',
+                ward_id: '',
+                designation: '',
+                qualification: '',
+                search: '',
+                sort: 'name',
+                columns: [...defaults],
+                count: null,
+                counting: false,
+                statusOptions: [
+                    { value: 'all', label: 'All' },
+                    { value: 'active', label: 'Active only' },
+                    { value: 'inactive', label: 'Inactive only' },
+                ],
+
+                openModal() {
+                    // Carry the list's active search into the dialog, so
+                    // "export what I'm looking at" is one click.
+                    this.search = document.getElementById('listSearchInput')?.value.trim() || '';
+                    this.open = true;
+                    this.refreshCount();
+                },
+
+                selectAllColumns() {
+                    this.columns = [...every];
+                },
+
+                resetColumns() {
+                    this.columns = [...defaults];
+                },
+
+                // Live row count so the number on the button is the number in
+                // the file. Stale replies are dropped by comparing tokens.
+                async refreshCount() {
+                    const token = Symbol();
+                    this._token = token;
+                    this.counting = true;
+
+                    const params = new URLSearchParams({
+                        status: this.status,
+                        ward_id: this.ward_id,
+                        designation: this.designation,
+                        qualification: this.qualification,
+                        search: this.search,
+                    });
+
+                    try {
+                        const response = await fetch(`{{ route('nurses.export.count') }}?${params}`);
+                        const data = await response.json();
+                        if (this._token !== token) return;
+                        this.count = data.count;
+                    } catch (error) {
+                        if (this._token !== token) return;
+                        this.count = null;
+                    } finally {
+                        if (this._token === token) this.counting = false;
+                    }
+                },
+            };
+        }
+
         function openLdapBindingModal(nurseId, currentUserId, nurseName) {
             const modal = document.getElementById('ldapBindingModal');
             const form = document.getElementById('ldapBindingForm');
@@ -298,14 +633,5 @@
             modal.classList.add('hidden');
         }
 
-        document.getElementById('searchInput').addEventListener('input', function (e) {
-            const searchTerm = e.target.value.toLowerCase();
-            const rows = document.querySelectorAll('#dataTable tbody tr');
-
-            rows.forEach(row => {
-                const text = row.textContent.toLowerCase();
-                row.style.display = text.includes(searchTerm) ? '' : 'none';
-            });
-        });
     </script>
 </x-app-layout>

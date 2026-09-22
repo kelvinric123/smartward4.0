@@ -17,6 +17,8 @@
 
     <!-- Scripts -->
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+
+    @include('components.autofill-guard')
 </head>
 
 <body class="font-sans antialiased bg-gradient-to-br from-blue-50 via-cyan-50 to-teal-50 overflow-hidden">

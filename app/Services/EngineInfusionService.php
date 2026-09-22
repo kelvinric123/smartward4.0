@@ -87,10 +87,43 @@ class EngineInfusionService
      */
     public function infusions(): Collection
     {
-        return $this->pumpPairs()
-            ->filter(fn (array $pair) => $pair['local'] && $pair['local']->patient)
-            ->map(fn (array $pair) => $this->toInfusion($pair['engine'], $pair['local']))
+        return $this->linkedPairs()
+            ->map(fn (array $pair) => $pair['infusion'])
             ->values();
+    }
+
+    /**
+     * Same set as infusions(), but keeping the raw engine snapshot alongside
+     * each infusion. Callers that need pump-level state the Infusion model
+     * does not carry - battery, mains/battery power, signal - read it from
+     * `engine`, which is live, rather than from the registry row, which is
+     * only as fresh as the last syncRegistry() call.
+     *
+     * Each item: ['engine' => array, 'local' => InfusionPump, 'infusion' => Infusion]
+     */
+    public function linkedPairs(): Collection
+    {
+        return $this->overview()
+            ->filter(fn (array $pair) => $pair['infusion'])
+            ->values();
+    }
+
+    /**
+     * Every pump the engine has seen, with an infusion attached to the ones
+     * that are bound to a patient and `infusion => null` for the ones that
+     * are not. One /api/pumps call answers both halves of the ward overview:
+     * the infusion cards, and the "seen but not linked" list that tells a
+     * nurse which pump still needs binding.
+     *
+     * Each item: ['engine' => array, 'local' => ?InfusionPump, 'infusion' => ?Infusion]
+     */
+    public function overview(): Collection
+    {
+        return $this->pumpPairs()->map(fn (array $pair) => $pair + [
+            'infusion' => $pair['local'] && $pair['local']->patient
+                ? $this->toInfusion($pair['engine'], $pair['local'])
+                : null,
+        ]);
     }
 
     /**
@@ -243,6 +276,7 @@ class EngineInfusionService
         return [
             'running' => $infusions->where('status', Infusion::STATUS_RUNNING)->count(),
             'paused' => $infusions->where('status', Infusion::STATUS_PAUSED)->count(),
+            'stopped' => $infusions->where('status', Infusion::STATUS_STOPPED)->count(),
             'completed' => $infusions->where('status', Infusion::STATUS_COMPLETED)->count(),
             'warnings' => $infusions
                 ->where('status', Infusion::STATUS_RUNNING)

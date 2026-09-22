@@ -9,11 +9,195 @@ use Illuminate\Http\Request;
 
 class NurseController extends Controller
 {
-    public function index()
+    /**
+     * Columns offered by the export dialog: key => [label, default-on].
+     * The defaults mirror the columns the on-screen table already shows, so
+     * an export with nothing touched matches what the user is looking at.
+     */
+    private const EXPORT_COLUMNS = [
+        'personnel_code' => ['Personnel Code', true],
+        'name' => ['Name', true],
+        'registration_number' => ['Registration No.', true],
+        'phone' => ['Phone', true],
+        'email' => ['Email', true],
+        'qualification' => ['Qualification', true],
+        'designation' => ['Designation', true],
+        'department' => ['Department', false],
+        'years_of_experience' => ['Years of Experience', false],
+        'ward' => ['Ward', true],
+        'ldap_user' => ['LDAP Link', true],
+        'app_username' => ['App Username', false],
+        'is_tagging' => ['Tagging', false],
+        'is_active' => ['Status', true],
+        'created_at' => ['Created', false],
+    ];
+
+    public function index(Request $request)
     {
-        $nurses = Nurse::latest()->paginate(10);
+        // Searched in the database, not in the rendered page: filtering the
+        // current page of 10 rows only ever found what was already on screen.
+        $search = trim((string) $request->input('search', ''));
+
+        // The list row shows the ward and the expanded panel shows the LDAP
+        // account and tagging nurses, so pull all three in one go.
+        $query = Nurse::with(['user', 'ward', 'taggingNurses'])->latest();
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                foreach (['name', 'personnel_code', 'registration_number', 'phone', 'email', 'designation', 'qualification'] as $field) {
+                    $q->orWhere($field, 'like', "%{$search}%");
+                }
+            });
+        }
+
+        $nurses = $query->paginate(10)->withQueryString();
         $users = User::where('role', User::ROLE_NURSE)->get();
-        return view('admin.nurses.index', compact('nurses', 'users'));
+        $wards = Ward::where('is_active', true)->orderBy('ward_name')->get();
+        $exportColumns = collect(self::EXPORT_COLUMNS)
+            ->map(fn (array $c, string $key) => [
+                'key' => $key,
+                'label' => $c[0],
+                'default' => $c[1],
+            ])
+            ->values()
+            ->all();
+
+        return view('admin.nurses.index', compact('nurses', 'users', 'wards', 'exportColumns', 'search'));
+    }
+
+    /**
+     * How many nurses the current export options would produce. Lets the
+     * export dialog show a live row count before anything is downloaded.
+     */
+    public function exportCount(Request $request)
+    {
+        return response()->json(['count' => $this->exportQuery($request)->count()]);
+    }
+
+    /**
+     * Stream the nurse list as CSV with a UTF-8 BOM, which Excel opens
+     * directly - the same approach the other exports in this app use.
+     */
+    public function export(Request $request)
+    {
+        $columns = $this->requestedExportColumns($request);
+        $fileName = 'nurses_' . date('Y-m-d_H-i-s') . '.csv';
+
+        $headers = [
+            'Content-type' => 'text/csv',
+            'Content-Disposition' => "attachment; filename=$fileName",
+            'Pragma' => 'no-cache',
+            'Cache-Control' => 'must-revalidate, post-check=0, pre-check=0',
+            'Expires' => '0',
+        ];
+
+        $query = $this->exportQuery($request);
+
+        $callback = function () use ($query, $columns) {
+            $file = fopen('php://output', 'w');
+
+            // BOM so Excel reads the UTF-8 accents and dashes correctly.
+            fprintf($file, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+            // The empty $escape is PHP 8.4's coming default and the RFC-4180
+            // behaviour Excel expects; passing it also silences the 8.4
+            // deprecation notice for the implicit backslash escape.
+            $write = fn (array $row) => fputcsv($file, $row, ',', '"', '');
+
+            $write(array_map(fn (string $key) => self::EXPORT_COLUMNS[$key][0], $columns));
+
+            $query->chunk(200, function ($nurses) use ($write, $columns) {
+                foreach ($nurses as $nurse) {
+                    $write(array_map(
+                        fn (string $key) => $this->exportValue($nurse, $key),
+                        $columns
+                    ));
+                }
+            });
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
+    }
+
+    /**
+     * The columns the dialog asked for, in the order they appear on screen.
+     * Falls back to the defaults if the request names none we recognise.
+     */
+    private function requestedExportColumns(Request $request): array
+    {
+        $requested = (array) $request->input('columns', []);
+        $columns = array_values(array_intersect(array_keys(self::EXPORT_COLUMNS), $requested));
+
+        if (empty($columns)) {
+            $columns = array_keys(array_filter(
+                self::EXPORT_COLUMNS,
+                fn (array $c) => $c[1]
+            ));
+        }
+
+        return $columns;
+    }
+
+    /**
+     * Build the nurse query from the export dialog's filters. Shared by the
+     * download and the live count so the number shown is the number written.
+     */
+    private function exportQuery(Request $request)
+    {
+        $query = Nurse::with(['ward', 'user']);
+
+        match ($request->input('status', 'all')) {
+            'active' => $query->where('is_active', true),
+            'inactive' => $query->where('is_active', false),
+            default => null,
+        };
+
+        if ($wardId = $request->input('ward_id')) {
+            $wardId === 'unassigned'
+                ? $query->whereNull('ward_id')
+                : $query->where('ward_id', $wardId);
+        }
+
+        if ($designation = $request->input('designation')) {
+            $query->where('designation', $designation);
+        }
+
+        if ($qualification = $request->input('qualification')) {
+            $query->where('qualification', $qualification);
+        }
+
+        if ($search = trim((string) $request->input('search', ''))) {
+            $query->where(function ($q) use ($search) {
+                foreach (['name', 'personnel_code', 'registration_number', 'phone', 'email', 'designation', 'qualification'] as $field) {
+                    $q->orWhere($field, 'like', "%{$search}%");
+                }
+            });
+        }
+
+        return match ($request->input('sort', 'name')) {
+            'personnel_code' => $query->orderBy('personnel_code'),
+            'registration_number' => $query->orderBy('registration_number'),
+            'newest' => $query->latest(),
+            default => $query->orderBy('name'),
+        };
+    }
+
+    /**
+     * One cell. Relations and booleans are rendered the way the table shows
+     * them, so the spreadsheet reads like the screen rather than like the DB.
+     */
+    private function exportValue(Nurse $nurse, string $key): string
+    {
+        return match ($key) {
+            'ward' => $nurse->ward->ward_name ?? '',
+            'ldap_user' => $nurse->user ? $nurse->user->name . ' (' . $nurse->user->email . ')' : 'Not Linked',
+            'is_active' => $nurse->is_active ? 'Active' : 'Inactive',
+            'is_tagging' => $nurse->is_tagging ? 'Yes' : 'No',
+            'created_at' => $nurse->created_at?->format('Y-m-d H:i') ?? '',
+            default => (string) ($nurse->{$key} ?? ''),
+        };
     }
 
     public function create()

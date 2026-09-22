@@ -601,6 +601,7 @@ class AdtApiController extends Controller
                         'gender' => $patient->gender,
                         'age' => $patient->age,
                         'notes' => "ADT A02: External Transfer to Unmapped {$adtWardCode}/{$adtBedCode}. Treated as Discharge.",
+                        'discharged_at' => $patient->discharged_at,
                         'source' => 'adt',
                     ]);
                 }
@@ -928,6 +929,7 @@ class AdtApiController extends Controller
                 'gender' => $patient->gender,
                 'age' => $patient->age,
                 'notes' => 'ADT A03: Discharged via HIS',
+                'discharged_at' => $patient->discharged_at,
                 'source' => 'adt',
             ]);
 

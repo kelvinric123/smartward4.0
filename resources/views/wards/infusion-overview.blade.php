@@ -22,21 +22,15 @@
             animation: blink-alarm 1s steps(1) infinite;
         }
     </style>
-    @if($tab === 'infusions')
-        <meta http-equiv="refresh" content="30">
-    @endif
     <meta name="csrf-token" content="{{ csrf_token() }}">
 </head>
 <body class="bg-gray-50">
     <div class="p-4" x-data="{ filter: '{{ $filter }}', wardId: '{{ $wardId }}', tab: '{{ $tab }}', showUnbindModal: false, unbindPumpId: null, unbindPumpName: '', unbindPumpHasActiveInfusion: false }">
-        @if(!empty($engineError))
+        {{-- The infusions panel carries its own source strip, and refreshes it.
+             The devices tab still needs to hear about an unreachable engine. --}}
+        @if($tab === 'devices' && !empty($engineError))
             <div class="mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-medium">
                 ⚠ {{ $engineError }}
-            </div>
-        @elseif(($dataSource ?? 'local') === 'engine')
-            <div class="mb-3 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-700 font-medium inline-flex items-center">
-                <span class="w-1.5 h-1.5 bg-indigo-500 rounded-full mr-2 animate-pulse"></span>
-                Live from Qmed Infusion Engine
             </div>
         @endif
         <!-- Header with Stats -->
@@ -54,8 +48,17 @@
                     </div>
                 </div>
                 @if($tab === 'infusions')
-                    <div class="text-xs text-gray-400">
-                        Auto-refreshes every 30s
+                    <div class="flex items-center gap-2 text-xs text-gray-400">
+                        <span id="refreshState">updated just now</span>
+                        <button type="button" id="refreshNow"
+                            class="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2 py-1 font-medium text-gray-600 transition-colors hover:bg-gray-50">
+                            <svg id="refreshIcon" class="h-3.5 w-3.5" fill="none" stroke="currentColor"
+                                viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Refresh
+                        </button>
                     </div>
                 @endif
             </div>
@@ -72,321 +75,11 @@
                 </a>
             </div>
 
-            <!-- Quick Stats (Only show on Infusions tab) -->
-            <div x-show="tab === 'infusions'"
-                class="grid {{ ($bloodTransfusions ?? collect())->isNotEmpty() ? 'grid-cols-6' : 'grid-cols-5' }} gap-2 mb-4">
-                <a href="?ward_id={{ $wardId }}&filter=active" 
-                   class="p-3 rounded-lg text-center transition-all {{ $filter === 'active' ? 'bg-green-100 border-2 border-green-500' : 'bg-white border border-gray-200 hover:border-green-300' }}">
-                    <div class="text-xl font-bold text-green-600">{{ $stats['running'] }}</div>
-                    <div class="text-xs text-gray-600">Running</div>
-                </a>
-                <a href="?ward_id={{ $wardId }}&filter=active" 
-                   class="p-3 rounded-lg text-center transition-all {{ $filter === 'active' ? 'bg-yellow-100 border-2 border-yellow-500' : 'bg-white border border-gray-200 hover:border-yellow-300' }}">
-                    <div class="text-xl font-bold text-yellow-600">{{ $stats['paused'] }}</div>
-                    <div class="text-xs text-gray-600">Paused</div>
-                </a>
-                <a href="?ward_id={{ $wardId }}&filter=warnings" 
-                   class="p-3 rounded-lg text-center transition-all {{ $filter === 'warnings' ? 'bg-amber-100 border-2 border-amber-500' : 'bg-white border border-gray-200 hover:border-amber-300' }}">
-                    <div class="text-xl font-bold text-amber-600 {{ $stats['warnings'] > 0 ? 'pulse-warning' : '' }}">{{ $stats['warnings'] }}</div>
-                    <div class="text-xs text-gray-600">Warnings</div>
-                </a>
-                <a href="?ward_id={{ $wardId }}&filter=alarms" 
-                   class="p-3 rounded-lg text-center transition-all {{ $filter === 'alarms' ? 'bg-red-100 border-2 border-red-500' : 'bg-white border border-gray-200 hover:border-red-300' }}">
-                    <div class="text-xl font-bold text-red-600 {{ $stats['alarms'] > 0 ? 'blink-alarm' : '' }}">{{ $stats['alarms'] }}</div>
-                    <div class="text-xs text-gray-600">Alarms</div>
-                </a>
-                <a href="?ward_id={{ $wardId }}&filter=completed" 
-                   class="p-3 rounded-lg text-center transition-all {{ $filter === 'completed' ? 'bg-blue-100 border-2 border-blue-500' : 'bg-white border border-gray-200 hover:border-blue-300' }}">
-                    <div class="text-xl font-bold text-blue-600">{{ $stats['completed'] }}</div>
-                    <div class="text-xs text-gray-600">Completed</div>
-                </a>
-                @if (($bloodTransfusions ?? collect())->isNotEmpty())
-                    <div class="p-3 rounded-lg text-center bg-white border border-rose-200">
-                        <div class="text-xl font-bold text-rose-600">{{ $bloodTransfusions->count() }}</div>
-                        <div class="text-xs text-gray-600">Transfusing</div>
-                    </div>
-                @endif
-            </div>
         </div>
 
         <!-- Infusions Tab Content -->
         <div x-show="tab === 'infusions'">
-        {{-- Blood units running in this ward. Kept separate from the pump
-             infusions above: blood has no pump, no device and no alarm feed. --}}
-        @if (($bloodTransfusions ?? collect())->isNotEmpty())
-            <div class="mb-6">
-                <h3 class="text-lg font-bold text-gray-700 mb-3 flex items-center">
-                    <span class="w-3 h-3 bg-rose-500 rounded-full mr-2"></span>
-                    Blood Transfusions in Progress
-                    <span class="ml-2 text-xs font-medium text-gray-500">({{ $bloodTransfusions->count() }})</span>
-                </h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    @foreach ($bloodTransfusions as $transfusion)
-                        <x-transfusion-card :transfusion="$transfusion" :show-patient="true" />
-                    @endforeach
-                </div>
-            </div>
-        @endif
-        @if($infusions->count() > 0)
-            <!-- Infusion Grid -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                @foreach($infusions as $infusion)
-                    @php
-                        $statusColors = [
-                            'running' => 'border-green-400 bg-gradient-to-br from-green-50 to-emerald-50',
-                            'paused' => 'border-yellow-400 bg-gradient-to-br from-yellow-50 to-amber-50',
-                            'completed' => 'border-blue-400 bg-gradient-to-br from-blue-50 to-cyan-50',
-                            'stopped' => 'border-gray-400 bg-gradient-to-br from-gray-50 to-slate-50',
-                            'alarming' => 'border-red-500 bg-gradient-to-br from-red-50 to-rose-50 blink-alarm',
-                            'pending' => 'border-gray-300 bg-white',
-                        ];
-                        $headerColors = [
-                            'running' => 'from-green-500 to-emerald-500',
-                            'paused' => 'from-yellow-500 to-amber-500',
-                            'completed' => 'from-blue-500 to-cyan-500',
-                            'stopped' => 'from-gray-500 to-slate-500',
-                            'alarming' => 'from-red-500 to-rose-500',
-                            'pending' => 'from-gray-400 to-gray-500',
-                        ];
-                    @endphp
-                    <div class="rounded-xl border-2 overflow-hidden shadow-md {{ $statusColors[$infusion->status] ?? 'border-gray-200 bg-white' }} {{ $infusion->is_warning && $infusion->status === 'running' ? 'pulse-warning' : '' }}">
-                        <!-- Header -->
-                        <div class="px-3 py-2 bg-gradient-to-r {{ $headerColors[$infusion->status] ?? 'from-gray-400 to-gray-500' }} text-white flex items-center justify-between">
-                            <div class="flex items-center">
-                                <span class="font-bold text-sm">{{ $infusion->patient->bed_number ?? 'N/A' }}</span>
-                                @if($infusion->is_warning)
-                                    <span class="ml-2 px-2 py-0.5 bg-white/30 rounded text-xs font-bold flex items-center">
-                                        <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                                        </svg>
-                                        LOW
-                                    </span>
-                                @endif
-                            </div>
-                            <span class="text-xs bg-white/20 px-2 py-0.5 rounded uppercase font-semibold">
-                                {{ $infusion->status }}
-                            </span>
-                        </div>
-
-                        <!-- Content -->
-                        <div class="p-3 space-y-2">
-                            <!-- Patient Info -->
-                            <div class="text-sm">
-                                <div class="font-semibold text-gray-800 truncate">{{ $infusion->patient->name ?? 'Unknown' }}</div>
-                                <div class="text-xs text-gray-500">MRN: {{ $infusion->patient->mrn ?? 'N/A' }}</div>
-                            </div>
-
-                            <!-- Medication -->
-                            <div class="bg-white/70 rounded-lg p-2 border border-gray-200">
-                                <div class="flex justify-between items-start">
-                                    <div class="flex-1 min-w-0">
-                                        <div class="text-xs text-gray-500">Medication</div>
-                                        <div class="font-semibold text-gray-800 text-sm truncate">{{ $infusion->medication_name }}</div>
-                                        @if($infusion->formatted_concentration)
-                                            <div class="text-xs text-gray-500">{{ $infusion->formatted_concentration }}</div>
-                                        @endif
-                                    </div>
-                                    @if($infusion->delivery_mode)
-                                        <span class="ml-2 px-1.5 py-0.5 bg-purple-100 text-purple-700 text-xs rounded">
-                                            {{ $infusion->delivery_mode_display }}
-                                        </span>
-                                    @endif
-                                </div>
-                            </div>
-
-                            <!-- Progress Bar -->
-                            @if($infusion->total_volume > 0)
-                                <div>
-                                    <div class="flex justify-between text-xs text-gray-600 mb-1">
-                                        <span>{{ number_format($infusion->infused_volume, 1) }} / {{ number_format($infusion->total_volume, 1) }} ml</span>
-                                        <span class="font-bold">{{ $infusion->progress_percent }}%</span>
-                                    </div>
-                                    <div class="w-full bg-gray-200 rounded-full h-2.5 overflow-hidden">
-                                        <div class="h-2.5 rounded-full transition-all duration-500 {{ $infusion->is_warning ? 'bg-amber-500' : ($infusion->status === 'running' ? 'bg-green-500' : 'bg-blue-500') }}" 
-                                             style="width: {{ $infusion->progress_percent }}%"></div>
-                                    </div>
-                                </div>
-                            @endif
-
-                            <!-- Stats Row -->
-                            <div class="grid grid-cols-4 gap-2 text-center">
-                                <div class="bg-white/70 rounded p-1.5 border border-gray-100">
-                                    <div class="text-xs text-gray-500">Rate</div>
-                                    <div class="font-bold text-gray-800 text-sm">{{ $infusion->flow_rate ? number_format($infusion->flow_rate, 1) . ' ml/hr' : '--' }}</div>
-                                </div>
-                                <div class="bg-white/70 rounded p-1.5 border border-gray-100 {{ $infusion->is_warning ? 'bg-amber-100 border-amber-300' : '' }}">
-                                    <div class="text-xs {{ $infusion->is_warning ? 'text-amber-700' : 'text-gray-500' }}">Remaining</div>
-                                    <div class="font-bold {{ $infusion->is_warning ? 'text-amber-700' : 'text-gray-800' }} text-sm">{{ $infusion->formatted_remaining_time }}</div>
-                                    @if($infusion->estimated_completion)
-                                        <div class="text-xs {{ $infusion->is_warning ? 'text-amber-600' : 'text-gray-400' }}">ETA {{ $infusion->estimated_completion->format('H:i') }}</div>
-                                    @endif
-                                </div>
-                                <div class="bg-white/70 rounded p-1.5 border border-gray-100">
-                                    <div class="text-xs text-gray-500">Syringe</div>
-                                    @if($infusion->syringe_size)
-                                        <div class="font-bold text-gray-800 text-sm">{{ number_format($infusion->syringe_size, 0) }}mL</div>
-                                        @if($infusion->syringe_actual_volume && $infusion->syringe_actual_volume != $infusion->syringe_size)
-                                            <div class="text-xs text-blue-600">{{ number_format($infusion->syringe_actual_volume, 1) }}mL actual</div>
-                                        @endif
-                                    @else
-                                        <div class="font-bold text-gray-800 text-xs truncate">{{ $infusion->infusionPump->device_id ?? 'N/A' }}</div>
-                                    @endif
-                                </div>
-                                <div class="bg-white/70 rounded p-1.5 border border-gray-100">
-                                    <div class="text-xs text-gray-500">Brand</div>
-                                    <div class="font-bold text-gray-800 text-xs truncate" title="{{ $infusion->syringe_manufacturer ?? 'N/A' }}">
-                                        {{ $infusion->syringe_manufacturer ? \Illuminate\Support\Str::limit($infusion->syringe_manufacturer, 12) : '--' }}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- Pump Info with Battery/Power Status -->
-                            @if($infusion->infusionPump)
-                                @php $pump = $infusion->infusionPump; @endphp
-                                <div class="flex items-center justify-between text-xs bg-gray-50 rounded p-1.5 border border-gray-100">
-                                    <div class="flex items-center space-x-2">
-                                        <!-- Pump Model -->
-                                        <span class="text-gray-600 truncate max-w-[100px]" title="{{ $pump->pump_model ?? $pump->device_id }}">
-                                            {{ $pump->pump_model ? \Illuminate\Support\Str::limit($pump->pump_model, 20) : $pump->device_id }}
-                                        </span>
-                                    </div>
-                                    <div class="flex items-center space-x-2">
-                                        <!-- Power/Battery Status -->
-                                        @if($pump->power_status === 'mains')
-                                            <span class="flex items-center text-green-600" title="Plugged In">
-                                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"/>
-                                                </svg>
-                                            </span>
-                                        @elseif($pump->battery_percent !== null)
-                                            @php
-                                                $batteryColor = $pump->battery_percent >= 50 ? 'text-green-600' : ($pump->battery_percent >= 20 ? 'text-yellow-600' : 'text-red-600');
-                                            @endphp
-                                            <span class="flex items-center {{ $batteryColor }}" title="Battery: {{ $pump->battery_percent }}%">
-                                                <svg class="w-3.5 h-3.5 mr-0.5" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path d="M2 6h12v8H2V6zm14 2h1.5a.5.5 0 01.5.5v3a.5.5 0 01-.5.5H16V8z"/>
-                                                    <path fill-rule="evenodd" d="M3 7h10v6H3V7z" clip-rule="evenodd" style="opacity: {{ $pump->battery_percent / 100 }}"/>
-                                                </svg>
-                                                <span class="text-xs">{{ $pump->battery_percent }}%</span>
-                                            </span>
-                                        @endif
-                                        
-                                        <!-- WiFi Strength -->
-                                        @if($pump->wifi_strength !== null)
-                                            @php
-                                                $wifiColor = $pump->wifi_strength >= 60 ? 'text-green-600' : ($pump->wifi_strength >= 40 ? 'text-yellow-600' : 'text-red-600');
-                                            @endphp
-                                            <span class="flex items-center {{ $wifiColor }}" title="WiFi: {{ $pump->wifi_strength }}%">
-                                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path fill-rule="evenodd" d="M17.778 8.222c-4.296-4.296-11.26-4.296-15.556 0A1 1 0 01.808 6.808c5.076-5.077 13.308-5.077 18.384 0a1 1 0 01-1.414 1.414zM14.95 11.05a7 7 0 00-9.9 0 1 1 0 01-1.414-1.414 9 9 0 0112.728 0 1 1 0 01-1.414 1.414zM12.12 13.88a3 3 0 00-4.242 0 1 1 0 01-1.415-1.415 5 5 0 017.072 0 1 1 0 01-1.415 1.415zM9 16a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clip-rule="evenodd"/>
-                                                </svg>
-                                            </span>
-                                        @endif
-                                    </div>
-                                </div>
-                            @endif
-
-                            <!-- Alarm Message -->
-                            @if($infusion->status === 'alarming' && $infusion->alarm_message)
-                                @php
-                                    $alarmBgColor = match($infusion->alarm_priority) {
-                                        'high' => 'bg-red-100 border-red-400 text-red-800',
-                                        'medium' => 'bg-orange-100 border-orange-400 text-orange-800',
-                                        'low' => 'bg-yellow-100 border-yellow-400 text-yellow-800',
-                                        'technical' => 'bg-blue-100 border-blue-400 text-blue-800',
-                                        default => 'bg-red-100 border-red-300 text-red-700',
-                                    };
-                                @endphp
-                                <div class="{{ $alarmBgColor }} border rounded-lg p-2 text-xs flex items-start">
-                                    <svg class="w-4 h-4 mr-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
-                                    </svg>
-                                    <div>
-                                        @if($infusion->alarm_priority)
-                                            <span class="font-bold uppercase text-[10px]">{{ $infusion->alarm_priority_display }}</span> • 
-                                        @endif
-                                        <strong>{{ $infusion->alarm_type ? ucfirst(str_replace('_', ' ', $infusion->alarm_type)) : 'ALARM' }}:</strong>
-                                        {{ $infusion->alarm_message }}
-                                    </div>
-                                </div>
-                            @endif
-
-                            <!-- Last Updated -->
-                            <div class="text-xs text-gray-400 text-right">
-                                Updated: {{ $infusion->last_updated_at ? $infusion->last_updated_at->diffForHumans() : 'N/A' }}
-                            </div>
-                        </div>
-                    </div>
-                @endforeach
-            </div>
-        @else
-            <!-- Empty State -->
-            <div class="bg-white rounded-xl border border-gray-200 p-8 text-center">
-                <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
-                    </svg>
-                </div>
-                <h3 class="text-lg font-semibold text-gray-700 mb-1">No Infusions Found</h3>
-                <p class="text-sm text-gray-500">
-                    @if($filter === 'active')
-                        There are no active infusions in this ward.
-                    @elseif($filter === 'completed')
-                        No completed infusions to display.
-                    @elseif($filter === 'warnings')
-                        No infusion warnings at this time.
-                    @elseif($filter === 'alarms')
-                        No active alarms - all systems normal.
-                    @else
-                        No infusion data available.
-                    @endif
-                </p>
-                <p class="text-xs text-gray-400 mt-2">Infusions will appear here when pump gateways send data.</p>
-            </div>
-        @endif
-        
-        <!-- Recently Completed Section (Only show when filter is 'active' and there are completed infusions) -->
-        @if($filter === 'active' && isset($recentlyCompleted) && $recentlyCompleted->count() > 0)
-            <div class="mt-8 border-t-2 border-dashed border-gray-200 pt-6">
-                <h3 class="text-lg font-bold text-gray-700 mb-4 flex items-center">
-                    <span class="w-3 h-3 bg-blue-500 rounded-full mr-2"></span>
-                    Recently Completed Infusions (Last 24h)
-                </h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    @foreach($recentlyCompleted as $infusion)
-                        <div class="rounded-xl border border-gray-200 bg-gray-50 opacity-80 hover:opacity-100 transition-opacity">
-                            <!-- Header -->
-                            <div class="px-3 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 text-white flex items-center justify-between rounded-t-xl">
-                                <div class="flex items-center">
-                                    <span class="font-bold text-sm">{{ $infusion->patient->bed_number ?? 'N/A' }}</span>
-                                </div>
-                                <span class="text-xs bg-white/20 px-2 py-0.5 rounded uppercase font-semibold">
-                                    Completed
-                                </span>
-                            </div>
-
-                            <!-- Content -->
-                            <div class="p-3 space-y-2">
-                                <!-- Patient Info -->
-                                <div class="text-sm">
-                                    <div class="font-semibold text-gray-800 truncate">{{ $infusion->patient->name ?? 'Unknown' }}</div>
-                                    <div class="text-xs text-gray-500">MRN: {{ $infusion->patient->mrn ?? 'N/A' }}</div>
-                                </div>
-
-                                <!-- Medication -->
-                                <div class="bg-white rounded-lg p-2 border border-gray-200">
-                                    <div class="text-xs text-gray-500">Medication</div>
-                                    <div class="font-semibold text-gray-800 text-sm truncate">{{ $infusion->medication_name }}</div>
-                                    <div class="text-xs text-gray-500">
-                                        {{ number_format($infusion->total_volume, 1) }} ml • Completed {{ $infusion->completed_at ? $infusion->completed_at->format('H:i') : '' }}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
-            </div>
-        @endif
+            @include('wards.partials.infusion-panel')
         </div>
 
         <!-- Devices Tab Content -->
@@ -591,6 +284,111 @@
             }
         }
     </script>
+
+    @if($tab === 'infusions')
+        <script>
+            /**
+             * Keep the panel current without reloading the iframe.
+             *
+             * The page used to carry <meta http-equiv="refresh">, which threw
+             * away the chosen filter, the scroll position and the open modal
+             * every 30 seconds. Instead we re-fetch this same route with
+             * ?fragment=1 - the server renders only the infusions panel - and
+             * swap the element in place.
+             */
+            (function () {
+                const baseSeconds = {{ $refreshSec }};
+                const target = new URL(window.location.href);
+                target.searchParams.set('fragment', '1');
+
+                const state = document.getElementById('refreshState');
+                const button = document.getElementById('refreshNow');
+                const icon = document.getElementById('refreshIcon');
+
+                let refreshedAt = Date.now();
+                let failures = 0;
+                let timer = null;
+                let inFlight = false;
+
+                function describeAge() {
+                    if (failures > 0) {
+                        return 'reconnecting…';
+                    }
+                    const seconds = Math.round((Date.now() - refreshedAt) / 1000);
+                    if (seconds < 5) return 'updated just now';
+                    if (seconds < 60) return `updated ${seconds}s ago`;
+                    return `updated ${Math.round(seconds / 60)}m ago`;
+                }
+
+                function paintAge() {
+                    if (state) state.textContent = describeAge();
+                }
+
+                function schedule() {
+                    clearTimeout(timer);
+                    // Back off while the engine is unreachable rather than
+                    // hammering it every few seconds.
+                    const factor = Math.min(6, Math.pow(2, failures));
+                    timer = setTimeout(refresh, baseSeconds * 1000 * factor);
+                }
+
+                // This page lives in an iframe inside a modal that stays in the
+                // DOM after it is closed. A display:none iframe has no layout,
+                // so a zero viewport means nobody is looking - stop calling the
+                // engine until it is opened again. Both checks are re-tested on
+                // the next tick, so nothing can stall permanently.
+                function offScreen() {
+                    return document.hidden || window.innerWidth === 0;
+                }
+
+                async function refresh() {
+                    if (inFlight) return;
+                    if (offScreen()) { schedule(); return; }
+
+                    inFlight = true;
+                    icon?.classList.add('animate-spin');
+
+                    try {
+                        const response = await fetch(target, {
+                            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                            cache: 'no-store',
+                        });
+                        if (!response.ok) throw new Error('HTTP ' + response.status);
+
+                        const holder = document.createElement('div');
+                        holder.innerHTML = await response.text();
+                        const fresh = holder.querySelector('#infusionPanel');
+                        const current = document.getElementById('infusionPanel');
+
+                        if (fresh && current) {
+                            current.replaceWith(fresh);
+                            refreshedAt = Date.now();
+                            failures = 0;
+                        }
+                    } catch (error) {
+                        failures++;
+                    } finally {
+                        inFlight = false;
+                        icon?.classList.remove('animate-spin');
+                        paintAge();
+                        schedule();
+                    }
+                }
+
+                button?.addEventListener('click', function () {
+                    failures = 0;
+                    refresh();
+                });
+
+                document.addEventListener('visibilitychange', function () {
+                    if (!document.hidden) refresh();
+                });
+
+                setInterval(paintAge, 1000);
+                schedule();
+            })();
+        </script>
+    @endif
 </body>
 </html>
 

@@ -6,6 +6,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Link Pump to Patient</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @include('components.autofill-guard')
 </head>
 <body class="bg-gray-50">
     <div class="p-4" x-data="pumpLinkManager()">

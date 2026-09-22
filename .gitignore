@@ -43,3 +43,8 @@ bbraun/venv/
 
 # Python bytecode
 __pycache__/
+
+# Infusion engine local database (runtime data, not deployed)
+infusion_engine/data/*.db
+infusion_engine/data/*.db-shm
+infusion_engine/data/*.db-wal

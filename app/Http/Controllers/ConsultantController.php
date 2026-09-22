@@ -8,10 +8,28 @@ use Illuminate\Http\Request;
 
 class ConsultantController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $consultants = Consultant::with('specialty')->latest()->paginate(10);
-        return view('admin.consultants.index', compact('consultants'));
+        // Searched in the database, not in the rendered page: filtering the
+        // current page of 10 rows only ever found what was already on screen.
+        $search = trim((string) $request->input('search', ''));
+
+        $query = Consultant::with('specialty')->latest();
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                foreach (['name', 'personnel_code', 'registration_number', 'phone', 'email', 'qualifications'] as $field) {
+                    $q->orWhere($field, 'like', "%{$search}%");
+                }
+
+                // The table shows the specialty, so it should be searchable too.
+                $q->orWhereHas('specialty', fn ($s) => $s->where('name', 'like', "%{$search}%"));
+            });
+        }
+
+        $consultants = $query->paginate(10)->withQueryString();
+
+        return view('admin.consultants.index', compact('consultants', 'search'));
     }
 
     public function create()

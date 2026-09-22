@@ -7,10 +7,25 @@ use Illuminate\Http\Request;
 
 class AnaesthetistController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $anaesthetists = Anaesthetist::latest()->paginate(10);
-        return view('admin.anaesthetists.index', compact('anaesthetists'));
+        // Searched in the database, not in the rendered page: filtering the
+        // current page of 10 rows only ever found what was already on screen.
+        $search = trim((string) $request->input('search', ''));
+
+        $query = Anaesthetist::latest();
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                foreach (['name', 'personnel_code', 'registration_number', 'phone', 'email', 'qualifications'] as $field) {
+                    $q->orWhere($field, 'like', "%{$search}%");
+                }
+            });
+        }
+
+        $anaesthetists = $query->paginate(10)->withQueryString();
+
+        return view('admin.anaesthetists.index', compact('anaesthetists', 'search'));
     }
 
     public function create()

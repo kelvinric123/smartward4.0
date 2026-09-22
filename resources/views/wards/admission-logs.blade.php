@@ -20,6 +20,7 @@
             .hide-{{ $key }} [data-col="{{ $key }}"] { display: none; }
         @endforeach
     </style>
+    @include('components.autofill-guard')
 </head>
 
 @php

@@ -14,6 +14,7 @@ use App\Http\Controllers\BedController;
 use App\Http\Controllers\WardDashboardController;
 use App\Http\Controllers\MedicationMonitoringController;
 use App\Http\Controllers\FluidBalanceController;
+use App\Http\Controllers\DischargeSummaryController;
 use App\Http\Controllers\WardScheduleController;
 use App\Http\Controllers\VitalSignController;
 use App\Http\Controllers\LdapConfigurationController;
@@ -90,6 +91,8 @@ Route::middleware('auth')->group(function () {
     Route::get('nurses/{nurse}/dashboard', [WardDashboardController::class, 'nurseDashboard'])->name('nurses.dashboard');
     Route::put('nurses/{nurse}/ldap-binding', [NurseController::class, 'updateLdapBinding'])->name('nurses.update-ldap-binding');
     Route::post('nurses/{nurse}/deactivate', [NurseController::class, 'deactivate'])->name('nurses.deactivate');
+    Route::get('nurses-export', [NurseController::class, 'export'])->name('nurses.export');
+    Route::get('nurses-export/count', [NurseController::class, 'exportCount'])->name('nurses.export.count');
     Route::get('nurses-bulk-upload', [NurseController::class, 'bulkUploadForm'])->name('nurses.bulk-upload');
     Route::post('nurses-bulk-upload/preview', [NurseController::class, 'bulkUploadPreview'])->name('nurses.bulk-upload.preview');
     Route::post('nurses-bulk-upload/confirm', [NurseController::class, 'bulkUploadConfirm'])->name('nurses.bulk-upload.confirm');
@@ -134,6 +137,12 @@ Route::middleware('auth')->group(function () {
     // Bed Management Routes
     Route::resource('beds', BedController::class)->except(['show']);
     Route::post('beds/{bed}/deactivate', [BedController::class, 'deactivate'])->name('beds.deactivate');
+
+    // Discharge Summary Routes
+    // {admission} is the admit / check-in admission_logs row that opened the stay.
+    Route::get('/discharge-summaries', [DischargeSummaryController::class, 'index'])->name('discharge-summaries.index');
+    Route::get('/discharge-summaries/{admission}', [DischargeSummaryController::class, 'show'])->name('discharge-summaries.show');
+    Route::get('/discharge-summaries/{admission}/print', [DischargeSummaryController::class, 'print'])->name('discharge-summaries.print');
 
     // Ward Schedule Routes
     Route::get('/ward-schedule', [WardScheduleController::class, 'index'])

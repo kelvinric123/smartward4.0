@@ -89,6 +89,7 @@
             background: #f9f9f9;
         }
     </style>
+    @include('components.autofill-guard')
 </head>
 <body class="bg-gray-50">
     @php
