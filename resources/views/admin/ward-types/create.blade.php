@@ -56,6 +56,29 @@
                         </div>
 
                         <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700">Critical Care Ward</label>
+                            <div class="mt-2 flex items-center gap-4">
+                                <label class="inline-flex items-center">
+                                    <input type="radio" name="is_critical_care" value="0"
+                                        {{ !old('is_critical_care', false) ? 'checked' : '' }}
+                                        class="form-radio text-blue-600 focus:ring-blue-500">
+                                    <span class="ml-2 text-gray-700">No</span>
+                                </label>
+                                <label class="inline-flex items-center">
+                                    <input type="radio" name="is_critical_care" value="1"
+                                        {{ old('is_critical_care', false) ? 'checked' : '' }}
+                                        class="form-radio text-blue-600 focus:ring-blue-500">
+                                    <span class="ml-2 text-gray-700">Yes</span>
+                                </label>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Wards of this type are listed on the Critical Care Ward
+                                Dashboard.</p>
+                            @error('is_critical_care')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-2">Clinical Indicator</label>
                             <p class="text-xs text-gray-500 mb-3">Select one or more scoring scales for this ward type.
                                 Manage the list on the Clinical Indicator tab.</p>

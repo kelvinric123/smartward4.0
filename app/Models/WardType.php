@@ -15,11 +15,13 @@ class WardType extends Model
         'code',
         'name',
         'description',
+        'is_critical_care',
         'sort_order',
         'is_active',
     ];
 
     protected $casts = [
+        'is_critical_care' => 'boolean',
         'sort_order' => 'integer',
         'is_active' => 'boolean',
     ];
@@ -70,6 +72,15 @@ class WardType extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);
+    }
+
+    /**
+     * Types marked critical care (ICU, HDU...): their wards are the ones on
+     * the Critical Care Ward Dashboard.
+     */
+    public function scopeCriticalCare(Builder $query): Builder
+    {
+        return $query->where('is_critical_care', true);
     }
 
     /**

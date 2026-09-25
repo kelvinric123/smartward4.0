@@ -20,8 +20,8 @@ class WardTypeSeeder extends Seeder
             ['code' => 'SURG', 'name' => 'Surgical'],
             ['code' => 'MED', 'name' => 'Medical'],
             ['code' => 'OBGY', 'name' => 'Obs and Gynae'],
-            ['code' => 'ICU', 'name' => 'ICU'],
-            ['code' => 'HDU', 'name' => 'HDU'],
+            ['code' => 'ICU', 'name' => 'ICU', 'is_critical_care' => true],
+            ['code' => 'HDU', 'name' => 'HDU', 'is_critical_care' => true],
             ['code' => 'EDOB', 'name' => 'ED Observation Bay'],
         ];
 
@@ -30,6 +30,7 @@ class WardTypeSeeder extends Seeder
                 ['hospital_id' => null, 'code' => $wardType['code']],
                 [
                     'name' => $wardType['name'],
+                    'is_critical_care' => $wardType['is_critical_care'] ?? false,
                     'sort_order' => $index + 1,
                     'is_active' => true,
                 ]

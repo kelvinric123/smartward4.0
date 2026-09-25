@@ -56,6 +56,10 @@
                                         <td class="px-3 py-3 text-sm whitespace-nowrap">
                                             @if ($ward->wardType)
                                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{{ $ward->wardType->name }}</span>
+                                                @if ($ward->wardType->is_critical_care)
+                                                    <span class="ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800"
+                                                        title="Listed on the Critical Care Ward Dashboard">Critical care</span>
+                                                @endif
                                             @else
                                                 <span class="text-gray-400">-</span>
                                             @endif

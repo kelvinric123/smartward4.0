@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
@@ -47,5 +48,14 @@ class Ward extends Model
     public function slideshows()
     {
         return $this->hasMany(Slideshow::class);
+    }
+
+    /**
+     * Wards whose ward type is marked critical care, the ones listed on the
+     * Critical Care Ward Dashboard.
+     */
+    public function scopeCriticalCare(Builder $query): Builder
+    {
+        return $query->whereHas('wardType', fn (Builder $type) => $type->criticalCare());
     }
 }

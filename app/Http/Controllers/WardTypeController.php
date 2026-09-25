@@ -44,6 +44,7 @@ class WardTypeController extends Controller
         unset($validated['clinical_indicator_ids']);
 
         $validated['code'] = strtoupper(trim($validated['code']));
+        $validated['is_critical_care'] = $request->boolean('is_critical_care');
         $validated['sort_order'] = $validated['sort_order'] ?? ((int) WardType::max('sort_order') + 1);
         $validated['is_active'] = true;
 
@@ -71,6 +72,7 @@ class WardTypeController extends Controller
         unset($validated['clinical_indicator_ids']);
 
         $validated['code'] = strtoupper(trim($validated['code']));
+        $validated['is_critical_care'] = $request->boolean('is_critical_care', $wardType->is_critical_care);
         $validated['sort_order'] = $validated['sort_order'] ?? $wardType->sort_order;
 
         $wardType->update($validated);
@@ -123,6 +125,7 @@ class WardTypeController extends Controller
             'clinical_indicator_ids' => 'nullable|array',
             'clinical_indicator_ids.*' => 'exists:clinical_indicators,id',
             'description' => 'nullable|string|max:255',
+            'is_critical_care' => 'nullable|boolean',
             'sort_order' => 'nullable|integer|min:0',
         ], [
             'code.unique' => $hospitalId

@@ -374,6 +374,18 @@
             </a>
         </div>
 
+        <!-- Critical Care Ward Dashboard Section -->
+        <div class="pt-2">
+            <a href="{{ route('critical-care.dashboard') }}"
+                class="flex items-center px-3 py-2.5 rounded-lg text-white transition-all {{ request()->routeIs('critical-care.dashboard') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M3 12h4l3-8 4 16 3-8h4" />
+                </svg>
+                <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Critical Care Ward Dashboard</span>
+            </a>
+        </div>
+
         <!-- Integration Section -->
         @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE_HEAD) && !Auth::user()->hasRole(App\Models\User::ROLE_USER))
             <div class="pt-2">

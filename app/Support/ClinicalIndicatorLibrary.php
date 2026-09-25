@@ -24,6 +24,10 @@ use Illuminate\Support\Collection;
  * recorded score is shown with its breakdown as well as its total, which is how
  * GCS reads as E3 V4 M6.
  *
+ * An item with a `unit` and a `normal` range is a reading typed in from the
+ * monitor instead, which is how the invasive hemodynamic numerics are
+ * recorded. ClinicalIndicatorReadings describes those items and flags them.
+ *
  * Every scale names one of CATEGORIES as its category, which is what it is
  * listed under. Scales appear category by category in CATEGORIES order, and in
  * INDICATORS order within a category.
@@ -59,6 +63,7 @@ final class ClinicalIndicatorLibrary
         'Nutrition' => 'Screening for malnutrition and the risk of it',
         'Consciousness' => 'Level of consciousness, to pick up neurological deterioration',
         'Deterioration' => 'Early warning of a patient getting worse, from routine observations',
+        'Hemodynamics' => 'Invasive pressures and cardiac output from the bedside monitor, for critical care',
         'Delirium' => 'Screening for delirium and cognitive impairment',
         'Frailty' => 'Screening older adults for frailty',
         self::OTHER_CATEGORY => 'Added locally, with no clinical detail in the library yet',
@@ -470,6 +475,48 @@ final class ClinicalIndicatorLibrary
             'note' => 'Any new drop from Alert needs prompt review: in NEWS2 a new V, P or U scores 3, enough on its own to trigger an urgent response. Responding only to pain is roughly a GCS of 8, where the airway may be at risk. AVPU is coarse, so an alert but newly confused patient still scores A, which is why NEWS2 adds C for new confusion (ACVPU). Use the Glasgow Coma Scale where finer tracking is needed.',
             'confirmed' => true,
         ],
+        [
+            'code' => 'HEMO',
+            'name' => 'Advanced Hemodynamics (Numerics)',
+            'category' => 'Hemodynamics',
+            'population' => 'Adults in critical care with invasive monitoring: arterial line, central venous catheter or cardiac output monitor',
+            'purpose' => 'Records the hemodynamic numerics from the bedside monitor and flags each one against its adult normal range and the level at which the ICU doctor should be told, so falling perfusion pressure or a low-output state is picked up between rounds.',
+            // Readings typed in from the monitor, not options: see ClinicalIndicatorReadings.
+            // Only what the patient is monitored for is entered; SBP, DBP and MAP go together.
+            'groups' => [
+                'ABP' => ['label' => 'Invasive arterial pressure', 'format' => '{SBP}/{DBP} ({MAP})'],
+            ],
+            'items' => [
+                ['name' => 'Arterial systolic pressure', 'abbr' => 'SBP', 'group' => 'ABP', 'unit' => 'mmHg', 'decimals' => 0,
+                    'limits' => [20, 300], 'normal' => [90, 140], 'escalate_below' => 90, 'escalate_above' => 180],
+                ['name' => 'Arterial diastolic pressure', 'abbr' => 'DBP', 'group' => 'ABP', 'unit' => 'mmHg', 'decimals' => 0,
+                    'limits' => [10, 200], 'normal' => [60, 90], 'escalate_below' => 40, 'escalate_above' => 120],
+                ['name' => 'Mean arterial pressure', 'abbr' => 'MAP', 'group' => 'ABP', 'unit' => 'mmHg', 'decimals' => 0,
+                    'limits' => [15, 250], 'normal' => [70, 105], 'escalate_below' => 65, 'trend' => 'line'],
+                ['name' => 'Central venous pressure', 'abbr' => 'CVP', 'unit' => 'mmHg', 'decimals' => 0,
+                    'limits' => [-10, 40], 'normal' => [2, 8], 'escalate_above' => 15],
+                ['name' => 'Cardiac output', 'abbr' => 'CO', 'unit' => 'L/min', 'decimals' => 2,
+                    'limits' => [0.5, 20], 'normal' => [4.0, 8.0]],
+                ['name' => 'Cardiac index', 'abbr' => 'CI', 'unit' => 'L/min/m²', 'decimals' => 2,
+                    'limits' => [0.3, 10], 'normal' => [2.5, 4.0], 'escalate_below' => 2.2, 'trend' => 'band'],
+            ],
+            'checks' => [
+                ['DBP', '<', 'SBP', 'Diastolic pressure must be lower than systolic.'],
+                ['MAP', '>', 'DBP', 'MAP must lie between the diastolic and systolic pressures.'],
+                ['MAP', '<', 'SBP', 'MAP must lie between the diastolic and systolic pressures.'],
+            ],
+            // The worst reading sets the status (see ClinicalIndicatorReadings), not a total
+            'score_min' => 0,
+            'score_max' => 2,
+            'bands' => [
+                ['label' => 'Within normal range', 'range' => 'Every reading inside its normal range', 'min' => 0, 'max' => 0, 'tone' => self::TONE_LOW],
+                ['label' => 'Outside normal range', 'range' => 'A reading outside its normal range, none at an escalation level', 'min' => 1, 'max' => 1, 'tone' => self::TONE_MODERATE],
+                ['label' => 'Escalate', 'range' => 'A reading at an escalation level: inform the ICU doctor', 'min' => 2, 'max' => 2, 'tone' => self::TONE_HIGH],
+            ],
+            'reference' => 'Normal ranges: Edwards Lifesciences, Normal Hemodynamic Parameters (adult), with CVP taken as 2 to 8 mmHg. Escalation: MAP 65, Surviving Sepsis Campaign, Evans et al., 2021; SBP 90 and CI 2.2, cardiogenic shock criteria, SHOCK trial (Hochman et al., 1999) and SCAI shock classification, 2019; DBP 40, Hernández, Teboul and Bakker, 2019; SBP 180 and DBP 120, ACC/AHA hypertension guideline, 2017; CVP 15, common ICU practice',
+            'note' => 'Copy the values the monitor displays, with the transducer levelled at the phlebostatic axis (4th intercostal space, mid-axillary line) and zeroed, and pressures read at end-expiration. Steer by MAP: below 65 mmHg organ perfusion is at risk, which is why most vasopressor targets start there. CVP alone does not show whether the patient will respond to fluid, so read it as a trend and against PEEP; a sudden rise can mean fluid overload, right ventricular failure, tamponade or tension pneumothorax. CI adjusts cardiac output for body size, so escalation is on CI rather than CO: below 2.2 L/min/m² is a low-output state. These are adult defaults: where the ICU team has set a target for the patient, such as a higher MAP in chronic hypertension, that target applies.',
+            'confirmed' => true,
+        ],
 
         // --- Awaiting confirmation of the local variant ---------------------
         // These exist so ward types can already be bound to them, but the
@@ -653,11 +700,36 @@ final class ClinicalIndicatorLibrary
     }
 
     /**
+     * Whether the scale is recorded as readings typed in from the monitor
+     * (the hemodynamic numerics), which needs every item to carry a unit and
+     * a normal range. See ClinicalIndicatorReadings.
+     */
+    public static function takesReadings(?array $definition): bool
+    {
+        if (empty($definition['items'])) {
+            return false;
+        }
+
+        foreach ($definition['items'] as $item) {
+            if (!isset($item['unit'], $item['normal'])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * The scoring rule for one item as readable text, derived from its options
-     * so the reference panel and the scoring form cannot disagree.
+     * so the reference panel and the scoring form cannot disagree. A reading
+     * gives its normal range and escalation levels instead.
      */
     public static function itemScoringText(array $item): string
     {
+        if (isset($item['unit'], $item['normal'])) {
+            return ClinicalIndicatorReadings::rangeText($item);
+        }
+
         if (empty($item['options'])) {
             return $item['scoring'] ?? '';
         }
@@ -746,7 +818,9 @@ final class ClinicalIndicatorLibrary
 
         $summary = implode(' - ', $parts);
 
-        if ($definition['score_min'] !== null && $definition['score_max'] !== null) {
+        if (self::takesReadings($definition)) {
+            $summary .= ' (readings: ' . implode(', ', array_column($definition['items'], 'abbr')) . ')';
+        } elseif ($definition['score_min'] !== null && $definition['score_max'] !== null) {
             $summary .= ' (score ' . $definition['score_min'] . ' to ' . $definition['score_max'] . ')';
         }
 

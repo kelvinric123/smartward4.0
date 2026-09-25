@@ -81,6 +81,8 @@
                                         <th class="px-3 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                                             Clinical Indicator</th>
                                         <th class="px-3 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                            Critical Care</th>
+                                        <th class="px-3 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                                             Status</th>
                                         <th class="px-3 py-3 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
                                             Actions</th>
@@ -115,6 +117,16 @@
                                                 @empty
                                                     <span class="text-gray-400">Not set</span>
                                                 @endforelse
+                                            </td>
+                                            <td class="px-3 py-3 whitespace-nowrap text-sm">
+                                                @if ($wardType->is_critical_care)
+                                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800"
+                                                        title="Wards of this type are on the Critical Care Ward Dashboard">
+                                                        Yes
+                                                    </span>
+                                                @else
+                                                    <span class="text-gray-400">No</span>
+                                                @endif
                                             </td>
                                             <td class="px-3 py-3 whitespace-nowrap">
                                                 <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full {{ $wardType->is_active ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border border-green-200' : 'bg-gradient-to-r from-red-100 to-pink-100 text-red-800 border border-red-200' }}">
@@ -161,7 +173,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="6" class="px-6 py-12 text-center">
+                                            <td colspan="7" class="px-6 py-12 text-center">
                                                 <div class="flex flex-col items-center">
                                                     <svg class="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -275,7 +287,12 @@
                                                     @if ($definition)
                                                         <p class="text-xs text-gray-500 mt-0.5">
                                                             {{ $definition['population'] ?? '' }}
-                                                            @if ($definition['score_min'] !== null)
+                                                            @if (\App\Support\ClinicalIndicatorLibrary::takesReadings($definition))
+                                                                @if (!empty($definition['population']))
+                                                                    <span class="text-gray-300">&middot;</span>
+                                                                @endif
+                                                                Readings: {{ implode(', ', array_column($definition['items'], 'abbr')) }}
+                                                            @elseif ($definition['score_min'] !== null)
                                                                 @if (!empty($definition['population']))
                                                                     <span class="text-gray-300">&middot;</span>
                                                                 @endif

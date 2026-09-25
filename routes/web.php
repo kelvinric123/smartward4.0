@@ -203,6 +203,8 @@ Route::middleware('auth')->group(function () {
 
     // Ward Dashboard Routes
     Route::get('/ward-dashboard', [WardDashboardController::class, 'index'])->name('ward.dashboard');
+    // Critical Care Ward Dashboard: the ward dashboard for wards whose ward type is marked critical care
+    Route::get('/critical-care-dashboard', [\App\Http\Controllers\CriticalCareDashboardController::class, 'index'])->name('critical-care.dashboard');
     Route::post('/ward-dashboard/admit-patient', [WardDashboardController::class, 'admitPatient'])->name('ward.admit-patient');
     Route::post('/ward-dashboard/prebook-patient', [WardDashboardController::class, 'prebookPatient'])->name('ward.prebook-patient');
     Route::post('/ward-dashboard/check-in-prebook/{patient}', [WardDashboardController::class, 'checkInPrebook'])->name('ward.check-in-prebook');

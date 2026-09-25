@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\ClinicalIndicatorLibrary;
+use App\Support\ClinicalIndicatorReadings;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -65,14 +66,31 @@ class ClinicalIndicatorScore extends Model
     }
 
     /**
+     * Readings typed in from the monitor (the hemodynamic numerics) rather
+     * than a scale scored item by item. Their score is only the worst flag, so
+     * the readings are what to show.
+     */
+    public function isReadings(): bool
+    {
+        return !empty($this->item_scores) && isset($this->item_scores[0]['unit']);
+    }
+
+    /**
      * The item breakdown in its conventional short form, such as E3 V4 M6 for
      * GCS, where the total alone would hide which response changed. Null for
      * scales whose items carry no abbr, which are read by their total.
+     *
+     * Readings come back as the values with their units, arrows marking any
+     * outside the normal range, e.g. ABP 85/42 (56) mmHg ↓↓ · CVP 12 mmHg ↑.
      */
     public function breakdown(): ?string
     {
         if (empty($this->item_scores)) {
             return null;
+        }
+
+        if ($this->isReadings()) {
+            return ClinicalIndicatorReadings::summary($this->item_scores, $this->clinicalIndicator?->definition());
         }
 
         $parts = [];

@@ -13,6 +13,8 @@
         'moderate' => 'bg-amber-50 text-amber-800 border-amber-200',
         'low' => 'bg-green-50 text-green-800 border-green-200',
     ];
+    // Monitor readings (the hemodynamic numerics): ranges per parameter, and a status from the worst one
+    $readings = \App\Support\ClinicalIndicatorLibrary::takesReadings($definition);
 @endphp
 
 <div {{ $attributes->merge(['class' => 'rounded-xl border border-blue-100 bg-white p-6']) }}>
@@ -28,11 +30,12 @@
 
     @if (!empty($definition['items']))
         <div class="mt-5">
-            <h4 class="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">What is scored</h4>
+            <h4 class="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">{{ $readings ? 'What is recorded' : 'What is scored' }}</h4>
             <div class="divide-y divide-gray-100 rounded-lg border border-gray-200 overflow-hidden">
                 @foreach ($definition['items'] as $item)
                     <div class="px-4 py-2.5 flex flex-col gap-0.5 sm:flex-row sm:gap-4">
-                        <span class="text-sm font-medium text-gray-800 sm:w-64 sm:shrink-0">{{ $item['name'] }}</span>
+                        <span class="text-sm font-medium text-gray-800 sm:w-64 sm:shrink-0">{{ $item['name'] }}@if ($readings && !empty($item['abbr']))
+                                <span class="text-gray-500">({{ $item['abbr'] }}, {{ $item['unit'] }})</span>@endif</span>
                         <span
                             class="text-sm text-gray-600">{{ \App\Support\ClinicalIndicatorLibrary::itemScoringText($item) }}</span>
                     </div>
@@ -44,18 +47,28 @@
     @if (!empty($definition['bands']))
         <div class="mt-5">
             <h4 class="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
-                Total score
-                @if ($definition['score_min'] !== null)
-                    <span class="font-medium text-gray-500 normal-case tracking-normal">({{ $definition['score_min'] }}
-                        to {{ $definition['score_max'] }})</span>
+                @if ($readings)
+                    Status
+                    <span class="font-medium text-gray-500 normal-case tracking-normal">(set by the worst reading)</span>
+                @else
+                    Total score
+                    @if ($definition['score_min'] !== null)
+                        <span class="font-medium text-gray-500 normal-case tracking-normal">({{ $definition['score_min'] }}
+                            to {{ $definition['score_max'] }})</span>
+                    @endif
                 @endif
             </h4>
             <div class="flex flex-wrap gap-2">
                 @foreach ($definition['bands'] as $band)
                     <span
                         class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium {{ $tones[$band['tone']] ?? $tones['low'] }}">
-                        <span class="font-bold">{{ $band['range'] }}</span>
-                        <span>{{ $band['label'] }}</span>
+                        @if ($readings)
+                            <span class="font-bold">{{ $band['label'] }}</span>
+                            <span>{{ $band['range'] }}</span>
+                        @else
+                            <span class="font-bold">{{ $band['range'] }}</span>
+                            <span>{{ $band['label'] }}</span>
+                        @endif
                     </span>
                 @endforeach
             </div>

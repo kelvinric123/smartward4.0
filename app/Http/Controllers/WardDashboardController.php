@@ -25,6 +25,7 @@ use App\Models\ClinicalIndicator;
 use App\Models\ClinicalIndicatorScore;
 use App\Support\ClinicalIndicatorLibrary;
 use App\Support\ClinicalIndicatorMonitoring;
+use App\Support\ClinicalIndicatorReadings;
 use App\Support\FluidBalanceChart;
 use App\Models\PatientCareProvider;
 use App\Models\Infusion;
@@ -45,9 +46,22 @@ class WardDashboardController extends Controller
         // Get all wards
         $wards = Ward::where('is_active', true)->get();
 
+        return view('wards.dashboard', $this->dashboardViewData($request, $wards));
+    }
+
+    /**
+     * Everything the dashboard view shows for the ward picked from $wards
+     * (?ward_id=, else the first one). The Critical Care Ward Dashboard renders
+     * its own copy of the view from this, passing only the critical care wards;
+     * with $withinWards set, a ward_id outside that list falls back to the first.
+     */
+    protected function dashboardViewData(Request $request, \Illuminate\Support\Collection $wards, bool $withinWards = false): array
+    {
         // Get selected ward (default to first ward)
         $selectedWardId = $request->input('ward_id', $wards->first()->id ?? null);
-        $selectedWard = Ward::find($selectedWardId);
+        $selectedWard = $withinWards
+            ? $wards->firstWhere('id', $selectedWardId)
+            : Ward::find($selectedWardId);
 
         if (!$selectedWard) {
             $selectedWard = $wards->first();
@@ -60,7 +74,7 @@ class WardDashboardController extends Controller
 
         // If no ward exists, return empty view
         if (!$selectedWard || !$selectedWardId) {
-            return view('wards.dashboard', [
+            return [
                 'wards' => $wards,
                 'beds' => [],
                 'statistics' => [
@@ -86,7 +100,7 @@ class WardDashboardController extends Controller
                 'bedBoxVitalsMode' => $userSettings ? ($userSettings->bed_box_vitals_mode ?? 'demo') : 'demo',
                 'notificationCount' => 0,
                 'currentShift' => null,
-            ]);
+            ];
         }
 
         // Sync bed status with patient assignments
@@ -194,7 +208,7 @@ class WardDashboardController extends Controller
             ['key' => 'qc_checking', 'label' => 'QC checking', 'shifts' => ['ON'], 'note' => '(Night Only)'],
         ];
 
-        return view('wards.dashboard', compact(
+        return compact(
             'wards',
             'beds',
             'statistics',
@@ -215,7 +229,7 @@ class WardDashboardController extends Controller
             'assessmentAlerts',
             'fluidBalanceEnabled',
             'fluidBalanceAlerts'
-        ));
+        );
     }
 
     public function nurseDashboard(Request $request, Nurse $nurse): View
@@ -1329,6 +1343,13 @@ class WardDashboardController extends Controller
                     'scorable' => ClinicalIndicatorLibrary::isScorable($definition),
                     'latest' => $history->first(),
                     'history' => $history->take(10),
+                    // Monitor readings (hemodynamic numerics) are charted: every one this admission, oldest first
+                    'trend' => ClinicalIndicatorLibrary::takesReadings($definition)
+                        ? $history
+                            ->filter(fn ($score) => !$patient->admitted_at || $score->recorded_at->gte($patient->admitted_at))
+                            ->reverse()
+                            ->values()
+                        : null,
                     // When it is next due, for scales with a monitoring interval switched on
                     'monitoring' => $indicator->isMonitored()
                         ? ClinicalIndicatorMonitoring::status(
@@ -1355,6 +1376,9 @@ class WardDashboardController extends Controller
             'score' => 'nullable|integer|min:0',
             'item_scores' => 'nullable|array',
             'item_scores.*' => 'nullable|integer',
+            // Monitor readings (hemodynamic numerics), by item
+            'readings' => 'nullable|array',
+            'readings.*' => 'nullable|numeric',
             'notes' => 'nullable|string|max:1000',
         ]);
 
@@ -1373,7 +1397,17 @@ class WardDashboardController extends Controller
         $definition = $indicator->definition();
         $itemScores = null;
 
-        if (ClinicalIndicatorLibrary::isScorable($definition)) {
+        if (ClinicalIndicatorLibrary::takesReadings($definition)) {
+            // Each reading is flagged against its range; the score is the worst flag
+            $readings = ClinicalIndicatorReadings::evaluate($definition, $validated['readings'] ?? []);
+
+            if ($readings['error'] !== null) {
+                return back()->withInput()->with('error', $readings['error']);
+            }
+
+            $score = $readings['score'];
+            $itemScores = $readings['items'];
+        } elseif (ClinicalIndicatorLibrary::isScorable($definition)) {
             $items = $definition['items'];
             $posted = $validated['item_scores'] ?? [];
 
@@ -1423,8 +1457,9 @@ class WardDashboardController extends Controller
         $record->applyBand($indicator->code)->save();
         $breakdown = $record->breakdown();
 
-        return back()->withInput()->with('success', $indicator->name . ' scored ' . $score
-            . ($breakdown ? ' (' . $breakdown . ')' : '')
+        return back()->withInput()->with('success', ($record->isReadings()
+                ? $indicator->name . ' recorded: ' . $breakdown
+                : $indicator->name . ' scored ' . $score . ($breakdown ? ' (' . $breakdown . ')' : ''))
             . ($record->band_label ? ' - ' . $record->band_label : '') . '.');
     }
 
@@ -1912,10 +1947,13 @@ class WardDashboardController extends Controller
         $patient = $movement->patient;
         $patientName = $patient ? $patient->name : 'Patient';
 
+        // The Critical Care Ward Dashboard sends from_dashboard=critical-care to get its own page back
+        $dashboardRoute = $request->input('from_dashboard') === 'critical-care' ? 'critical-care.dashboard' : 'ward.dashboard';
+
         if ($movement->status !== 'sent') {
             // Check if request came from dashboard
             if ($request->has('from_dashboard')) {
-                return redirect()->route('ward.dashboard', ['ward_id' => $request->input('ward_id')])
+                return redirect()->route($dashboardRoute, ['ward_id' => $request->input('ward_id')])
                     ->with('error', 'Only sent movements can be marked as returned.');
             }
             return redirect()->route('ward.patient-details', [
@@ -1938,7 +1976,7 @@ class WardDashboardController extends Controller
 
         // Check if request came from dashboard - redirect back to dashboard with notification
         if ($request->has('from_dashboard')) {
-            return redirect()->route('ward.dashboard', ['ward_id' => $request->input('ward_id')])
+            return redirect()->route($dashboardRoute, ['ward_id' => $request->input('ward_id')])
                 ->with('success', $patientName . ' has been marked as returned from ' . $movement->location . '.');
         }
 

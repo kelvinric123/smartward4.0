@@ -2890,6 +2890,11 @@
 
                 {{-- One panel per clinical indicator bound to this ward's ward type --}}
                 @foreach ($wardClinicalIndicators ?? [] as $indicator)
+                    @if (\App\Support\ClinicalIndicatorLibrary::takesReadings($indicator['definition']))
+                        {{-- Monitor readings (the hemodynamic numerics) are typed in rather than scored --}}
+                        @include('wards.partials.clinical-indicator-readings')
+                        @continue
+                    @endif
                     @php
                         $definition = $indicator['definition'];
                         $items = $definition['items'] ?? [];
