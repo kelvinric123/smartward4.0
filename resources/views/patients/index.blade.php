@@ -62,7 +62,7 @@
                     @endif
                 </form>
                 <a href="{{ route('patients.create') }}"
-                    class="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 border border-transparent rounded-lg font-semibold text-sm text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
+                    class="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-brand-600 to-accent-600 hover:from-brand-700 hover:to-accent-700 border border-transparent rounded-lg font-semibold text-sm text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                     </svg>
@@ -94,7 +94,7 @@
                     <a href="{{ request()->fullUrlWithQuery(['status' => $key, 'page' => null]) }}"
                         @class([
                             'inline-flex items-center gap-2 shrink-0 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors',
-                            'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-md' => $status === $key,
+                            'bg-gradient-to-r from-brand-600 to-accent-600 text-white shadow-md' => $status === $key,
                             'text-gray-600 hover:bg-blue-50 hover:text-blue-700' => $status !== $key,
                         ])>
                         {{ $tab['label'] }}
@@ -111,7 +111,7 @@
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-blue-100">
                         <thead>
-                            <tr class="bg-gradient-to-r from-blue-50 to-cyan-50">
+                            <tr class="bg-gradient-to-r from-brand-50 to-accent-50">
                                 <x-patient.sort-header column="name" label="Patient" :sort="$sort" :direction="$direction" />
                                 <th class="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">IC / Passport</th>
                                 <th class="px-4 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Age / Gender</th>
@@ -128,7 +128,7 @@
                                     <td class="px-4 py-4">
                                         <div class="flex items-center gap-3">
                                             <div
-                                                class="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 text-white text-sm font-bold flex items-center justify-center shadow-sm">
+                                                class="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-brand-600 to-accent-500 text-white text-sm font-bold flex items-center justify-center shadow-sm">
                                                 {{ $initials($patient->name) ?: '?' }}
                                             </div>
                                             <div class="min-w-0">

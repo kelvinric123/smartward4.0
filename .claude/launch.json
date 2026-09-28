@@ -3,9 +3,9 @@
   "configurations": [
     {
       "name": "artisan-serve",
-      "runtimeExecutable": "C:/laragon/bin/php/php-8.4/php.exe",
-      "runtimeArgs": ["artisan", "serve", "--port=8000"],
-      "port": 8000
+      "runtimeExecutable": "php",
+      "runtimeArgs": ["artisan", "serve", "--port=8888"],
+      "port": 8888
     },
     {
       "name": "nurse-app-web",

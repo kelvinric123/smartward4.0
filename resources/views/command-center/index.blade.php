@@ -3,16 +3,22 @@
         <div class="flex items-center justify-between">
             <div>
                 <h2 class="font-bold text-2xl text-slate-800 leading-tight">{{ __('Command Center') }}</h2>
-                <p class="text-sm text-slate-500 mt-1">Ward, bed, patient, vitals, risk &amp; nutrition analytics</p>
+                <p class="text-sm text-slate-500 mt-1">Live clinical watch, with ward, bed, patient, vitals, risk &amp; nutrition analytics</p>
             </div>
             <div class="text-sm text-slate-500">{{ date('l, F j, Y') }}</div>
         </div>
     </x-slot>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // The live board's auto-refresh comes back quietly: no entry animations or count-up on a wall screen
+        try {
+            if (sessionStorage.getItem('ccQuietReload') === '1') document.documentElement.classList.add('cc-quiet');
+        } catch (e) {}
+    </script>
 
     @php
-        $activeTab = in_array(request('tab'), ['ward', 'bed', 'patient', 'vitals', 'risk', 'diet']) ? request('tab') : 'ward';
+        $activeTab = in_array(request('tab'), ['live', 'ward', 'bed', 'patient', 'vitals', 'risk', 'diet']) ? request('tab') : 'live';
 
         $icons = [
             'building'  => 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
@@ -35,8 +41,16 @@
         ];
     @endphp
 
+    {{-- The open tab is kept in the address, so a refresh or a bookmark comes back to it --}}
     <div class="py-6" x-data="{ tab: '{{ $activeTab }}' }"
-        x-init="$watch('tab', v => window.dispatchEvent(new CustomEvent('cc-tab', { detail: v })))">
+        x-init="$watch('tab', v => {
+            window.dispatchEvent(new CustomEvent('cc-tab', { detail: v }));
+            try {
+                const url = new URL(window.location.href);
+                url.searchParams.set('tab', v);
+                window.history.replaceState(null, '', url);
+            } catch (e) {}
+        })">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-5">
 
             {{-- ------ Filter bar ------ --}}
@@ -135,6 +149,7 @@
                     <nav class="flex gap-1 overflow-x-auto">
                         @php
                             $tabs = [
+                                'live'    => ['label' => 'Live',        'icon' => $icons['lightning'], 'active' => 'text-red-600 border-red-500 bg-red-50/40', 'badge' => $live['attention_total']],
                                 'ward'    => ['label' => 'Ward',        'icon' => $icons['building'],  'active' => 'text-indigo-600 border-indigo-500 bg-indigo-50/40'],
                                 'bed'     => ['label' => 'Beds',        'icon' => $icons['bed'],       'active' => 'text-sky-600 border-sky-500 bg-sky-50/40'],
                                 'patient' => ['label' => 'Patients',    'icon' => $icons['users'],     'active' => 'text-emerald-600 border-emerald-500 bg-emerald-50/40'],
@@ -153,9 +168,285 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ $info['icon'] }}" />
                                 </svg>
                                 {{ $info['label'] }}
+                                @if(!empty($info['badge']))
+                                    <span class="min-w-[1.25rem] px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-bold leading-none text-center"
+                                        title="{{ $info['badge'] }} {{ \Illuminate\Support\Str::plural('patient', $info['badge']) }} needing attention">{{ $info['badge'] }}</span>
+                                @endif
                             </button>
                         @endforeach
                     </nav>
+                </div>
+
+                {{-- ===================== LIVE TAB ===================== --}}
+                {{-- What needs attention across the wards right now (CommandCenterLive); the date range does not apply --}}
+                @php
+                    $ls = $live['stats'];
+                    $when = fn ($at) => $at->isToday() ? $at->format('H:i') : $at->format('d M H:i');
+                    $details = fn (array $row, ?string $openTab = null) => route('ward.patient-details', array_filter(['patient_id' => $row['id'], 'open_tab' => $openTab]));
+                    $ewsChips = ['urgent' => 'bg-red-600 text-white', 'warning' => 'bg-amber-400 text-white', 'normal' => 'bg-emerald-500 text-white', 'old' => 'bg-slate-200 text-slate-600'];
+                    $ewsHours = \App\Services\CommandCenterLive::EWS_CURRENT_HOURS;
+                    $reasonChip = 'inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs transition-colors';
+                    // A ward board count: blank when none, a coloured chip when some
+                    $count = fn (int $n, string $tone) => $n > 0
+                        ? '<span class="inline-flex min-w-[1.75rem] justify-center rounded px-1.5 py-0.5 text-xs font-semibold tabular-nums ' . $tone . '">' . $n . '</span>'
+                        : '<span class="text-slate-300">&ndash;</span>';
+                    $recentHours = \App\Support\ClinicalIndicatorReadings::RECENT_HOURS;
+                @endphp
+                <div x-show="tab === 'live'" x-cloak
+                    x-transition:enter="transition ease-out duration-300"
+                    x-transition:enter-start="opacity-0 translate-y-2"
+                    x-transition:enter-end="opacity-100 translate-y-0"
+                    class="p-5 space-y-5">
+
+                    {{-- Right now, and keeping it current --}}
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-600">
+                            <span class="relative flex h-2.5 w-2.5">
+                                <span class="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping"></span>
+                                <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+                            </span>
+                            <span class="font-semibold text-slate-800">Right now</span>
+                            <span class="text-slate-300">&middot;</span>
+                            <span>{{ $selectedWard ? $selectedWard->ward_name : 'All wards' }}</span>
+                            <span class="text-slate-300">&middot;</span>
+                            <span>Updated {{ $live['generated_at']->format('H:i:s') }}</span>
+                            <span class="text-xs text-slate-400">The date range applies to the other tabs.</span>
+                        </div>
+                        {{-- Reloads while this tab is open and the screen is visible; the choice is remembered on this browser --}}
+                        <div x-data="{
+                                auto: true,
+                                init() {
+                                    try { this.auto = localStorage.getItem('ccLiveRefresh') !== 'off' } catch (e) {}
+                                    const panel = this.$el;
+                                    setInterval(() => {
+                                        if (!this.auto || panel.offsetParent === null || document.visibilityState !== 'visible') return;
+                                        try { sessionStorage.setItem('ccQuietReload', '1') } catch (e) {}
+                                        window.location.reload();
+                                    }, 60000);
+                                },
+                                toggle() {
+                                    this.auto = !this.auto;
+                                    try { localStorage.setItem('ccLiveRefresh', this.auto ? 'on' : 'off') } catch (e) {}
+                                },
+                            }">
+                            <button type="button" @click="toggle()"
+                                :class="auto ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'"
+                                class="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors">
+                                <span class="h-2 w-2 rounded-full" :class="auto ? 'bg-emerald-500' : 'bg-slate-300'"></span>
+                                <span x-text="auto ? 'Auto-refresh every minute' : 'Auto-refresh off'">Auto-refresh every minute</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {{-- Short labels: the cards are narrow at six across --}}
+                    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 cc-stagger">
+                        <x-cc-stat label="Inpatients" :value="$ls['inpatients']"
+                            :hint="$ls['pending_discharge'] . ' to discharge'" color="indigo" :icon="$icons['users']" />
+                        <x-cc-stat label="Crit. care" :value="$ls['cc_wards'] ? $ls['cc_occupied'] . ' / ' . $ls['cc_beds'] : '–'"
+                            :hint="$ls['cc_wards'] ? $ls['ventilated'] . ' ventilated' : 'No CC ward'" color="cyan" :icon="$icons['bed']" />
+                        <x-cc-stat label="EWS 5+" :value="$ls['ews_urgent']"
+                            :hint="$ls['ews_warning'] . ' at EWS 3–4'" color="red" :icon="$icons['warning']" />
+                        <x-cc-stat label="Escalations" :value="$ls['escalations']"
+                            :hint="'Monitors, ' . $recentHours . ' h'" color="rose" :icon="$icons['heart']" />
+                        <x-cc-stat label="Overdue" :value="$ls['overdue_care']"
+                            hint="Scales & doses" color="amber" :icon="$icons['clock']" />
+                        <x-cc-stat label="Alerts" :value="$ls['alerts']"
+                            :hint="$ls['alerts_urgent'] . ' urgent'" color="violet" :icon="$icons['lightning']" />
+                    </div>
+
+                    {{-- The patients to look at first --}}
+                    <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                        <div class="px-5 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                            <h3 class="flex items-center gap-2 text-sm font-semibold text-slate-700 uppercase tracking-wider">
+                                <span class="w-2 h-2 rounded-full bg-gradient-to-r from-red-500 to-amber-500"></span>
+                                Needs attention now
+                            </h3>
+                            <span class="text-xs text-slate-400">
+                                {{ $live['attention_total'] }} {{ \Illuminate\Support\Str::plural('patient', $live['attention_total']) }} &middot; most urgent first
+                            </span>
+                        </div>
+                        @if(empty($live['attention']))
+                            <div class="px-5 py-10 text-center">
+                                <div class="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="{{ $icons['check'] }}" />
+                                    </svg>
+                                </div>
+                                <p class="text-sm font-medium text-slate-700">Nobody needs attention right now</p>
+                                <p class="mt-1 text-xs text-slate-400">No raised EWS, escalating monitor readings, overdue assessments or doses, fluid balance alerts or urgent alerts.</p>
+                            </div>
+                        @else
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full text-sm">
+                                    <thead class="bg-slate-50 text-slate-500 uppercase text-[11px] tracking-wider">
+                                        <tr>
+                                            <th class="px-5 py-2.5 text-left font-semibold">Patient</th>
+                                            <th class="px-3 py-2.5 text-left font-semibold">Ward &middot; Bed</th>
+                                            <th class="px-3 py-2.5 text-left font-semibold">EWS</th>
+                                            <th class="px-3 py-2.5 text-left font-semibold">Why</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100">
+                                        @foreach($live['attention'] as $row)
+                                            <tr class="align-top hover:bg-slate-50/70 transition-colors">
+                                                <td class="px-5 py-3">
+                                                    <a href="{{ $details($row) }}" target="_blank" rel="noopener"
+                                                        class="font-medium text-slate-800 hover:text-indigo-600">{{ $row['name'] }}</a>
+                                                    <div class="text-xs text-slate-400">{{ $row['mrn'] }}</div>
+                                                    @if($row['pending_discharge'] || $row['ventilated'] || $row['transfusing'])
+                                                        <div class="mt-1 flex flex-wrap gap-1">
+                                                            @if($row['ventilated'])
+                                                                <span class="rounded bg-cyan-50 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-700">Ventilated</span>
+                                                            @endif
+                                                            @if($row['transfusing'])
+                                                                <span class="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700">Transfusing</span>
+                                                            @endif
+                                                            @if($row['pending_discharge'])
+                                                                <span class="rounded bg-yellow-50 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-700">Pending discharge</span>
+                                                            @endif
+                                                        </div>
+                                                    @endif
+                                                </td>
+                                                <td class="px-3 py-3 whitespace-nowrap">
+                                                    <span class="text-slate-700">{{ $row['ward'] }}</span>
+                                                    @if($row['critical_care'])
+                                                        <span class="ml-1 rounded bg-cyan-50 px-1 py-0.5 text-[10px] font-bold text-cyan-700" title="Critical care ward">CC</span>
+                                                    @endif
+                                                    <div class="text-xs text-slate-400">Bed {{ $row['bed'] ?: '–' }}</div>
+                                                </td>
+                                                <td class="px-3 py-3 whitespace-nowrap">
+                                                    @if($row['ews'])
+                                                        <span class="rounded px-1.5 py-0.5 text-xs font-bold {{ $ewsChips[$row['ews']['severity']] }}"
+                                                            @if($row['ews']['severity'] === 'old') title="From vital signs over {{ $ewsHours }} h old, so not counted" @endif>EWS {{ $row['ews']['score'] }}</span>
+                                                        <div class="mt-1 text-[11px] text-slate-400">
+                                                            {{ $row['ews']['severity'] === 'old' ? 'Old · ' : '' }}{{ $when($row['ews']['at']) }}
+                                                        </div>
+                                                    @else
+                                                        <span class="text-xs text-slate-400">No vitals</span>
+                                                    @endif
+                                                </td>
+                                                <td class="px-3 py-3">
+                                                    <div class="flex flex-wrap gap-1.5">
+                                                        @foreach($row['escalations'] as $escalation)
+                                                            <a href="{{ $details($row, 'indicator-' . $escalation['indicator_id']) }}" target="_blank" rel="noopener"
+                                                                class="{{ $reasonChip }} border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                                                                title="At an escalation level: inform the ICU doctor">
+                                                                <span class="font-semibold">{{ $escalation['code'] }}</span> {{ $escalation['readings'] }}
+                                                            </a>
+                                                        @endforeach
+                                                        @foreach($row['assessments_overdue'] as $overdue)
+                                                            <a href="{{ $details($row, 'indicator-' . $overdue['indicator_id']) }}" target="_blank" rel="noopener"
+                                                                class="{{ $reasonChip }} border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100">
+                                                                <span class="font-semibold">{{ $overdue['code'] }}</span> overdue &middot; {{ $overdue['history'] }}
+                                                            </a>
+                                                        @endforeach
+                                                        @if($row['doses_overdue'])
+                                                            <a href="{{ $details($row, 'medications') }}" target="_blank" rel="noopener"
+                                                                class="{{ $reasonChip }} border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                                                                title="{{ implode(', ', $row['doses_overdue']) }}">
+                                                                <span class="font-semibold">{{ count($row['doses_overdue']) }} {{ \Illuminate\Support\Str::plural('dose', count($row['doses_overdue'])) }} overdue</span>
+                                                                {{ \Illuminate\Support\Str::limit(implode(', ', $row['doses_overdue']), 40) }}
+                                                            </a>
+                                                        @endif
+                                                        @if($row['fluid'])
+                                                            <a href="{{ $details($row, 'io') }}" target="_blank" rel="noopener"
+                                                                class="{{ $reasonChip }} {{ $row['fluid']['level'] === 'critical' ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100' : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100' }}">
+                                                                <span class="font-semibold">I/O</span> {{ $row['fluid']['title'] }}
+                                                            </a>
+                                                        @endif
+                                                        @if($row['alerts_urgent'])
+                                                            <span class="{{ $reasonChip }} border-violet-200 bg-violet-50 text-violet-700">
+                                                                <span class="font-semibold">{{ $row['alerts_urgent'] }}</span> urgent {{ \Illuminate\Support\Str::plural('alert', $row['alerts_urgent']) }} pending
+                                                            </span>
+                                                        @endif
+                                                        @if(!$row['escalations'] && !$row['assessments_overdue'] && !$row['doses_overdue'] && !$row['fluid'] && !$row['alerts_urgent'])
+                                                            <span class="text-xs text-slate-500">Raised EWS</span>
+                                                        @endif
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                            @if($live['attention_total'] > count($live['attention']))
+                                <div class="border-t border-slate-100 px-5 py-2.5 text-xs text-slate-500">
+                                    {{ $live['attention_total'] - count($live['attention']) }} more &middot; choose a ward above to see its whole list.
+                                </div>
+                            @endif
+                        @endif
+                    </div>
+
+                    {{-- Every ward at a glance --}}
+                    <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                        <div class="px-5 py-3 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2">
+                            <h3 class="flex items-center gap-2 text-sm font-semibold text-slate-700 uppercase tracking-wider">
+                                <span class="w-2 h-2 rounded-full bg-gradient-to-r from-indigo-500 to-cyan-500"></span>
+                                Wards right now
+                            </h3>
+                            <span class="text-xs text-slate-400">Counts are patients &middot; a ward's name opens its dashboard</span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full text-sm">
+                                <thead class="bg-slate-50 text-slate-500 uppercase text-[11px] tracking-wider">
+                                    <tr>
+                                        <th class="px-5 py-2.5 text-left font-semibold">Ward</th>
+                                        <th class="px-3 py-2.5 text-left font-semibold w-44">Beds</th>
+                                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap" title="Pending discharge">To discharge</th>
+                                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap" title="Prebooked, waiting for a bed">Incoming</th>
+                                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">EWS 5+</th>
+                                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">EWS 3–4</th>
+                                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap" title="Hemodynamic or ventilator readings at an escalation level, last {{ $recentHours }} h">Escalating</th>
+                                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap">Ventilated</th>
+                                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap" title="Monitored assessments or medication doses overdue">Overdue</th>
+                                        <th class="px-3 py-2.5 text-right font-semibold whitespace-nowrap" title="Fluid balance (I/O chart) alerts">I/O</th>
+                                        <th class="px-5 py-2.5 text-right font-semibold whitespace-nowrap" title="Pending ward notifications">Alerts</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    @forelse($live['wards'] as $w)
+                                        @php
+                                            $wardBar = $w['occupancy'] >= 90 ? 'from-rose-500 to-red-500' : ($w['occupancy'] >= 75 ? 'from-amber-400 to-orange-500' : 'from-emerald-400 to-teal-500');
+                                        @endphp
+                                        <tr class="hover:bg-slate-50/70 transition-colors">
+                                            <td class="px-5 py-3">
+                                                <span class="whitespace-nowrap">
+                                                    <a href="{{ $w['dashboard_url'] }}" class="font-medium text-slate-800 hover:text-indigo-600">{{ $w['name'] }}</a>
+                                                    @if($w['critical_care'])
+                                                        <span class="ml-1 rounded bg-cyan-50 px-1 py-0.5 text-[10px] font-bold text-cyan-700" title="Critical care ward: opens the Critical Care Ward Dashboard">CC</span>
+                                                    @endif
+                                                </span>
+                                                <div class="text-xs text-slate-400">
+                                                    {{ $w['code'] }}{{ $w['type'] ? ' · ' . $w['type'] : '' }}{{ $w['transfusing'] ? ' · ' . $w['transfusing'] . ' transfusing' : '' }}
+                                                </div>
+                                            </td>
+                                            <td class="px-3 py-3">
+                                                <div class="flex items-center gap-2">
+                                                    <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                                        <div class="cc-bar h-full rounded-full bg-gradient-to-r {{ $wardBar }}" style="width: {{ $w['occupancy'] }}%"></div>
+                                                    </div>
+                                                    <span class="text-xs tabular-nums text-slate-600 whitespace-nowrap">{{ $w['occupied'] }}/{{ $w['beds'] }}</span>
+                                                </div>
+                                            </td>
+                                            <td class="px-3 py-3 text-right">{!! $count($w['pending_discharge'], 'bg-yellow-50 text-yellow-700') !!}</td>
+                                            <td class="px-3 py-3 text-right">{!! $count($w['incoming'], 'bg-sky-50 text-sky-700') !!}</td>
+                                            <td class="px-3 py-3 text-right">{!! $count($w['ews_urgent'], 'bg-red-100 text-red-700') !!}</td>
+                                            <td class="px-3 py-3 text-right">{!! $count($w['ews_warning'], 'bg-amber-100 text-amber-800') !!}</td>
+                                            <td class="px-3 py-3 text-right">{!! $count($w['escalations'], 'bg-red-100 text-red-700') !!}</td>
+                                            <td class="px-3 py-3 text-right">{!! $count($w['ventilated'], 'bg-cyan-50 text-cyan-700') !!}</td>
+                                            <td class="px-3 py-3 text-right">{!! $count($w['overdue_care'], 'bg-amber-100 text-amber-800') !!}</td>
+                                            <td class="px-3 py-3 text-right">{!! $count($w['fluid_alerts'], 'bg-sky-50 text-sky-700') !!}</td>
+                                            <td class="px-5 py-3 text-right whitespace-nowrap">
+                                                {!! $count($w['alerts'], $w['alerts_urgent'] ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700') !!}
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr><td colspan="11" class="px-5 py-8 text-center text-slate-400">No wards configured</td></tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
                 {{-- ===================== WARD TAB ===================== --}}
@@ -165,7 +456,7 @@
                     x-transition:enter-end="opacity-100 translate-y-0"
                     class="p-5 space-y-5">
 
-                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 cc-stagger">
+                    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 cc-stagger">
                         <x-cc-stat label="Total Wards" :value="$stats['total_wards']" color="indigo" :icon="$icons['building']" />
                         <x-cc-stat label="Total Beds" :value="$stats['total_beds']" color="sky" :icon="$icons['bed']" />
                         <x-cc-stat label="Occupied" :value="$stats['occupied']" hint="{{ $stats['occupancy_rate'] }}% occupancy" color="rose" :icon="$icons['user']" />
@@ -267,7 +558,7 @@
                     x-transition:enter-end="opacity-100 translate-y-0"
                     class="p-5 space-y-5">
 
-                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 cc-stagger">
+                    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 cc-stagger">
                         <x-cc-stat label="Total Beds" :value="$stats['total_beds']" color="sky" :icon="$icons['bed']" />
                         <x-cc-stat label="Occupied" :value="$stats['occupied']" color="rose" :icon="$icons['user']" />
                         <x-cc-stat label="Available" :value="$stats['available']" color="emerald" :icon="$icons['check']" />
@@ -348,7 +639,7 @@
                     x-transition:enter-end="opacity-100 translate-y-0"
                     class="p-5 space-y-5">
 
-                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 cc-stagger">
+                    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 cc-stagger">
                         <x-cc-stat label="Admitted" :value="$stats['admitted_patients']" color="emerald" :icon="$icons['users']" />
                         <x-cc-stat label="Pending Discharge" :value="$stats['pending_discharge']" color="amber" :icon="$icons['clock']" />
                         <x-cc-stat label="Prebooked" :value="$stats['prebooked']" color="sky" :icon="$icons['clipboard']" />
@@ -448,7 +739,7 @@
                     x-transition:enter-end="opacity-100 translate-y-0"
                     class="p-5 space-y-5">
 
-                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 cc-stagger">
+                    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 cc-stagger">
                         <x-cc-stat label="Total Readings" :value="number_format($vitalStats['total'])" hint="in period" color="rose" :icon="$icons['heart']" />
                         <x-cc-stat label="Patients Covered" :value="$vitalStats['patients_covered']" hint="distinct patients" color="indigo" :icon="$icons['users']" />
                         <x-cc-stat label="Full Readings" :value="$vitalStats['full_readings']" hint="{{ $vitalStats['full_pct'] }}% of readings" color="emerald" :icon="$icons['check']" />
@@ -585,7 +876,7 @@
                     x-transition:enter-end="opacity-100 translate-y-0"
                     class="p-5 space-y-5">
 
-                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 cc-stagger">
+                    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 cc-stagger">
                         <x-cc-stat label="Inpatients" :value="$riskStats['total_inpatients']" hint="{{ $selectedWard ? $selectedWard->ward_code : 'all wards' }}" color="indigo" :icon="$icons['users']" />
                         <x-cc-stat label="High Fall Risk" :value="$riskStats['high_fall']" hint="high + FR alert" color="orange" :icon="$icons['warning']" />
                         <x-cc-stat label="On Isolation" :value="$riskStats['isolated']" hint="any precaution" color="violet" :icon="$icons['shield']" />
@@ -693,7 +984,7 @@
                     x-transition:enter-end="opacity-100 translate-y-0"
                     class="p-5 space-y-5">
 
-                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 cc-stagger">
+                    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 cc-stagger">
                         <x-cc-stat label="With Diet Orders" :value="$dietStats['with_diet']" hint="of {{ $dietStats['total_inpatients'] }} inpatients" color="teal" :icon="$icons['clipboard']" />
                         <x-cc-stat label="No Diet Recorded" :value="$dietStats['no_diet']" color="slate" :icon="$icons['eye']" />
                         <x-cc-stat label="Nil By Mouth" :value="$dietStats['nbm']" hint="NBM / NPO" color="red" :icon="$icons['ban']" />
@@ -784,15 +1075,21 @@
             to   { transform: scaleX(1); }
         }
         .cc-bar { transform-origin: left; animation: ccBarGrow 1.1s cubic-bezier(.22, 1, .36, 1) both .3s; }
+
+        .cc-quiet .cc-stagger > *, .cc-quiet .cc-bar { animation: none !important; }
     </style>
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            // Set by the live board's auto-refresh just before it reloads
+            const quiet = document.documentElement.classList.contains('cc-quiet');
+            try { sessionStorage.removeItem('ccQuietReload'); } catch (e) {}
+
             // ---------- Global chart styling ----------
             Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
             Chart.defaults.color = '#64748b';
             Chart.defaults.borderColor = '#e2e8f0';
-            Chart.defaults.animation.duration = 950;
+            Chart.defaults.animation.duration = quiet ? 0 : 950;
             Chart.defaults.animation.easing = 'easeOutQuart';
             Chart.defaults.plugins.legend.labels.usePointStyle = true;
             Chart.defaults.plugins.legend.labels.boxWidth = 8;
@@ -843,7 +1140,7 @@
             };
 
             // ---------- Count-up animation for stat values ----------
-            document.querySelectorAll('[data-countup]').forEach((node) => {
+            (quiet ? [] : document.querySelectorAll('[data-countup]')).forEach((node) => {
                 const raw = node.textContent.trim();
                 if (!/^[\d.,]+\s*[%°A-Za-z]*$/.test(raw)) return;
                 const num = parseFloat(raw.replace(/,/g, ''));

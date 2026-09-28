@@ -211,7 +211,7 @@
 
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-100 text-sm">
-                    <thead class="bg-gradient-to-r from-blue-50 to-cyan-50">
+                    <thead class="bg-gradient-to-r from-brand-50 to-accent-50">
                         <tr>
                             <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Bed</th>
                             <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Patient</th>
@@ -282,7 +282,7 @@
                             Review summary
                         </button>
                         <button type="submit"
-                            class="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white text-sm font-semibold rounded-lg shadow">
+                            class="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-brand-600 to-accent-600 hover:from-brand-700 hover:to-accent-700 text-white text-sm font-semibold rounded-lg shadow">
                             Apply to ward dashboard
                         </button>
                     </div>

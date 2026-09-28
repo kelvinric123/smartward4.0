@@ -155,7 +155,7 @@
             Cancel
         </button>
         <button type="submit"
-            class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 rounded-lg font-semibold text-sm text-white shadow-md transition-all">
+            class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-brand-600 to-accent-600 hover:from-brand-700 hover:to-accent-700 rounded-lg font-semibold text-sm text-white shadow-md transition-all">
             {{ $isNew ? 'Add credential' : 'Save changes' }}
         </button>
     </div>

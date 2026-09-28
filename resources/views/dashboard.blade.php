@@ -93,7 +93,7 @@
                 <div class="lg:col-span-2">
                     <div
                         class="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg overflow-hidden border border-blue-100">
-                        <div class="px-6 py-4 bg-gradient-to-r from-blue-50 to-cyan-50 border-b border-blue-100">
+                        <div class="px-6 py-4 bg-gradient-to-r from-brand-50 to-accent-50 border-b border-blue-100">
                             <div class="flex items-center justify-between">
                                 <h3 class="text-lg font-bold text-gray-800">Specialties Overview</h3>
                                 <a href="{{ route('specialties.index') }}"
@@ -105,7 +105,7 @@
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 @foreach(\App\Models\Specialty::limit(6)->get() as $specialty)
                                     <div
-                                        class="flex items-center p-4 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl border border-blue-100 hover:shadow-md transition-all">
+                                        class="flex items-center p-4 bg-gradient-to-br from-brand-50 to-accent-50 rounded-xl border border-blue-100 hover:shadow-md transition-all">
                                         <div class="p-2 bg-blue-500 rounded-lg text-white mr-4">
                                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -130,7 +130,7 @@
                     <!-- Hospital Info -->
                     <div
                         class="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg overflow-hidden border border-blue-100">
-                        <div class="px-6 py-4 bg-gradient-to-r from-blue-50 to-cyan-50 border-b border-blue-100">
+                        <div class="px-6 py-4 bg-gradient-to-r from-brand-50 to-accent-50 border-b border-blue-100">
                             <h3 class="text-lg font-bold text-gray-800">Hospital Information</h3>
                         </div>
                         <div class="p-6">
@@ -179,12 +179,12 @@
                     <!-- Quick Actions -->
                     <div
                         class="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg overflow-hidden border border-blue-100">
-                        <div class="px-6 py-4 bg-gradient-to-r from-blue-50 to-cyan-50 border-b border-blue-100">
+                        <div class="px-6 py-4 bg-gradient-to-r from-brand-50 to-accent-50 border-b border-blue-100">
                             <h3 class="text-lg font-bold text-gray-800">Quick Actions</h3>
                         </div>
                         <div class="p-6 space-y-3">
                             <a href="{{ route('consultants.create') }}"
-                                class="flex items-center p-3 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white rounded-xl transition-all shadow-md hover:shadow-lg">
+                                class="flex items-center p-3 bg-gradient-to-r from-brand-500 to-accent-500 hover:from-brand-600 hover:to-accent-600 text-white rounded-xl transition-all shadow-md hover:shadow-lg">
                                 <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M12 4v16m8-8H4" />

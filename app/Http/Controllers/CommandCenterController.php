@@ -10,6 +10,8 @@ use App\Models\Patient;
 use App\Models\SugarReading;
 use App\Models\VitalSign;
 use App\Models\Ward;
+use App\Models\WardDashboardSetting;
+use App\Services\CommandCenterLive;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -107,20 +109,28 @@ class CommandCenterController extends Controller
             ->count();
 
         // ---------- Per-ward breakdown (current state) ----------
+        // Period flow counted per ward in one query each, not two queries per ward
+        $admissionsByWard = AdmissionLog::query()
+            ->where('action', 'admit')
+            ->whereBetween('admitted_at', [$startDate, $endDate])
+            ->selectRaw('ward_id, COUNT(*) as total')
+            ->groupBy('ward_id')
+            ->pluck('total', 'ward_id');
+        $dischargesByWard = Patient::query()
+            ->whereBetween('discharged_at', [$startDate, $endDate])
+            ->selectRaw('ward_id, COUNT(*) as total')
+            ->groupBy('ward_id')
+            ->pluck('total', 'ward_id');
+
         $wardBreakdown = Ward::where('is_active', true)
             ->with(['beds' => fn($q) => $q->where('is_active', true)])
             ->get()
-            ->map(function (Ward $ward) use ($startDate, $endDate) {
+            ->map(function (Ward $ward) use ($admissionsByWard, $dischargesByWard) {
                 $beds = $ward->beds;
                 $total = $beds->count();
                 $occ = $beds->where('status', 'occupied')->count();
-                $admissions = AdmissionLog::where('ward_id', $ward->id)
-                    ->where('action', 'admit')
-                    ->whereBetween('admitted_at', [$startDate, $endDate])
-                    ->count();
-                $discharges = Patient::where('ward_id', $ward->id)
-                    ->whereBetween('discharged_at', [$startDate, $endDate])
-                    ->count();
+                $admissions = (int) ($admissionsByWard[$ward->id] ?? 0);
+                $discharges = (int) ($dischargesByWard[$ward->id] ?? 0);
                 return [
                     'ward_name' => $ward->ward_name,
                     'ward_code' => $ward->ward_code,
@@ -150,6 +160,12 @@ class CommandCenterController extends Controller
         $riskStats = $this->riskStatistics($inpatients);
         $dietStats = $this->dietStatistics($inpatients, $startDate, $endDate, $selectedWard?->id);
         $wardSafety = $this->wardSafetyMatrix($inpatientsAll, $wards);
+
+        // ---------- Live board: what needs attention right now (the date range does not apply) ----------
+        $live = CommandCenterLive::build(
+            $selectedWard ? Ward::whereKey($selectedWard->id)->get() : $wards,
+            $this->ewsSystem($user->id)
+        );
 
         $hospital = Hospital::first();
 
@@ -188,7 +204,17 @@ class CommandCenterController extends Controller
             'riskStats' => $riskStats,
             'dietStats' => $dietStats,
             'wardSafety' => $wardSafety,
+            'live' => $live,
         ]);
+    }
+
+    /** The EWS the viewer's ward dashboard scores with, so both agree. */
+    private function ewsSystem(int $userId): string
+    {
+        $settings = WardDashboardSetting::where('user_id', $userId)->first();
+        $clinical = $settings && is_array($settings->clinical_settings) ? $settings->clinical_settings : [];
+
+        return $clinical['ews_system'] ?? 'ews_ihh';
     }
 
     /**
@@ -655,43 +681,34 @@ class CommandCenterController extends Controller
 
     private function monthlyStatistics(int $year, ?int $wardId): array
     {
-        $labels = [];
-        $admissions = [];
-        $discharges = [];
-        $vitalSigns = [];
+        $start = Carbon::create($year, 1, 1)->startOfYear();
+        $end = (clone $start)->endOfYear();
 
-        for ($month = 1; $month <= 12; $month++) {
-            $start = Carbon::create($year, $month, 1)->startOfMonth();
-            $end = (clone $start)->endOfMonth();
-            $labels[] = $start->format('M');
+        // One grouped query per series rather than one per month
+        $perMonth = function ($query, string $column) use ($start, $end): array {
+            $counts = $query->whereBetween($column, [$start, $end])
+                ->selectRaw("MONTH({$column}) as month, COUNT(*) as total")
+                ->groupBy('month')
+                ->pluck('total', 'month');
 
-            $admQuery = AdmissionLog::query()
-                ->where('action', 'admit')
-                ->whereBetween('admitted_at', [$start, $end]);
-            if ($wardId) {
-                $admQuery->where('ward_id', $wardId);
-            }
-            $admissions[] = $admQuery->count();
-
-            $disQuery = Patient::query()->whereBetween('discharged_at', [$start, $end]);
-            if ($wardId) {
-                $disQuery->where('ward_id', $wardId);
-            }
-            $discharges[] = $disQuery->count();
-
-            $vsQuery = VitalSign::query()->whereBetween('recorded_at', [$start, $end]);
-            if ($wardId) {
-                $vsQuery->whereHas('patient', fn($q) => $q->where('ward_id', $wardId));
-            }
-            $vitalSigns[] = $vsQuery->count();
-        }
+            return array_map(fn (int $month) => (int) ($counts[$month] ?? 0), range(1, 12));
+        };
 
         return [
             'year' => $year,
-            'labels' => $labels,
-            'admissions' => $admissions,
-            'discharges' => $discharges,
-            'vital_signs' => $vitalSigns,
+            'labels' => array_map(fn (int $month) => Carbon::create($year, $month, 1)->format('M'), range(1, 12)),
+            'admissions' => $perMonth(
+                AdmissionLog::query()->where('action', 'admit')->when($wardId, fn($q) => $q->where('ward_id', $wardId)),
+                'admitted_at'
+            ),
+            'discharges' => $perMonth(
+                Patient::query()->when($wardId, fn($q) => $q->where('ward_id', $wardId)),
+                'discharged_at'
+            ),
+            'vital_signs' => $perMonth(
+                VitalSign::query()->when($wardId, fn($q) => $q->whereHas('patient', fn($p) => $p->where('ward_id', $wardId))),
+                'recorded_at'
+            ),
         ];
     }
 

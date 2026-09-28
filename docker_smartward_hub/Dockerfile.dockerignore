@@ -1,0 +1,58 @@
+# =============================================================================
+# Build context for docker_smartward_hub/Dockerfile (the kelvinric/smartward4 image)
+#
+# BuildKit reads this file instead of the repo-root .dockerignore for this
+# Dockerfile only; the sidecar images (HL7, ecg, bbraun) keep using the root one.
+#
+# It lists what the image needs rather than what it doesn't: the repo also holds
+# the mobile and terminal apps (several GB of node_modules and native builds),
+# and a deny list sent all of them to Docker on every build (13.6 GB, ~50 min).
+# A new top-level folder stays out until it is added below.
+# =============================================================================
+
+# Everything out ...
+*
+
+# ... then the Laravel app back in
+!app
+!bootstrap
+!config
+!database
+!public
+!resources
+!routes
+!storage
+!artisan
+!composer.json
+!composer.lock
+
+# Slideshow pictures served from base_path('picture')
+!picture
+
+# Frontend build (npm ci + npm run build in the Dockerfile)
+!package.json
+!package-lock.json
+!vite.config.js
+!tailwind.config.js
+!postcss.config.js
+
+# Files the Dockerfile copies into place
+!docker_smartward_hub/conf
+!docker_smartward_hub/scripts
+!docker_smartward_hub/docker.env
+
+# Local state inside the folders above: rebuilt in the image or created at runtime
+storage/logs/*
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+!storage/**/.gitkeep
+!storage/**/.gitignore
+bootstrap/cache/*
+!bootstrap/cache/.gitignore
+public/build
+public/hot
+public/storage
+database/*.sqlite
+**/.DS_Store
+**/Thumbs.db

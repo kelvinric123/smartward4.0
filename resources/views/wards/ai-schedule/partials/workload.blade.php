@@ -82,7 +82,7 @@
         </div>
         <div class="overflow-x-auto">
             <table class="min-w-full divide-y divide-gray-100 text-sm">
-                <thead class="bg-gradient-to-r from-blue-50 to-cyan-50">
+                <thead class="bg-gradient-to-r from-brand-50 to-accent-50">
                     <tr>
                         <th class="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Nurse</th>
                         <th class="px-3 py-3 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">Shifts</th>

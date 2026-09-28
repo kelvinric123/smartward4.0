@@ -47,7 +47,7 @@
                      puts an incomplete record on paper, so the warning comes
                      before the print window opens, not after. --}}
                 <button type="button" onclick="openPrintView({{ $episode->isDischarged() ? 'false' : 'true' }})"
-                    class="inline-flex items-center rounded-lg border border-transparent bg-gradient-to-r from-blue-600 to-cyan-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:from-blue-700 hover:to-cyan-700 hover:shadow-xl">
+                    class="inline-flex items-center rounded-lg border border-transparent bg-gradient-to-r from-brand-600 to-accent-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition-all duration-200 hover:from-brand-700 hover:to-accent-700 hover:shadow-xl">
                     <svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -62,7 +62,7 @@
         <div class="mx-auto max-w-7xl sm:px-6 lg:px-8">
             <div class="overflow-hidden rounded-2xl border border-blue-100 bg-white/90 shadow-lg backdrop-blur-sm">
                 {{-- Section tabs --}}
-                <nav class="flex flex-wrap gap-1 border-b border-blue-100 bg-gradient-to-r from-blue-50 to-cyan-50 px-4 pt-3 sm:px-6"
+                <nav class="flex flex-wrap gap-1 border-b border-blue-100 bg-gradient-to-r from-brand-50 to-accent-50 px-4 pt-3 sm:px-6"
                     aria-label="Summary sections">
                     @foreach ($tabs as $key => $tab)
                         <button type="button" data-summary-tab="{{ $key }}"

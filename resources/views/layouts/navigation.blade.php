@@ -1,6 +1,9 @@
 @php
     $openSection = null;
-    $hospital = \App\Models\Hospital::first();
+    $hospital ??= \App\Models\Hospital::first();
+    // Items the hospital hid on its Theme & Menu tab; the role checks below still apply
+    $menu = \App\Support\NavigationMenu::for($hospital);
+    $isAdmin = Auth::user()->isSuperadmin() || Auth::user()->hasRole(App\Models\User::ROLE_HOSPITAL_ADMIN) || Auth::user()->hasRole(App\Models\User::ROLE_IT_ADMIN);
     $logoUrl = $hospital && $hospital->navbar_logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->navbar_logo_path) : ($hospital && $hospital->logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->logo_path) : asset('phkl_new.png'));
 
     if (request()->routeIs('patients.*')) {
@@ -28,11 +31,11 @@
     isSectionOpen(section) { return this.openSection === section; },
     toggleSection(section) { this.openSection = this.openSection === section ? null : section; }
 }" @toggle-sidebar.window="sidebarOpen = $event.detail.open"
-    class="bg-gradient-to-br from-blue-600 to-cyan-500 border-r border-blue-400 transition-all duration-300 h-screen flex flex-col flex-shrink-0 shadow-xl"
+    class="bg-gradient-to-br from-brand-600 to-accent-500 border-r border-brand-400 transition-all duration-300 h-screen flex flex-col flex-shrink-0 shadow-xl"
     :class="sidebarOpen ? 'w-64' : 'w-20'">
     <!-- Logo & Toggle -->
     <div
-        class="shrink-0 flex items-center justify-between px-4 py-4 border-b border-blue-400/30 h-16 backdrop-blur-sm bg-white/10">
+        class="shrink-0 flex items-center justify-between px-4 py-4 border-b border-brand-400/30 h-16 backdrop-blur-sm bg-white/10">
         <a href="{{ route('dashboard') }}" x-show="sidebarOpen" x-transition class="flex items-center">
             <img src="{{ $logoUrl }}" alt="Hospital Logo" class="h-10 w-auto">
         </a>
@@ -52,7 +55,7 @@
     <div class="flex-1 min-h-0 px-2 py-4 space-y-2 overflow-y-auto overscroll-contain [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.35)_transparent]"
         x-init="$nextTick(() => $el.querySelector('.bg-white\\/25')?.scrollIntoView({ block: 'nearest' }))">
         <!-- Dashboard -->
-        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD))
+        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && $menu->shows('dashboard'))
             <a href="{{ route('dashboard') }}"
                 class="flex items-center px-3 py-2.5 rounded-lg text-white transition-all {{ request()->routeIs('dashboard') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -64,7 +67,7 @@
         @endif
 
         <!-- Command Center (Superadmin / Hospital Admin / IT Admin) -->
-        @if(Auth::user()->isSuperadmin() || Auth::user()->hasRole(App\Models\User::ROLE_HOSPITAL_ADMIN) || Auth::user()->hasRole(App\Models\User::ROLE_IT_ADMIN))
+        @if($isAdmin && $menu->shows('command-center'))
             <a href="{{ route('command-center.index') }}"
                 class="flex items-center px-3 py-2.5 rounded-lg text-white transition-all {{ request()->routeIs('command-center.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
                 <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -75,9 +78,21 @@
             </a>
         @endif
 
+        <!-- Command Center V2: the executive summary for management (same viewers as the Command Center) -->
+        @if($isAdmin && $menu->shows('command-center-v2'))
+            <a href="{{ route('command-center-v2.index') }}"
+                class="flex items-center px-3 py-2.5 rounded-lg text-white transition-all {{ request()->routeIs('command-center-v2.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M8 13v-1m4 1v-3m4 3V8M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                </svg>
+                <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Command Center V2</span>
+            </a>
+        @endif
+
 
         <!-- Patient Section -->
-        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE_HEAD) && !Auth::user()->hasRole(App\Models\User::ROLE_USER))
+        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE_HEAD) && !Auth::user()->hasRole(App\Models\User::ROLE_USER) && $menu->shows('patients'))
             <div class="pt-2">
                 <button @click="toggleSection('patient')"
                     class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10">
@@ -109,8 +124,8 @@
         @endif
 
 
-        <!-- Admin Management Section -->
-        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE_HEAD) && !Auth::user()->hasRole(App\Models\User::ROLE_USER))
+        <!-- Admin Management Section: admins always keep its Hospital item -->
+        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE_HEAD) && !Auth::user()->hasRole(App\Models\User::ROLE_USER) && ($isAdmin || $menu->shows('nurses')))
             <div class="pt-2">
                 <button @click="toggleSection('admin')"
                     class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10">
@@ -130,7 +145,7 @@
                 <div x-show="isSectionOpen('admin') && sidebarOpen" x-transition
                     class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
 
-                    @if(Auth::user()->isSuperadmin() || Auth::user()->hasRole(App\Models\User::ROLE_HOSPITAL_ADMIN) || Auth::user()->hasRole(App\Models\User::ROLE_IT_ADMIN))
+                    @if($isAdmin && $menu->shows('hospitals'))
                         <a href="{{ route('hospitals.index') }}"
                             class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('hospitals.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
                             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -141,7 +156,7 @@
                         </a>
                     @endif
 
-                    @if(Auth::user()->isSuperadmin() || Auth::user()->hasRole(App\Models\User::ROLE_HOSPITAL_ADMIN) || Auth::user()->hasRole(App\Models\User::ROLE_IT_ADMIN))
+                    @if($isAdmin && $menu->shows('specialties'))
                         <a href="{{ route('specialties.index') }}"
                             class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('specialties.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
                             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -153,7 +168,7 @@
                     @endif
 
 
-                    @if(Auth::user()->isSuperadmin() || Auth::user()->hasRole(App\Models\User::ROLE_HOSPITAL_ADMIN) || Auth::user()->hasRole(App\Models\User::ROLE_IT_ADMIN))
+                    @if($isAdmin && $menu->shows('consultants'))
                         <a href="{{ route('consultants.index') }}"
                             class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('consultants.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
                             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -165,7 +180,7 @@
                     @endif
 
 
-                    @if(Auth::user()->isSuperadmin() || Auth::user()->hasRole(App\Models\User::ROLE_HOSPITAL_ADMIN) || Auth::user()->hasRole(App\Models\User::ROLE_IT_ADMIN))
+                    @if($isAdmin && $menu->shows('anaesthetists'))
                         <a href="{{ route('anaesthetists.index') }}"
                             class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('anaesthetists.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
                             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -177,16 +192,18 @@
                     @endif
 
 
-                    <a href="{{ route('nurses.index') }}"
-                        class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('nurses.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
-                        <span class="ml-2">Nurses</span>
-                    </a>
+                    @if($menu->shows('nurses'))
+                        <a href="{{ route('nurses.index') }}"
+                            class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('nurses.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                            <span class="ml-2">Nurses</span>
+                        </a>
+                    @endif
 
-                    @if(Auth::user()->isSuperadmin() || Auth::user()->hasRole(App\Models\User::ROLE_HOSPITAL_ADMIN) || Auth::user()->hasRole(App\Models\User::ROLE_IT_ADMIN))
+                    @if($isAdmin && $menu->shows('users'))
                         <a href="{{ route('users.index') }}"
                             class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('users.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
                             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -197,7 +214,7 @@
                         </a>
                     @endif
 
-                    @if(Auth::user()->isSuperadmin() || Auth::user()->hasRole(App\Models\User::ROLE_HOSPITAL_ADMIN) || Auth::user()->hasRole(App\Models\User::ROLE_IT_ADMIN))
+                    @if($isAdmin && $menu->shows('patient-flow-command-centres'))
                         <a href="{{ route('patient-flow-command-centres.index') }}"
                             class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('patient-flow-command-centres.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
                             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -209,7 +226,7 @@
                     @endif
 
 
-                    @if(Auth::user()->isSuperadmin() || Auth::user()->hasRole(App\Models\User::ROLE_HOSPITAL_ADMIN) || Auth::user()->hasRole(App\Models\User::ROLE_IT_ADMIN))
+                    @if($isAdmin && $menu->shows('diet-types'))
                         <div class="border-t border-white/20 my-2 mx-2"></div>
                         <p class="px-3 py-1 text-xs text-white/60 font-medium uppercase tracking-wider">Patient Additional Field
                         </p>
@@ -230,7 +247,7 @@
 
 
         <!-- Ward Management Section -->
-        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE_HEAD) && !Auth::user()->hasRole(App\Models\User::ROLE_USER))
+        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE_HEAD) && !Auth::user()->hasRole(App\Models\User::ROLE_USER) && $menu->showsAny('wards', 'ward-types', 'beds', 'discharge-summaries'))
             <div class="pt-2">
                 <button @click="toggleSection('wardManagement')"
                     class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10">
@@ -249,87 +266,101 @@
 
                 <div x-show="isSectionOpen('wardManagement') && sidebarOpen" x-transition
                     class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
-                    <a href="{{ route('wards.index') }}"
-                        class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('wards.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                        </svg>
-                        <span class="ml-2">Wards</span>
-                    </a>
+                    @if($menu->shows('wards'))
+                        <a href="{{ route('wards.index') }}"
+                            class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('wards.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                            </svg>
+                            <span class="ml-2">Wards</span>
+                        </a>
+                    @endif
 
-                    <a href="{{ route('ward-types.index') }}"
-                        class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ward-types.*') || request()->routeIs('clinical-indicators.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                        </svg>
-                        <span class="ml-2">Ward Type</span>
-                    </a>
+                    @if($menu->shows('ward-types'))
+                        <a href="{{ route('ward-types.index') }}"
+                            class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ward-types.*') || request()->routeIs('clinical-indicators.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                            </svg>
+                            <span class="ml-2">Ward Type</span>
+                        </a>
+                    @endif
 
-                    <a href="{{ route('beds.index') }}"
-                        class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('beds.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
-                        <span class="ml-2">Beds</span>
-                    </a>
+                    @if($menu->shows('beds'))
+                        <a href="{{ route('beds.index') }}"
+                            class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('beds.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            <span class="ml-2">Beds</span>
+                        </a>
+                    @endif
 
-                    <a href="{{ route('discharge-summaries.index') }}"
-                        class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('discharge-summaries.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                        <span class="ml-2">Discharge Summary</span>
-                    </a>
+                    @if($menu->shows('discharge-summaries'))
+                        <a href="{{ route('discharge-summaries.index') }}"
+                            class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('discharge-summaries.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <span class="ml-2">Discharge Summary</span>
+                        </a>
+                    @endif
                 </div>
             </div>
         @endif
 
 
         <!-- Schedule Section -->
-        <div class="pt-2">
-            <button @click="toggleSection('schedule')"
-                class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ward.schedule') || request()->routeIs('ward.ai-schedule') ? 'bg-white/20' : '' }}">
-                <div class="flex items-center">
-                    <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M8 7V5a3 3 0 013-3h2a3 3 0 013 3v2m4 0H4a2 2 0 00-2 2v9a3 3 0 003 3h14a3 3 0 003-3v-9a2 2 0 00-2-2z" />
+        @if($menu->showsAny('ward-schedule', 'ai-schedule'))
+            <div class="pt-2">
+                <button @click="toggleSection('schedule')"
+                    class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ward.schedule') || request()->routeIs('ward.ai-schedule') ? 'bg-white/20' : '' }}">
+                    <div class="flex items-center">
+                        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8 7V5a3 3 0 013-3h2a3 3 0 013 3v2m4 0H4a2 2 0 00-2 2v9a3 3 0 003 3h14a3 3 0 003-3v-9a2 2 0 00-2-2z" />
+                        </svg>
+                        <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Schedule</span>
+                    </div>
+                    <svg x-show="sidebarOpen" :class="{'rotate-180': isSectionOpen('schedule')}"
+                        class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                     </svg>
-                    <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Schedule</span>
-                </div>
-                <svg x-show="sidebarOpen" :class="{'rotate-180': isSectionOpen('schedule')}"
-                    class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                </svg>
-            </button>
+                </button>
 
-            <div x-show="isSectionOpen('schedule') && sidebarOpen" x-transition
-                class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
-                <a href="{{ route('ward.schedule') }}"
-                    class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ward.schedule') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M3 7h18M3 12h18M3 17h18" />
-                    </svg>
-                    <span class="ml-2">Ward Schedule</span>
-                </a>
-                <a href="{{ route('ward.ai-schedule') }}"
-                    class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ward.ai-schedule') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                    </svg>
-                    <span class="ml-2">AI Nurse Schedule</span>
-                </a>
+                <div x-show="isSectionOpen('schedule') && sidebarOpen" x-transition
+                    class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
+                    @if($menu->shows('ward-schedule'))
+                        <a href="{{ route('ward.schedule') }}"
+                            class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ward.schedule') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M3 7h18M3 12h18M3 17h18" />
+                            </svg>
+                            <span class="ml-2">Ward Schedule</span>
+                        </a>
+                    @endif
+                    @if($menu->shows('ai-schedule'))
+                        <a href="{{ route('ward.ai-schedule') }}"
+                            class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ward.ai-schedule') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                            </svg>
+                            <span class="ml-2">AI Nurse Schedule</span>
+                        </a>
+                    @endif
+                </div>
             </div>
-        </div>
+        @endif
 
 
         <!-- Vital Sign Section -->
-        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD))
+        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && $menu->shows('vital-signs'))
             <div class="pt-2">
                 <button @click="toggleSection('vitalSign')"
                     class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('vital-signs.*') ? 'bg-white/20' : '' }}">
@@ -363,31 +394,35 @@
 
 
         <!-- Ward Dashboard Section -->
-        <div class="pt-2">
-            <a href="{{ route('ward.dashboard') }}"
-                class="flex items-center px-3 py-2.5 rounded-lg text-white transition-all {{ request()->routeIs('ward.dashboard') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-                <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Ward Dashboard</span>
-            </a>
-        </div>
+        @if($menu->shows('ward-dashboard'))
+            <div class="pt-2">
+                <a href="{{ route('ward.dashboard') }}"
+                    class="flex items-center px-3 py-2.5 rounded-lg text-white transition-all {{ request()->routeIs('ward.dashboard') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                    <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                    <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Ward Dashboard</span>
+                </a>
+            </div>
+        @endif
 
         <!-- Critical Care Ward Dashboard Section -->
-        <div class="pt-2">
-            <a href="{{ route('critical-care.dashboard') }}"
-                class="flex items-center px-3 py-2.5 rounded-lg text-white transition-all {{ request()->routeIs('critical-care.dashboard') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M3 12h4l3-8 4 16 3-8h4" />
-                </svg>
-                <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Critical Care Ward Dashboard</span>
-            </a>
-        </div>
+        @if($menu->shows('critical-care-dashboard'))
+            <div class="pt-2">
+                <a href="{{ route('critical-care.dashboard') }}"
+                    class="flex items-center px-3 py-2.5 rounded-lg text-white transition-all {{ request()->routeIs('critical-care.dashboard') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                    <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M3 12h4l3-8 4 16 3-8h4" />
+                    </svg>
+                    <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Critical Care Ward Dashboard</span>
+                </a>
+            </div>
+        @endif
 
         <!-- Integration Section -->
-        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE_HEAD) && !Auth::user()->hasRole(App\Models\User::ROLE_USER))
+        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE_HEAD) && !Auth::user()->hasRole(App\Models\User::ROLE_USER) && $menu->showsAny('ldap', 'vital-sign-integration', 'infusion-integration', 'adt-config', 'adt-test', 'ecg', 'ekad', 'integration-demo'))
             <div class="pt-2">
                 <button @click="toggleSection('integration')"
                     class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('ldap.*') || request()->routeIs('vital-sign-integration.*') || request()->routeIs('infusion-integration.*') || request()->routeIs('adt.*') || request()->routeIs('ecg.index') || request()->routeIs('ekad.*') || request()->routeIs('integration.demo.*') ? 'bg-white/20' : '' }}">
@@ -406,84 +441,100 @@
 
                 <div x-show="isSectionOpen('integration') && sidebarOpen" x-transition
                     class="mt-2 ml-4 space-y-1 border-l-2 border-white/30 pl-2">
-                    <a href="{{ route('ldap.index') }}"
-                        class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ldap.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
-                        </svg>
-                        <span class="ml-2">LDAP Integration</span>
-                    </a>
+                    @if($menu->shows('ldap'))
+                        <a href="{{ route('ldap.index') }}"
+                            class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ldap.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
+                            </svg>
+                            <span class="ml-2">LDAP Integration</span>
+                        </a>
+                    @endif
 
-                    <a href="{{ route('vital-sign-integration.index') }}"
-                        class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('vital-sign-integration.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd"
-                                d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"
-                                clip-rule="evenodd" />
-                        </svg>
-                        <span class="ml-2">Vital Sign Integration</span>
-                    </a>
+                    @if($menu->shows('vital-sign-integration'))
+                        <a href="{{ route('vital-sign-integration.index') }}"
+                            class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('vital-sign-integration.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                            <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd"
+                                    d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z"
+                                    clip-rule="evenodd" />
+                            </svg>
+                            <span class="ml-2">Vital Sign Integration</span>
+                        </a>
+                    @endif
 
-                    <a href="{{ route('infusion-integration.index') }}"
-                        class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('infusion-integration.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                        </svg>
-                        <span class="ml-2">Infusion Integration</span>
-                    </a>
+                    @if($menu->shows('infusion-integration'))
+                        <a href="{{ route('infusion-integration.index') }}"
+                            class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('infusion-integration.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                            </svg>
+                            <span class="ml-2">Infusion Integration</span>
+                        </a>
+                    @endif
 
-                    <a href="{{ route('adt.index') }}"
-                        class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('adt.index') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                        </svg>
-                        <span class="ml-2">ADT Config</span>
-                    </a>
+                    @if($menu->shows('adt-config'))
+                        <a href="{{ route('adt.index') }}"
+                            class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('adt.index') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                            <span class="ml-2">ADT Config</span>
+                        </a>
+                    @endif
 
-                    <a href="{{ route('adt.test') }}"
-                        class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('adt.test') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                        <span class="ml-2">ADT Test</span>
-                    </a>
+                    @if($menu->shows('adt-test'))
+                        <a href="{{ route('adt.test') }}"
+                            class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('adt.test') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            <span class="ml-2">ADT Test</span>
+                        </a>
+                    @endif
 
-                    <a href="{{ route('ecg.index') }}"
-                        class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ecg.index') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                        </svg>
-                        <span class="ml-2">ECG Admin</span>
-                    </a>
+                    @if($menu->shows('ecg'))
+                        <a href="{{ route('ecg.index') }}"
+                            class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ecg.index') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                            </svg>
+                            <span class="ml-2">ECG Admin</span>
+                        </a>
+                    @endif
 
-                    <a href="{{ route('ekad.index') }}"
-                        class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ekad.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                        <span class="ml-2">EKad (E-Ink)</span>
-                    </a>
+                    @if($menu->shows('ekad'))
+                        <a href="{{ route('ekad.index') }}"
+                            class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('ekad.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                            <span class="ml-2">EKad (E-Ink)</span>
+                        </a>
+                    @endif
 
-                    <a href="{{ route('integration.demo.index') }}"
-                        class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('integration.demo.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
-                        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                        </svg>
-                        <span class="ml-2">Demo</span>
-                    </a>
+                    @if($menu->shows('integration-demo'))
+                        <a href="{{ route('integration.demo.index') }}"
+                            class="flex items-center px-3 py-2 rounded-lg text-white text-sm transition-all {{ request()->routeIs('integration.demo.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                            <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                            </svg>
+                            <span class="ml-2">Demo</span>
+                        </a>
+                    @endif
                 </div>
             </div>
         @endif
 
         <!-- Application Logs Section -->
-        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE_HEAD) && !Auth::user()->hasRole(App\Models\User::ROLE_USER))
+        @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE_HEAD) && !Auth::user()->hasRole(App\Models\User::ROLE_USER) && $menu->shows('user-activities'))
             <div class="pt-2">
                 <button @click="toggleSection('appLogs')"
                     class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-white transition-all hover:bg-white/10 {{ request()->routeIs('user-activities.*') ? 'bg-white/20' : '' }}">
@@ -517,7 +568,7 @@
     </div>
 
     <!-- User Profile & Footer (Bottom) -->
-    <div class="shrink-0 border-t border-blue-400/30 backdrop-blur-sm bg-white/10">
+    <div class="shrink-0 border-t border-brand-400/30 backdrop-blur-sm bg-white/10">
         <div x-show="sidebarOpen" x-transition class="p-4">
             <div class="flex items-center mb-4">
                 <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-bold">
@@ -525,7 +576,7 @@
                 </div>
                 <div class="ml-3 overflow-hidden">
                     <div class="font-medium text-sm text-white truncate">{{ Auth::user()->name }}</div>
-                    <div class="text-xs text-blue-100 truncate">{{ Auth::user()->email }}</div>
+                    <div class="text-xs text-brand-100 truncate">{{ Auth::user()->email }}</div>
                 </div>
             </div>
             <div class="space-y-1">
@@ -555,7 +606,7 @@
 
         <!-- Footer -->
         <div x-show="sidebarOpen" x-transition
-            class="px-4 py-3 bg-white/10 backdrop-blur-sm border-t border-blue-400/30">
+            class="px-4 py-3 bg-white/10 backdrop-blur-sm border-t border-brand-400/30">
             <div class="text-center">
                 <p class="text-xs text-white/90 font-medium">Developed by</p>
                 <a href="https://qmed.asia" target="_blank"

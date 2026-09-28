@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Patient;
 use App\Models\Ward;
 use App\Models\WardType;
+use App\Support\ClinicalIndicatorReadings;
 use Illuminate\Http\Request;
 
 /**
@@ -17,12 +19,22 @@ class CriticalCareDashboardController extends WardDashboardController
     public function index(Request $request)
     {
         $wards = Ward::where('is_active', true)->criticalCare()->get();
+        $data = $this->dashboardViewData($request, $wards, true);
 
-        return view('wards.critical-care-dashboard', $this->dashboardViewData($request, $wards, true) + [
+        $patients = $data['selectedWard']
+            ? Patient::where('ward_id', $data['selectedWard']->id)
+                ->where('is_active', true)
+                ->whereIn('status', [Patient::STATUS_ADMITTED, Patient::STATUS_PENDING_DISCHARGE])
+                ->get()
+            : collect();
+
+        return view('wards.critical-care-dashboard', $data + [
             // Named in the empty state, so it says which ward type a ward needs to show up here
             'criticalCareTypes' => $wards->isEmpty()
                 ? WardType::active()->criticalCare()->orderBy('sort_order')->orderBy('name')->pluck('name')->unique()->values()
                 : collect(),
+            // The ventilator as charted in the last few hours, on each bed card
+            'bedsideReadings' => ClinicalIndicatorReadings::recentForPatients($patients),
         ]);
     }
 }

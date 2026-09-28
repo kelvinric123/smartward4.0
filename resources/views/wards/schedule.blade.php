@@ -488,7 +488,7 @@
                                 @endphp
                                 <table class="min-w-full divide-y divide-blue-100">
                                     <thead>
-                                        <tr class="bg-gradient-to-r from-blue-50 to-cyan-50">
+                                        <tr class="bg-gradient-to-r from-brand-50 to-accent-50">
                                             <th
                                                 class="px-6 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider w-32">
                                                 Bed</th>

@@ -1,69 +1,65 @@
 <x-guest-layout>
-    <div x-data="{ mode: 'selection' }" class="min-h-[400px] flex flex-col justify-center">
+    {{-- Reopen the password form after a failed sign-in so its errors are visible --}}
+    <div x-data="{ mode: '{{ $errors->any() || old('email') ? 'email' : 'selection' }}', showPassword: false }">
 
         <!-- Header -->
-        <div class="mb-8 text-center">
-            <h2 class="text-3xl font-extrabold text-gray-800 tracking-tight">
-                <span class="bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-cyan-600">SmartWard</span>
+        <div class="mb-6 text-center sm:mb-8">
+            <h2 class="text-2xl font-extrabold tracking-tight text-slate-800 sm:text-3xl">
+                <span class="bg-gradient-to-r from-brand-600 to-accent-600 bg-clip-text text-transparent">SmartWard</span>
                 Login
             </h2>
-            <p class="text-sm text-gray-500 mt-2">Select your login method to continue</p>
+            <p class="mt-2 text-sm text-slate-500"
+                x-text="mode === 'selection' ? 'Select your login method to continue' : 'Sign in with your email and password'">
+                Select your login method to continue</p>
         </div>
 
         <!-- Session Status -->
-        <x-auth-session-status class="mb-4" :status="session('status')" />
+        <x-auth-session-status class="mb-4 rounded-lg bg-green-50 px-4 py-3" :status="session('status')" />
 
         <!-- Selection Mode -->
         <div x-show="mode === 'selection'" x-transition:enter="transition ease-out duration-300"
             x-transition:enter-start="opacity-0 transform scale-95"
-            x-transition:enter-end="opacity-100 transform scale-100" class="space-y-4">
+            x-transition:enter-end="opacity-100 transform scale-100" class="space-y-3 sm:space-y-4">
 
-            <button @click="mode = 'email'"
-                class="w-full group relative p-6 bg-white border-2 border-slate-100 rounded-2xl hover:border-blue-500 hover:shadow-xl transition-all duration-300 text-left">
-                <div class="flex items-center">
-                    <div
-                        class="flex-shrink-0 p-3 bg-blue-50 rounded-xl group-hover:bg-blue-600 transition-colors duration-300">
-                        <svg class="w-8 h-8 text-blue-600 group-hover:text-white transition-colors duration-300"
-                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-                        </svg>
-                    </div>
-                    <div class="ml-5">
-                        <h3 class="text-lg font-bold text-gray-800 group-hover:text-blue-600 transition-colors">Standard
-                            Login</h3>
-                        <p class="text-sm text-gray-500 mt-1">For Admin & Non-LDAP Users with password</p>
-                    </div>
-                    <div class="ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
-                        <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                        </svg>
-                    </div>
+            <button type="button" @click="mode = 'email'"
+                class="group flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 text-left transition-all duration-200 hover:border-brand-500 hover:shadow-lg hover:shadow-brand-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 sm:p-5">
+                <div
+                    class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 transition-colors duration-200 group-hover:bg-brand-600 group-hover:text-white">
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                    </svg>
                 </div>
+                <div class="min-w-0 flex-1">
+                    <h3 class="text-base font-bold text-slate-800 transition-colors group-hover:text-brand-600 sm:text-lg">
+                        Standard Login</h3>
+                    <p class="mt-0.5 text-sm text-slate-500">For Admin &amp; Non-LDAP Users with password</p>
+                </div>
+                <svg class="h-5 w-5 shrink-0 text-slate-300 transition-all group-hover:translate-x-0.5 group-hover:text-brand-500"
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
             </button>
 
             <a href="{{ route('login.ldap') }}"
-                class="block w-full group relative p-6 bg-white border-2 border-slate-100 rounded-2xl hover:border-emerald-500 hover:shadow-xl transition-all duration-300 text-left">
-                <div class="flex items-center">
-                    <div
-                        class="flex-shrink-0 p-3 bg-emerald-50 rounded-xl group-hover:bg-emerald-600 transition-colors duration-300">
-                        <svg class="w-8 h-8 text-emerald-600 group-hover:text-white transition-colors duration-300"
-                            fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                        </svg>
-                    </div>
-                    <div class="ml-5">
-                        <h3 class="text-lg font-bold text-gray-800 group-hover:text-emerald-600 transition-colors">LDAP
-                            User Login</h3>
-                        <p class="text-sm text-gray-500 mt-1">Sign in with your Active Directory credentials</p>
-                    </div>
-                    <div class="ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
-                        <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                        </svg>
-                    </div>
+                class="group flex w-full items-center gap-4 rounded-2xl border border-slate-200 bg-white p-4 text-left transition-all duration-200 hover:border-emerald-500 hover:shadow-lg hover:shadow-emerald-500/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 sm:p-5">
+                <div
+                    class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 transition-colors duration-200 group-hover:bg-emerald-600 group-hover:text-white">
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
                 </div>
+                <div class="min-w-0 flex-1">
+                    <h3
+                        class="text-base font-bold text-slate-800 transition-colors group-hover:text-emerald-600 sm:text-lg">
+                        LDAP User Login</h3>
+                    <p class="mt-0.5 text-sm text-slate-500">Sign in with your Active Directory credentials</p>
+                </div>
+                <svg class="h-5 w-5 shrink-0 text-slate-300 transition-all group-hover:translate-x-0.5 group-hover:text-emerald-500"
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                </svg>
             </a>
         </div>
 
@@ -71,9 +67,9 @@
         <div x-show="mode === 'email'" x-cloak x-transition:enter="transition ease-out duration-300"
             x-transition:enter-start="opacity-0 translate-x-4" x-transition:enter-end="opacity-100 translate-x-0">
 
-            <button @click="mode = 'selection'"
-                class="mb-6 flex items-center text-sm text-gray-500 hover:text-blue-600 transition-colors">
-                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button type="button" @click="mode = 'selection'"
+                class="mb-5 inline-flex items-center rounded-md text-sm text-slate-500 transition-colors hover:text-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
+                <svg class="mr-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                 </svg>
                 Back to selection
@@ -83,17 +79,18 @@
                 @csrf
                 <!-- Email Address -->
                 <div>
-                    <x-input-label for="email" :value="__('Email Address')" class="text-gray-700 font-medium" />
+                    <x-input-label for="email" :value="__('Email Address')" class="font-medium text-slate-700" />
                     <div class="relative mt-2">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                            <svg class="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
                             </svg>
                         </div>
                         <x-text-input id="email"
-                            class="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                            type="email" name="email" :value="old('email')" required autofocus autocomplete="username"
+                            class="block w-full rounded-lg border-slate-300 py-3 pl-10 pr-3 text-base transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 sm:text-sm"
+                            type="email" name="email" :value="old('email')" required autocomplete="username"
+                            x-init="$watch('mode', m => m === 'email' && $nextTick(() => $el.focus()))"
                             placeholder="Enter your email" />
                     </div>
                     <x-input-error :messages="$errors->get('email')" class="mt-2" />
@@ -101,41 +98,54 @@
 
                 <!-- Password -->
                 <div>
-                    <x-input-label for="password" :value="__('Password')" class="text-gray-700 font-medium" />
+                    <x-input-label for="password" :value="__('Password')" class="font-medium text-slate-700" />
                     <div class="relative mt-2">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                            <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                            <svg class="h-5 w-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                             </svg>
                         </div>
                         <x-text-input id="password"
-                            class="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                            type="password" name="password" required autocomplete="current-password"
-                            placeholder="Enter your password" />
+                            class="block w-full rounded-lg border-slate-300 py-3 pl-10 pr-11 text-base transition-all focus:border-brand-500 focus:ring-2 focus:ring-brand-500/30 sm:text-sm"
+                            type="password" x-bind:type="showPassword ? 'text' : 'password'" name="password" required
+                            autocomplete="current-password" placeholder="Enter your password" />
+                        <button type="button" @click="showPassword = !showPassword"
+                            class="absolute inset-y-0 right-0 flex items-center rounded-r-lg px-3 text-slate-400 hover:text-slate-600 focus:outline-none focus-visible:text-brand-600"
+                            :aria-label="showPassword ? 'Hide password' : 'Show password'">
+                            <svg x-show="!showPassword" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                            <svg x-show="showPassword" x-cloak class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            </svg>
+                        </button>
                     </div>
                     <x-input-error :messages="$errors->get('password')" class="mt-2" />
                 </div>
 
                 <!-- Remember Me & Forgot Password -->
-                <div class="flex items-center justify-between">
+                <div class="flex flex-wrap items-center justify-between gap-2">
                     <label for="remember_me" class="inline-flex items-center">
                         <input id="remember_me" type="checkbox"
-                            class="rounded border-gray-300 text-blue-600 shadow-sm focus:ring-blue-500" name="remember">
-                        <span class="ml-2 text-sm text-gray-600">{{ __('Remember me') }}</span>
+                            class="rounded border-slate-300 text-brand-600 shadow-sm focus:ring-brand-500" name="remember">
+                        <span class="ml-2 text-sm text-slate-600">{{ __('Remember me') }}</span>
                     </label>
 
                     @if (Route::has('password.request'))
-                        <a class="text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                        <a class="text-sm font-medium text-brand-600 transition-colors hover:text-brand-800"
                             href="{{ route('password.request') }}">
                             {{ __('Forgot password?') }}
                         </a>
                     @endif
                 </div>
 
-                <div class="pt-2">
+                <div class="pt-1">
                     <button type="submit"
-                        class="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-semibold py-3 px-4 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
+                        class="w-full transform rounded-lg bg-gradient-to-r from-brand-600 to-accent-600 px-4 py-3 font-semibold text-white shadow-lg shadow-brand-600/20 transition-all duration-200 hover:-translate-y-0.5 hover:from-brand-700 hover:to-accent-700 hover:shadow-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2">
                         {{ __('Sign In with Password') }}
                     </button>
                 </div>

@@ -394,7 +394,7 @@ python http_server.py</pre>
 
             <!-- Server Status Section -->
             <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-blue-100">
-                <div class="p-6 border-b border-blue-100 bg-gradient-to-r from-blue-50 to-cyan-50">
+                <div class="p-6 border-b border-blue-100 bg-gradient-to-r from-brand-50 to-accent-50">
                     <div class="flex items-center">
                         <div class="p-3 bg-blue-600 rounded-xl mr-4">
                             <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

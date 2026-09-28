@@ -35,7 +35,7 @@
     ][$apcTone];
     $apcText = ['red' => 'text-red-700', 'amber' => 'text-amber-800', 'green' => 'text-green-700', 'gray' => 'text-gray-700'][$apcTone];
 
-    $addButton = 'inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 rounded-lg font-semibold text-sm text-white shadow-md transition-all';
+    $addButton = 'inline-flex items-center px-4 py-2 bg-gradient-to-r from-brand-600 to-accent-600 hover:from-brand-700 hover:to-accent-700 rounded-lg font-semibold text-sm text-white shadow-md transition-all';
     $linkButton = 'text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline';
     $removeButton = 'text-xs font-medium text-red-600 hover:text-red-800 hover:underline';
 @endphp

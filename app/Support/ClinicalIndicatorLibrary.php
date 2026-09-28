@@ -25,8 +25,9 @@ use Illuminate\Support\Collection;
  * GCS reads as E3 V4 M6.
  *
  * An item with a `unit` and a `normal` range is a reading typed in from the
- * monitor instead, which is how the invasive hemodynamic numerics are
- * recorded. ClinicalIndicatorReadings describes those items and flags them.
+ * monitor instead, which is how the invasive hemodynamic numerics and the
+ * ventilator settings are recorded. ClinicalIndicatorReadings describes those
+ * items and flags them.
  *
  * Every scale names one of CATEGORIES as its category, which is what it is
  * listed under. Scales appear category by category in CATEGORIES order, and in
@@ -64,6 +65,7 @@ final class ClinicalIndicatorLibrary
         'Consciousness' => 'Level of consciousness, to pick up neurological deterioration',
         'Deterioration' => 'Early warning of a patient getting worse, from routine observations',
         'Hemodynamics' => 'Invasive pressures and cardiac output from the bedside monitor, for critical care',
+        'Ventilation' => 'Ventilator settings and airway readings for intubated patients, for critical care',
         'Delirium' => 'Screening for delirium and cognitive impairment',
         'Frailty' => 'Screening older adults for frailty',
         self::OTHER_CATEGORY => 'Added locally, with no clinical detail in the library yet',
@@ -487,17 +489,17 @@ final class ClinicalIndicatorLibrary
                 'ABP' => ['label' => 'Invasive arterial pressure', 'format' => '{SBP}/{DBP} ({MAP})'],
             ],
             'items' => [
-                ['name' => 'Arterial systolic pressure', 'abbr' => 'SBP', 'group' => 'ABP', 'unit' => 'mmHg', 'decimals' => 0,
+                ['name' => 'Arterial systolic pressure', 'abbr' => 'SBP', 'group' => 'ABP', 'chart' => 'pressure', 'unit' => 'mmHg', 'decimals' => 0,
                     'limits' => [20, 300], 'normal' => [90, 140], 'escalate_below' => 90, 'escalate_above' => 180],
-                ['name' => 'Arterial diastolic pressure', 'abbr' => 'DBP', 'group' => 'ABP', 'unit' => 'mmHg', 'decimals' => 0,
+                ['name' => 'Arterial diastolic pressure', 'abbr' => 'DBP', 'group' => 'ABP', 'chart' => 'pressure', 'unit' => 'mmHg', 'decimals' => 0,
                     'limits' => [10, 200], 'normal' => [60, 90], 'escalate_below' => 40, 'escalate_above' => 120],
-                ['name' => 'Mean arterial pressure', 'abbr' => 'MAP', 'group' => 'ABP', 'unit' => 'mmHg', 'decimals' => 0,
+                ['name' => 'Mean arterial pressure', 'abbr' => 'MAP', 'group' => 'ABP', 'chart' => 'pressure', 'unit' => 'mmHg', 'decimals' => 0,
                     'limits' => [15, 250], 'normal' => [70, 105], 'escalate_below' => 65, 'trend' => 'line'],
-                ['name' => 'Central venous pressure', 'abbr' => 'CVP', 'unit' => 'mmHg', 'decimals' => 0,
+                ['name' => 'Central venous pressure', 'abbr' => 'CVP', 'chart' => 'pressure', 'unit' => 'mmHg', 'decimals' => 0,
                     'limits' => [-10, 40], 'normal' => [2, 8], 'escalate_above' => 15],
-                ['name' => 'Cardiac output', 'abbr' => 'CO', 'unit' => 'L/min', 'decimals' => 2,
+                ['name' => 'Cardiac output', 'abbr' => 'CO', 'chart' => 'flow', 'unit' => 'L/min', 'decimals' => 2,
                     'limits' => [0.5, 20], 'normal' => [4.0, 8.0]],
-                ['name' => 'Cardiac index', 'abbr' => 'CI', 'unit' => 'L/min/m²', 'decimals' => 2,
+                ['name' => 'Cardiac index', 'abbr' => 'CI', 'chart' => 'flow', 'unit' => 'L/min/m²', 'decimals' => 2,
                     'limits' => [0.3, 10], 'normal' => [2.5, 4.0], 'escalate_below' => 2.2, 'trend' => 'band'],
             ],
             'checks' => [
@@ -505,6 +507,11 @@ final class ClinicalIndicatorLibrary
                 ['MAP', '>', 'DBP', 'MAP must lie between the diastolic and systolic pressures.'],
                 ['MAP', '<', 'SBP', 'MAP must lie between the diastolic and systolic pressures.'],
             ],
+            'charts' => [
+                'pressure' => 'Arterial and central venous pressure',
+                'flow' => 'Cardiac output and index',
+            ],
+            'notes_example' => 'e.g. on noradrenaline 0.1 mcg/kg/min, PEEP 8, trace damped',
             // The worst reading sets the status (see ClinicalIndicatorReadings), not a total
             'score_min' => 0,
             'score_max' => 2,
@@ -515,6 +522,49 @@ final class ClinicalIndicatorLibrary
             ],
             'reference' => 'Normal ranges: Edwards Lifesciences, Normal Hemodynamic Parameters (adult), with CVP taken as 2 to 8 mmHg. Escalation: MAP 65, Surviving Sepsis Campaign, Evans et al., 2021; SBP 90 and CI 2.2, cardiogenic shock criteria, SHOCK trial (Hochman et al., 1999) and SCAI shock classification, 2019; DBP 40, Hernández, Teboul and Bakker, 2019; SBP 180 and DBP 120, ACC/AHA hypertension guideline, 2017; CVP 15, common ICU practice',
             'note' => 'Copy the values the monitor displays, with the transducer levelled at the phlebostatic axis (4th intercostal space, mid-axillary line) and zeroed, and pressures read at end-expiration. Steer by MAP: below 65 mmHg organ perfusion is at risk, which is why most vasopressor targets start there. CVP alone does not show whether the patient will respond to fluid, so read it as a trend and against PEEP; a sudden rise can mean fluid overload, right ventricular failure, tamponade or tension pneumothorax. CI adjusts cardiac output for body size, so escalation is on CI rather than CO: below 2.2 L/min/m² is a low-output state. These are adult defaults: where the ICU team has set a target for the patient, such as a higher MAP in chronic hypertension, that target applies.',
+            'confirmed' => true,
+        ],
+        [
+            'code' => 'VENT',
+            'name' => 'Ventilator & Airway Parameters',
+            'category' => 'Ventilation',
+            'population' => 'Adults on invasive mechanical ventilation through an endotracheal tube or tracheostomy, with continuous capnography',
+            'purpose' => 'Records the ventilator settings and airway readings at the bedside and flags each one against its usual adult range and the level at which the ICU doctor should be told, so a rising oxygen or pressure need, CO2 drifting out of range or a change in tidal volume is picked up between rounds.',
+            // Readings typed in from the ventilator and capnograph, not options: see ClinicalIndicatorReadings.
+            // Only what the patient is on is entered; none of them has to go with another.
+            'items' => [
+                ['name' => 'End-tidal carbon dioxide', 'abbr' => 'EtCO2', 'chart' => 'gas', 'unit' => 'mmHg', 'decimals' => 0,
+                    'limits' => [0, 150], 'normal' => [35, 45], 'escalate_below' => 30, 'escalate_above' => 50, 'trend' => 'band'],
+                // FiO2 cannot fall below room air, so its normal range starts at the limit and it is never low
+                ['name' => 'Fraction of inspired oxygen', 'abbr' => 'FiO2', 'chart' => 'gas', 'unit' => '%', 'decimals' => 0,
+                    'limits' => [21, 100], 'normal' => [21, 40], 'escalate_above' => 60],
+                ['name' => 'Positive end-expiratory pressure', 'abbr' => 'PEEP', 'chart' => 'airway', 'unit' => 'cmH₂O', 'decimals' => 0,
+                    'limits' => [0, 30], 'normal' => [5, 8]],
+                ['name' => 'Peak inspiratory pressure', 'abbr' => 'PIP', 'chart' => 'airway', 'unit' => 'cmH₂O', 'decimals' => 0,
+                    'limits' => [0, 80], 'normal' => [10, 30], 'escalate_above' => 35, 'trend' => 'line'],
+                ['name' => 'Tidal volume', 'abbr' => 'Vt', 'chart' => 'airway', 'unit' => 'mL', 'decimals' => 0,
+                    'limits' => [0, 2000], 'normal' => [300, 500]],
+            ],
+            'checks' => [
+                ['PIP', '>', 'PEEP', 'Peak inspiratory pressure must be higher than PEEP.'],
+            ],
+            'charts' => [
+                'gas' => 'End-tidal CO2 and inspired oxygen',
+                'airway' => 'Airway pressures and tidal volume',
+            ],
+            // The level of support at a glance on the critical care bed cards
+            'dashboard' => ['FiO2', 'PEEP'],
+            'notes_example' => 'e.g. SIMV-PC rate 14, plateau 26, ETT 7.5 at 22 cm, suctioned',
+            // The worst reading sets the status (see ClinicalIndicatorReadings), not a total
+            'score_min' => 0,
+            'score_max' => 2,
+            'bands' => [
+                ['label' => 'Within normal range', 'range' => 'Every reading inside its normal range', 'min' => 0, 'max' => 0, 'tone' => self::TONE_LOW],
+                ['label' => 'Outside normal range', 'range' => 'A reading outside its normal range, none at an escalation level', 'min' => 1, 'max' => 1, 'tone' => self::TONE_MODERATE],
+                ['label' => 'Escalate', 'range' => 'A reading at an escalation level: inform the ICU doctor', 'min' => 2, 'max' => 2, 'tone' => self::TONE_HIGH],
+            ],
+            'reference' => 'Normal ranges: EtCO2 35 to 45 mmHg, the normal adult range; FiO2 up to 40% and PEEP 5 to 8 cmH₂O, within the oxygenation criteria for readiness to wean, MacIntyre et al., 2001; tidal volume set by predicted body weight with plateau pressure 30 cmH₂O or below, ARDS Network, 2000. Capnography for every intubated patient: NAP4, Cook et al., 2011. Escalation at EtCO2 30 and 50 mmHg, FiO2 60% and PIP 35 cmH₂O: common ICU practice',
+            'note' => 'Copy what the ventilator and capnograph display: the set FiO2 and PEEP, the measured peak pressure and the exhaled tidal volume. A sudden fall in EtCO2 or a lost waveform means a displaced, disconnected or blocked tube, or falling cardiac output, until proven otherwise: check the patient and the tube at once. When PIP rises, check the plateau pressure: a high PIP with an unchanged plateau points to the airway (secretions, bronchospasm, a kinked or bitten tube), a rising plateau to stiffer lungs or chest wall (pneumothorax, atelectasis, pulmonary oedema, abdominal distension); keep the plateau at 30 cmH₂O or below. The right tidal volume depends on height and sex, about 6 to 8 mL/kg of predicted body weight, so the mL range here is only a prompt to check it. FiO2 above 40% or PEEP above 8 cmH₂O is more support than a patient ready to wean usually needs, and FiO2 above 60% for long risks oxygen toxicity. These are adult defaults: where the ICU team has set targets for the patient, such as permissive hypercapnia in ARDS or tight CO2 control after brain injury, those targets apply.',
             'confirmed' => true,
         ],
 

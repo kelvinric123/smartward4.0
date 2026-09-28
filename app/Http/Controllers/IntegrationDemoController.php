@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Ward;
 use App\Models\Bed;
+use App\Models\ClinicalIndicator;
 use App\Models\DietType;
 use App\Models\Patient;
 use App\Models\SugarReading;
@@ -11,9 +12,14 @@ use App\Models\VitalSign;
 use App\Models\AdmissionLog;
 use App\Models\Infusion;
 use App\Models\InfusionPump;
+use App\Services\DemoClinicalData;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Faker\Factory as Faker;
 use Carbon\Carbon;
 
@@ -23,14 +29,42 @@ class IntegrationDemoController extends Controller
     {
         $wards = Ward::where('is_active', true)->get();
 
-        $admittedPatients = Patient::with(['ward', 'bed'])
+        $admittedPatients = Patient::with(['ward.wardType.clinicalIndicators', 'bed'])
             ->where('is_active', true)
             ->whereIn('status', ['admitted', 'pending_discharge'])
             ->get();
 
         $dietTypes = DietType::where('is_active', true)->orderBy('name')->get();
 
-        return view('integration.demo.index', compact('wards', 'admittedPatients', 'dietTypes'));
+        // The clinical indicators each patient's ward records, offered on the vital signs form
+        $patientIndicators = $admittedPatients->mapWithKeys(fn (Patient $patient) => [$patient->id => [
+            'wardType' => $patient->ward?->wardType?->name,
+            'indicators' => $this->wardIndicators($patient)
+                ->map(fn (ClinicalIndicator $indicator) => [
+                    'id' => $indicator->id,
+                    'code' => $indicator->code,
+                    'name' => $indicator->name,
+                    'kind' => DemoClinicalData::kind($indicator->definition()),
+                    'detail' => DemoClinicalData::describe($indicator->definition()),
+                ])
+                ->values()
+                ->all(),
+        ]]);
+
+        return view('integration.demo.index', compact('wards', 'admittedPatients', 'dietTypes', 'patientIndicators'));
+    }
+
+    /**
+     * The active clinical indicators bound to the patient's ward type: the
+     * ones Patient Details shows, so the only ones worth seeding.
+     */
+    private function wardIndicators(Patient $patient): Collection
+    {
+        $wardType = $patient->ward?->wardType;
+
+        return $wardType && $wardType->is_active
+            ? $wardType->clinicalIndicators->where('is_active', true)->values()
+            : collect();
     }
 
     public function seedPatients(Request $request)
@@ -280,19 +314,44 @@ class IntegrationDemoController extends Controller
         return (string) array_key_first($weights);
     }
 
+    /**
+     * Vital signs and, for the clinical indicators the patient's ward records,
+     * monitor readings or scores, all following one clinical course.
+     */
     public function seedVitalSigns(Request $request)
     {
         $request->validate([
             'patient_id' => 'required|exists:patients,id',
             'readings_per_day' => 'required|integer|min:1|max:24',
             'past_days' => 'required|integer|min:0|max:30',
+            'seed_vitals' => 'nullable|boolean',
+            'pattern' => ['nullable', 'string', Rule::in(array_keys(DemoClinicalData::PATTERNS))],
+            'indicator_ids' => 'nullable|array',
+            'indicator_ids.*' => 'integer',
+            'monitor_per_day' => 'nullable|integer|min:1|max:24',
+            'assessments_per_day' => 'nullable|integer|min:1|max:24',
         ]);
 
-        $patient = Patient::findOrFail($request->patient_id);
+        $patient = Patient::with('ward.wardType.clinicalIndicators')->findOrFail($request->patient_id);
         $admissionId = $patient->getCurrentAdmissionId() ?? ('ADM-' . $patient->id . '-' . now()->format('YmdHis'));
+        $pattern = $request->input('pattern') ?: 'stable';
+        // A form from before the clinical indicator options only seeded vital signs
+        $seedVitals = $request->boolean('seed_vitals', true);
+
+        // Only what the patient's ward records, and has the detail to seed from
+        $indicators = $this->wardIndicators($patient)
+            ->whereIn('id', array_map('intval', (array) $request->input('indicator_ids', [])))
+            ->filter(fn (ClinicalIndicator $indicator) => DemoClinicalData::kind($indicator->definition()) !== null)
+            ->values();
+
+        if (!$seedVitals && $indicators->isEmpty()) {
+            return back()->withInput()->with('demo_tab', 'seed-vitals')
+                ->with('error', "Choose vital signs or a clinical indicator recorded on {$patient->name}'s ward to seed.");
+        }
 
         $faker = Faker::create();
         $totalSeeded = 0;
+        $indicatorsSeeded = [];
 
         $startDate = Carbon::now()->subDays($request->past_days)->startOfDay();
         $endDate = Carbon::now();
@@ -302,46 +361,62 @@ class IntegrationDemoController extends Controller
             $startDate = $patient->admitted_at->copy();
         }
 
-        for ($day = 0; $day <= $request->past_days; $day++) {
-            $currentDate = $startDate->copy()->addDays($day);
-            if ($currentDate->gt($endDate)) {
-                break;
-            }
+        // The course runs over the whole period, whatever is seeded
+        $from = $startDate->copy();
+        $ventilated = $indicators->contains('code', DemoClinicalData::VENTILATOR);
 
-            for ($i = 0; $i < $request->readings_per_day; $i++) {
-                // Spread the readings evenly across the day, or randomly. Let's do random hours.
-                $readingTime = $currentDate->copy()->addMinutes($faker->numberBetween(0, 1439)); // 0 to 1439 mins in a day
-                
-                // If the reading time is in the future, cap it to now
-                if ($readingTime->gt($endDate)) {
-                    $readingTime = $endDate->copy()->subMinutes($faker->numberBetween(1, 60));
-                }
-                
-                // If the reading time is before admission, adjust it
-                if ($patient->admitted_at && $readingTime->lt($patient->admitted_at)) {
-                    $readingTime = $patient->admitted_at->copy()->addMinutes($faker->numberBetween(1, 60));
+        DB::transaction(function () use ($request, $patient, $admissionId, $pattern, $seedVitals, $indicators, $faker, $startDate, $endDate, $from, $ventilated, &$totalSeeded, &$indicatorsSeeded) {
+            for ($day = 0; $seedVitals && $day <= $request->past_days; $day++) {
+                $currentDate = $startDate->copy()->addDays($day);
+                if ($currentDate->gt($endDate)) {
+                    break;
                 }
 
-                VitalSign::create([
-                    'patient_id' => $patient->id,
-                    'admission_id' => $admissionId,
-                    'recorded_by' => Auth::id() ?? 1,
-                    'systolic_bp' => $faker->numberBetween(100, 140),
-                    'diastolic_bp' => $faker->numberBetween(60, 90),
-                    'pulse_rate' => $faker->numberBetween(60, 100),
-                    'temperature' => $faker->randomFloat(1, 36.5, 37.5),
-                    'spo2' => $faker->numberBetween(95, 100),
-                    'respiratory_rate' => $faker->numberBetween(12, 20),
-                    'reading_type' => 'full',
-                    'notes' => 'Demo seeded data',
-                    'recorded_at' => $readingTime,
-                ]);
+                for ($i = 0; $i < $request->readings_per_day; $i++) {
+                    // Spread the readings evenly across the day, or randomly. Let's do random hours.
+                    $readingTime = $currentDate->copy()->addMinutes($faker->numberBetween(0, 1439)); // 0 to 1439 mins in a day
 
-                $totalSeeded++;
+                    // If the reading time is in the future, cap it to now
+                    if ($readingTime->gt($endDate)) {
+                        $readingTime = $endDate->copy()->subMinutes($faker->numberBetween(1, 60));
+                    }
+
+                    // If the reading time is before admission, adjust it
+                    if ($patient->admitted_at && $readingTime->lt($patient->admitted_at)) {
+                        $readingTime = $patient->admitted_at->copy()->addMinutes($faker->numberBetween(1, 60));
+                    }
+
+                    $severity = DemoClinicalData::severity($pattern, DemoClinicalData::progress($readingTime, $from, $endDate));
+
+                    VitalSign::create(DemoClinicalData::vitalSigns($pattern, $severity, $ventilated) + [
+                        'patient_id' => $patient->id,
+                        'admission_id' => $admissionId,
+                        'recorded_by' => Auth::id() ?? 1,
+                        'reading_type' => 'full',
+                        'notes' => DemoClinicalData::NOTE,
+                        'recorded_at' => $readingTime,
+                    ]);
+
+                    $totalSeeded++;
+                }
             }
-        }
 
-        return back()->with('success', "Successfully seeded {$totalSeeded} vital sign readings for {$patient->name}.");
+            foreach ($indicators as $indicator) {
+                $kind = DemoClinicalData::kind($indicator->definition());
+                $perDay = $kind === DemoClinicalData::KIND_READINGS
+                    ? ($request->integer('monitor_per_day') ?: 6)
+                    : ($request->integer('assessments_per_day') ?: 2);
+
+                $count = DemoClinicalData::seedIndicator($patient, $indicator, $from, $endDate, $perDay, $pattern, Auth::id());
+                $indicatorsSeeded[] = $count . ' ' . $indicator->code . ($kind === DemoClinicalData::KIND_READINGS ? ' readings' : ' scores');
+            }
+        });
+
+        $seeded = collect($seedVitals ? ["{$totalSeeded} vital sign readings"] : [])->merge($indicatorsSeeded);
+        $course = $pattern === 'stable' ? '' : ' (' . Str::lower(Str::before(DemoClinicalData::PATTERNS[$pattern], ':')) . ' course)';
+
+        return back()->withInput()->with('demo_tab', 'seed-vitals')
+            ->with('success', 'Successfully seeded ' . $seeded->join(', ', ' and ') . " for {$patient->name}{$course}.");
     }
 
     public function seedInfusion(Request $request)
@@ -402,6 +477,6 @@ class IntegrationDemoController extends Controller
             'last_updated_at' => now(),
         ]);
 
-        return back()->with('success', "Successfully seeded an active infusion for {$patient->name}.");
+        return back()->with('demo_tab', 'seed-infusions')->with('success', "Successfully seeded an active infusion for {$patient->name}.");
     }
 }

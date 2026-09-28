@@ -174,10 +174,10 @@
 
             {{-- Patient banner with the key stay figures --}}
             <div class="bg-white/90 backdrop-blur-sm shadow-lg rounded-2xl border border-blue-100 overflow-hidden">
-                <div class="h-1.5 bg-gradient-to-r from-blue-600 to-cyan-500"></div>
+                <div class="h-1.5 bg-gradient-to-r from-brand-600 to-accent-500"></div>
                 <div class="p-6 flex flex-col md:flex-row md:items-center gap-5">
                     <div
-                        class="w-16 h-16 shrink-0 rounded-2xl bg-gradient-to-br from-blue-600 to-cyan-500 text-white text-xl font-bold flex items-center justify-center shadow-md">
+                        class="w-16 h-16 shrink-0 rounded-2xl bg-gradient-to-br from-brand-600 to-accent-500 text-white text-xl font-bold flex items-center justify-center shadow-md">
                         {{ $initials ?: '?' }}
                     </div>
                     <div class="min-w-0 flex-1">
@@ -276,7 +276,7 @@
             {{-- Tab bar + the sections it switches between --}}
             <div x-data="{
                     tab: @js($initialTab),
-                    activeClass: 'bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-md',
+                    activeClass: 'bg-gradient-to-r from-brand-600 to-accent-600 text-white shadow-md',
                     idleClass: 'text-gray-600 hover:bg-blue-50 hover:text-blue-700',
                     select(next) {
                         this.tab = next;

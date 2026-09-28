@@ -175,10 +175,6 @@ RUN echo "Building frontend assets..." \
 # Clean up Node.js after build to reduce image size
 RUN apk del nodejs npm
 
-# Set permissions before running migrations
-RUN chown -R www:www /app \
-    && chmod -R 755 /app/storage /app/bootstrap/cache
-
 # Copy docker.env and create .env file for build-time migrations
 # Use Unix socket for build-time DB connection (more reliable than TCP in Docker build)
 COPY docker_smartward_hub/docker.env /app/docker.env
@@ -247,8 +243,11 @@ RUN git config --global --add safe.directory '*' \
     && composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist --no-scripts \
     && rm -f bootstrap/cache/packages.php bootstrap/cache/services.php
 
-# Reset permissions after migrations
-RUN chown -R www:www /app \
+# The app files arrive owned by www (COPY --chown); hand www what the build has
+# created as root since: dependencies, built assets, caches and logs. A chown -R
+# of all of /app would copy every file into another layer of the image.
+RUN chown www:www /app \
+    && chown -R www:www /app/vendor /app/public /app/storage /app/bootstrap/cache \
     && chmod -R 755 /app/storage /app/bootstrap/cache
 
 # Allow binding to privileged ports (port 88)

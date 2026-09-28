@@ -16,10 +16,14 @@ class Hospital extends Model
         'logo_path',
         'login_logo_path',
         'navbar_logo_path',
+        'theme_primary_color',
+        'theme_secondary_color',
+        'hidden_nav_items',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'hidden_nav_items' => 'array',
     ];
 
     public function wards()

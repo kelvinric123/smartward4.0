@@ -1,3 +1,4 @@
+@php($hospital = \App\Models\Hospital::first())
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 
@@ -19,9 +20,10 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 
     @include('components.autofill-guard')
+    <x-theme-style :hospital="$hospital" />
 </head>
 
-<body class="font-sans antialiased bg-gradient-to-br from-blue-50 via-cyan-50 to-teal-50 overflow-hidden">
+<body class="font-sans antialiased bg-gradient-to-br from-brand-50 via-accent-50 to-brand-50 overflow-hidden">
     <div class="flex h-screen min-h-0" x-data="{ hideNav: false, hideFooter: false }"
         @fullscreenchange.window="hideNav = !!document.fullscreenElement"
         @toggle-custom-fullscreen.window="hideNav = $event.detail.enabled; hideFooter = $event.detail.enabled">
@@ -33,7 +35,7 @@
         <div class="flex-1 flex flex-col overflow-hidden min-h-0">
             <!-- Page Heading -->
             @isset($header)
-                <header class="{{ request()->routeIs('ward.dashboard', 'critical-care.dashboard') ? 'bg-gradient-to-br from-blue-600 to-cyan-500 shadow-sm border-b border-blue-400' : 'bg-white/80 backdrop-blur-sm shadow-sm border-b border-blue-100' }}">
+                <header class="{{ request()->routeIs('ward.dashboard', 'critical-care.dashboard') ? 'bg-gradient-to-br from-brand-600 to-accent-500 shadow-sm border-b border-brand-400' : 'bg-white/80 backdrop-blur-sm shadow-sm border-b border-brand-100' }}">
                     <div class="w-full px-4 sm:px-6 lg:px-8 py-4">
                         {{ $header }}
                     </div>
@@ -46,12 +48,12 @@
             </main>
 
             <!-- Footer -->
-            <footer x-show="!hideFooter" x-transition class="bg-white/60 backdrop-blur-sm border-t border-blue-100 py-4"
+            <footer x-show="!hideFooter" x-transition class="bg-white/60 backdrop-blur-sm border-t border-brand-100 py-4"
                 :class="hideNav ? 'fixed bottom-0 left-0 right-0 z-50' : ''">
                 <div class="w-full px-4 sm:px-6 lg:px-8">
                     <div class="flex items-center justify-between">
                         <div class="text-sm text-gray-600">
-                            <span class="font-semibold text-blue-600">PHKL</span> Smart Ward 4.0
+                            <span class="font-semibold text-brand-600">PHKL</span> Smart Ward 4.0
                         </div>
                         <div class="flex items-center space-x-2">
                             <span class="text-xs text-gray-500">Developed by</span>

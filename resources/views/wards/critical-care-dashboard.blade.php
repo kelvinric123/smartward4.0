@@ -1071,37 +1071,122 @@
                                                     this.close();
                                                 },
                                             }">
-                                            {{-- Left side: EWS/No Vitals + Pending Discharge --}}
-                                            <div class="flex items-center gap-1 shrink-0">
-                                                @if($isVisible('ews'))
-                                                    @if($bed['ews_has_vitals'] && $bed['ews'] !== null)
-                                                        @php
-                                                            $ewsScore = $bed['ews'];
-                                                            if ($ewsScore <= 2) {
-                                                                $ewsBgClass = 'bg-green-500';
-                                                            } elseif ($ewsScore <= 4) {
-                                                                $ewsBgClass = 'bg-yellow-500';
-                                                            } elseif ($ewsScore <= 6) {
-                                                                $ewsBgClass = 'bg-orange-500';
-                                                            } else {
-                                                                $ewsBgClass = 'bg-red-500';
-                                                            }
-                                                        @endphp
-                                                        <span
-                                                            class="px-1.5 py-0.5 {{ $ewsBgClass }} text-white text-xs rounded font-bold">EWS:
-                                                            {{ $ewsScore }}</span>
-                                                        @if($ewsScore >= 5)
-                                                            <svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-                                                                <path fill-rule="evenodd"
-                                                                    d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                                                                    clip-rule="evenodd" />
-                                                            </svg>
+                                            {{-- Left side: EWS/No Vitals + Pending Discharge, and under it the ventilator. It takes the width
+                                                 the status grid leaves, never less than EWS, and sits at the top so the badge clears the card's edge --}}
+                                            <div class="flex-1 self-start flex flex-col items-start gap-0.5 mr-1">
+                                                <div class="flex items-center gap-1 shrink-0">
+                                                    @if($isVisible('ews'))
+                                                        @if($bed['ews_has_vitals'] && $bed['ews'] !== null)
+                                                            @php
+                                                                $ewsScore = $bed['ews'];
+                                                                if ($ewsScore <= 2) {
+                                                                    $ewsBgClass = 'bg-green-500';
+                                                                } elseif ($ewsScore <= 4) {
+                                                                    $ewsBgClass = 'bg-yellow-500';
+                                                                } elseif ($ewsScore <= 6) {
+                                                                    $ewsBgClass = 'bg-orange-500';
+                                                                } else {
+                                                                    $ewsBgClass = 'bg-red-500';
+                                                                }
+                                                            @endphp
+                                                            <span
+                                                                class="px-1.5 py-0.5 {{ $ewsBgClass }} text-white text-xs rounded font-bold">EWS:
+                                                                {{ $ewsScore }}</span>
+                                                            @if($ewsScore >= 5)
+                                                                <svg class="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                                                                    <path fill-rule="evenodd"
+                                                                        d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                                                                        clip-rule="evenodd" />
+                                                                </svg>
+                                                            @endif
+                                                        @else
+                                                            <span class="px-1.5 py-0.5 bg-gray-400 text-white text-xs rounded font-medium">No
+                                                                vitals</span>
                                                         @endif
-                                                    @else
-                                                        <span class="px-1.5 py-0.5 bg-gray-400 text-white text-xs rounded font-medium">No
-                                                            vitals</span>
                                                     @endif
-                                                @endif
+                                                </div>
+
+                                                {{-- Ventilator & Airway readings charted in the last 12 hours: FiO2 and PEEP, coloured by the worst reading --}}
+                                                @foreach(($bedsideReadings ?? [])[$bed['patient_id']] ?? [] as $readingSet)
+                                                    @php
+                                                        $readingFlags = \App\Support\ClinicalIndicatorReadings::FLAGS;
+                                                        $readingTone = $readingFlags[$readingSet['flag']]['tone'];
+                                                        $readingChipClass = [
+                                                            'high' => 'bg-red-600 animate-pulse',
+                                                            'moderate' => 'bg-amber-500',
+                                                            'low' => 'bg-cyan-600',
+                                                        ][$readingTone];
+                                                        $readingHeaderClass = ['high' => 'text-red-700', 'moderate' => 'text-amber-700', 'low' => 'text-cyan-700'][$readingTone];
+                                                        $readingPillClass = ['high' => 'bg-red-100 text-red-800', 'moderate' => 'bg-amber-100 text-amber-800', 'low' => 'bg-emerald-100 text-emerald-800'][$readingTone];
+                                                        $readingTextClasses = ['high' => 'text-red-600 font-bold', 'moderate' => 'text-amber-700 font-semibold', 'low' => 'text-gray-800'];
+                                                        $readingWhen = fn ($at) => $at->isToday() ? $at->format('H:i') : $at->format('d M H:i');
+                                                        $readingPopover = 'readings_' . $readingSet['code'] . '_' . $bed['patient_id'];
+                                                        $readingSummary = collect($readingSet['readings'])
+                                                            ->map(fn ($reading) => $reading['abbr'] . ' ' . $reading['text'] . ' ' . $reading['unit'] . ' ' . $readingFlags[$reading['flag']]['arrow'])
+                                                            ->map(fn ($text) => trim($text))
+                                                            ->implode(' · ');
+                                                    @endphp
+                                                    {{-- As wide as the column without widening it, so the values truncate rather than squeeze the grid --}}
+                                                    <div class="relative w-0 min-w-full">
+                                                        <button type="button"
+                                                            @click="toggle('{{ $readingPopover }}', $event.currentTarget)"
+                                                            data-popover-trigger
+                                                            class="max-w-full inline-flex items-center gap-1 px-1.5 rounded text-white text-xs leading-4 font-bold tabular-nums {{ $readingChipClass }}"
+                                                            title="{{ $readingSet['name'] }}: {{ $readingSummary }}">
+                                                            <x-clinical-indicator-category-icon :category="$readingSet['category']" size="bare" />
+                                                            {{-- One line: a pair that no longer fits drops out whole rather than being cut mid-value --}}
+                                                            <span class="min-w-0 h-4 overflow-hidden flex flex-wrap gap-x-1.5">
+                                                                @foreach($readingSet['headline'] as $reading)
+                                                                    <span class="whitespace-nowrap"><span class="text-[10px] font-semibold opacity-80">{{ $reading['abbr'] }}</span> {{ $reading['text'] }}</span>
+                                                                @endforeach
+                                                            </span>
+                                                        </button>
+                                                        <template x-teleport="body">
+                                                            <div x-show="openPopover === '{{ $readingPopover }}'"
+                                                                @click.away="closeOnAway($event)" {!! $popoverTransition !!}
+                                                                :style="{ left: popX + 'px', top: popY + 'px' }"
+                                                                :class="flipped ? '' : '-translate-y-full'"
+                                                                data-status-popover="{{ $readingPopover }}"
+                                                                class="{{ $popoverBase }} p-3">
+                                                                <div class="text-xs font-bold flex items-center gap-1 {{ $readingHeaderClass }}">
+                                                                    <x-clinical-indicator-category-icon :category="$readingSet['category']" size="bare" />
+                                                                    <span>{{ $readingSet['name'] }}</span>
+                                                                </div>
+                                                                <div class="mt-1 mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-gray-500">
+                                                                    @if($readingSet['status'])
+                                                                        <span class="px-1.5 py-0.5 rounded-full font-semibold {{ $readingPillClass }}">{{ $readingSet['status'] }}</span>
+                                                                    @endif
+                                                                    <span>Recorded {{ $readingWhen($readingSet['at']) }}</span>
+                                                                </div>
+                                                                <table class="text-xs">
+                                                                    <tbody>
+                                                                        @foreach($readingSet['readings'] as $reading)
+                                                                            @php $readingFlag = $readingFlags[$reading['flag']]; @endphp
+                                                                            <tr title="{{ $reading['name'] }}: {{ $readingFlag['label'] }}">
+                                                                                <td class="pr-3 py-0.5 font-semibold text-gray-600">{{ $reading['abbr'] }}</td>
+                                                                                <td class="pr-1 py-0.5 text-right tabular-nums {{ $readingTextClasses[$readingFlag['tone']] }}">{{ $reading['text'] }}{{ $readingFlag['arrow'] }}</td>
+                                                                                <td class="py-0.5 text-gray-500 whitespace-nowrap">
+                                                                                    {{ $reading['unit'] }}
+                                                                                    @unless($reading['at']->equalTo($readingSet['at']))
+                                                                                        <span class="ml-1 text-[10px] text-gray-400">at {{ $readingWhen($reading['at']) }}</span>
+                                                                                    @endunless
+                                                                                </td>
+                                                                            </tr>
+                                                                        @endforeach
+                                                                    </tbody>
+                                                                </table>
+                                                                <div class="mt-1.5 text-[10px] text-gray-400">
+                                                                    Latest of each in the last {{ \App\Support\ClinicalIndicatorReadings::RECENT_HOURS }} hours
+                                                                </div>
+                                                                <button type="button"
+                                                                    @click="close(); window.dispatchEvent(new CustomEvent('open-patient-details-modal', { detail: { patientId: {{ $bed['patient_id'] }}, tab: 'indicator-{{ $readingSet['indicator_id'] }}' } }))"
+                                                                    class="mt-2 text-[11px] font-semibold text-blue-700 hover:underline">
+                                                                    Open readings &rarr;
+                                                                </button>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                @endforeach
                                             </div>
 
                                             {{-- Right side: Clinical Status Grid (4x2) --}}
@@ -1934,7 +2019,7 @@
                                     <p class="text-gray-500">Edit a ward on the Wards page and set its Ward Type to {{ $criticalCareTypes->join(', ', ' or ') }}. Its beds will then show here.</p>
                                     <div class="mt-4 flex items-center justify-center gap-3">
                                         <a href="{{ route('wards.index') }}"
-                                            class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 rounded-lg font-semibold text-sm text-white shadow-md transition-all">
+                                            class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-brand-600 to-accent-600 hover:from-brand-700 hover:to-accent-700 rounded-lg font-semibold text-sm text-white shadow-md transition-all">
                                             Go to Wards
                                         </a>
                                         <a href="{{ route('ward-types.index') }}"
@@ -1945,7 +2030,7 @@
                                 @else
                                     <p class="text-gray-500">No ward type is marked as critical care yet. On the Ward Types page, set Critical Care Ward to Yes for your ICU / HDU types.</p>
                                     <a href="{{ route('ward-types.index') }}"
-                                        class="mt-4 inline-flex items-center px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 rounded-lg font-semibold text-sm text-white shadow-md transition-all">
+                                        class="mt-4 inline-flex items-center px-4 py-2 bg-gradient-to-r from-brand-600 to-accent-600 hover:from-brand-700 hover:to-accent-700 rounded-lg font-semibold text-sm text-white shadow-md transition-all">
                                         Go to Ward Types
                                     </a>
                                 @endif

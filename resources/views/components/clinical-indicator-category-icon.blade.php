@@ -14,6 +14,7 @@
         'Nutrition' => ['bg-emerald-100 text-emerald-700', 'M5 3v5a2 2 0 004 0V3M7 3v18M17 21V3c-1.657 0-3 2.239-3 5v5h3'],
         'Consciousness' => ['bg-indigo-100 text-indigo-700', 'M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z'],
         'Hemodynamics' => ['bg-rose-100 text-rose-700', 'M3 12h4l3-8 4 16 3-8h4'],
+        'Ventilation' => ['bg-cyan-100 text-cyan-700', 'M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2M9.6 4.6A2 2 0 1 1 11 8H2M12.6 19.4A2 2 0 1 0 14 16H2'],
         'Deterioration' => ['bg-red-100 text-red-700', 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9'],
         'Delirium' => ['bg-purple-100 text-purple-700', 'M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z'],
         'Frailty' => ['bg-teal-100 text-teal-700', 'M4 8h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4a2 2 0 012-2zm17 3v2M6 11v2'],
@@ -22,10 +23,13 @@
     [$colour, $path] = $styles[$category] ?? ['bg-gray-100 text-gray-600', 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z'];
 
     [$box, $icon] = match ($size) {
+        // The glyph alone, in the colour of the text around it, such as inside a badge
+        'bare' => ['', 'w-3 h-3'],
         'xs' => ['h-5 w-5 rounded-full', 'w-3 h-3'],
         'sm' => ['h-6 w-6 rounded-md', 'w-3.5 h-3.5'],
         default => ['h-9 w-9 rounded-xl', 'w-5 h-5'],
     };
+    $colour = $size === 'bare' ? '' : $colour;
 @endphp
 
 <span {{ $attributes->merge(['class' => "inline-flex shrink-0 items-center justify-center $box $colour"]) }} aria-hidden="true">

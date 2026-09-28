@@ -5,7 +5,8 @@
         </h2>
     </x-slot>
 
-    <div class="py-12" x-data="{ activeTab: 'seed-patients' }">
+    {{-- Back on the tab that was just seeded from, so seeding again is one click --}}
+    <div class="py-12" x-data="{ activeTab: @js(session('demo_tab', 'seed-patients')) }">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             
             @if(session('success'))
@@ -225,39 +226,135 @@
                         </form>
                     </div>
 
-                    <!-- Tab 2: Seed Vital Signs -->
-                    <div x-show="activeTab === 'seed-vitals'" x-cloak>
+                    <!-- Tab 2: Seed Vital Signs, and the clinical indicators the patient's ward records -->
+                    <div x-show="activeTab === 'seed-vitals'" x-cloak
+                        x-data="{
+                            patientId: @js((string) old('patient_id', '')),
+                            seedVitals: @js((bool) old('seed_vitals', true)),
+                            wards: @js($patientIndicators),
+                            selected: @js(array_map('strval', (array) old('indicator_ids', []))),
+                            get ward() { return this.wards[this.patientId] || null },
+                            get indicators() { return this.ward ? this.ward.indicators : [] },
+                            chosen(kinds) { return this.indicators.some(i => kinds.includes(i.kind) && this.selected.includes(String(i.id))) },
+                            pickAll() { this.selected = this.indicators.filter(i => i.kind).map(i => String(i.id)) },
+                            init() {
+                                if (!this.selected.length) this.pickAll();
+                                this.$watch('patientId', () => this.pickAll());
+                            },
+                        }">
                         <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Generate Demo Vital Signs for Admitted Patient</h3>
                         <form action="{{ route('integration.demo.seed-vital-signs') }}" method="POST">
                             @csrf
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div class="col-span-1 md:col-span-3">
                                     <label for="patient_id_vitals" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Select Admitted Patient</label>
-                                    <select id="patient_id_vitals" name="patient_id" required class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                                    <select id="patient_id_vitals" name="patient_id" required x-model="patientId" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                                         <option value="">-- Choose a Patient --</option>
                                         @foreach($admittedPatients as $patient)
                                             <option value="{{ $patient->id }}">
-                                                {{ $patient->name }} 
+                                                {{ $patient->name }}
                                                 (Ward: {{ $patient->ward->ward_name ?? 'N/A' }}, Bed: {{ $patient->bed->bed_number ?? $patient->bed_number ?? 'N/A' }})
                                             </option>
                                         @endforeach
                                     </select>
                                 </div>
-                                
+
                                 <div>
-                                    <label for="readings_per_day" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Readings per day</label>
-                                    <input type="number" id="readings_per_day" name="readings_per_day" min="1" max="24" value="4" required class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                                    <label for="readings_per_day" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Vital sign readings per day</label>
+                                    <input type="number" id="readings_per_day" name="readings_per_day" min="1" max="24" value="{{ old('readings_per_day', 4) }}" required class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                                 </div>
 
                                 <div>
                                     <label for="past_days" class="block text-sm font-medium text-gray-700 dark:text-gray-300">For the past how many days</label>
-                                    <input type="number" id="past_days" name="past_days" min="0" max="30" value="3" required class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                                    <p class="mt-2 text-xs text-gray-500">0 means today only. Max 30 days.</p>
+                                    <input type="number" id="past_days" name="past_days" min="0" max="30" value="{{ old('past_days', 3) }}" required class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                                    <p class="mt-2 text-xs text-gray-500">0 means today only. Max 30 days. The clinical indicators cover the same period.</p>
+                                </div>
+
+                                <div>
+                                    <label for="pattern" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Clinical course</label>
+                                    <select id="pattern" name="pattern" class="mt-1 block w-full pl-3 pr-10 py-2 border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                                        @foreach(\App\Services\DemoClinicalData::PATTERNS as $value => $label)
+                                            <option value="{{ $value }}" @selected(old('pattern', 'stable') === $value)>{{ $label }}</option>
+                                        @endforeach
+                                    </select>
+                                    <p class="mt-2 text-xs text-gray-500">Runs oldest to newest through everything seeded here, so vital signs and indicators tell one story. Stable seeds vital signs as before.</p>
+                                </div>
+
+                                <div class="col-span-1 md:col-span-3">
+                                    <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                        <input type="hidden" name="seed_vitals" value="0">
+                                        <input type="checkbox" name="seed_vitals" value="1" x-model="seedVitals"
+                                            class="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                        <span>
+                                            <span class="font-medium">Seed vital signs</span>
+                                            <span class="block text-xs text-gray-500">Untick to seed only the clinical indicators below.</span>
+                                        </span>
+                                    </label>
                                 </div>
                             </div>
-                            
+
+                            {{-- ---------- Clinical indicators the patient's ward type records (chosen on Ward Types) ---------- --}}
+                            <div class="mt-8 border-t border-gray-200 dark:border-gray-700 pt-6">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <svg class="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 12h4l3-8 4 16 3-8h4" />
+                                    </svg>
+                                    <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Clinical Indicators</h4>
+                                </div>
+                                <p class="text-xs text-gray-500 mb-4">Entries for the clinical indicators this patient's ward type records: monitor readings for Advanced Hemodynamics and the ventilator, scores for assessment scales. They show in Patient Details, and the ventilator also on the Critical Care Ward Dashboard bed cards.</p>
+
+                                <p x-show="!patientId" class="text-sm text-gray-500">Choose a patient to see the clinical indicators their ward records.</p>
+                                <p x-show="patientId && !indicators.length" x-cloak class="text-sm text-gray-600 dark:text-gray-300">
+                                    <template x-if="ward && ward.wardType">
+                                        <span>The <span class="font-medium" x-text="ward.wardType"></span> ward type records no clinical indicators yet. Choose them on
+                                            <a href="{{ route('ward-types.index', ['tab' => 'clinical_indicators']) }}" class="text-indigo-600 hover:underline">Ward Types</a>.</span>
+                                    </template>
+                                    <template x-if="!ward || !ward.wardType">
+                                        <span>This patient's ward has no ward type yet. Set one on
+                                            <a href="{{ route('wards.index') }}" class="text-indigo-600 hover:underline">Wards</a>, then choose its clinical indicators on
+                                            <a href="{{ route('ward-types.index', ['tab' => 'clinical_indicators']) }}" class="text-indigo-600 hover:underline">Ward Types</a>.</span>
+                                    </template>
+                                </p>
+
+                                <div x-show="indicators.length" x-cloak class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <template x-for="indicator in indicators" :key="indicator.id">
+                                        <label class="flex items-start gap-2 border rounded-md p-3"
+                                            :class="!indicator.kind
+                                                ? 'border-gray-200 dark:border-gray-700 opacity-60 cursor-not-allowed'
+                                                : (selected.includes(String(indicator.id))
+                                                    ? 'border-indigo-500 ring-1 ring-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 cursor-pointer'
+                                                    : 'border-gray-300 dark:border-gray-600 cursor-pointer')">
+                                            <input type="checkbox" name="indicator_ids[]" :value="String(indicator.id)" x-model="selected" :disabled="!indicator.kind"
+                                                class="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+                                            <span class="min-w-0">
+                                                <span class="flex items-start gap-2">
+                                                    <span class="inline-flex shrink-0 items-center px-2 py-0.5 rounded-full text-xs font-bold bg-violet-100 text-violet-800" x-text="indicator.code"></span>
+                                                    <span class="text-sm font-medium text-gray-900 dark:text-gray-100" x-text="indicator.name"></span>
+                                                </span>
+                                                <span class="block mt-0.5 text-xs text-gray-500" x-text="indicator.detail"></span>
+                                            </span>
+                                        </label>
+                                    </template>
+                                </div>
+
+                                <div x-show="chosen(['readings', 'scored', 'score'])" x-cloak class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <div x-show="chosen(['readings'])">
+                                        <label for="monitor_per_day" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Monitor readings per day</label>
+                                        <input type="number" id="monitor_per_day" name="monitor_per_day" min="1" max="24" value="{{ old('monitor_per_day', 6) }}" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                                        <p class="mt-2 text-xs text-gray-500">Evenly spaced up to now, the latest minutes ago. 24 is hourly; cardiac output comes every third set.</p>
+                                    </div>
+                                    <div x-show="chosen(['scored', 'score'])">
+                                        <label for="assessments_per_day" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Assessments per day</label>
+                                        <input type="number" id="assessments_per_day" name="assessments_per_day" min="1" max="24" value="{{ old('assessments_per_day', 2) }}" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                                        <p class="mt-2 text-xs text-gray-500">For the scored scales, such as GCS or the fall risk scales.</p>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="mt-6">
-                                <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                <button type="submit" :disabled="!seedVitals && !selected.length"
+                                    class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    x-text="seedVitals && selected.length ? 'Seed Vital Signs & Clinical Indicators' : (selected.length ? 'Seed Clinical Indicators' : 'Seed Vital Signs')">
                                     Seed Vital Signs
                                 </button>
                             </div>

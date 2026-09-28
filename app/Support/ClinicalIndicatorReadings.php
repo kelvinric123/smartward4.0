@@ -2,9 +2,18 @@
 
 namespace App\Support;
 
+use App\Models\ClinicalIndicator;
+use App\Models\ClinicalIndicatorScore;
+use App\Models\Patient;
+use App\Models\Ward;
+use Carbon\Carbon;
+use Carbon\CarbonInterface;
+use Illuminate\Support\Collection;
+
 /**
  * Scales whose items are readings typed in from the bedside monitor, such as
- * the invasive hemodynamic numerics, rather than options picked and totalled.
+ * the invasive hemodynamic numerics or the ventilator settings, rather than
+ * options picked and totalled.
  *
  * A reading item carries its `unit`, the `decimals` it is recorded to, the
  * `limits` a monitor can plausibly show (anything outside is a typo), the
@@ -24,10 +33,22 @@ namespace App\Support;
  *
  * On the patient's trend graph an item's `trend` marks the values the ICU
  * steers by: 'line' draws its escalation level as a dashed line, 'band' also
- * shades its normal range.
+ * shades its normal range. The graph has one chart per key of the definition's
+ * `charts` (key => title), and each item is drawn on the one its `chart` names.
+ *
+ * A definition's `dashboard` names the readings the critical care bed cards
+ * show, such as the ventilator's FiO2 and PEEP: see recentForPatients(). Its
+ * `notes_example` is the hint shown in the notes field of the readings form.
  */
 final class ClinicalIndicatorReadings
 {
+    /**
+     * How far back the critical care bed cards look for readings. A scale not
+     * recorded for this long drops off the card rather than showing values
+     * that may no longer be current, such as a patient since extubated.
+     */
+    public const RECENT_HOURS = 12;
+
     public const FLAG_NORMAL = 'normal';
     public const FLAG_LOW = 'low';
     public const FLAG_HIGH = 'high';
@@ -281,6 +302,150 @@ final class ClinicalIndicatorReadings
         }
 
         return $groups;
+    }
+
+    /**
+     * What the critical care bed cards show of each patient's readings. For
+     * every scale bound to the patient's ward type whose definition names
+     * `dashboard` readings: the latest value of each parameter recorded in the
+     * last RECENT_HOURS of this admission, as the patient's tiles take them,
+     * and the worst flag among them. Keyed by patient id, then scale code;
+     * patients with nothing recent are left out.
+     *
+     * With $everyScale, every monitor-readings scale the ward records counts,
+     * not only those on the bed cards: the Command Center's view, which
+     * watches hemodynamics for escalation too.
+     *
+     * @param  iterable<Patient>  $patients
+     * @return array<int, array<string, array<string, mixed>>>
+     */
+    public static function recentForPatients(iterable $patients, ?CarbonInterface $now = null, bool $everyScale = false): array
+    {
+        $patients = collect($patients)->filter(fn (Patient $patient) => $patient->ward_id);
+
+        if ($patients->isEmpty()) {
+            return [];
+        }
+
+        // Looked up per ward rather than per patient: a dashboard is one ward.
+        $indicatorsByWard = Ward::with('wardType.clinicalIndicators')
+            ->whereIn('id', $patients->pluck('ward_id')->unique())
+            ->get()
+            ->mapWithKeys(fn (Ward $ward) => [$ward->id => self::readingIndicators($ward, $everyScale)]);
+
+        $indicatorIds = $indicatorsByWard->collapse()->pluck('id')->unique();
+
+        if ($indicatorIds->isEmpty()) {
+            return [];
+        }
+
+        $records = ClinicalIndicatorScore::query()
+            ->whereIn('patient_id', $patients->pluck('id'))
+            ->whereIn('clinical_indicator_id', $indicatorIds)
+            ->where('recorded_at', '>=', Carbon::instance($now ?? now())->subHours(self::RECENT_HOURS))
+            ->orderByDesc('recorded_at')
+            ->orderByDesc('id')
+            ->get(['patient_id', 'clinical_indicator_id', 'item_scores', 'recorded_at'])
+            ->groupBy(fn (ClinicalIndicatorScore $record) => $record->patient_id . ':' . $record->clinical_indicator_id);
+
+        $recent = [];
+
+        foreach ($patients as $patient) {
+            foreach ($indicatorsByWard->get($patient->ward_id, collect()) as $indicator) {
+                // This admission only, as on the patient's trend
+                $history = $records->get($patient->id . ':' . $indicator->id, collect())
+                    ->filter(fn (ClinicalIndicatorScore $record) => !$patient->admitted_at || $record->recorded_at->gte($patient->admitted_at));
+
+                $set = $history->isNotEmpty() ? self::latestSet($indicator, $history) : null;
+
+                if ($set && $set['readings']) {
+                    $recent[$patient->id][$indicator->code] = $set;
+                }
+            }
+        }
+
+        return $recent;
+    }
+
+    /**
+     * The latest value of each parameter across records given newest first,
+     * in the definition's order. The headline is the `dashboard` readings
+     * where they were recorded, otherwise the first two that were.
+     */
+    private static function latestSet(ClinicalIndicator $indicator, Collection $history): array
+    {
+        $definition = $indicator->definition();
+        $latest = [];
+
+        foreach ($history as $record) {
+            foreach ($record->item_scores ?? [] as $entry) {
+                $latest[$entry['abbr']] ??= $entry + ['at' => $record->recorded_at];
+            }
+        }
+
+        $readings = [];
+        $worst = self::FLAG_NORMAL;
+
+        foreach ($definition['items'] as $item) {
+            if (!isset($latest[$item['abbr']])) {
+                continue;
+            }
+
+            $entry = $latest[$item['abbr']];
+            $flag = $entry['flag'] ?? self::FLAG_NORMAL;
+            $worst = self::worse($worst, $flag);
+
+            $readings[] = [
+                'abbr' => $item['abbr'],
+                'name' => $item['name'],
+                'text' => self::display($entry, $definition),
+                'unit' => $item['unit'],
+                'flag' => $flag,
+                'at' => $entry['at'],
+            ];
+        }
+
+        $byAbbr = collect($readings)->keyBy('abbr');
+        $headline = collect($definition['dashboard'] ?? [])
+            ->map(fn (string $abbr) => $byAbbr->get($abbr))
+            ->filter()
+            ->values()
+            ->all();
+
+        return [
+            'indicator_id' => $indicator->id,
+            'code' => $indicator->code,
+            'name' => $indicator->name,
+            'category' => $indicator->category(),
+            'readings' => $readings,
+            'headline' => $headline ?: array_slice($readings, 0, 2),
+            'flag' => $worst,
+            'status' => ClinicalIndicatorLibrary::bandFor($indicator->code, self::FLAGS[$worst]['grade'])['label'] ?? null,
+            'at' => $history->first()->recorded_at,
+        ];
+    }
+
+    /**
+     * The active monitor-readings scales bound to the ward's ward type: those
+     * shown on the bed cards, or with $everyScale all of them.
+     */
+    private static function readingIndicators(Ward $ward, bool $everyScale): Collection
+    {
+        $wardType = $ward->wardType;
+
+        if (!$wardType || !$wardType->is_active) {
+            return collect();
+        }
+
+        return $wardType->clinicalIndicators
+            ->filter(function (ClinicalIndicator $indicator) use ($everyScale) {
+                $definition = $indicator->definition();
+
+                return $indicator->is_active
+                    && ($everyScale || !empty($definition['dashboard']))
+                    && ClinicalIndicatorLibrary::takesReadings($definition);
+            })
+            ->values();
     }
 
     private static function worse(string $flag, string $other): string

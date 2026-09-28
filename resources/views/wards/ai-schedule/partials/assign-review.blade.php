@@ -163,7 +163,7 @@
                 </button>
                 @if ($canEdit)
                     <button type="submit" form="bed-assignment-form"
-                        class="inline-flex items-center px-5 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white text-sm font-semibold rounded-lg shadow">
+                        class="inline-flex items-center px-5 py-2 bg-gradient-to-r from-brand-600 to-accent-600 hover:from-brand-700 hover:to-accent-700 text-white text-sm font-semibold rounded-lg shadow">
                         <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
                         Apply to ward dashboard
                     </button>

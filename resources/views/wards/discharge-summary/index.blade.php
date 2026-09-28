@@ -118,7 +118,7 @@
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-blue-100">
                             <thead>
-                                <tr class="bg-gradient-to-r from-blue-50 to-cyan-50">
+                                <tr class="bg-gradient-to-r from-brand-50 to-accent-50">
                                     <th scope="col"
                                         class="px-4 py-3.5 text-left text-xs font-bold uppercase tracking-wider text-gray-700">
                                         Patient</th>

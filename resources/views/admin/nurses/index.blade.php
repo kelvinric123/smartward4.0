@@ -25,7 +25,7 @@
                     {{ __('Bulk Upload') }}
                 </a>
                 <a href="{{ route('nurses.create') }}"
-                    class="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 border border-transparent rounded-lg font-semibold text-sm text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
+                    class="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-brand-600 to-accent-600 hover:from-brand-700 hover:to-accent-700 border border-transparent rounded-lg font-semibold text-sm text-white shadow-lg hover:shadow-xl transition-all duration-200 transform hover:-translate-y-0.5">
                     <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                     </svg>
@@ -62,7 +62,7 @@
                     <div class="overflow-x-auto xl:overflow-x-visible">
                         <table class="min-w-full divide-y divide-blue-100" id="dataTable">
                             <thead>
-                                <tr class="bg-gradient-to-r from-blue-50 to-cyan-50">
+                                <tr class="bg-gradient-to-r from-brand-50 to-accent-50">
                                     <th scope="col" class="w-10 px-3 py-3.5">
                                         <span class="sr-only">Details</span>
                                     </th>

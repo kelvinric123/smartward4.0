@@ -1,8 +1,8 @@
 {{--
     Patient details panel for a clinical indicator recorded as monitor readings
-    (the hemodynamic numerics) rather than scored. Top to bottom: the latest
-    value of each parameter, how they have moved this admission, the form to
-    record new readings, and the readings themselves.
+    (the hemodynamic numerics, the ventilator settings) rather than scored. Top
+    to bottom: the latest value of each parameter, how they have moved this
+    admission, the form to record new readings, and the readings themselves.
 
     The parameters and ranges come from the library definition, which is what
     the Ward Types page shows; the server flags the readings again when they
@@ -25,8 +25,12 @@
     $tileValueClasses = ['high' => 'text-red-600', 'moderate' => 'text-amber-600', 'low' => 'text-gray-900'];
     $cellClasses = ['high' => 'text-red-700 font-bold', 'moderate' => 'text-amber-700 font-semibold', 'low' => 'text-gray-800'];
 
-    // Monitor colours: arterial red, central venous blue, cardiac output green
-    $colours = ['SBP' => '#dc2626', 'DBP' => '#dc2626', 'MAP' => '#991b1b', 'CVP' => '#2563eb', 'CO' => '#0e7490', 'CI' => '#059669'];
+    // Monitor colours: arterial red, central venous blue, cardiac output green;
+    // capnography amber, oxygen green, airway pressures orange and blue, tidal volume violet
+    $colours = [
+        'SBP' => '#dc2626', 'DBP' => '#dc2626', 'MAP' => '#991b1b', 'CVP' => '#2563eb', 'CO' => '#0e7490', 'CI' => '#059669',
+        'EtCO2' => '#ca8a04', 'FiO2' => '#059669', 'PIP' => '#ea580c', 'PEEP' => '#2563eb', 'Vt' => '#7c3aed',
+    ];
     $palette = ['#7c3aed', '#db2777', '#ca8a04', '#4b5563'];
     foreach ($items as $i => $item) {
         $colours[$item['abbr']] ??= $palette[$i % count($palette)];
@@ -89,12 +93,17 @@
         ];
     }
 
-    // The trend: pressures on one chart, cardiac output on another, the value steered by on the left axis
+    // The trend: one chart per key of the definition's charts, each item on the one it names. On each
+    // chart the unit of the value steered by (else of the first item) is read on the left axis and any
+    // other on the right; pressures are read from zero.
     $toLocalMs = fn ($time) => ($time->getTimestamp() + $time->getOffset()) * 1000;
-    $chartOf = fn (array $item) => $item['unit'] === 'mmHg' ? 'pressure' : 'flow';
-    $flowItems = collect($items)->filter(fn ($item) => $chartOf($item) === 'flow');
-    $leftFlowUnit = ($flowItems->first(fn ($item) => isset($item['trend'])) ?? $flowItems->first())['unit'] ?? null;
-    $axisOf = fn (array $item) => $chartOf($item) === 'flow' && $item['unit'] !== $leftFlowUnit ? 'y1' : 'y';
+    $chartTitles = $definition['charts'] ?? ['readings' => 'Readings'];
+    $chartOf = fn (array $item) => isset($chartTitles[$item['chart'] ?? '']) ? $item['chart'] : array_key_first($chartTitles);
+    $leftUnits = collect($items)
+        ->groupBy(fn ($item) => $chartOf($item))
+        ->map(fn ($chartItems) => ($chartItems->first(fn ($item) => isset($item['trend'])) ?? $chartItems->first())['unit']);
+    $axisOf = fn (array $item) => $item['unit'] === $leftUnits[$chartOf($item)] ? 'y' : 'y1';
+    $fromZero = fn (string $unit) => in_array($unit, ['mmHg', 'cmH₂O'], true);
 
     $series = [];
     $lines = [];
@@ -137,13 +146,16 @@
     $axes = [];
     foreach (collect($items)->groupBy(fn ($item) => $chartOf($item) . '|' . $axisOf($item)) as $key => $axisItems) {
         [$chart, $axis] = explode('|', $key);
+        $unit = $axisItems->first()['unit'];
         $lows = $axisItems->map(fn ($item) => min($item['normal'][0], $item['escalate_below'] ?? $item['normal'][0]));
+        // An escalation level drawn as a line stays in view
+        $highs = $axisItems->map(fn ($item) => isset($item['trend']) ? max($item['normal'][1], $item['escalate_above'] ?? $item['normal'][1]) : $item['normal'][1]);
         $axes[] = [
             'chart' => $chart,
             'id' => $axis,
-            'title' => $axisItems->count() > 1 ? $axisItems->first()['unit'] : $axisItems->first()['abbr'] . ' (' . $axisItems->first()['unit'] . ')',
-            'min' => $chart === 'pressure' ? 0 : floor($lows->min() * 0.6),
-            'max' => ceil($axisItems->max(fn ($item) => $item['normal'][1]) * ($chart === 'pressure' ? 1.15 : 1.25)),
+            'title' => $axisItems->count() > 1 ? $unit : $axisItems->first()['abbr'] . ' (' . $unit . ')',
+            'min' => $fromZero($unit) ? 0 : floor($lows->min() * 0.6),
+            'max' => ceil($highs->max() * ($fromZero($unit) ? 1.15 : 1.25)),
         ];
     }
 
@@ -154,10 +166,8 @@
             ->all(),
     ])->values()->all();
     $recorded = collect($points)->flatMap(fn ($point) => array_keys($point['r']))->unique();
-    $charted = [
-        'pressure' => collect($series)->where('chart', 'pressure')->pluck('abbr')->intersect($recorded)->isNotEmpty(),
-        'flow' => collect($series)->where('chart', 'flow')->pluck('abbr')->intersect($recorded)->isNotEmpty(),
-    ];
+    $charted = collect($chartTitles)
+        ->map(fn ($title, $chart) => collect($series)->where('chart', $chart)->pluck('abbr')->intersect($recorded)->isNotEmpty());
     $spanMinutes = $trend->count() > 1 ? abs($trend->last()->recorded_at->diffInMinutes($trend->first()->recorded_at)) : 0;
 
     $panel = [
@@ -176,6 +186,7 @@
         'flags' => $flags,
         'chips' => $chipClasses,
         // The trend
+        'chartKeys' => array_keys($chartTitles),
         'points' => $points,
         'now' => $toLocalMs(now()),
         'range' => $spanMinutes > 24 * 60 ? '24h' : 'all',
@@ -349,7 +360,7 @@
                     }
                     const w = this.timeWindow();
                     labelSpan = w.span;
-                    ['pressure', 'flow'].forEach(key => {
+                    this.chartKeys.forEach(key => {
                         const canvas = this.$refs['chart_' + key];
                         if (!canvas) return;
                         if (charts[key]) {
@@ -560,11 +571,11 @@
             <p x-show="chartMissing" x-cloak class="mt-3 text-sm text-gray-500">
                 The chart could not be drawn because the chart library did not load. The readings are listed below.
             </p>
-            @foreach (['pressure' => 'Arterial and central venous pressure', 'flow' => 'Cardiac output and index'] as $chart => $title)
+            @foreach ($chartTitles as $chart => $title)
                 @if ($charted[$chart])
                     <div class="mt-3">
                         <div class="text-xs font-semibold text-gray-600">{{ $title }}</div>
-                        <div class="relative {{ $chart === 'pressure' ? 'h-64' : 'h-52' }}">
+                        <div class="relative {{ $loop->first ? 'h-64' : 'h-52' }}">
                             <canvas x-ref="chart_{{ $chart }}"></canvas>
                             <div x-show="visibleCount === 0" x-cloak
                                 class="absolute inset-0 flex items-center justify-center rounded-lg bg-white/80 text-sm text-gray-500">
@@ -638,7 +649,7 @@
                     (optional)</label>
                 <input type="text" id="ci{{ $indicator['id'] }}_notes" name="notes" maxlength="1000"
                     class="block w-full rounded-lg border-gray-300 shadow-sm text-sm focus:border-blue-500 focus:ring-blue-500"
-                    placeholder="e.g. on noradrenaline 0.1 mcg/kg/min, PEEP 8, trace damped">
+                    placeholder="{{ $definition['notes_example'] ?? '' }}">
             </div>
 
             <div class="flex items-center gap-3">

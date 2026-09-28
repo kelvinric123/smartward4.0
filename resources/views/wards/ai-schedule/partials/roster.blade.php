@@ -189,7 +189,7 @@
 
         <table class="min-w-full text-sm">
             <thead>
-                <tr class="bg-gradient-to-r from-blue-50 to-cyan-50">
+                <tr class="bg-gradient-to-r from-brand-50 to-accent-50">
                     <th class="sticky left-0 z-10 bg-blue-50 px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Nurse</th>
                     @foreach ($board['dates'] as $date)
                         @php $holiday = $board['holidays'][$date->toDateString()] ?? null; @endphp

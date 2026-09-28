@@ -31,6 +31,7 @@ use App\Http\Controllers\UserActivityController;
 use App\Http\Controllers\PatientFlowCommandCentreController;
 use App\Http\Controllers\IntegrationDemoController;
 use App\Http\Controllers\CommandCenterController;
+use App\Http\Controllers\CommandCenterV2Controller;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -58,6 +59,9 @@ Route::get('/dashboard', function () {
 Route::middleware('auth')->group(function () {
     // Command Center (Superadmin / Hospital Admin / IT Admin)
     Route::get('/command-center', [CommandCenterController::class, 'index'])->name('command-center.index');
+    // Command Center V2: the executive summary for management, refreshed live from its data route
+    Route::get('/command-center-v2', [CommandCenterV2Controller::class, 'index'])->name('command-center-v2.index');
+    Route::get('/command-center-v2/data', [CommandCenterV2Controller::class, 'data'])->name('command-center-v2.data');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
