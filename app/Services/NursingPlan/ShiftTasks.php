@@ -210,7 +210,7 @@ class ShiftTasks
                 $item['name'] . ' reassessment',
                 ucfirst($item['history']) . ' · every ' . $item['interval'],
                 $item['state'] === ClinicalIndicatorMonitoring::STATE_OVERDUE ? 'critical' : ($item['state'] === ClinicalIndicatorMonitoring::STATE_DUE ? 'warning' : 'default'),
-                null,
+                'assess',
                 $item['code']
             ))
             ->values()

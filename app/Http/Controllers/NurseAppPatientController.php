@@ -3,19 +3,25 @@
 namespace App\Http\Controllers;
 
 use App\Models\BloodTransfusion;
+use App\Models\ClinicalIndicator;
+use App\Models\ClinicalIndicatorScore;
 use App\Models\Consultant;
 use App\Models\ConsultantOrder;
 use App\Models\ConsultantOrderHandover;
 use App\Models\FluidBalanceEntry;
 use App\Models\FluidBalancePlan;
 use App\Models\FluidOverloadAssessment;
+use App\Models\LabInvestigation;
 use App\Models\MedicationAdministration;
 use App\Models\Nurse;
 use App\Models\NursingCarePlanItem;
+use App\Models\OxygenTherapyChange;
 use App\Models\Patient;
 use App\Models\PatientMedication;
+use App\Models\VitalSign;
 use App\Models\WardNotification;
 use App\Services\DischargeSummaryService;
+use App\Services\LabInvestigations;
 use App\Services\NurseApp\NurseAppActor;
 use App\Services\NurseApp\NurseAppPatientBundle;
 use App\Services\NursingPlan\NursingCarePlan;
@@ -24,6 +30,7 @@ use App\Services\ShiftHandover;
 use App\Support\AdmissionTimeline;
 use App\Support\FluidBalanceChart;
 use App\Support\NursingCarePlanLibrary;
+use App\Support\OxygenTherapyChart;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -35,7 +42,8 @@ use Illuminate\Validation\Rule;
 /**
  * Nurse app: one patient, and what a nurse does for them at the bedside -
  * consultant orders, the I/O chart, medication doses, blood transfusions,
- * infusions and alerts. The mobile twin of the ward dashboard's Patient
+ * infusions, alerts, lab results to review, oxygen therapy and the ward's
+ * assessment scales. The mobile twin of the ward dashboard's Patient
  * Details tabs.
  *
  * Every action applies the same rules as the ward dashboard's own
@@ -802,6 +810,249 @@ class NurseAppPatientController extends Controller
         $this->log('Care plan item ' . $validated['status'], $nurse, $patient, ['nursing_care_plan_item_id' => $item->id]);
 
         return $this->done($nurse, $patient, '"' . $item->diagnosis . '" ' . $validated['status'] . '.');
+    }
+
+    // ---------------------------------------------------- lab investigations
+
+    /**
+     * POST /api/nurse/patients/{patient}/labs/{lab}/review - mark a result
+     * reviewed, as Patient Details > Lab Investigations does.
+     */
+    public function reviewLab(Request $request, Patient $patient, LabInvestigation $lab): JsonResponse
+    {
+        [$nurse, $denied] = $this->authorise($request, $patient, $lab->patient_id);
+        if ($denied) {
+            return $denied;
+        }
+
+        if (!LabInvestigations::enabled()) {
+            return $this->refuse('Lab Investigations are switched off for the ward.', 409);
+        }
+
+        if (!$lab->awaitingReview()) {
+            return $this->refuse($lab->test_name . ' has no result waiting for review.', 409);
+        }
+
+        $lab->update([
+            'reviewed_at' => now(),
+            'reviewed_by' => NurseAppActor::userId($nurse),
+            'reviewed_by_name' => $nurse->name,
+        ]);
+
+        $this->log('Lab result reviewed', $nurse, $patient, ['lab_investigation_id' => $lab->id, 'order_no' => $lab->order_no]);
+
+        return $this->done($nurse, $patient, $lab->test_name . ' marked as reviewed.');
+    }
+
+    // --------------------------------------------------------------- oxygen
+
+    /**
+     * POST /api/nurse/patients/{patient}/oxygen - change the patient's oxygen
+     * (device, flow rate or FiO2, and the SpO2 target), or change to room air,
+     * on the same rules as Patient Details > Oxygen Therapy.
+     */
+    public function storeOxygen(Request $request, Patient $patient): JsonResponse
+    {
+        [$nurse, $denied] = $this->authorise($request, $patient);
+        if ($denied) {
+            return $denied;
+        }
+
+        $delivery = (string) $request->input('oxygen_delivery');
+        $onOxygen = $delivery !== '' && $delivery !== VitalSign::OXYGEN_ROOM_AIR;
+        $model = OxygenTherapyChange::class;
+
+        $validated = $request->validate([
+            'oxygen_delivery' => ['required', Rule::in(array_keys(VitalSign::OXYGEN_DELIVERY_OPTIONS))],
+            'oxygen_flow_rate' => 'nullable|numeric|min:' . $model::FLOW_MIN . '|max:' . $model::FLOW_MAX,
+            'fio2_percent' => 'nullable|integer|min:' . $model::FIO2_MIN . '|max:' . $model::FIO2_MAX,
+            'target_spo2_min' => 'nullable|required_with:target_spo2_max|integer|min:' . $model::TARGET_MIN . '|max:' . $model::TARGET_MAX,
+            'target_spo2_max' => 'nullable|required_with:target_spo2_min|integer|min:' . $model::TARGET_MIN . '|max:' . $model::TARGET_MAX . '|gt:target_spo2_min',
+            'notes' => 'nullable|string|max:255',
+            'minutes_ago' => 'nullable|integer|min:0|max:' . self::BACKDATE_MINUTES,
+        ], [
+            'oxygen_delivery.required' => 'Choose how the oxygen is given, or Room Air.',
+            'oxygen_flow_rate.min' => 'The flow rate must be at least ' . $model::FLOW_MIN . ' L/min.',
+            'oxygen_flow_rate.max' => 'The flow rate can be at most ' . $model::FLOW_MAX . ' L/min.',
+            'fio2_percent.min' => 'FiO₂ cannot be below ' . $model::FIO2_MIN . '% (room air).',
+            'fio2_percent.max' => 'FiO₂ can be at most ' . $model::FIO2_MAX . '%.',
+            'target_spo2_min.required_with' => 'Enter both ends of the SpO₂ target, or neither.',
+            'target_spo2_max.required_with' => 'Enter both ends of the SpO₂ target, or neither.',
+            'target_spo2_max.gt' => 'The top of the SpO₂ target must be above the bottom.',
+            'minutes_ago.max' => 'A change cannot be timed more than 24 hours back.',
+        ]);
+
+        // Without a setting the chart has nothing to show for the device
+        if ($onOxygen && !filled($validated['oxygen_flow_rate'] ?? null) && !filled($validated['fio2_percent'] ?? null)) {
+            return $this->refuse('Enter the flow rate or the FiO₂ for ' . (VitalSign::OXYGEN_DELIVERY_OPTIONS[$delivery] ?? 'this device') . '.');
+        }
+
+        $at = $this->timeFrom($validated['minutes_ago'] ?? null);
+        $target = isset($validated['target_spo2_min'], $validated['target_spo2_max'])
+            ? [(int) $validated['target_spo2_min'], (int) $validated['target_spo2_max']]
+            : null;
+        $notes = filled($validated['notes'] ?? null) ? trim($validated['notes']) : null;
+
+        $change = new OxygenTherapyChange([
+            'patient_id' => $patient->id,
+            'ward_id' => $patient->ward_id,
+            'oxygen_delivery' => $delivery,
+            'oxygen_flow_rate' => $onOxygen && isset($validated['oxygen_flow_rate']) ? round((float) $validated['oxygen_flow_rate'], 1) : null,
+            'fio2_percent' => $onOxygen && isset($validated['fio2_percent']) ? (int) $validated['fio2_percent'] : null,
+            'target_spo2_min' => $target[0] ?? null,
+            'target_spo2_max' => $target[1] ?? null,
+            'notes' => $notes,
+            'started_at' => $at,
+            'recorded_by' => NurseAppActor::userId($nurse),
+        ]);
+
+        // Saving what is already in force, from now, would only repeat it
+        $current = OxygenTherapyChart::current($patient);
+        if ($current && empty($validated['minutes_ago']) && $notes === null
+            && $current['record']->hasSameOxygenAs($change) && $current['target'] === $target) {
+            return $this->done($nurse, $patient, 'Oxygen unchanged: still ' . $this->describeOxygen($change) . '.');
+        }
+
+        $change->save();
+
+        $this->log('Oxygen changed', $nurse, $patient, [
+            'oxygen_therapy_change_id' => $change->id,
+            'oxygen_delivery' => $change->oxygen_delivery,
+            'target_spo2' => $target,
+        ]);
+
+        return $this->done($nurse, $patient, ($change->isOnOxygen()
+            ? 'Oxygen changed to ' . $this->describeOxygen($change)
+            : 'Changed to room air') . ' at ' . $at->format('H:i') . '.');
+    }
+
+    /**
+     * POST /api/nurse/patients/{patient}/oxygen/{change}/void - strike out a
+     * change made in error. It stays in the history, crossed through.
+     */
+    public function voidOxygen(Request $request, Patient $patient, OxygenTherapyChange $change): JsonResponse
+    {
+        [$nurse, $denied] = $this->authorise($request, $patient, $change->patient_id);
+        if ($denied) {
+            return $denied;
+        }
+
+        $validated = $request->validate(
+            ['void_reason' => 'required|string|max:255'],
+            ['void_reason.required' => 'Give a reason for striking out this change.']
+        );
+
+        if ($change->isVoided()) {
+            return $this->refuse('That change is already struck out.', 409);
+        }
+
+        $change->update([
+            'voided_at' => now(),
+            'voided_by' => NurseAppActor::userId($nurse),
+            'void_reason' => trim($validated['void_reason']),
+        ]);
+
+        $this->log('Oxygen change struck out', $nurse, $patient, ['oxygen_therapy_change_id' => $change->id]);
+
+        return $this->done($nurse, $patient, 'Struck out: ' . $this->describeOxygen($change) . ' from ' . $change->started_at->format('H:i') . '.');
+    }
+
+    /** "Nasal Cannula / Prongs 2 L/min", or "Room Air". */
+    private function describeOxygen(OxygenTherapyChange $change): string
+    {
+        return $change->oxygenDeliveryLabel() . ($change->isOnOxygen() && $change->oxygenSettingsLabel()
+            ? ' ' . $change->oxygenSettingsLabel()
+            : '');
+    }
+
+    // ---------------------------------------------------------- assessments
+
+    /**
+     * POST /api/nurse/patients/{patient}/assessments/{indicator} - score one of
+     * the ward's assessment scales: item by item ({ item_scores: [value per
+     * item] }, totalled here) or as a total typed in ({ score }). A screen
+     * asked question by question and monitor readings are recorded on the
+     * ward dashboard.
+     */
+    public function storeAssessment(Request $request, Patient $patient, ClinicalIndicator $indicator): JsonResponse
+    {
+        [$nurse, $denied] = $this->authorise($request, $patient);
+        if ($denied) {
+            return $denied;
+        }
+
+        $validated = $request->validate([
+            'score' => 'nullable|integer|min:0',
+            'item_scores' => 'nullable|array',
+            'item_scores.*' => 'nullable|integer',
+            'notes' => 'nullable|string|max:1000',
+        ]);
+
+        // Only scales this patient's ward is set up for may be scored
+        $allowed = $indicator->is_active && (bool) $patient->ward?->wardType?->clinicalIndicators
+            ->where('is_active', true)
+            ->contains('id', $indicator->id);
+        if (!$allowed) {
+            return $this->refuse($indicator->name . ' is not used on this ward.', 404);
+        }
+
+        $definition = $indicator->definition();
+        $kind = NurseAppPatientBundle::scaleKind($definition);
+        $itemScores = null;
+
+        if ($kind === 'scored') {
+            $posted = $validated['item_scores'] ?? [];
+            if (count(array_filter($posted, fn ($value) => $value !== null)) !== count($definition['items'])) {
+                return $this->refuse('Score every item before saving.');
+            }
+
+            $itemScores = [];
+            $score = 0;
+            foreach ($definition['items'] as $index => $item) {
+                $value = (int) ($posted[$index] ?? -1);
+                $option = collect($item['options'])->first(fn (array $option) => (int) $option['value'] === $value);
+                if (!$option) {
+                    return $this->refuse('That is not a valid option for ' . $item['name'] . '.');
+                }
+
+                $entry = ['name' => $item['name'], 'label' => $option['label'], 'value' => $value];
+                if (!empty($item['abbr'])) {
+                    $entry['abbr'] = $item['abbr'];
+                }
+                $itemScores[] = $entry;
+                $score += $value;
+            }
+        } elseif ($kind === 'score') {
+            if (!isset($validated['score'])) {
+                return $this->refuse('Enter a score before saving.');
+            }
+            $score = (int) $validated['score'];
+            if (isset($definition['score_max']) && $score > (int) $definition['score_max']) {
+                return $this->refuse($indicator->name . ' scores at most ' . $definition['score_max'] . '.');
+            }
+        } else {
+            return $this->refuse($indicator->name . ' is recorded on the ward dashboard.', 409);
+        }
+
+        $record = new ClinicalIndicatorScore([
+            'patient_id' => $patient->id,
+            'clinical_indicator_id' => $indicator->id,
+            'ward_id' => $patient->ward_id,
+            'score' => $score,
+            'item_scores' => $itemScores,
+            'notes' => filled($validated['notes'] ?? null) ? trim($validated['notes']) : null,
+            'recorded_by' => NurseAppActor::userId($nurse),
+            'recorded_at' => now(),
+        ]);
+        $record->applyBand($indicator->code)->save();
+
+        $this->log('Assessment scored', $nurse, $patient, ['clinical_indicator_score_id' => $record->id, 'code' => $indicator->code]);
+
+        $breakdown = $record->breakdown();
+
+        return $this->done($nurse, $patient, $indicator->name . ' scored ' . $score
+            . ($breakdown ? ' (' . $breakdown . ')' : '')
+            . ($record->band_label ? ' - ' . $record->band_label : '') . '.');
     }
 
     // --------------------------------------------------------------- alerts

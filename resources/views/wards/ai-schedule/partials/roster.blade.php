@@ -215,6 +215,14 @@
                             @if ($nurse->designation)
                                 <div class="text-[11px] text-gray-400">{{ $nurse->designation }}</div>
                             @endif
+                            @php $ack = $acknowledgements[$nurse->id] ?? null; @endphp
+                            @if ($ack && $ack['state'] === 'seen')
+                                <div class="text-[10px] font-semibold text-emerald-700" title="Acknowledged in the nurse app {{ $ack['at'] }}">&#10003; Seen {{ $ack['at'] }}</div>
+                            @elseif ($ack && $ack['state'] === 'changed')
+                                <div class="text-[10px] font-semibold text-amber-700" title="Acknowledged {{ $ack['at'] }}, changed since">Changed since seen</div>
+                            @elseif ($stat['shifts'] > 0)
+                                <div class="text-[10px] text-gray-400" title="Not acknowledged in the nurse app yet">Not seen</div>
+                            @endif
                         </th>
                         @foreach ($board['dates'] as $date)
                             @php

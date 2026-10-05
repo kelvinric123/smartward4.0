@@ -7,6 +7,7 @@ use App\Models\VitalSign;
 use App\Models\Patient;
 use App\Models\AdmissionLog;
 use App\Http\Middleware\RequireDeletePassphrase;
+use App\Support\OxygenTherapyChart;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
@@ -219,6 +220,11 @@ class VitalSignController extends Controller
             'selectedDate' => $selectedDate,
             'hasPreviousDay' => $hasPreviousDay,
             'hasNextDay' => $hasNextDay,
+            // The oxygen the patient is on now (Oxygen Therapy tab and readings together),
+            // unless an earlier admission is being looked at
+            'currentOxygen' => $patient && (!$admissionId || $admissionId === $patient->getCurrentAdmissionId())
+                ? OxygenTherapyChart::current($patient)
+                : null,
         ]);
     }
 

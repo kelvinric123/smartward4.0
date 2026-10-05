@@ -15,6 +15,10 @@ const notesByPatient = new Map();
 // and nothing touches the server.
 let demoMode = false;
 
+function isoMinusHours(hours) {
+  return new Date(Date.now() - hours * 3600000).toISOString();
+}
+
 export function setDemoMode(on) {
   demoMode = !!on;
   notesByPatient.clear();

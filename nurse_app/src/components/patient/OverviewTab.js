@@ -38,6 +38,44 @@ export function attentionItems(chart) {
     })
   );
 
+  const ox = chart.oxygen;
+  if (ox?.alert && ox.latest_spo2) {
+    items.push({
+      tab: 'oxygen',
+      toneName: ox.alert,
+      title: ox.alert === 'critical' ? `SpO₂ ${ox.latest_spo2.value}% below the target` : `SpO₂ ${ox.latest_spo2.value}% above the target on oxygen`,
+      text: `${ox.current?.label ?? 'Oxygen'}${ox.current?.settings ? ` ${ox.current.settings}` : ''} · target ${ox.target?.label ?? '-'} · ${ox.latest_spo2.time_label}`,
+    });
+  }
+
+  const labs = chart.labs?.enabled ? chart.labs : null;
+  if (labs) {
+    const critical = labs.items.filter((l) => l.can_review && l.flag === 'critical');
+    critical.forEach((l) =>
+      items.push({
+        tab: 'labs',
+        toneName: 'critical',
+        title: `Critical result: ${l.test_name}`,
+        text: [l.results.filter((r) => r.level === 'critical').map((r) => `${r.name} ${r.value} ${r.unit}`.trim()).join(', '), l.review_label].filter(Boolean).join(' · '),
+      })
+    );
+    const overdue = labs.items.filter((l) => l.review_state === 'overdue' && l.flag !== 'critical').length;
+    if (overdue) items.push({ tab: 'labs', toneName: 'critical', title: `${overdue} lab ${overdue === 1 ? 'result' : 'results'} overdue for review` });
+    const others = labs.counts.awaiting_review - critical.length - overdue;
+    if (others > 0) items.push({ tab: 'labs', toneName: 'info', title: `${others} lab ${others === 1 ? 'result' : 'results'} to review` });
+  }
+
+  (chart.assessments?.scales ?? [])
+    .filter((sc) => sc.monitoring && sc.monitoring.state !== 'ok')
+    .forEach((sc) =>
+      items.push({
+        tab: 'assess',
+        toneName: sc.monitoring.state === 'overdue' ? 'critical' : 'warning',
+        title: `${sc.name} ${sc.monitoring.state === 'overdue' ? 'overdue' : 'due'}`,
+        text: sc.monitoring.label,
+      })
+    );
+
   if (b.orders_stat) items.push({ tab: 'orders', toneName: 'critical', title: `${b.orders_stat} STAT ${b.orders_stat === 1 ? 'order' : 'orders'} open` });
   if (b.meds_overdue) items.push({ tab: 'meds', toneName: 'critical', title: `${b.meds_overdue} ${b.meds_overdue === 1 ? 'dose' : 'doses'} overdue` });
   if (b.infusion_alarms) items.push({ tab: 'infusion', toneName: 'critical', title: `${b.infusion_alarms} infusion ${b.infusion_alarms === 1 ? 'alarm' : 'alarms'}` });
@@ -64,7 +102,11 @@ export function attentionItems(chart) {
     });
   }
 
-  return items;
+  const order = { critical: 0, warning: 1, info: 2 };
+  return items
+    .map((item, i) => ({ item, i }))
+    .sort((x, y) => (order[x.item.toneName] ?? 3) - (order[y.item.toneName] ?? 3) || x.i - y.i)
+    .map(({ item }) => item);
 }
 
 export default function OverviewTab({ chart, goTab }) {
@@ -144,7 +186,12 @@ export default function OverviewTab({ chart, goTab }) {
         ) : (
           <View style={[shared.chipWrap, { marginBottom: 6 }]}>
             {p.allergies.map((a, i) => (
-              <Tag key={i} label={a.name} toneName={a.resolved ? 'muted' : 'critical'} solid={!a.resolved} />
+              <Tag
+                key={i}
+                label={`${a.name}${a.severity ? ` · ${a.severity}` : ''}${a.resolved ? ' (resolved)' : ''}`}
+                toneName={a.resolved ? 'muted' : 'critical'}
+                solid={!a.resolved && a.severity !== 'Mild'}
+              />
             ))}
           </View>
         )}
@@ -158,13 +205,39 @@ export default function OverviewTab({ chart, goTab }) {
       </Card>
 
       <Card title="ADMISSION">
+        {p.vip ? <Row label="VIP status" value={p.vip} valueTone="warning" bold /> : null}
         <Row label="Consultant" value={p.consultant} />
         {p.anaesthetist ? <Row label="Anaesthetist" value={p.anaesthetist} /> : null}
         {p.primary_nurse ? <Row label="Primary nurse" value={p.primary_nurse} /> : null}
         <Row label="Admitted" value={p.admitted_label} />
         <Row label="Stay" value={p.stay_label} />
         <Row label="Status" value={p.status_label} valueTone={p.status === 'pending_discharge' ? 'warning' : undefined} />
-        {p.expected_discharge_label ? <Row label="Expected discharge" value={p.expected_discharge_label} /> : null}
+        {p.expected_discharge ? (
+          <Row
+            label="Expected discharge"
+            value={`${p.expected_discharge.label}${p.expected_discharge.projected ? ' (estimated)' : ''}${p.expected_discharge.relative ? ` · ${p.expected_discharge.relative}` : ''}`}
+            valueTone={p.expected_discharge.tone === 'info' ? undefined : p.expected_discharge.tone}
+          />
+        ) : p.expected_discharge_label ? (
+          <Row label="Expected discharge" value={p.expected_discharge_label} />
+        ) : null}
+        {p.payor ? (
+          <Row
+            label="Payor"
+            value={[p.payor.status_label, p.payor.detail].filter(Boolean).join(' · ')}
+            valueTone={p.payor.status === 'rejected' ? 'critical' : ['pending', 'gl_requested', 'partial'].includes(p.payor.status) ? 'warning' : undefined}
+          />
+        ) : null}
+        {p.coe?.length ? (
+          <View style={styles.coeRow}>
+            <Text style={styles.coeLabel}>COE</Text>
+            <View style={[shared.chipWrap, { flex: 1, justifyContent: 'flex-end' }]}>
+              {p.coe.map((c) => (
+                <Tag key={c} label={c} toneName="info" />
+              ))}
+            </View>
+          </View>
+        ) : null}
       </Card>
     </View>
   );
@@ -207,4 +280,6 @@ const styles = StyleSheet.create({
   readingTime: { width: 78, color: colors.slate500, fontSize: 11, fontWeight: '700' },
   readingValues: { flex: 1, color: colors.slate700, fontSize: 11 },
   subLabel: { color: colors.muted, fontSize: 12, marginBottom: 6 },
+  coeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, gap: 16 },
+  coeLabel: { color: colors.muted, fontSize: 12 },
 });

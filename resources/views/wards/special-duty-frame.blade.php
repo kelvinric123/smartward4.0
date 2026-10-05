@@ -6,6 +6,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Special Duty Assignment</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <x-theme-style />
     <style>
         body {
             background: linear-gradient(135deg, #fef3c7 0%, #fed7aa 100%);

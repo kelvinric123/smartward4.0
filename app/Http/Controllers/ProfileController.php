@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Support\UserTheme;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Redirect;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class ProfileController extends Controller
@@ -35,6 +37,29 @@ class ProfileController extends Controller
         $request->user()->save();
 
         return Redirect::route('profile.edit')->with('status', 'profile-updated');
+    }
+
+    /**
+     * Update how SmartWard looks for the user: display mode and colours (UserTheme).
+     */
+    public function updateTheme(Request $request): RedirectResponse
+    {
+        $hex = ['nullable', 'regex:/^#[0-9a-fA-F]{6}$/', 'required_if:colours,' . UserTheme::COLOURS_CUSTOM];
+
+        $validated = $request->validateWithBag('updateTheme', [
+            'mode' => ['required', Rule::in(array_keys(UserTheme::MODES))],
+            'colours' => ['required', Rule::in(UserTheme::colourChoices())],
+            'primary' => $hex,
+            'secondary' => $hex,
+            'background' => $hex,
+        ], [
+            'regex' => 'Enter a colour as #rrggbb.',
+            'required_if' => 'Choose a colour for each, or pick a preset.',
+        ]);
+
+        $request->user()->forceFill(['theme' => UserTheme::fromInput($validated)])->save();
+
+        return Redirect::route('profile.edit')->with('status', 'theme-updated');
     }
 
     /**

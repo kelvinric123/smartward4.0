@@ -18,7 +18,10 @@ import { fetchNurseDashboard } from '../api/endpoints';
 import * as mock from '../data/mockData';
 import { demoBadgesFor } from '../data/mockPatient';
 import PatientScreen from './PatientScreen';
-import { CountBadge } from '../components/ui';
+import RosterScreen from './RosterScreen';
+import TeamScreen from './TeamScreen';
+import { CountBadge, Tag } from '../components/ui';
+import { DEMO_WORKLOAD, demoDashboardSchedule } from '../data/mockSchedule';
 
 const REFRESH_INTERVAL_MS = 60000;
 
@@ -59,6 +62,10 @@ export default function NurseDashboard({ session, onLogout }) {
   const assignedBeds = data?.beds ?? [];
   // The bed whose chart is open (orders, I/O, meds, infusion, alerts), if any
   const [openBed, setOpenBed] = useState(null);
+  // My roster or the team on shift, when open
+  const [view, setView] = useState(null);
+  const schedule = data?.schedule ?? null;
+  const myLoad = summary.my_load ?? null;
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const total = assignedBeds.length;
@@ -71,9 +78,10 @@ export default function NurseDashboard({ session, onLogout }) {
 
   const load = useCallback(async (isRefresh = false) => {
     if (isDemo) {
-      // Demo beds carry the same "what needs doing" badges the server sends
-      const beds = mock.assignedBeds.map((b) => ({ ...b, badges: demoBadgesFor(b) }));
+      // Demo beds carry the same "what needs doing" badges and workload the server sends
+      const beds = mock.assignedBeds.map((b) => ({ ...b, badges: demoBadgesFor(b), workload: DEMO_WORKLOAD[b.id] ?? null }));
       const total = (key) => beds.reduce((n, b) => n + (b.badges?.[key] ?? 0), 0);
+      const demoSchedule = demoDashboardSchedule();
       setData({
         nurse: mock.nurse,
         current_shift: mock.currentShift,
@@ -83,7 +91,10 @@ export default function NurseDashboard({ session, onLogout }) {
           open_orders: total('orders_open'),
           doses_overdue: total('meds_overdue'),
           pending_alerts: total('alerts_pending'),
+          labs_to_review: total('labs_review'),
+          my_load: demoSchedule.my_load,
         },
+        schedule: demoSchedule.schedule,
         beds,
       });
       setLoadError(null);
@@ -121,6 +132,20 @@ export default function NurseDashboard({ session, onLogout }) {
     };
   }, [load, isDemo]);
 
+  if (view === 'roster' || view === 'team') {
+    const Screen = view === 'roster' ? RosterScreen : TeamScreen;
+    return (
+      <Screen
+        session={session}
+        onClose={() => {
+          setView(null);
+          load(); // requests and acknowledgements may have changed
+        }}
+        onSessionExpired={onLogout}
+      />
+    );
+  }
+
   if (openBed) {
     return (
       <PatientScreen
@@ -139,6 +164,7 @@ export default function NurseDashboard({ session, onLogout }) {
     b.badges
       ? b.badges.orders_open + b.badges.meds_overdue + b.badges.alerts_pending
         + (b.badges.transfusions_running ?? 0) + (b.badges.transfusions_pending ?? 0)
+        + (b.badges.labs_review ?? 0) + (b.badges.assess_overdue ?? 0)
       : 0;
 
   return (
@@ -216,6 +242,8 @@ export default function NurseDashboard({ session, onLogout }) {
           </View>
         ) : null}
 
+        <ScheduleCard schedule={schedule} myLoad={myLoad} onRoster={() => setView('roster')} onTeam={() => setView('team')} />
+
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -253,6 +281,12 @@ export default function NurseDashboard({ session, onLogout }) {
             tone={summary.pending_alerts ? 'amber' : 'default'}
           />
           <StatCard
+            label="LABS"
+            value={summary.labs_to_review ?? 0}
+            sub="Results to review"
+            tone={summary.labs_to_review ? 'amber' : 'default'}
+          />
+          <StatCard
             label="OCCUPANCY"
             value={`${summary.ward_occupancy}%`}
             sub="Whole ward"
@@ -287,7 +321,7 @@ export default function NurseDashboard({ session, onLogout }) {
                   </Text>
                   <CountBadge
                     count={bedTodo(b)}
-                    toneName={b.badges?.orders_stat || b.badges?.meds_overdue || b.badges?.transfusions_running ? 'critical' : 'warning'}
+                    toneName={b.badges?.orders_stat || b.badges?.meds_overdue || b.badges?.transfusions_running || b.badges?.labs_critical || b.badges?.assess_overdue ? 'critical' : 'warning'}
                   />
                 </TouchableOpacity>
               );
@@ -335,7 +369,91 @@ export default function NurseDashboard({ session, onLogout }) {
   );
 }
 
+/** Today and tomorrow from my roster, my workload, and anything waiting on me; opens My roster and Team. */
+function ScheduleCard({ schedule, myLoad, onRoster, onTeam }) {
+  if (!schedule && !myLoad) return null;
+  const waiting = [];
+  if (schedule?.swaps_to_answer) waiting.push(`${schedule.swaps_to_answer} swap ${schedule.swaps_to_answer === 1 ? 'request' : 'requests'} to answer`);
+  (schedule?.to_acknowledge ?? []).forEach((w) => waiting.push(`${w.state === 'changed' ? 'Changes to' : 'Roster'} ${w.label} to acknowledge`));
+  if (schedule?.requests_decided) waiting.push(`${schedule.requests_decided} of your requests decided`);
+  const dayText = (d) => {
+    if (!d) return '—';
+    if (d.leave) return d.leave.label;
+    if (!d.shift) return 'Not rostered';
+    if (d.shift === 'OFF') return 'Day off';
+    return `${d.shift} ${d.time ?? ''}${d.duties?.length ? ` · ${d.duties.join(', ')}` : ''}`;
+  };
+  const loadTone = myLoad?.level === 'heavy' ? 'warning' : myLoad?.level === 'light' ? 'info' : 'good';
+
+  return (
+    <View style={styles.scheduleCard}>
+      <TouchableOpacity activeOpacity={0.85} onPress={onRoster} style={styles.scheduleMain}>
+        <View style={styles.scheduleHead}>
+          <Text style={styles.scheduleEyebrow}>MY ROSTER</Text>
+          {waiting.length ? <CountBadge count={waiting.length} toneName="warning" /> : null}
+        </View>
+        <Text style={styles.scheduleLine} numberOfLines={1}>
+          <Text style={styles.scheduleDay}>Today </Text>
+          {dayText(schedule?.today)}
+        </Text>
+        <Text style={styles.scheduleLine} numberOfLines={1}>
+          <Text style={styles.scheduleDay}>Tomorrow </Text>
+          {dayText(schedule?.tomorrow)}
+        </Text>
+        {waiting.map((w) => (
+          <Text key={w} style={styles.scheduleWaiting} numberOfLines={1}>• {w}</Text>
+        ))}
+        <Text style={styles.scheduleLink}>Roster, leave and swaps ›</Text>
+      </TouchableOpacity>
+      <TouchableOpacity activeOpacity={0.85} onPress={onTeam} style={styles.scheduleSide}>
+        <Text style={styles.scheduleEyebrow}>MY LOAD</Text>
+        {myLoad ? (
+          <>
+            <Text style={styles.loadValue}>{myLoad.score}</Text>
+            <Tag label={myLoad.level.toUpperCase()} toneName={loadTone} />
+            <Text style={styles.loadMeta}>Team avg {myLoad.team_average}</Text>
+          </>
+        ) : (
+          <Text style={styles.loadMeta}>No beds this shift</Text>
+        )}
+        <Text style={styles.scheduleLink}>Team ›</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  scheduleCard: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 12,
+  },
+  scheduleMain: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.07)',
+    padding: 12,
+  },
+  scheduleSide: {
+    width: 104,
+    backgroundColor: '#fff',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(15,23,42,0.07)',
+    padding: 12,
+    alignItems: 'flex-start',
+    gap: 4,
+  },
+  scheduleHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  scheduleEyebrow: { color: colors.muted, fontSize: 10, fontWeight: '800', letterSpacing: 2 },
+  scheduleLine: { color: colors.slate900, fontSize: 13, fontWeight: '700', marginTop: 2 },
+  scheduleDay: { color: colors.slate500, fontWeight: '800' },
+  scheduleWaiting: { marginTop: 4, color: colors.amber700, fontSize: 12, fontWeight: '700' },
+  scheduleLink: { marginTop: 8, color: colors.cyan700, fontSize: 12, fontWeight: '800' },
+  loadValue: { color: colors.slate900, fontSize: 24, fontWeight: '800' },
+  loadMeta: { color: colors.muted, fontSize: 11 },
   root: {
     flex: 1,
     backgroundColor: colors.surface,

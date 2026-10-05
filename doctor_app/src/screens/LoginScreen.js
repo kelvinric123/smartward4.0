@@ -234,7 +234,7 @@ export default function LoginScreen({ onLogin }) {
             </View>
 
             <View style={styles.footer}>
-              <Text style={styles.footerText}>QMed Smart Ward · Doctor App · v1.0.0</Text>
+              <Text style={styles.footerText}>QMed Smart Ward · Doctor App · v1.1.0</Text>
               <Text style={styles.footerUrl}>{currentUrl}</Text>
             </View>
           </ScrollView>

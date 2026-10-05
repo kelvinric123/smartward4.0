@@ -620,8 +620,9 @@ class AdmissionTimeline
                 'assessment',
                 $indicator?->name ?? 'Assessment',
                 implode(' · ', array_filter([
-                    // Monitor readings show their values instead; their score is only the worst flag
-                    $score->isReadings() ? null : 'Score ' . $score->score,
+                    // Readings and screens show their values or answers instead; their score is only
+                    // the worst flag or the most serious answer
+                    $score->hasTotal() ? 'Score ' . $score->score : null,
                     $score->band_label,
                     $score->breakdown(),
                 ])),

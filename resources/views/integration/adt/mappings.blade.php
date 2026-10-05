@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ADT Mappings</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <x-theme-style />
 </head>
 <body class="bg-gray-50">
     <div class="max-w-6xl mx-auto p-6 space-y-6">

@@ -215,6 +215,7 @@ class PatientController extends Controller
                 'date_of_birth' => 'nullable|date|before_or_equal:today',
                 'race' => 'nullable|string|max:100',
                 'religion' => 'nullable|string|max:100',
+                'vip_status' => ['nullable', Rule::in(array_keys(Patient::VIP_STATUSES))],
             ],
             'admission' => [
                 'expected_discharge_at' => 'nullable|date',
@@ -309,25 +310,7 @@ class PatientController extends Controller
     {
         $losMinutes = $patient->lengthOfStayMinutes();
 
-        // Without an expected discharge date, project one from the estimated length of stay
-        $expectedDischarge = $patient->expected_discharge_at;
-        $expectedIsProjected = false;
-        if (!$expectedDischarge && $patient->admitted_at && $patient->estimated_length_of_stay) {
-            $expectedDischarge = $patient->admitted_at->copy()->addDays((int) $patient->estimated_length_of_stay);
-            $expectedIsProjected = true;
-        }
-
-        $expectedRelative = null;
-        if ($expectedDischarge && $patient->isAdmitted()) {
-            $days = (int) round(now()->startOfDay()->diffInDays($expectedDischarge->copy()->startOfDay(), false));
-            $expectedRelative = match (true) {
-                $days === 0 => 'Today',
-                $days === 1 => 'Tomorrow',
-                $days > 1 => "In {$days} days",
-                $days === -1 => 'Overdue by 1 day',
-                default => 'Overdue by ' . abs($days) . ' days',
-            };
-        }
+        $expected = $patient->expectedDischarge();
 
         $total = $patient->total_charges !== null ? (float) $patient->total_charges : null;
         $deposit = (float) ($patient->deposit_paid ?? 0);
@@ -340,9 +323,10 @@ class PatientController extends Controller
         return [
             'los_days' => $losMinutes !== null ? intdiv($losMinutes, 1440) : null,
             'los_hours' => $losMinutes !== null ? intdiv($losMinutes % 1440, 60) : null,
-            'expected_discharge' => $expectedDischarge,
-            'expected_is_projected' => $expectedIsProjected,
-            'expected_relative' => $expectedRelative,
+            'expected_discharge' => $expected['at'],
+            'expected_is_projected' => $expected['projected'],
+            'expected_relative' => $expected['relative'],
+            'expected_relative_class' => $expected['relative_class'],
             'charges' => [
                 'total' => $total,
                 'deposit' => $deposit,

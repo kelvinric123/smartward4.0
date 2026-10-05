@@ -199,4 +199,39 @@ class CriticalCareDashboardTest extends TestCase
             ->post(route('ward.patient-movements.return', $movement), ['from_dashboard' => '1', 'ward_id' => $icu->id])
             ->assertRedirect(route('ward.dashboard', ['ward_id' => $icu->id]));
     }
+
+    public function test_bed_box_allergy_popover_shows_severity_on_both_dashboards(): void
+    {
+        $icu = $this->makeWard('ICU1', 'Intensive Care Unit', $this->makeType('ICU', true));
+        Bed::create([
+            'ward_id' => $icu->id, 'bed_number' => 'B01', 'bed_id' => 'ICU1-B01',
+            'bed_display_name' => 'B01', 'status' => 'occupied', 'is_active' => true,
+        ]);
+        $patient = Patient::create([
+            'name' => 'Tan Mei Ling', 'mrn' => 'MRN80002', 'rn' => 'RN80002', 'ic_passport' => '710101-10-5002',
+            'age' => 54, 'gender' => 'Female', 'phone' => '012-0000001',
+            'ward_id' => $icu->id, 'bed_number' => 'B01', 'status' => Patient::STATUS_ADMITTED, 'is_active' => true,
+            'admitted_at' => now()->subDay(),
+        ]);
+        $patient->update(['allergies' => [
+            ['allergen' => 'PEN^Penicillin', 'severity_code' => 'SV', 'status' => 'Active'],
+            ['allergen' => 'Latex', 'severity' => 'Mild', 'status' => 'Active'],
+            'Peanuts',
+        ]]);
+
+        foreach ([route('ward.dashboard', ['ward_id' => $icu->id]), route('critical-care.dashboard', ['ward_id' => $icu->id])] as $url) {
+            $this->actingAs($this->user)->get($url)
+                ->assertOk()
+                ->assertSee('Allergies (3 Active, 1 Severe)')
+                ->assertSeeInOrder(['Penicillin', 'Active', 'Severe', 'Latex', 'Active', 'Mild', 'Peanuts'])
+                ->assertSee('bg-yellow-300 border border-red-800', false);
+        }
+
+        // No severe allergy: no marker on the icon, and allergies without a severity still list
+        $patient->update(['allergies' => ['Peanuts']]);
+        $this->actingAs($this->user)->get(route('ward.dashboard', ['ward_id' => $icu->id]))
+            ->assertSee('Allergies (1 Active)')
+            ->assertSee('Peanuts')
+            ->assertDontSee('bg-yellow-300 border border-red-800', false);
+    }
 }

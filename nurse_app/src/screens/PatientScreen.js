@@ -1,7 +1,8 @@
 // One patient's chart: the nurse app's twin of the ward dashboard's Patient
 // Details. Tabs for the overview, consultant orders, the I/O chart,
-// medications, infusions, blood transfusion, bedside alerts and the nursing
-// plan (this shift's tasks and the nursing care plan).
+// medications, oxygen therapy, lab investigations, infusions, blood
+// transfusion, assessment scales, bedside alerts and the nursing plan (this
+// shift's tasks and the nursing care plan).
 //
 // Every action answers with the whole refreshed chart, which simply replaces
 // what is on screen - so the app always shows the server's view.
@@ -31,6 +32,9 @@ import InfusionTab from '../components/patient/InfusionTab';
 import TransfusionTab from '../components/patient/TransfusionTab';
 import AlertsTab from '../components/patient/AlertsTab';
 import NursingPlanTab from '../components/patient/NursingPlanTab';
+import LabsTab from '../components/patient/LabsTab';
+import OxygenTab from '../components/patient/OxygenTab';
+import AssessTab from '../components/patient/AssessTab';
 
 const REFRESH_INTERVAL_MS = 60000;
 
@@ -167,6 +171,12 @@ export default function PatientScreen({ session, bed, onClose, onSessionExpired,
         { key: 'orders', label: 'Orders', count: b.orders_open, tone: b.orders_stat ? 'critical' : 'info' },
         { key: 'io', label: 'I/O', dot: !!b.io_level, tone: b.io_level === 'critical' ? 'critical' : 'warning' },
         { key: 'meds', label: 'Meds', count: b.meds_overdue, tone: 'critical' },
+        // Oxygen, Labs and Assess show only when the server sends them (an older server does not)
+        chart.oxygen ? { key: 'oxygen', label: 'Oxygen', dot: !!b.oxygen_level, tone: b.oxygen_level === 'critical' ? 'critical' : 'warning' } : null,
+        // Only while the ward has Lab Investigations switched on
+        chart.labs?.enabled
+          ? { key: 'labs', label: 'Labs', count: b.labs_review, tone: b.labs_overdue || b.labs_critical ? 'critical' : 'warning' }
+          : null,
         { key: 'infusion', label: 'Infusion', count: b.infusion_alarms, tone: 'critical' },
         {
           key: 'transfusion',
@@ -174,6 +184,9 @@ export default function PatientScreen({ session, bed, onClose, onSessionExpired,
           count: b.transfusions_running || b.transfusions_pending,
           tone: b.transfusions_running || b.transfusion_critical ? 'critical' : 'warning',
         },
+        chart.assessments?.scales?.length
+          ? { key: 'assess', label: 'Assess', count: b.assess_overdue || b.assess_due, tone: b.assess_overdue ? 'critical' : 'warning' }
+          : null,
         { key: 'alerts', label: 'Alerts', count: b.alerts_pending, tone: 'warning' },
         {
           key: 'plan',
@@ -181,7 +194,7 @@ export default function PatientScreen({ session, bed, onClose, onSessionExpired,
           count: b.shift_overdue || b.care_plan_due,
           tone: b.shift_overdue ? 'critical' : 'info',
         },
-      ]
+      ].filter(Boolean)
     : [];
 
   return (
@@ -218,8 +231,9 @@ export default function PatientScreen({ session, bed, onClose, onSessionExpired,
 
           {p ? (
             <View style={styles.flags}>
+              {p.vip ? <Tag label={p.vip} toneName="warning" solid /> : null}
               {p.allergies.filter((a) => !a.resolved).slice(0, 3).map((a, i) => (
-                <Tag key={i} label={`⚠ ${a.name}`} toneName="critical" solid />
+                <Tag key={i} label={`⚠ ${a.name}${a.severity ? ` (${a.severity})` : ''}`} toneName="critical" solid />
               ))}
               {p.nbm ? <Tag label="NIL BY MOUTH" toneName="critical" /> : null}
               {p.isolation ? <Tag label={p.isolation.toUpperCase()} toneName="warning" /> : null}
@@ -276,8 +290,11 @@ export default function PatientScreen({ session, bed, onClose, onSessionExpired,
             {tab === 'orders' ? <OrdersTab chart={chart} perform={perform} /> : null}
             {tab === 'io' ? <IoTab chart={chart} perform={perform} loadIoDay={loadIoDay} loadingDay={loadingDay} /> : null}
             {tab === 'meds' ? <MedsTab chart={chart} perform={perform} /> : null}
+            {tab === 'oxygen' && chart.oxygen ? <OxygenTab chart={chart} perform={perform} /> : null}
+            {tab === 'labs' && chart.labs ? <LabsTab chart={chart} perform={perform} /> : null}
             {tab === 'infusion' ? <InfusionTab chart={chart} /> : null}
             {tab === 'transfusion' ? <TransfusionTab chart={chart} perform={perform} /> : null}
+            {tab === 'assess' && chart.assessments ? <AssessTab chart={chart} perform={perform} /> : null}
             {tab === 'alerts' ? <AlertsTab chart={chart} perform={perform} /> : null}
             {tab === 'plan' ? <NursingPlanTab chart={chart} perform={perform} goTab={goTab} /> : null}
             <Text style={styles.footnote}>

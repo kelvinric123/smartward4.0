@@ -7,6 +7,7 @@
 import { nurse as demoNurse } from './mockData';
 import { DAYS, SHIFTS, ago, ahead, balance, dm, hm, ml, pad, when } from './demoTime';
 import { carePlanActions, demoCarePlan, nursingPlanBundle } from './mockNursingPlan';
+import { assessmentsBundle, clinicalActions, demoClinical, demoPatientExtras, labsBundle, oxygenBundle } from './mockClinical';
 
 const INTAKE_TYPES = { oral: 'Oral', iv: 'IV fluid', tube_feed: 'Tube feed', blood: 'Blood product', iv_med: 'IV medication', other: 'Other intake' };
 const OUTPUT_TYPES = { urine: 'Urine', drain: 'Drain', vomit: 'Vomit', ng_aspirate: 'NG aspirate', stool: 'Stool', other: 'Other output' };
@@ -175,6 +176,7 @@ function buildState(bed) {
     answered: [],
     units: tfUnitsFromScenario(s, next),
     carePlan: demoCarePlan(bed, next),
+    clinical: demoClinical(bed, next),
   };
 }
 
@@ -644,11 +646,11 @@ function toBundle(state) {
       status_label: bed.is_pending_discharge ? 'Pending Discharge' : 'Admitted',
       admitted_label: `${dm(ago((bed.days ?? 1) * 1440 + (bed.hours ?? 0) * 60))} 09:15`,
       stay_label: `${bed.days ?? 0}d ${bed.hours ?? 0}h`,
-      expected_discharge_label: null,
       consultant: bed.consultant,
       anaesthetist: null,
       primary_nurse: demoNurse.name,
-      allergies: s.allergies ?? [],
+      // rn, vip, payor, coe, expected discharge, allergies with severity
+      ...demoPatientExtras(bed, s.allergies ?? []),
       nbm: !!s.nbm,
       diet: s.diet ?? null,
       diet_orders: null,
@@ -720,6 +722,9 @@ function toBundle(state) {
       pending: state.alerts.filter((a) => a.status === 'pending').map(alertMap),
       recent: state.answered.slice(0, 5).map(alertMap),
     },
+    labs: labsBundle(state),
+    oxygen: oxygenBundle(state),
+    assessments: assessmentsBundle(state),
     generated_at: new Date().toISOString(),
     generated_label: hm(new Date()),
   };
@@ -747,6 +752,12 @@ function toBundle(state) {
     transfusion_critical: transfusions.exceptions.filter((e) => e.level === 'critical').length,
     care_plan_due: bundle.nursing_plan.care_plan.due_evaluations,
     shift_overdue: bundle.nursing_plan.shift.counts.overdue,
+    labs_review: bundle.labs.counts.awaiting_review,
+    labs_overdue: bundle.labs.counts.overdue,
+    labs_critical: bundle.labs.counts.critical,
+    oxygen_level: bundle.oxygen.alert,
+    assess_overdue: bundle.assessments.counts.overdue,
+    assess_due: bundle.assessments.counts.due,
   };
 
   return bundle;
@@ -785,6 +796,7 @@ export function createDemoPatientClient(bed) {
     },
 
     ...carePlanActions(state, { ok, fail, by }),
+    ...clinicalActions(state, { ok, fail, by }),
 
     addOrder: ({ instruction, urgency, consultant_id }) => {
       if (!instruction) return fail('Write down what the consultant ordered.');

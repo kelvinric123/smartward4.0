@@ -57,6 +57,7 @@ class Patient extends Model
         'payor_status',
         'payor_remarks',
         'coe_indicators',
+        'vip_status',
         'total_charges',
         'deposit_paid',
         'charges_updated_at',
@@ -86,8 +87,13 @@ class Patient extends Model
     ];
 
     /**
-     * Suggested Centre of Excellence (COE) programmes. Custom values can also be entered.
+     * VIP status (value => label); null means not a VIP
      */
+    const VIP_STATUSES = [
+        'vip' => 'VIP',
+        'vvip' => 'VVIP',
+    ];
+
     /**
      * Non-oral feeding routes (value => label), used when the ward manages diet directly
      */
@@ -104,6 +110,33 @@ class Patient extends Model
      */
     const NBM_DIET_CODES = ['NBM', 'NPO'];
 
+    /**
+     * Allergy severity codes, as sent in HL7 AL1-4 (table 0128). Severity is optional.
+     */
+    const ALLERGY_SEVERITIES = [
+        'MI' => 'Mild',
+        'MO' => 'Moderate',
+        'SV' => 'Severe',
+        'U' => 'Unknown',
+    ];
+
+    /**
+     * Severity label of one stored allergy entry, or null when none was recorded.
+     * ADT entries may carry only the AL1-4 code; plain-text entries never have one.
+     */
+    public static function allergySeverity(mixed $allergy): ?string
+    {
+        if (!is_array($allergy)) {
+            return null;
+        }
+
+        return ($allergy['severity'] ?? null)
+            ?: (self::ALLERGY_SEVERITIES[strtoupper((string) ($allergy['severity_code'] ?? ''))] ?? null);
+    }
+
+    /**
+     * Suggested Centre of Excellence (COE) programmes. Custom values can also be entered.
+     */
     const COE_INDICATOR_SUGGESTIONS = [
         'CCPC Breast',
         'Chronic Kidney Disease',
@@ -204,6 +237,58 @@ class Patient extends Model
     public function payorStatusBadgeClass(): string
     {
         return self::PAYOR_STATUS_BADGE_CLASSES[$this->payor_status] ?? 'bg-gray-100 text-gray-700';
+    }
+
+    const VIP_STATUS_BADGE_CLASSES = [
+        'vip' => 'bg-amber-100 text-amber-800',
+        'vvip' => 'bg-amber-400 text-amber-950',
+    ];
+
+    public function vipStatusLabel(): ?string
+    {
+        return self::VIP_STATUSES[$this->vip_status] ?? null;
+    }
+
+    public function vipStatusBadgeClass(): string
+    {
+        return self::VIP_STATUS_BADGE_CLASSES[$this->vip_status] ?? 'bg-gray-100 text-gray-700';
+    }
+
+    /**
+     * Expected discharge: the recorded date, or one projected from the estimated length of stay.
+     * While the patient is admitted, "relative" says how far off it is (Today, Tomorrow, In 3 days,
+     * Overdue by 2 days) and "relative_class" colours its badge.
+     *
+     * @return array{at: ?\Illuminate\Support\Carbon, projected: bool, relative: ?string, relative_class: ?string}
+     */
+    public function expectedDischarge(): array
+    {
+        $at = $this->expected_discharge_at;
+        $projected = false;
+        if (!$at && $this->admitted_at && $this->estimated_length_of_stay) {
+            $at = $this->admitted_at->copy()->addDays((int) $this->estimated_length_of_stay);
+            $projected = true;
+        }
+
+        $relative = null;
+        $relativeClass = null;
+        if ($at && $this->isAdmitted()) {
+            $days = (int) round(now()->startOfDay()->diffInDays($at->copy()->startOfDay(), false));
+            $relative = match (true) {
+                $days === 0 => 'Today',
+                $days === 1 => 'Tomorrow',
+                $days > 1 => "In {$days} days",
+                $days === -1 => 'Overdue by 1 day',
+                default => 'Overdue by ' . abs($days) . ' days',
+            };
+            $relativeClass = match (true) {
+                $days < 0 => 'bg-red-100 text-red-700',
+                $days <= 1 => 'bg-amber-100 text-amber-800',
+                default => 'bg-blue-100 text-blue-700',
+            };
+        }
+
+        return ['at' => $at, 'projected' => $projected, 'relative' => $relative, 'relative_class' => $relativeClass];
     }
 
     /**

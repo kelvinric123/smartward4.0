@@ -24,6 +24,10 @@ POST  /api/doctor/login                      { username, password }
 GET   /api/doctor/dashboard                  doctor + summary + wards + beds
 GET   /api/doctor/patients/{id}/notes
 POST  /api/doctor/patients/{id}/notes        { text }
+GET   /api/doctor/patients/{id}/chart        I/O, meds, orders, oxygen, labs (?io_day=Y-m-d)
+POST  /api/doctor/patients/{id}/orders       { instruction, urgency, fluid_limit_ml?, urine_min_ml_per_hour? }
+POST  /api/doctor/patients/{id}/orders/{order}/cancel   { reason }
+POST  /api/doctor/patients/{id}/labs/{lab}/review       marks a lab result reviewed
 POST  /api/doctor/logout
 POST  /api/doctor/ping                       connectivity test
 ```
@@ -43,7 +47,12 @@ doctor_app/
     components/
       Pill.js
       StatCard.js
-      BedCard.js               -- doctor view: diagnosis, meds, vitals, infusions
+      BedCard.js               -- doctor view: allergies, VIP, chart buttons, vitals, I/O, meds, infusions
+      chart/
+        PatientChartModal.js   -- full-screen chart: I/O · Meds · Orders · O₂ · Labs tabs
+        IoTab.js, MedsTab.js, OrdersTab.js
+        OxygenTab.js           -- oxygen now, SpO₂ against target, progression charts, history
+        LabsTab.js             -- lab results (flags, review due), "Mark reviewed"
     screens/
       LoginScreen.js           -- consultant login + settings dialog (API path)
       DoctorDashboard.js       -- ward filter + bed queue + bed detail (auto-refresh 60s)
@@ -61,6 +70,24 @@ doctor_app/
   every 60 seconds.
 - **Consultant notes** are persisted per patient on the server and visible to
   the whole care team.
+- **Bed card**: VIP / VVIP badge, active allergies with their severity
+  (severity is optional, as ADT may not send it), a flag for lab results
+  waiting for review, and chart buttons for I/O, medications, orders, oxygen
+  and labs. The REVIEWS stat counts lab results waiting for review.
+- **Patient chart** (tap a chart button):
+  - **O₂**: the oxygen now (changed on the ward's Oxygen Therapy tab or
+    recorded with the vital signs), the SpO₂ target, the latest SpO₂ against
+    it, charts of SpO₂ and oxygen given over the admission, and every change.
+    Read-only: "Order an oxygen change" opens a consultant order for the ward.
+  - **Labs**: lab investigations from the HIS (Patient Details > Lab
+    Investigations): results with their flags, when each is due for review,
+    and **Mark reviewed** (recorded under the consultant's name).
+- **Demo Login** shows all of this with sample data and no server, and
+  behaves like the server: every sample time is moved to "now"
+  (`src/data/demoClock.js`), the O₂ tab's SpO₂ comes from the bed's own vital
+  signs, and the dashboard is worked out from the demo charts
+  (`src/data/demoDashboard.js`), so an order written or a result reviewed in
+  a chart shows on the bed card and in the stats at the next refresh.
 
 ## Run on a device with Expo Go (fastest dev loop)
 

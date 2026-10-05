@@ -47,6 +47,16 @@ class DischargeSummaryRecords
         'alert_active' => 'FR Alert Active',
     ];
 
+    /** The ADT feed sends fall risk as 1 / 0, which the ward reads as an active alert / none. */
+    private static function fallRiskKey($value): string
+    {
+        return match (strtolower((string) $value)) {
+            '1', 'yes', 'y' => 'alert_active',
+            '0', 'no', 'n' => 'none',
+            default => (string) $value,
+        };
+    }
+
     /**
      * Every admission log row filed during the stay - the admission, each
      * transfer, a scheduled discharge, the discharge - oldest first.
@@ -409,6 +419,8 @@ class DischargeSummaryRecords
                 return [
                     'name' => trim($name) !== '' ? trim($name) : $raw,
                     'resolved' => strcasecmp($status, 'Resolved') === 0,
+                    // Optional: Mild, Moderate, Severe or Unknown (HL7 AL1-4, or entered on the ward)
+                    'severity' => Patient::allergySeverity($entry),
                 ];
             })
             ->filter()
@@ -443,7 +455,7 @@ class DischargeSummaryRecords
             'diet' => $diet !== '' ? $diet : null,
             'dietOrders' => filled($patient->diet_orders) ? $patient->diet_orders : null,
             'feeding' => $feeding !== '' ? $feeding : null,
-            'fallRisk' => self::FALL_RISK_LABELS[$patient->fall_risk] ?? null,
+            'fallRisk' => self::FALL_RISK_LABELS[self::fallRiskKey($patient->fall_risk)] ?? null,
             'isolation' => $isolation,
             'nursingLevel' => $nursingLevel,
             'hgt' => $patient->hgt_enabled

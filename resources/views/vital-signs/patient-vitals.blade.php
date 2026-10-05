@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Patient Vital Signs</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <x-theme-style />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; }
@@ -122,6 +123,15 @@
             'fio2_percent' => $vital->fio2_percent ?? '',
             'notes' => $vital->notes ?? '',
         ];
+
+        // A new reading starts from the oxygen the patient is on now (Oxygen Therapy tab or the last reading)
+        $oxygenPrefill = ($currentOxygen ?? null) ? [
+            'oxygen_delivery' => $currentOxygen['delivery'],
+            'oxygen_flow_rate' => $currentOxygen['on_oxygen'] && $currentOxygen['flow'] !== null
+                ? \App\Models\OxygenTherapyChange::formatFlowRate($currentOxygen['flow'])
+                : '',
+            'fio2_percent' => $currentOxygen['on_oxygen'] ? ($currentOxygen['fio2'] ?? '') : '',
+        ] : null;
     @endphp
     <div class="p-4" x-data='{
         view: "ihh",
@@ -130,12 +140,13 @@
         deleteId: null,
         passphrase: "",
         editorForm: {},
+        oxygenPrefill: @json($oxygenPrefill),
         blankForm() {
             return { id: null, recorded_at: "", systolic_bp: "", diastolic_bp: "", pulse_rate: "", temperature: "",
                      spo2: "", respiratory_rate: "", oxygen_delivery: "", oxygen_flow_rate: "", fio2_percent: "", notes: "" };
         },
         startAdd() {
-            this.editorForm = this.blankForm();
+            this.editorForm = Object.assign(this.blankForm(), this.oxygenPrefill || {});
             this.passphrase = "";
             this.deleteId = null;
             this.editorMode = "add";
@@ -361,6 +372,16 @@
                     </div>
                     <div class="bg-gradient-to-br from-sky-50 to-sky-100 border border-sky-200 rounded-lg p-3 text-center">
                         <div class="text-xs text-sky-600 font-semibold mb-1">Oxygen</div>
+                        @if($currentOxygen ?? null)
+                            {{-- The oxygen now: changed on the Oxygen Therapy tab, or by a later reading --}}
+                            <div class="text-base font-bold leading-tight {{ $currentOxygen['on_oxygen'] ? 'text-sky-700' : 'text-gray-900' }}">
+                                {{ $currentOxygen['label'] }}
+                            </div>
+                            <div class="text-xs text-gray-500">{{ $currentOxygen['settings'] ?? 'On oxygen' }}</div>
+                            <div class="text-[10px] text-gray-400" title="{{ $currentOxygen['source'] === 'therapy' ? 'Set on the Oxygen Therapy tab' : 'Recorded with vital signs' }}">
+                                since {{ $currentOxygen['at']->format('d M H:i') }}
+                            </div>
+                        @else
                         <div class="text-base font-bold leading-tight {{ $latest->isOnOxygen() ? 'text-sky-700' : 'text-gray-900' }}">
                             {{ $latest->oxygenDeliveryLabel() ?? '-' }}
                         </div>
@@ -377,6 +398,7 @@
                                 Not recorded
                             @endif
                         </div>
+                        @endif
                     </div>
                 </div>
                 <div class="text-xs text-gray-500 mb-4">

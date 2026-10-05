@@ -15,7 +15,10 @@ use App\Models\ShiftSetting;
 use App\Models\VitalSign;
 use App\Models\WardScheduleAssignment;
 use App\Models\ConsultantOrder;
+use App\Models\LabInvestigation;
 use App\Models\PatientMedication;
+use App\Services\DoctorApp\DoctorAppPatientChart;
+use App\Services\LabInvestigations;
 use App\Support\DoctorAppAccess;
 use App\Support\FluidBalanceChart;
 use Illuminate\Http\JsonResponse;
@@ -155,7 +158,8 @@ class DoctorAppApiController extends Controller
                 'wards_covered' => count($wards),
                 'critical_patients' => $criticalCount,
                 'pending_discharge' => $pendingDischarge,
-                'pending_reviews' => 0,
+                // Lab results waiting for review (Patient Details > Lab Investigations)
+                'pending_reviews' => array_sum(array_map(fn ($b) => $b['labs']['awaiting_review'] ?? 0, $beds)),
                 'pending_orders' => array_sum(array_column($beds, 'pending_orders')),
             ],
             'wards' => $wards,
@@ -316,9 +320,9 @@ class DoctorAppApiController extends Controller
     }
 
     /**
-     * Today's I/O, the active medication orders and the open consultant
-     * orders of every patient on the dashboard, fetched for all of them at
-     * once rather than bed by bed.
+     * Today's I/O, the active medication orders, the open consultant orders
+     * and the lab results waiting for review of every patient on the
+     * dashboard, fetched for all of them at once rather than bed by bed.
      */
     private function linkedData($patients): array
     {
@@ -333,7 +337,36 @@ class DoctorAppApiController extends Controller
                 ->groupBy('patient_id')
                 ->pluck('open_count', 'patient_id')
                 ->all(),
+            'labs' => $this->labsAwaitingReview($ids),
         ];
+    }
+
+    /**
+     * Per patient: the lab results waiting for review, how many are overdue and how many
+     * carry a critical flag. Only what Patient Details would show (no sample results
+     * unless sample data is on), and nothing when Lab Investigations is switched off.
+     */
+    private function labsAwaitingReview($ids): array
+    {
+        $settings = LabInvestigations::settings();
+        if (!$settings['enabled']) {
+            return [];
+        }
+
+        $now = now();
+
+        return LabInvestigation::whereIn('patient_id', $ids)
+            ->where('status', 'resulted')
+            ->whereNull('reviewed_at')
+            ->when(!$settings['sample'], fn ($query) => $query->where('source', LabInvestigation::SOURCE_HIS))
+            ->get()
+            ->groupBy('patient_id')
+            ->map(fn ($labs) => [
+                'awaiting_review' => $labs->count(),
+                'overdue' => $labs->filter(fn (LabInvestigation $lab) => $lab->reviewState($now) === 'overdue')->count(),
+                'critical' => $labs->filter(fn (LabInvestigation $lab) => $lab->resultFlag() === 'critical')->count(),
+            ])
+            ->all();
     }
 
     private function bedPayload(Patient $patient, Consultant $consultant, array $nurseAssignments, array $linked = []): array
@@ -341,6 +374,7 @@ class DoctorAppApiController extends Controller
         $dashboard = app(WardDashboardController::class);
         $io = $linked['io'][$patient->id] ?? null;
         $medications = $linked['medications'][$patient->id] ?? null;
+        $labs = $linked['labs'][$patient->id] ?? null;
         $bed = $this->findBedForPatient($patient);
 
         // Vitals: latest 20 readings, oldest -> newest for the trend chart
@@ -440,10 +474,17 @@ class DoctorAppApiController extends Controller
                 : 'None',
             'fall_risk' => $patient->fall_risk ?? 'none',
             'allergies' => $patient->allergies ?? [],
+            // Name, optional severity and resolved, active and most severe first
+            'allergy_list' => DoctorAppPatientChart::allergies($patient),
+            'vip_status' => $patient->vipStatusLabel(),
+            // The oxygen now (Oxygen Therapy tab or vital signs); null when none is recorded
+            'oxygen' => DoctorAppPatientChart::oxygenBrief($patient),
+            // Lab results waiting for review; null when there are none
+            'labs' => $labs,
             'is_outside' => $currentMovement !== null,
             'current_movement_location' => $currentMovement?->location,
             'is_pending_discharge' => $isPendingDischarge,
-            'pending_review' => false,
+            'pending_review' => ($labs['awaiting_review'] ?? 0) > 0,
             'pending_orders' => (int) ($linked['orders'][$patient->id] ?? 0),
             'last_hgt' => $patient->latestSugarReading ? [
                 'value' => number_format((float) $patient->latestSugarReading->value, 1) . ' mmol/L',

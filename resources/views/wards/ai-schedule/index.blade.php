@@ -125,6 +125,7 @@
                         'workload' => 'Workload',
                         'leave' => 'Leave & holidays',
                     ];
+                    $requestsToDecide = ($rosterRequests ?? collect())->where('status', \App\Models\NurseRosterRequest::STATUS_PENDING)->count();
                 @endphp
                 <div class="border-b border-gray-200">
                     <nav class="-mb-px flex flex-wrap gap-x-6" aria-label="Tabs">
@@ -133,6 +134,10 @@
                                 :class="tab === '{{ $key }}' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
                                 class="whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm">
                                 {{ $label }}
+                                @if ($key === 'leave' && $requestsToDecide)
+                                    <span class="ml-1 inline-flex items-center justify-center min-w-[1.25rem] px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white"
+                                        title="{{ $requestsToDecide }} request(s) from the nurse app to decide">{{ $requestsToDecide }}</span>
+                                @endif
                             </button>
                         @endforeach
                     </nav>

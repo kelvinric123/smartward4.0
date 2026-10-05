@@ -422,12 +422,24 @@
         body.fullscreen-res-3840x2160 .fixed.inset-0 .font-semibold {
             font-size: 1.3rem !important;
         }
+
+        /* The header is tight below this width: the Privacy Mode badge shows its icon only */
+        @media (max-width: 1899px) {
+            .privacy-badge-label {
+                display: none;
+            }
+        }
     </style>
     <x-slot name="header">
         <div class="flex items-center justify-between" x-data="{ 
             customFullscreen: localStorage.getItem('wardDashboardFullscreen') === 'true' @if(auth()->check() && auth()->user()->hasRole('ward_dashboard')) || true @endif,
-            countdown: {{ $dashboardDisplay['refresh_interval'] ?? 60 }},
+            refreshInterval: {{ (int) ($dashboardDisplay['refresh_interval'] ?? 60) }},
+            countdown: {{ (int) ($dashboardDisplay['refresh_interval'] ?? 60) }},
             isPaused: false,
+            get countdownLabel() {
+                if (this.countdown < 60) return this.countdown + 's';
+                return Math.floor(this.countdown / 60) + ':' + String(this.countdown % 60).padStart(2, '0');
+            },
             init() {
                 window.addEventListener('pause-timer', () => { this.isPaused = true; });
                 window.addEventListener('resume-timer', () => { this.isPaused = false; });
@@ -441,8 +453,8 @@
                     });
                 }
 
-                // Auto-refresh countdown
-                setInterval(() => {
+                // Auto-refresh countdown, at the interval set in Settings (0 = off)
+                if (this.refreshInterval > 0) setInterval(() => {
                     // Check if any modal is currently visible
                     let anyModalOpen = false;
                     document.querySelectorAll('.fixed.inset-0.z-50').forEach(el => {
@@ -473,14 +485,25 @@
                             Ward Dashboard
                         </h2>
                         <span
-                            class="ml-3 px-2 py-0.5 text-xs font-semibold bg-white/20 text-white rounded-full flex items-center border border-white/30 shadow-sm"
-                            title="Auto-refreshing in">
+                            class="ml-3 px-2 py-0.5 text-xs font-semibold bg-white/20 text-white rounded-full flex items-center flex-shrink-0 whitespace-nowrap border border-white/30 shadow-sm"
+                            :title="refreshInterval > 0 ? 'Auto-refreshing in' : 'Auto refresh is off (Settings > Dashboard Display)'">
                             <svg class="w-3.5 h-3.5 mr-1 text-white/70" fill="none" stroke="currentColor"
                                 viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                            <span x-text="countdown"></span>s
+                            <span x-text="refreshInterval > 0 ? countdownLabel : 'Off'"></span>
+                            @if(\App\Support\PatientPrivacy::isActive($dashboardDisplay ?? []))
+                                <span class="ml-2 pl-2 border-l border-white/30 flex items-center"
+                                    title="Privacy Mode: patient names and MRNs are masked on this board">
+                                    <svg class="w-3.5 h-3.5 text-white/70" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                    </svg>
+                                    <span class="privacy-badge-label ml-1">Privacy</span>
+                                </span>
+                            @endif
                         </span>
                         <svg class="w-4 h-4 ml-2 text-white/70 group-hover:text-white transition-colors" fill="none"
                             stroke="currentColor" viewBox="0 0 24 24" title="Refresh">
@@ -700,46 +723,12 @@
         $fullscreenResolution = $dashboardDisplay['fullscreen_resolution'] ?? 'default';
         $fullscreenResolutionClass = $fullscreenResolutionClasses[$fullscreenResolution] ?? '';
 
-        // Patient name masking function
-        $maskPatientName = function ($fullName) use ($dashboardDisplay) {
-            $mask = $dashboardDisplay['patient_name_mask'] ?? 'full';
-            if ($mask === 'full' || empty($fullName)) {
-                return $fullName;
-            }
-
-            $parts = preg_split('/\s+/', trim($fullName));
-
-            switch ($mask) {
-                case 'first_only':
-                    return implode(' ', array_map(function ($part, $i) {
-                        return $i === 0 ? $part : $part[0] . str_repeat('*', max(strlen($part) - 1, 0));
-                    }, $parts, array_keys($parts)));
-
-                case 'last_only':
-                    $lastIndex = count($parts) - 1;
-                    return implode(' ', array_map(function ($part, $i) use ($lastIndex) {
-                        return $i === $lastIndex ? $part : $part[0] . str_repeat('*', max(strlen($part) - 1, 0));
-                    }, $parts, array_keys($parts)));
-
-                case 'initials':
-                    return implode('', array_map(function ($part) {
-                        return strtoupper($part[0]) . '.';
-                    }, $parts));
-
-                case 'first_last_initial':
-                    if (count($parts) === 1)
-                        return $parts[0];
-                    return $parts[0] . ' ' . strtoupper($parts[count($parts) - 1][0]) . '.';
-
-                case 'all_asterisk':
-                    return implode(' ', array_map(function ($part) {
-                        return str_repeat('*', strlen($part));
-                    }, $parts));
-
-                default:
-                    return $fullName;
-            }
-        };
+        // Privacy Mode: how patient names and MRNs show on this board.
+        // $maskMrn gives null when the MRN is hidden.
+        $nameMask = $dashboardDisplay['patient_name_mask'] ?? 'full';
+        $mrnMask = $dashboardDisplay['patient_mrn_mask'] ?? 'full';
+        $maskPatientName = fn ($fullName) => \App\Support\PatientPrivacy::name($fullName, $nameMask);
+        $maskMrn = fn ($mrn) => \App\Support\PatientPrivacy::mrn($mrn, $mrnMask);
     @endphp
 
     @php
@@ -795,7 +784,7 @@
                                     style="overflow: visible;" data-section="{{ $bed['section'] ?? 1 }}"
                                     data-next-movement-time="{{ $bed['next_movement_time_iso'] ?? '' }}"
                                     data-next-movement-location="{{ $bed['next_movement_location'] ?? '' }}"
-                                    data-patient-name="{{ $bed['patient_name'] ?? '' }}" data-bed-number="{{ $bed['number'] }}">
+                                    data-patient-name="{{ $maskPatientName($bed['patient_name'] ?? '') }}" data-bed-number="{{ $bed['number'] }}">
                                     <div
                                         class="px-4 py-2 bg-gradient-to-r from-orange-500 to-amber-500 text-white flex items-center justify-between">
                                         <span class="font-bold bed-number cursor-pointer"
@@ -836,16 +825,18 @@
                                                     d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                             </svg>
                                             <span class="font-semibold text-gray-800 truncate"
-                                                title="{{ $bed['patient_name'] }}">{{ $maskPatientName($bed['patient_name']) }}</span>
+                                                title="{{ $maskPatientName($bed['patient_name']) }}">{{ $maskPatientName($bed['patient_name']) }}</span>
                                         </div>
+                                        @if($maskMrn($bed['mrn']) !== null)
                                         <div class="flex items-center text-xs text-gray-600 min-w-0">
                                             <svg class="w-3 h-3 mr-2 flex-shrink-0" fill="none" stroke="currentColor"
                                                 viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                     d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                                             </svg>
-                                            <span class="truncate">{{ $bed['mrn'] }}</span>
+                                            <span class="truncate">{{ $maskMrn($bed['mrn']) }}</span>
                                         </div>
+                                        @endif
                                     </div>
 
                                     <!-- Single Return Button -->
@@ -902,7 +893,7 @@
                                     style="overflow: visible;" data-section="{{ $bed['section'] ?? 1 }}"
                                     data-next-movement-time="{{ $bed['next_movement_time_iso'] ?? '' }}"
                                     data-next-movement-location="{{ $bed['next_movement_location'] ?? '' }}"
-                                    data-patient-name="{{ $bed['patient_name'] ?? '' }}" data-bed-number="{{ $bed['number'] }}"
+                                    data-patient-name="{{ $maskPatientName($bed['patient_name'] ?? '') }}" data-bed-number="{{ $bed['number'] }}"
                                     data-pending-discharge="{{ $isPendingDischarge ? 'true' : 'false' }}"
                                     data-ews-abnormal="{{ $ewsIsAbnormal ? 'true' : 'false' }}">
                                     <div class="px-4 py-2 {{ $bgClass }} text-white flex items-center justify-between">
@@ -921,8 +912,8 @@
                                                 </span>
                                             @endif
                                         </div>
-                                        @if($isVisible('mrn'))
-                                            <span class="text-sm">{{ $bed['mrn'] }}</span>
+                                        @if($isVisible('mrn') && $maskMrn($bed['mrn']) !== null)
+                                            <span class="text-sm">{{ $maskMrn($bed['mrn']) }}</span>
                                         @endif
                                     </div>
                                     <div class="p-3 space-y-1.5 flex-1 overflow-hidden">
@@ -934,7 +925,7 @@
                                                         d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                                 </svg>
                                                 <span class="font-semibold text-gray-800 truncate"
-                                                    title="{{ $bed['patient_name'] }}">{{ $maskPatientName($bed['patient_name']) }}</span>
+                                                    title="{{ $maskPatientName($bed['patient_name']) }}">{{ $maskPatientName($bed['patient_name']) }}</span>
                                             </div>
                                         @endif
                                         @if($isVisible('consultant'))
@@ -1003,7 +994,7 @@
                                                         <button
                                                             onclick='window.dispatchEvent(new CustomEvent("open-prebook-modal", { detail: @json($pendingPrebookData) }))'
                                                             class="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded-[4px] text-[10px] font-bold uppercase tracking-wider transition-colors shadow-sm flex-shrink-0"
-                                                            title="Prebooked for: {{ $bed['pending_prebook_patient_name'] }}">
+                                                            title="Prebooked for: {{ $maskPatientName($bed['pending_prebook_patient_name']) }}">
                                                             Prebooked
                                                         </button>
                                                     @else
@@ -1328,16 +1319,24 @@
                                                                 return [
                                                                     'name' => $name,
                                                                     'status' => $a['status'] ?? 'Active',
+                                                                    'severity' => \App\Models\Patient::allergySeverity($a),
                                                                 ];
                                                             }
                                                             $rawName = $a;
                                                             $name = str_contains($rawName, '^') ? explode('^', $rawName)[1] ?? $rawName : $rawName;
-                                                            return ['name' => $name, 'status' => 'Active'];
+                                                            return ['name' => $name, 'status' => 'Active', 'severity' => null];
                                                         });
 
                                                         $activeCount = $processedAllergies->filter(fn($a) => ($a['status'] ?? 'Active') !== 'Resolved')->count();
                                                         $totalCount = $processedAllergies->count();
                                                         $hasActive = $activeCount > 0;
+                                                        // A severe active allergy gets a marker on the bed box icon
+                                                        $severeCount = $processedAllergies->filter(fn($a) => ($a['status'] ?? 'Active') !== 'Resolved' && $a['severity'] === 'Severe')->count();
+                                                        $severityBadge = [
+                                                            'Severe' => 'bg-red-600 text-white',
+                                                            'Moderate' => 'bg-orange-500 text-white',
+                                                            'Mild' => 'bg-yellow-200 text-yellow-900',
+                                                        ];
 
                                                         $btnClass = $hasActive
                                                             ? 'bg-red-600 text-white border-red-700'
@@ -1348,12 +1347,15 @@
                                                             @click="toggle('allergy_{{ $bed['patient_id'] }}', $event.currentTarget)"
                                                             data-popover-trigger
                                                             class="w-6 h-6 text-xs rounded flex items-center justify-center cursor-pointer border {{ $btnClass }}"
-                                                            title="Allergies ({{ $hasActive ? $activeCount . ' Active' : 'Resolved' }})">
+                                                            title="Allergies ({{ $hasActive ? $activeCount . ' Active' : 'Resolved' }}{{ $severeCount ? ', ' . $severeCount . ' Severe' : '' }})">
                                                             <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                                                                 <path
                                                                     d="M12 2L1 21h22L12 2zm0 3.5L19.5 19h-15L12 5.5zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z" />
                                                             </svg>
                                                         </button>
+                                                        @if($severeCount)
+                                                            <span class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-yellow-300 border border-red-800 pointer-events-none"></span>
+                                                        @endif
                                                         <template x-teleport="body">
                                                             <div x-show="openPopover === 'allergy_{{ $bed['patient_id'] }}'"
                                                                 @click.away="closeOnAway($event)" {!! $popoverTransition !!}
@@ -1378,6 +1380,9 @@
                                                                                 <span
                                                                                     class="block text-[10px] {{ ($allergy['status'] ?? 'Active') === 'Resolved' ? 'text-green-600' : 'text-red-600' }}">
                                                                                     {{ $allergy['status'] }}
+                                                                                    @if($allergy['severity'])
+                                                                                        <span class="ml-1 px-1 rounded font-semibold uppercase tracking-wide {{ $severityBadge[$allergy['severity']] ?? 'bg-gray-200 text-gray-700' }}">{{ $allergy['severity'] }}</span>
+                                                                                    @endif
                                                                                 </span>
                                                                             </div>
                                                                         </li>
@@ -1785,7 +1790,7 @@
                                                         d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                                 </svg>
                                                 <span class="font-semibold text-gray-800 truncate"
-                                                    title="{{ $bed['patient_name'] }}">{{ $maskPatientName($bed['patient_name']) }}</span>
+                                                    title="{{ $maskPatientName($bed['patient_name']) }}">{{ $maskPatientName($bed['patient_name']) }}</span>
                                             </div>
                                         @endif
                                         @if(!empty($bed['consultant']) && $bed['consultant'] !== 'Not Assigned')
@@ -1967,7 +1972,7 @@
                                     @endif
                                     @if(($statistics['infusion_warnings'] ?? 0) > 0)
                                         <span
-                                            class="inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-gray-900 bg-amber-400 rounded-full">
+                                            class="inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-bold leading-none text-black bg-amber-400 rounded-full">
                                             {{ $statistics['infusion_warnings'] }}
                                         </span>
                                     @endif
@@ -2860,12 +2865,20 @@
     </div>
 
     <!-- Settings Modal -->
-    <div x-data="{ open: false }" 
+    <div x-data="{
+            open: false,
+            saved: false,
+            close() {
+                this.open = false;
+                if (this.saved) window.location.reload();
+            }
+         }"
          x-init="$watch('open', value => window.dispatchEvent(new CustomEvent(value ? 'pause-timer' : 'resume-timer')))"
+         @message.window="if ($event.origin === window.location.origin && $event.data && $event.data.type === 'settings-updated') saved = true"
          @open-settings-modal.window="open = true" x-show="open"
          class="fixed inset-0 z-50 overflow-y-auto" style="display: none;">
         <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-            <div x-show="open" @click="open = false" x-transition:enter="ease-out duration-300"
+            <div x-show="open" @click="close()" x-transition:enter="ease-out duration-300"
                 x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
                 x-transition:leave="ease-in duration-200" x-transition:leave-start="opacity-100"
                 x-transition:leave-end="opacity-0" class="fixed inset-0 transition-opacity" aria-hidden="true">
@@ -2907,7 +2920,7 @@
                     </div>
                 </div>
                 <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                    <button @click="open = false" type="button"
+                    <button @click="close()" type="button"
                         class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:w-auto sm:text-sm">
                         Close
                     </button>
@@ -3454,7 +3467,7 @@
                                                         :key="patient.id + '_' + patient.role">
                                                         <div class="bg-white px-2 py-1.5 rounded border border-gray-200 hover:border-cyan-400 cursor-pointer transition-colors text-xs"
                                                             @click="highlightAndFilterBeds([patient.bed_number], 'bed')"
-                                                            :title="patient.name + ' (MRN: ' + patient.mrn + ') - ' + getRoleLabel(patient.role)">
+                                                            :title="patient.name + (patient.mrn ? ' (MRN: ' + patient.mrn + ')' : '') + ' - ' + getRoleLabel(patient.role)">
                                                             <div class="flex items-center gap-1.5">
                                                                 <!-- Role indicator dot -->
                                                                 <span class="w-2 h-2 rounded-full flex-shrink-0" :class="{
@@ -3591,8 +3604,10 @@
                                                                 <div>
                                                                     <div class="font-medium text-gray-900">{{ $patient['name'] }}
                                                                     </div>
+                                                                    @if($patient['mrn'] !== null)
                                                                     <div class="text-sm text-gray-600">MRN: {{ $patient['mrn'] }}
                                                                     </div>
+                                                                    @endif
                                                                 </div>
                                                                 <div class="text-right">
                                                                     <div class="text-sm font-semibold text-pink-700">
@@ -3782,7 +3797,9 @@
                                                         <div class="flex items-center justify-between">
                                                             <div>
                                                                 <div class="font-medium text-gray-900">{{ $patient['name'] }}</div>
+                                                                @if($patient['mrn'] !== null)
                                                                 <div class="text-sm text-gray-600">MRN: {{ $patient['mrn'] }}</div>
+                                                                @endif
                                                             </div>
                                                             <div class="text-right">
                                                                 <div class="text-sm font-semibold text-purple-700">
@@ -4145,8 +4162,9 @@
                                     <p class="text-sm font-semibold text-gray-800" x-text="notification.patient_name">
                                     </p>
                                     <p class="text-xs text-gray-600">
-                                        Bed <span x-text="notification.bed_number"></span> • MRN: <span
-                                            x-text="notification.patient_mrn"></span>
+                                        Bed <span x-text="notification.bed_number"></span><template
+                                            x-if="notification.patient_mrn"><span> • MRN: <span
+                                            x-text="notification.patient_mrn"></span></span></template>
                                     </p>
                                     <template x-if="notification.type !== 'ews'">
                                         <p class="text-sm text-gray-700 mt-1.5 font-medium"

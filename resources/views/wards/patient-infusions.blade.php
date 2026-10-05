@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Patient Infusion Details</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <x-theme-style />
     <style>
         body { font-family: 'Inter', sans-serif; }
         @keyframes pulse-warning {

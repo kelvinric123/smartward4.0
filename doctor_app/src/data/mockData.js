@@ -422,3 +422,22 @@ export const consultantBeds = [
     ],
   },
 ];
+
+// What Patient Details added for each demo patient: the VIP status and the
+// allergies with their severity (optional, as ADT may not send one). The oxygen
+// and the lab results come from the demo charts (src/data/mockChart.js), and
+// src/data/demoDashboard.js puts the dashboard together from both.
+const allergy = (name, severity = null, resolved = false) => ({
+  name,
+  severity,
+  resolved,
+  label: severity ? `${name} (${severity})` : name,
+});
+
+export const patientExtras = {
+  5001: { allergy_list: [allergy('Penicillin', 'Severe'), allergy('Latex')] },
+  5003: { vip_status: 'VIP', allergy_list: [allergy('Sulfa drugs', 'Moderate')] },
+  6001: { allergy_list: [allergy('Aspirin', 'Mild', true)] },
+  6002: { vip_status: 'VVIP', allergy_list: [allergy('Seafood', 'Severe'), allergy('Peanuts', 'Unknown')] },
+  7001: { allergy_list: [allergy('Contrast media', 'Moderate')] },
+};

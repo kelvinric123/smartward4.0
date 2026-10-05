@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shift Settings</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <x-theme-style />
     <style>
         body {
             font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;

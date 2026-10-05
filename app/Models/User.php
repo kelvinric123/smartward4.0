@@ -84,6 +84,8 @@ class User extends Authenticatable
             'deactivated_at' => 'datetime',
             'api_token_created_at' => 'datetime',
             'api_token_last_used_at' => 'datetime',
+            // Display mode and colours (App\Support\UserTheme)
+            'theme' => 'array',
         ];
     }
 

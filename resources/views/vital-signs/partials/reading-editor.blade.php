@@ -90,6 +90,12 @@
             <p class="mt-1 text-[11px] text-gray-500" x-show="!onOxygen()">
                 Flow rate and FiO₂ apply once a delivery device other than room air is selected.
             </p>
+            @if (!empty($oxygenPrefill))
+                <p class="mt-1 text-[11px] text-sky-700" x-show="editorMode === 'add'" x-cloak>
+                    Filled in from the oxygen the patient is on now ({{ $currentOxygen['short'] }}).
+                    If it has changed, record the new oxygen here and Oxygen Therapy will show it.
+                </p>
+            @endif
         </div>
 
         <div class="mt-3">

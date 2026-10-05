@@ -7,9 +7,10 @@
     $scoresByScale = $assessmentScores->groupBy('clinical_indicator_id');
     $lowGlucose = $glucoseReadings->filter(fn($reading) => $reading->isLow())->count();
     $highGlucose = $glucoseReadings->filter(fn($reading) => $reading->isHigh())->count();
-    $scoreLine = fn($score) => $score->isReadings()
-        // Monitor readings (hemodynamic numerics): the values tell the story, the score is only the worst flag
-        ? trim(($score->band_label ? $score->band_label . ' · ' : '') . $score->breakdown())
+    $scoreLine = fn($score) => !$score->hasTotal()
+        // Monitor readings (hemodynamic numerics) and screens (C-SSRS): the values or answers tell the
+        // story, the score is only the worst flag or the most serious answer
+        ? implode(' · ', array_filter([$score->band_label, $score->breakdown()]))
         : trim($score->score . ($score->band_label ? ' · ' . $score->band_label : '') . ($score->breakdown() ? ' (' . $score->breakdown() . ')' : ''));
 @endphp
 

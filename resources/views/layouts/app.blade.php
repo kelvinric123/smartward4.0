@@ -23,7 +23,7 @@
     <x-theme-style :hospital="$hospital" />
 </head>
 
-<body class="font-sans antialiased bg-gradient-to-br from-brand-50 via-accent-50 to-brand-50 overflow-hidden">
+<body class="font-sans antialiased bg-gradient-to-br from-backdrop-50 via-accent-50 to-backdrop-50 overflow-hidden">
     <div class="flex h-screen min-h-0" x-data="{ hideNav: false, hideFooter: false }"
         @fullscreenchange.window="hideNav = !!document.fullscreenElement"
         @toggle-custom-fullscreen.window="hideNav = $event.detail.enabled; hideFooter = $event.detail.enabled">

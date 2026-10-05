@@ -79,6 +79,8 @@ export default function BedCard({ bed, doctorName, demo, onChartChanged }) {
     setTrendMetric(metricKey);
     setTrendOpen(true);
   };
+  const oxygen = bed.oxygen ?? null;
+  const activeAllergies = (bed.allergy_list ?? []).filter((a) => !a.resolved);
   const ews = bed.ews_has_vitals ? bed.ews : null;
   const ewsBadge = ewsTone(ews);
   const headerBg = headerBgFor(bed.status);
@@ -96,6 +98,13 @@ export default function BedCard({ bed, doctorName, demo, onChartChanged }) {
             <View style={styles.pillRow}>
               <Pill label={`BED ${bed.number}`} bg="rgba(255,255,255,0.16)" color="#dbeafe" />
               <Pill label={bed.ward_name} bg="rgba(255,255,255,0.10)" color="#bfdbfe" />
+              {bed.vip_status ? (
+                <Pill
+                  label={bed.vip_status}
+                  bg={bed.vip_status === 'VVIP' ? '#fbbf24' : colors.amber100}
+                  color="#451a03"
+                />
+              ) : null}
             </View>
             <Text style={styles.patientName} numberOfLines={1}>
               {bed.patient_name ?? 'Unoccupied Bed'}
@@ -114,7 +123,16 @@ export default function BedCard({ bed, doctorName, demo, onChartChanged }) {
 
       <View style={styles.body}>
         <View style={styles.flagRow}>
-          {bed.pending_review ? (
+          {/* Lab results waiting for review (Patient Details > Lab Investigations) */}
+          {bed.labs ? (
+            <TouchableOpacity onPress={() => openChart('labs')} activeOpacity={0.8}>
+              <Pill
+                label={`${bed.labs.awaiting_review} RESULT${bed.labs.awaiting_review > 1 ? 'S' : ''} TO REVIEW${bed.labs.overdue ? ` · ${bed.labs.overdue} OVERDUE` : ''}`}
+                bg={bed.labs.overdue || bed.labs.critical ? colors.rose100 : colors.amber100}
+                color={bed.labs.overdue || bed.labs.critical ? colors.rose700 : colors.amber700}
+              />
+            </TouchableOpacity>
+          ) : bed.pending_review ? (
             <Pill label="REVIEW DUE" bg={colors.amber100} color={colors.amber700} />
           ) : null}
           {bed.pending_orders > 0 ? (
@@ -132,7 +150,20 @@ export default function BedCard({ bed, doctorName, demo, onChartChanged }) {
           ) : null}
         </View>
 
-        {/* The patient chart: the same I/O chart, medications and orders the ward works from */}
+        {activeAllergies.length ? (
+          <View style={styles.allergyBox}>
+            <Text style={styles.allergyTitle}>⚠ ALLERGIES</Text>
+            <Text style={styles.allergyText}>
+              {activeAllergies.map((a, i) => (
+                <Text key={`${a.name}-${i}`} style={a.severity === 'Severe' && styles.allergySevere}>
+                  {i ? '  ·  ' : ''}{a.label}
+                </Text>
+              ))}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* The patient chart: the same I/O chart, medications, orders, oxygen and labs the ward works from */}
         <View style={styles.chartRow}>
           <TouchableOpacity style={styles.chartBtn} activeOpacity={0.8} onPress={() => openChart('io')}>
             <Text style={styles.chartBtnLabel}>I/O CHART</Text>
@@ -157,6 +188,31 @@ export default function BedCard({ bed, doctorName, demo, onChartChanged }) {
             <Text style={styles.chartBtnLabel}>ORDERS</Text>
             <Text style={styles.chartBtnValue} numberOfLines={1}>
               {bed.pending_orders > 0 ? `${bed.pending_orders} open` : 'Write ›'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <View style={[styles.chartRow, { marginTop: 8 }]}>
+          <TouchableOpacity style={styles.chartBtn} activeOpacity={0.8} onPress={() => openChart('oxygen')}>
+            <Text style={styles.chartBtnLabel}>OXYGEN</Text>
+            <Text
+              style={[
+                styles.chartBtnValue,
+                oxygen?.spo2_state === 'below' && { color: colors.rose700 },
+                oxygen?.spo2_state === 'above' && { color: colors.amber700 },
+              ]}
+              numberOfLines={1}
+            >
+              {oxygen ? (oxygen.on_oxygen ? oxygen.short : 'Room air') : 'Open ›'}
+              {oxygen?.on_oxygen && oxygen.target_label ? <Text style={styles.chartBtnSub}>  ·  {oxygen.target_label}</Text> : null}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.chartBtn} activeOpacity={0.8} onPress={() => openChart('labs')}>
+            <Text style={styles.chartBtnLabel}>LABS</Text>
+            <Text
+              style={[styles.chartBtnValue, (bed.labs?.overdue || bed.labs?.critical) ? { color: colors.rose700 } : null]}
+              numberOfLines={1}
+            >
+              {bed.labs ? `${bed.labs.awaiting_review} to review` : 'Results ›'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -624,6 +680,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: colors.slate900,
+  },
+  chartBtnSub: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.muted,
+  },
+  allergyBox: {
+    marginBottom: 10,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.rose100,
+    backgroundColor: colors.rose50,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  allergyTitle: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: colors.rose700,
+  },
+  allergyText: {
+    marginTop: 3,
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.rose700,
+  },
+  allergySevere: {
+    fontWeight: '900',
+    textDecorationLine: 'underline',
   },
   chartLink: {
     fontSize: 11,

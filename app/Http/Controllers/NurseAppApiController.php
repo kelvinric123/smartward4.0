@@ -8,6 +8,8 @@ use App\Models\ConsultantOrder;
 use App\Models\DietType;
 use App\Models\Infusion;
 use App\Models\IsolationType;
+use App\Models\LabInvestigation;
+use App\Models\NurseRosterRequest;
 use App\Models\Nurse;
 use App\Models\Patient;
 use App\Models\PatientCareProvider;
@@ -18,6 +20,10 @@ use App\Models\VitalSign;
 use App\Models\Ward;
 use App\Models\WardNotification;
 use App\Models\WardScheduleAssignment;
+use App\Services\LabInvestigations;
+use App\Services\NurseApp\NurseAppSchedule;
+use App\Services\NurseScheduling\NurseRoster;
+use App\Support\ClinicalIndicatorMonitoring;
 use App\Support\FluidBalanceChart;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -202,6 +208,13 @@ class NurseAppApiController extends Controller
         $alerts = $allInfusions->where('is_warning', true)->count()
             + $allInfusions->where('status', Infusion::STATUS_ALARMING)->count();
 
+        // Workload per bed, scored as the AI Nurse Schedule scores it, and my share of the shift
+        $workload = NurseAppSchedule::workload(collect($beds)->pluck('ward_id')->push($ward?->id));
+        foreach ($beds as $i => $row) {
+            $beds[$i]['workload'] = $workload['beds'][$row['id']] ?? null;
+        }
+        $myLoad = $workload['loads'][$nurse->id] ?? null;
+
         return response()->json([
             'nurse' => $this->nursePayload($nurse),
             'current_shift' => $currentShift ? [
@@ -222,9 +235,49 @@ class NurseAppApiController extends Controller
                 'open_orders' => collect($beds)->sum(fn($b) => $b['badges']['orders_open']),
                 'doses_overdue' => collect($beds)->sum(fn($b) => $b['badges']['meds_overdue']),
                 'pending_alerts' => collect($beds)->sum(fn($b) => $b['badges']['alerts_pending']),
+                'labs_to_review' => collect($beds)->sum(fn($b) => $b['badges']['labs_review'] ?? 0),
+                // My beds' workload against the shift average on the ward (heavy / even / light)
+                'my_load' => $myLoad ? [
+                    'score' => $myLoad['score'],
+                    'beds' => $myLoad['beds'],
+                    'patients' => $myLoad['patients'],
+                    'level' => $myLoad['level'],
+                    'team_average' => $myLoad['team_average'],
+                    'team_size' => $myLoad['team_size'],
+                ] : null,
             ],
+            'schedule' => $this->schedulePayload($nurse),
             'beds' => $beds,
         ]);
+    }
+
+    /**
+     * The roster at a glance for the dashboard: today and tomorrow, swaps colleagues
+     * asked of me, my requests decided lately, and whether a week of my roster is
+     * waiting to be acknowledged (new, or changed since I saw it).
+     */
+    private function schedulePayload(Nurse $nurse): array
+    {
+        $days = NurseRoster::days($nurse, now()->startOfDay(), 2);
+        $weeks = [NurseRoster::week($nurse, now()), NurseRoster::week($nurse, now()->addWeek())];
+        $toAcknowledge = collect($weeks)
+            ->filter(fn (array $week) => $week['totals']['shifts'] > 0 && $week['acknowledgement']['state'] !== 'seen')
+            ->map(fn (array $week) => ['start' => $week['start'], 'label' => $week['label'], 'state' => $week['acknowledgement']['state']])
+            ->values();
+
+        return [
+            'today' => $days[0],
+            'tomorrow' => $days[1],
+            'swaps_to_answer' => NurseRosterRequest::where('colleague_id', $nurse->id)
+                ->where('status', NurseRosterRequest::STATUS_AWAITING_COLLEAGUE)
+                ->count(),
+            'requests_open' => NurseRosterRequest::where('nurse_id', $nurse->id)->open()->count(),
+            'requests_decided' => NurseRosterRequest::where('nurse_id', $nurse->id)
+                ->whereIn('status', [NurseRosterRequest::STATUS_APPROVED, NurseRosterRequest::STATUS_DECLINED])
+                ->where('decided_at', '>=', now()->subDay())
+                ->count(),
+            'to_acknowledge' => $toAcknowledge->all(),
+        ];
     }
 
     /**
@@ -261,6 +314,8 @@ class NurseAppApiController extends Controller
             ->groupBy('patient_id')
             ->get()
             ->keyBy('patient_id');
+        $labs = $this->labBadges($patients);
+        $assessments = ClinicalIndicatorMonitoring::forPatients($patients);
 
         $badges = [];
         foreach ($ids as $id) {
@@ -273,10 +328,50 @@ class NurseAppApiController extends Controller
                 'alerts_pending' => (int) ($alerts[$id] ?? 0),
                 'transfusions_running' => (int) ($transfusions[$id]->running_count ?? 0),
                 'transfusions_pending' => (int) ($transfusions[$id]->pending_count ?? 0),
+                'labs_review' => $labs[$id]['review'] ?? 0,
+                'labs_overdue' => $labs[$id]['overdue'] ?? 0,
+                'labs_critical' => $labs[$id]['critical'] ?? 0,
+                'assess_overdue' => (int) ($assessments[$id]['overdue'] ?? 0),
+                'assess_due' => (int) ($assessments[$id]['due'] ?? 0),
             ];
         }
 
         return $badges;
+    }
+
+    /**
+     * Lab results waiting for review per patient: how many, how many overdue,
+     * and how many critical. None while the ward has Lab Investigations off;
+     * sample results count while sample data is on (and are made here, so a
+     * bed shows them before its chart is first opened).
+     *
+     * @return array<int, array{review: int, overdue: int, critical: int}>
+     */
+    private function labBadges(\Illuminate\Support\Collection $patients): array
+    {
+        $settings = LabInvestigations::settings();
+        if (!$settings['enabled']) {
+            return [];
+        }
+
+        if ($settings['sample']) {
+            $patients->each(fn (Patient $patient) => LabInvestigations::ensureSamples($patient));
+        }
+
+        $now = now();
+
+        return LabInvestigation::whereIn('patient_id', $patients->pluck('id'))
+            ->when(!$settings['sample'], fn ($query) => $query->where('source', LabInvestigation::SOURCE_HIS))
+            ->where('status', 'resulted')
+            ->whereNull('reviewed_at')
+            ->get()
+            ->groupBy('patient_id')
+            ->map(fn ($labs) => [
+                'review' => $labs->count(),
+                'overdue' => $labs->filter(fn (LabInvestigation $lab) => $lab->reviewState($now) === 'overdue')->count(),
+                'critical' => $labs->filter(fn (LabInvestigation $lab) => $lab->resultFlag() === 'critical')->count(),
+            ])
+            ->all();
     }
 
     // ------------------------------------------------------------------

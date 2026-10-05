@@ -16,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/infusion/*',
             'api/adt/*',
             'api/cplus/*',
+            'api/his/*',
             'api/v1/*',
             'api/doctor/*',
             'api/nurse/*',

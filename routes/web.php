@@ -69,6 +69,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::patch('/profile/theme', [ProfileController::class, 'updateTheme'])->name('profile.theme.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
     Route::post('/profile/logos', [ProfileController::class, 'updateLogos'])->name('profile.logos.update');
 
@@ -205,6 +206,9 @@ Route::middleware('auth')->group(function () {
     Route::delete('/ward-schedule/ai/leaves/{leave}', [\App\Http\Controllers\AiNurseScheduleController::class, 'destroyLeave'])->name('ward.ai-schedule.leaves.destroy');
     Route::post('/ward-schedule/ai/holidays', [\App\Http\Controllers\AiNurseScheduleController::class, 'storeHoliday'])->name('ward.ai-schedule.holidays.store');
     Route::delete('/ward-schedule/ai/holidays/{holiday}', [\App\Http\Controllers\AiNurseScheduleController::class, 'destroyHoliday'])->name('ward.ai-schedule.holidays.destroy');
+    // Leave and shift-swap requests from the nurse app
+    Route::post('/ward-schedule/ai/requests/{rosterRequest}/approve', [\App\Http\Controllers\AiNurseScheduleController::class, 'approveRequest'])->name('ward.ai-schedule.requests.approve');
+    Route::post('/ward-schedule/ai/requests/{rosterRequest}/decline', [\App\Http\Controllers\AiNurseScheduleController::class, 'declineRequest'])->name('ward.ai-schedule.requests.decline');
 
     // Shift Settings Routes
     Route::get('/ward-schedule/shift-settings', [ShiftSettingController::class, 'index'])->name('ward.shift-settings');
@@ -229,6 +233,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/ward-dashboard/patient-movements', [WardDashboardController::class, 'storeMovement'])->name('ward.patient-movements.store');
     Route::post('/ward-dashboard/patient-movements/{movement}/send', [WardDashboardController::class, 'sendMovement'])->name('ward.patient-movements.send');
     Route::post('/ward-dashboard/patient-movements/{movement}/return', [WardDashboardController::class, 'returnMovement'])->name('ward.patient-movements.return');
+    Route::post('/ward-dashboard/lab-investigations/{labInvestigation}/review', [\App\Http\Controllers\LabInvestigationController::class, 'review'])->name('ward.lab-investigations.review');
+    Route::post('/ward-dashboard/settings/lab-investigations', [\App\Http\Controllers\LabInvestigationController::class, 'updateSettings'])->name('ward.lab-investigations.settings');
     Route::post('/ward-dashboard/patient-referrals', [WardDashboardController::class, 'storeReferral'])->name('ward.patient-referrals.store');
     Route::post('/ward-dashboard/transfer-bed', [WardDashboardController::class, 'transferBed'])->name('ward.transfer-bed');
     Route::post('/ward-dashboard/discharge-patient', [WardDashboardController::class, 'dischargePatient'])->name('ward.discharge-patient');
@@ -264,6 +270,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/ward-dashboard/fluid-balance/entries/{entry}/void', [FluidBalanceController::class, 'void'])->name('ward.fluid-balance.void');
     Route::post('/ward-dashboard/fluid-balance/plan', [FluidBalanceController::class, 'savePlan'])->name('ward.fluid-balance.plan');
     Route::post('/ward-dashboard/fluid-balance/assessments', [FluidBalanceController::class, 'storeAssessment'])->name('ward.fluid-balance.assessments.store');
+
+    // Oxygen Therapy Routes (Patient Details > Oxygen Therapy tab)
+    Route::post('/ward-dashboard/oxygen-therapy', [\App\Http\Controllers\OxygenTherapyController::class, 'store'])->name('ward.oxygen-therapy.store');
+    Route::post('/ward-dashboard/oxygen-therapy/{change}/void', [\App\Http\Controllers\OxygenTherapyController::class, 'void'])->name('ward.oxygen-therapy.void');
 
     Route::post('/ward-dashboard/settings/clinical-options', [WardDashboardController::class, 'updateClinicalIndicatorOptions'])->name('ward.settings.clinical-options');
     Route::get('/ward-dashboard/slideshow-viewer', [WardDashboardController::class, 'slideshowViewer'])->name('ward.slideshow-viewer');
@@ -421,6 +431,11 @@ Route::prefix('api/cplus')->middleware([\App\Http\Middleware\AuthenticateIntegra
     Route::post('/bed-sync', [\App\Http\Controllers\Api\CplusBedSyncController::class, 'sync']);
 });
 
+// HIS lab orders and results (no CSRF; bearer token of an Integration User)
+Route::prefix('api/his')->middleware([\App\Http\Middleware\AuthenticateIntegrationUser::class, 'throttle:120,1'])->group(function () {
+    Route::post('/lab-investigations', [\App\Http\Controllers\Api\HisLabInvestigationController::class, 'store'])->name('api.his.lab-investigations');
+});
+
 // Public API V1 Routes for Vital Sign Gateway (Raspberry Pi - comennc5)
 // Uses X-Passphrase header + username/password per-request authentication
 Route::prefix('api/v1')->group(function () {
@@ -456,6 +471,8 @@ Route::prefix('api/doctor')->group(function () {
     Route::get('/patients/{patient}/chart', [\App\Http\Controllers\DoctorAppPatientController::class, 'show']);
     Route::post('/patients/{patient}/orders', [\App\Http\Controllers\DoctorAppPatientController::class, 'storeOrder']);
     Route::post('/patients/{patient}/orders/{order}/cancel', [\App\Http\Controllers\DoctorAppPatientController::class, 'cancelOrder']);
+    // Lab Investigations: mark a result reviewed
+    Route::post('/patients/{patient}/labs/{lab}/review', [\App\Http\Controllers\DoctorAppPatientController::class, 'reviewLab']);
 });
 
 // Public API Routes for the Nurse mobile app (token auth, no CSRF)
@@ -486,6 +503,19 @@ Route::prefix('api/nurse')->group(function () {
     Route::post('/patients/{patient}/care-plan/{item}/update', [\App\Http\Controllers\NurseAppPatientController::class, 'updateCarePlanItem']);
     Route::post('/patients/{patient}/care-plan/{item}/evaluate', [\App\Http\Controllers\NurseAppPatientController::class, 'evaluateCarePlanItem']);
     Route::post('/patients/{patient}/care-plan/{item}/close', [\App\Http\Controllers\NurseAppPatientController::class, 'closeCarePlanItem']);
+    Route::post('/patients/{patient}/labs/{lab}/review', [\App\Http\Controllers\NurseAppPatientController::class, 'reviewLab']);
+    Route::post('/patients/{patient}/oxygen', [\App\Http\Controllers\NurseAppPatientController::class, 'storeOxygen']);
+    Route::post('/patients/{patient}/oxygen/{change}/void', [\App\Http\Controllers\NurseAppPatientController::class, 'voidOxygen']);
+    Route::post('/patients/{patient}/assessments/{indicator}', [\App\Http\Controllers\NurseAppPatientController::class, 'storeAssessment']);
+
+    // The nurse's roster (AI Nurse Schedule), leave and swap requests, and the ward team on shift
+    Route::get('/roster', [\App\Http\Controllers\NurseAppRosterController::class, 'show']);
+    Route::post('/roster/acknowledge', [\App\Http\Controllers\NurseAppRosterController::class, 'acknowledge']);
+    Route::get('/roster/colleagues', [\App\Http\Controllers\NurseAppRosterController::class, 'colleagues']);
+    Route::post('/requests', [\App\Http\Controllers\NurseAppRosterController::class, 'storeRequest']);
+    Route::post('/requests/{rosterRequest}/cancel', [\App\Http\Controllers\NurseAppRosterController::class, 'cancelRequest']);
+    Route::post('/requests/{rosterRequest}/respond', [\App\Http\Controllers\NurseAppRosterController::class, 'respondRequest']);
+    Route::get('/team', [\App\Http\Controllers\NurseAppRosterController::class, 'team']);
     Route::post('/notifications/{notification}/respond', [\App\Http\Controllers\NurseAppPatientController::class, 'respondNotification']);
 });
 

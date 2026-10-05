@@ -145,6 +145,59 @@ class PatientAdditionalInfoSourcesTest extends TestCase
         $this->assertEquals([$this->adtAllergy, 'Latex'], $patient->fresh()->allergies);
     }
 
+    public function test_new_allergy_can_carry_an_optional_severity(): void
+    {
+        PatientInfoSources::save(['allergies' => 'manual']);
+        $patient = $this->makePatient();
+
+        // Severity is stored the same way the ADT feed sends it (AL1-4)
+        $this->saveAdditionalInfo($patient, [
+            'allergies_managed' => 1,
+            'allergies_kept' => [json_encode('Peanuts')],
+            'new_allergy' => 'Latex',
+            'new_allergy_severity' => 'SV',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertEquals([
+            'Peanuts',
+            ['allergen' => 'Latex', 'severity_code' => 'SV', 'severity' => 'Severe', 'status' => 'Active'],
+        ], $patient->fresh()->allergies);
+
+        // An unknown severity code is rejected and nothing is saved
+        $this->saveAdditionalInfo($patient, [
+            'allergies_managed' => 1,
+            'new_allergy' => 'Dust',
+            'new_allergy_severity' => 'XX',
+        ])->assertSessionHasErrors('new_allergy_severity');
+
+        $this->assertCount(2, $patient->fresh()->allergies);
+    }
+
+    public function test_patient_details_show_allergy_severity_when_present(): void
+    {
+        $patient = $this->makePatient();
+        // ADT entry with a severity code only, and one with no severity at all
+        $patient->update(['allergies' => [
+            ['allergen' => 'PEN^Penicillin', 'severity_code' => 'MO', 'status' => 'Active'],
+            'Peanuts',
+        ]]);
+
+        $html = $this->actingAs(User::factory()->create())
+            ->get(route('ward.patient-details', ['patient_id' => $patient->id, 'active_tab' => 'additional']))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('"name":"Penicillin","status":"Active","severity":"Moderate"', $html);
+        $this->assertStringContainsString('"name":"Peanuts","status":"Active","severity":null', $html);
+
+        // The editor offers severity as optional
+        PatientInfoSources::save(['allergies' => 'manual']);
+        $this->actingAs(User::factory()->create())
+            ->get(route('ward.patient-details', ['patient_id' => $patient->id, 'active_tab' => 'additional']))
+            ->assertSee('name="new_allergy_severity"', false)
+            ->assertSee('Not specified');
+    }
+
     public function test_directly_managed_fall_risk_can_be_set(): void
     {
         PatientInfoSources::save(['fall_risk' => 'manual']);

@@ -2,6 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Display modes (tailwind.config.js, App\Support\UserTheme) */
+@layer base {
+    /* Text with no colour class: black, as browsers draw it, until Dark or Sol re-colours it */
+    html {
+        color: rgb(var(--text-default, 0 0 0));
+    }
+
+    /* @tailwindcss/forms paints fields and checkboxes #fff; they follow the
+       surface instead, which is still white unless Dark or Sol is on */
+    [type='text'], input:where(:not([type])), [type='email'], [type='url'], [type='password'],
+    [type='number'], [type='date'], [type='datetime-local'], [type='month'], [type='search'],
+    [type='tel'], [type='time'], [type='week'], [multiple], textarea, select,
+    [type='checkbox'], [type='radio'] {
+        background-color: rgb(var(--bg-white, 255 255 255));
+    }
+}
+
+@layer components {
+    /* The plugin's class-based checkboxes and radios, likewise */
+    .form-checkbox, .form-radio {
+        background-color: rgb(var(--bg-white, 255 255 255));
+    }
+}
+
 /* Alpine.js x-cloak directive */
 [x-cloak] {
     display: none !important;

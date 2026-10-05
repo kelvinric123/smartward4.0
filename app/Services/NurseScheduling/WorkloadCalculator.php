@@ -92,7 +92,8 @@ final class WorkloadCalculator
             if (!in_array($patient->isolation_type, [null, '', 'none'], true)) {
                 $add('Isolation', 'isolation');
             }
-            if (in_array($patient->fall_risk, ['high', 'alert_active'], true)) {
+            // The ADT feed sends an active fall risk alert as 1
+            if (in_array((string) $patient->fall_risk, ['high', 'alert_active', '1'], true)) {
                 $add('High fall risk', 'fall_risk');
             }
             if (isset($withInfusion[$patient->id])) {

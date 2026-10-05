@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Support\ClinicalIndicatorLibrary;
 use App\Support\ClinicalIndicatorReadings;
+use App\Support\ClinicalIndicatorScreen;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -76,12 +77,32 @@ class ClinicalIndicatorScore extends Model
     }
 
     /**
+     * A screen asked question by question (the C-SSRS) rather than a scale
+     * totalled item by item. Its score is only the most serious answer, so
+     * the band and the answers are what to show.
+     */
+    public function isScreen(): bool
+    {
+        return !empty($this->item_scores) && array_key_exists('asked', $this->item_scores[0]);
+    }
+
+    /**
+     * Whether the score is a total worth showing. Readings and screens keep
+     * only the level their worst reading or most serious answer reached.
+     */
+    public function hasTotal(): bool
+    {
+        return !$this->isReadings() && !$this->isScreen();
+    }
+
+    /**
      * The item breakdown in its conventional short form, such as E3 V4 M6 for
      * GCS, where the total alone would hide which response changed. Null for
      * scales whose items carry no abbr, which are read by their total.
      *
      * Readings come back as the values with their units, arrows marking any
      * outside the normal range, e.g. ABP 85/42 (56) mmHg ↓↓ · CVP 12 mmHg ↑.
+     * A screen gives the questions answered yes, e.g. Yes to Q1, Q2.
      */
     public function breakdown(): ?string
     {
@@ -91,6 +112,10 @@ class ClinicalIndicatorScore extends Model
 
         if ($this->isReadings()) {
             return ClinicalIndicatorReadings::summary($this->item_scores, $this->clinicalIndicator?->definition());
+        }
+
+        if ($this->isScreen()) {
+            return ClinicalIndicatorScreen::summary($this->item_scores);
         }
 
         $parts = [];

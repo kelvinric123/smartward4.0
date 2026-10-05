@@ -4,12 +4,15 @@ namespace App\Services\NurseApp;
 
 use App\Http\Controllers\WardDashboardController;
 use App\Models\BloodTransfusion;
+use App\Models\ClinicalIndicator;
+use App\Models\ClinicalIndicatorScore;
 use App\Models\ConsultantOrder;
 use App\Models\FluidBalanceEntry;
 use App\Models\FluidBalancePlan;
 use App\Models\FluidOverloadAssessment;
 use App\Models\Infusion;
 use App\Models\MedicationAdministration;
+use App\Models\OxygenTherapyChange;
 use App\Models\Nurse;
 use App\Models\Patient;
 use App\Models\PatientCareProvider;
@@ -22,6 +25,9 @@ use App\Services\EngineInfusionService;
 use App\Services\InfusionEngineClient;
 use App\Services\NursingPlan\NursingCarePlan;
 use App\Services\NursingPlan\ShiftTasks;
+use App\Services\PatientChartSections;
+use App\Support\ClinicalIndicatorLibrary;
+use App\Support\ClinicalIndicatorMonitoring;
 use App\Support\FluidBalanceChart;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
@@ -31,7 +37,8 @@ use Illuminate\Support\Facades\Log;
  * Everything the nurse app's patient screen shows, as one JSON-ready array:
  * the patient, latest vitals, consultant orders, the I/O chart for one chart
  * day, medication orders, infusions and blood transfusions, pending alerts,
- * and a badge count per tab.
+ * lab investigations, oxygen therapy, the ward's assessment scales, and a
+ * badge count per tab.
  *
  * It reads the same models and helpers the ward dashboard's Patient Details
  * uses (ConsultantOrder::tabFor, FluidBalanceChart::forPatient,
@@ -70,7 +77,7 @@ class NurseAppPatientBundle
 
     public static function build(Patient $patient, Nurse $nurse, ?string $ioDay = null): array
     {
-        $patient->loadMissing(['ward', 'consultant', 'nurse', 'anaesthetist']);
+        $patient->loadMissing(['ward.wardType.clinicalIndicators', 'consultant', 'nurse', 'anaesthetist']);
         $infusions = self::infusions($patient);
 
         $bundle = [
@@ -82,6 +89,9 @@ class NurseAppPatientBundle
             'infusions' => $infusions,
             'transfusions' => self::transfusions($patient),
             'alerts' => self::alerts($patient),
+            'labs' => PatientChartSections::labs($patient),
+            'oxygen' => PatientChartSections::oxygen($patient) + ['options' => self::oxygenOptions()],
+            'assessments' => self::assessments($patient),
             // Nursing plan: the care plan, and what is due this shift (given
             // the infusions already read, so the engine is asked only once)
             'nursing_plan' => [
@@ -108,6 +118,12 @@ class NurseAppPatientBundle
             'transfusion_critical' => collect($bundle['transfusions']['exceptions'])->where('level', 'critical')->count(),
             'care_plan_due' => $bundle['nursing_plan']['care_plan']['due_evaluations'],
             'shift_overdue' => $bundle['nursing_plan']['shift']['counts']['overdue'],
+            'labs_review' => $bundle['labs']['counts']['awaiting_review'],
+            'labs_overdue' => $bundle['labs']['counts']['overdue'],
+            'labs_critical' => $bundle['labs']['counts']['critical'],
+            'oxygen_level' => $bundle['oxygen']['alert'],
+            'assess_overdue' => $bundle['assessments']['counts']['overdue'],
+            'assess_due' => $bundle['assessments']['counts']['due'],
         ];
 
         return $bundle;
@@ -121,12 +137,15 @@ class NurseAppPatientBundle
             ->where('role', PatientCareProvider::ROLE_ATTENDING)
             ->first();
         $clinical = app(DischargeSummaryRecords::class)->clinicalAlerts($patient);
+        $discharge = $patient->expectedDischarge();
+        $payorDetail = $patient->payor_name ?: (Patient::PAYOR_TYPES[$patient->payor_type] ?? null);
 
         return [
             'id' => $patient->id,
             'name' => $patient->name,
             'alias_name' => $patient->alias_name,
             'mrn' => $patient->mrn,
+            'rn' => $patient->rn,
             'gender' => $patient->gender,
             'age' => $patient->age,
             'bed' => $patient->bed_number,
@@ -136,7 +155,26 @@ class NurseAppPatientBundle
             'status_label' => $patient->statusLabel(),
             'admitted_label' => $patient->admitted_at?->format('d M Y, H:i'),
             'stay_label' => $patient->admitted_at ? $patient->lengthOfStayLabel() : null,
-            'expected_discharge_label' => $patient->expected_discharge_at?->format('d M Y, H:i'),
+            // Recorded, or projected from the estimated length of stay (then a date only)
+            'expected_discharge_label' => $discharge['at']?->format($discharge['projected'] ? 'd M Y' : 'd M Y, H:i'),
+            'expected_discharge' => $discharge['at'] ? [
+                'label' => $discharge['at']->format($discharge['projected'] ? 'd M Y' : 'd M Y, H:i'),
+                'projected' => $discharge['projected'],
+                'relative' => $discharge['relative'],
+                'tone' => match (true) {
+                    $discharge['relative'] === null => null,
+                    str_starts_with($discharge['relative'], 'Overdue') => 'critical',
+                    in_array($discharge['relative'], ['Today', 'Tomorrow'], true) => 'warning',
+                    default => 'info',
+                },
+            ] : null,
+            'vip' => $patient->vipStatusLabel(),
+            'payor' => $patient->payorStatusLabel() || $payorDetail ? [
+                'status' => $patient->payor_status,
+                'status_label' => $patient->payorStatusLabel(),
+                'detail' => $payorDetail,
+            ] : null,
+            'coe' => collect($patient->coe_indicators ?? [])->filter()->values()->all(),
             'consultant' => $attending?->display_name ?? $patient->consultant?->name,
             'anaesthetist' => $patient->anaesthetist?->name,
             'primary_nurse' => $patient->nurse?->name,
@@ -651,6 +689,139 @@ class NurseAppPatientBundle
             'completed_label' => $unit->completed_at ? self::when($unit->completed_at) : null,
             'took_minutes' => $unit->isFinished() ? (int) $unit->elapsedMinutes() : null,
             'stop_reason' => $unit->stop_reason,
+        ];
+    }
+
+    // -------------------------------------------------------------- oxygen
+
+    /** What the change-oxygen form offers: devices with their usual settings, targets and limits. */
+    private static function oxygenOptions(): array
+    {
+        return [
+            'devices' => collect(VitalSign::OXYGEN_DELIVERY_OPTIONS)
+                ->map(fn (string $label, string $key) => [
+                    'key' => $key,
+                    'label' => $label,
+                    'room_air' => $key === VitalSign::OXYGEN_ROOM_AIR,
+                    'flow' => OxygenTherapyChange::DEVICE_GUIDE[$key]['flow'] ?? [],
+                    'fio2' => OxygenTherapyChange::DEVICE_GUIDE[$key]['fio2'] ?? [],
+                    'hint' => OxygenTherapyChange::DEVICE_GUIDE[$key]['hint'] ?? null,
+                ])
+                ->values()
+                ->all(),
+            'targets' => OxygenTherapyChange::TARGET_PRESETS,
+            'flow_min' => OxygenTherapyChange::FLOW_MIN,
+            'flow_max' => OxygenTherapyChange::FLOW_MAX,
+            'fio2_min' => OxygenTherapyChange::FIO2_MIN,
+            'fio2_max' => OxygenTherapyChange::FIO2_MAX,
+            'target_min' => OxygenTherapyChange::TARGET_MIN,
+            'target_max' => OxygenTherapyChange::TARGET_MAX,
+        ];
+    }
+
+    // --------------------------------------------------------- assessments
+
+    /**
+     * The assessment scales the patient's ward is set up for (its ward type), as Patient
+     * Details shows them: the latest score and its band, recent scores, and when the scale
+     * is next due where monitoring is switched on. Scales scored item by item, or by a
+     * total typed in, can be scored in the app; a screen asked question by question
+     * (the C-SSRS) and monitor readings are recorded on the ward dashboard.
+     */
+    private static function assessments(Patient $patient): array
+    {
+        $wardType = $patient->ward?->wardType;
+        $indicators = $wardType && $wardType->is_active
+            ? $wardType->clinicalIndicators->where('is_active', true)->values()
+            : collect();
+
+        $scores = $indicators->isEmpty() ? collect() : ClinicalIndicatorScore::where('patient_id', $patient->id)
+            ->whereIn('clinical_indicator_id', $indicators->pluck('id'))
+            ->with('recordedBy:id,name', 'clinicalIndicator')
+            ->orderByDesc('recorded_at')
+            ->orderByDesc('id')
+            ->get()
+            ->groupBy('clinical_indicator_id');
+
+        $since = $patient->admitted_at ?? $patient->created_at;
+
+        $scales = $indicators->map(function (ClinicalIndicator $indicator) use ($scores, $since) {
+            $definition = $indicator->definition();
+            $history = $scores->get($indicator->id, collect());
+            $kind = self::scaleKind($definition);
+            $monitoring = $indicator->isMonitored()
+                ? ClinicalIndicatorMonitoring::status($indicator, $history->first()?->recorded_at, $since)
+                : null;
+
+            return [
+                'id' => $indicator->id,
+                'code' => $indicator->code,
+                'name' => $indicator->name,
+                'category' => $indicator->category(),
+                'purpose' => $definition['purpose'] ?? null,
+                'kind' => $kind,
+                'can_score' => in_array($kind, ['scored', 'score'], true),
+                'items' => $kind === 'scored'
+                    ? collect($definition['items'])->map(fn (array $item) => [
+                        'name' => $item['name'],
+                        'abbr' => $item['abbr'] ?? null,
+                        'options' => collect($item['options'])->map(fn (array $option) => [
+                            'label' => $option['label'],
+                            'value' => (int) $option['value'],
+                        ])->values()->all(),
+                    ])->values()->all()
+                    : [],
+                'score_min' => $definition['score_min'] ?? null,
+                'score_max' => $definition['score_max'] ?? null,
+                'bands' => collect($definition['bands'] ?? [])->map(fn (array $band) => [
+                    'label' => $band['label'],
+                    'min' => $band['min'],
+                    'max' => $band['max'],
+                    'tone' => $band['tone'] ?? null,
+                ])->values()->all(),
+                'note' => $definition['note'] ?? null,
+                'monitoring' => $monitoring ? [
+                    'state' => $monitoring['state'],
+                    'label' => $monitoring['label'],
+                    'interval' => $monitoring['interval'],
+                    'due_label' => self::when($monitoring['due_at']),
+                ] : null,
+                'latest' => $history->first() ? self::scoreRow($history->first()) : null,
+                'history' => $history->take(5)->map(fn (ClinicalIndicatorScore $score) => self::scoreRow($score))->values()->all(),
+            ];
+        })->values();
+
+        return [
+            'scales' => $scales->all(),
+            'counts' => [
+                'overdue' => $scales->where('monitoring.state', ClinicalIndicatorMonitoring::STATE_OVERDUE)->count(),
+                'due' => $scales->where('monitoring.state', ClinicalIndicatorMonitoring::STATE_DUE)->count(),
+            ],
+        ];
+    }
+
+    /** scored (item by item) | score (a total typed in) | screen (the C-SSRS) | readings (monitor numerics) */
+    public static function scaleKind(?array $definition): string
+    {
+        return match (true) {
+            ClinicalIndicatorLibrary::takesReadings($definition) => 'readings',
+            ClinicalIndicatorLibrary::isScreen($definition) => 'screen',
+            ClinicalIndicatorLibrary::isScorable($definition) => 'scored',
+            default => 'score',
+        };
+    }
+
+    private static function scoreRow(ClinicalIndicatorScore $score): array
+    {
+        return [
+            'id' => $score->id,
+            'score' => $score->hasTotal() ? $score->score : null,
+            'band_label' => $score->band_label,
+            'band_tone' => $score->band_tone,
+            'breakdown' => $score->breakdown(),
+            'notes' => $score->notes,
+            'time_label' => $score->recorded_at ? self::when($score->recorded_at) : null,
+            'by' => $score->recordedBy?->name,
         ];
     }
 

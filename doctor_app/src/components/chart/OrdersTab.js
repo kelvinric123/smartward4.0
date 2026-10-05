@@ -2,7 +2,7 @@
 // restriction, which becomes the I/O fluid plan), see where every order
 // stands, and cancel one of your own that is still open.
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput } from 'react-native';
 import { colors, radius } from '../../theme';
 import { Badge, Button, Chip, Empty, Section } from './parts';
@@ -87,7 +87,7 @@ function OrderCard({ order, onCancel }) {
   );
 }
 
-export default function OrdersTab({ orders, onCreate, onCancel, composeRequest }) {
+export default function OrdersTab({ orders, onCreate, onCancel, composeRequest, onComposeHandled }) {
   const [composing, setComposing] = useState(false);
   const [instruction, setInstruction] = useState('');
   const [urgency, setUrgency] = useState('routine');
@@ -98,12 +98,19 @@ export default function OrdersTab({ orders, onCreate, onCancel, composeRequest }
   const [error, setError] = useState(null);
   const [showClosed, setShowClosed] = useState(false);
 
-  // "Order a fluid restriction" on the I/O tab opens the form ready for one
+  // Another tab asking for an order ("Order a fluid restriction" on the I/O tab,
+  // "Order an oxygen change" on the Oxygen tab) opens the form ready for it. What
+  // the consultant typed is kept; only a text this form put there is replaced.
+  const startedWith = useRef(null);
   useEffect(() => {
     if (!composeRequest) return;
     setComposing(true);
-    setFluid(true);
-    setInstruction((text) => text || 'Fluid restriction. Strict input/output chart.');
+    setFluid(Boolean(composeRequest.fluid));
+    setInstruction((text) => (!text.trim() || text === startedWith.current ? composeRequest.text : text));
+    startedWith.current = composeRequest.text;
+    // Handled: coming back to this tab later does not open the form again
+    onComposeHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [composeRequest]);
 
   function reset() {

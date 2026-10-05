@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Consultant;
 use App\Models\ConsultantOrder;
 use App\Models\FluidBalancePlan;
+use App\Models\LabInvestigation;
 use App\Models\Patient;
 use App\Services\DoctorApp\DoctorAppPatientChart;
 use App\Services\ShiftHandover;
@@ -15,14 +16,16 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 /**
- * The doctor app's patient chart: I/O, medications and consultant orders
- * for one patient under the consultant's care, and writing or cancelling
- * the consultant's own orders. Every action answers with the refreshed
+ * The doctor app's patient chart: I/O, medications, consultant orders,
+ * oxygen therapy and lab investigations for one patient under the
+ * consultant's care; writing or cancelling the consultant's own orders, and
+ * marking lab results reviewed. Every action answers with the refreshed
  * chart, so the app simply redraws from it.
  *
  *   GET  /api/doctor/patients/{patient}/chart?io_day=Y-m-d
  *   POST /api/doctor/patients/{patient}/orders               { instruction, urgency, fluid_limit_ml?, urine_min_ml_per_hour? }
  *   POST /api/doctor/patients/{patient}/orders/{order}/cancel { reason }
+ *   POST /api/doctor/patients/{patient}/labs/{lab}/review
  *
  * An order sits with the nurse rostered to the bed for the shift on now,
  * exactly as one entered on the ward dashboard. A fluid restriction on it
@@ -134,6 +137,40 @@ class DoctorAppPatientController extends Controller
         ]);
 
         return $this->chart($patient, $consultant, null, 'Order cancelled.');
+    }
+
+    /**
+     * Mark a lab result reviewed, as Patient Details > Lab Investigations does. The
+     * consultant is named on the review; there is no web user behind it.
+     */
+    public function reviewLab(Request $request, Patient $patient, LabInvestigation $lab): JsonResponse
+    {
+        [$consultant, $denied] = $this->authorise($request, $patient);
+        if ($denied) {
+            return $denied;
+        }
+
+        if ((int) $lab->patient_id !== (int) $patient->id) {
+            return $this->refuse('That result is not on this patient.', 404);
+        }
+        if (!$lab->awaitingReview()) {
+            return $this->refuse($lab->test_name . ' has no result waiting for review.');
+        }
+
+        $lab->update([
+            'reviewed_at' => now(),
+            'reviewed_by' => null,
+            'reviewed_by_name' => $consultant->name,
+        ]);
+
+        Log::info('Doctor app lab result reviewed', [
+            'lab_investigation_id' => $lab->id,
+            'consultant_id' => $consultant->id,
+            'patient_id' => $patient->id,
+            'order_no' => $lab->order_no,
+        ]);
+
+        return $this->chart($patient, $consultant, null, $lab->test_name . ' marked as reviewed.');
     }
 
     // ------------------------------------------------------------------

@@ -1,4 +1,4 @@
-{{-- Leave & holidays tab: nurse leave, which the roster never books over, and public holidays --}}
+{{-- Leave & holidays tab: requests from the nurse app, nurse leave (which the roster never books over), and public holidays --}}
 
 @php
     $weekValue = $weekStart->toDateString();
@@ -11,6 +11,85 @@
 @endphp
 
 <div x-show="tab === 'leave'" x-cloak class="grid grid-cols-1 gap-4 xl:grid-cols-5">
+    {{-- Requests from the nurse app: leave, and swaps a colleague has accepted --}}
+    @php
+        $requestStyle = [
+            'pending' => 'bg-amber-100 text-amber-800',
+            'awaiting_colleague' => 'bg-sky-100 text-sky-800',
+            'approved' => 'bg-emerald-100 text-emerald-800',
+            'declined' => 'bg-rose-100 text-rose-800',
+            'cancelled' => 'bg-gray-100 text-gray-600',
+        ];
+        $openRequests = $rosterRequests->filter->isOpen();
+        $decidedRequests = $rosterRequests->reject->isOpen();
+    @endphp
+    <div class="xl:col-span-5 bg-white rounded-2xl shadow-lg border border-blue-100" id="roster-requests">
+        <div class="p-5 border-b border-gray-100 flex flex-wrap items-start justify-between gap-2">
+            <div>
+                <h3 class="text-lg font-semibold text-gray-800">Requests from the nurse app</h3>
+                <p class="text-xs text-gray-500 mt-0.5">
+                    Leave asked for in the nurse app, and shift swaps once the colleague has accepted. Approving leave books it as above;
+                    approving a swap swaps the two nurses' shifts that day, in the roster and in the beds they hold.
+                </p>
+            </div>
+            @if ($openRequests->where('status', 'pending')->count())
+                <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500 text-white">{{ $openRequests->where('status', 'pending')->count() }} to decide</span>
+            @endif
+        </div>
+
+        @if ($rosterRequests->isEmpty())
+            <p class="p-5 text-sm text-gray-500">No requests from the nurse app for {{ $ward->ward_name }}.</p>
+        @else
+            <ul class="divide-y divide-gray-100">
+                @foreach ($openRequests->concat($decidedRequests) as $req)
+                    <li class="p-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between {{ $req->isOpen() ? '' : 'opacity-70' }}">
+                        <div class="min-w-0">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-semibold text-gray-800">{{ $req->nurse?->name ?? 'Nurse' }}</span>
+                                <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide {{ $req->isSwap() ? 'bg-indigo-100 text-indigo-800' : 'bg-blue-100 text-blue-800' }}">{{ $req->isSwap() ? 'Swap' : 'Leave' }}</span>
+                                <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold {{ $requestStyle[$req->status] ?? 'bg-gray-100 text-gray-600' }}">{{ $req->statusLabel() }}</span>
+                            </div>
+                            <div class="mt-1 text-sm text-gray-700">{{ $req->summary() }}</div>
+                            <div class="mt-0.5 text-xs text-gray-500">
+                                Asked {{ $req->created_at?->format('d M H:i') }}
+                                @if ($req->note) &middot; &ldquo;{{ $req->note }}&rdquo; @endif
+                                @if ($req->isSwap() && $req->colleague_responded_at && $req->status !== 'declined')
+                                    &middot; accepted by {{ $req->colleague?->name }} {{ $req->colleague_responded_at->format('d M H:i') }}
+                                @endif
+                                @if ($req->decided_at)
+                                    &middot; {{ strtolower($req->statusLabel()) }} {{ $req->decided_at->format('d M H:i') }}{{ $req->decided_by_name ? ' by ' . $req->decided_by_name : '' }}{{ $req->decision_note ? ': ' . $req->decision_note : '' }}
+                                @endif
+                            </div>
+                        </div>
+
+                        @if ($canEdit && $req->isOpen())
+                            <div class="flex flex-wrap items-center gap-2 shrink-0" x-data="{ note: '' }">
+                                <input type="text" x-model="note" maxlength="255" placeholder="Note to the nurse (optional)"
+                                    class="w-56 rounded-lg border-gray-300 shadow-sm text-xs focus:border-indigo-500 focus:ring-indigo-500">
+                                @if ($req->status === 'pending')
+                                    <form method="POST" action="{{ route('ward.ai-schedule.requests.approve', $req) }}">
+                                        @csrf
+                                        <input type="hidden" name="week" value="{{ $weekValue }}">
+                                        <input type="hidden" name="decision_note" :value="note">
+                                        <button type="submit" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700">Approve</button>
+                                    </form>
+                                @else
+                                    <span class="text-xs text-gray-500">Waiting for {{ $req->colleague?->name ?? 'the colleague' }}</span>
+                                @endif
+                                <form method="POST" action="{{ route('ward.ai-schedule.requests.decline', $req) }}">
+                                    @csrf
+                                    <input type="hidden" name="week" value="{{ $weekValue }}">
+                                    <input type="hidden" name="decision_note" :value="note">
+                                    <button type="submit" class="px-3 py-1.5 rounded-lg border border-rose-300 text-rose-700 text-xs font-semibold hover:bg-rose-50">Decline</button>
+                                </form>
+                            </div>
+                        @endif
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+    </div>
+
     {{-- Leave --}}
     <div class="xl:col-span-3 bg-white rounded-2xl shadow-lg border border-blue-100">
         <div class="p-5 border-b border-gray-100">

@@ -304,6 +304,11 @@
                                                                     <span class="text-gray-300">&middot;</span>
                                                                 @endif
                                                                 Readings: {{ implode(', ', array_column($definition['items'], 'abbr')) }}
+                                                            @elseif (\App\Support\ClinicalIndicatorLibrary::isScreen($definition))
+                                                                @if (!empty($definition['population']))
+                                                                    <span class="text-gray-300">&middot;</span>
+                                                                @endif
+                                                                Screen: {{ count($definition['items']) }} questions, risk from the most serious answer
                                                             @elseif ($definition['score_min'] !== null)
                                                                 @if (!empty($definition['population']))
                                                                     <span class="text-gray-300">&middot;</span>

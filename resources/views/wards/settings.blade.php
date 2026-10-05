@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ward Settings</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <x-theme-style />
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
     <style>
@@ -174,18 +175,59 @@
                         <input type="hidden" name="dashboard_display_config" x-model="dashboardDisplayJson">
 
                         <div class="space-y-6">
-                            <!-- Patient Name Masking Section -->
+                            <!-- Auto Refresh Section -->
                             <div class="border border-gray-200 rounded-lg p-4">
                                 <h4 class="text-sm font-semibold text-gray-700 mb-3 flex items-center">
                                     <svg class="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor"
                                         viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                     </svg>
-                                    Patient Name Display
+                                    Auto Refresh
                                 </h4>
-                                <p class="text-xs text-gray-500 mb-4">Choose how patient names are displayed for privacy
-                                    purposes.</p>
+                                <p class="text-xs text-gray-500 mb-4">How often the ward dashboard reloads itself to
+                                    pick up new admissions, vitals and alerts. The countdown pauses while a popup is
+                                    open.</p>
+
+                                <div class="grid grid-cols-4 lg:grid-cols-8 gap-2">
+                                    <template x-for="option in refreshOptions" :key="option.value">
+                                        <button type="button" @click="dashboardDisplaySettings.refresh_interval = option.value"
+                                            class="px-2 py-2 rounded-lg border-2 text-xs font-semibold transition-all"
+                                            :class="Number(dashboardDisplaySettings.refresh_interval) === option.value ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100'"
+                                            x-text="option.label"></button>
+                                    </template>
+                                </div>
+
+                                <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-600">
+                                    <label for="refresh_interval_custom">Custom (seconds):</label>
+                                    <input id="refresh_interval_custom" type="number" min="0" max="3600" step="1"
+                                        x-model.number="dashboardDisplaySettings.refresh_interval"
+                                        class="w-24 px-2 py-1 text-sm border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                                    <span class="text-gray-500">0 turns it off; otherwise 10 to 3600.</span>
+                                </div>
+
+                                <p class="mt-3 text-xs font-medium"
+                                    :class="Number(dashboardDisplaySettings.refresh_interval) > 0 ? 'text-blue-700' : 'text-amber-700'"
+                                    x-text="getRefreshSummary()"></p>
+                            </div>
+
+                            <!-- Privacy Mode Section -->
+                            <div class="border border-gray-200 rounded-lg p-4">
+                                <h4 class="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                                    <svg class="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor"
+                                        viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                                    </svg>
+                                    Privacy Mode
+                                    <span class="ml-2 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide"
+                                        :class="isPrivacyModeOn() ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'"
+                                        x-text="isPrivacyModeOn() ? 'On' : 'Off'"></span>
+                                </h4>
+                                <p class="text-xs text-gray-500 mb-4">Choose how patient identity (name and MRN) shows
+                                    on the dashboard: bed boxes, staff patient lists, notifications and movement
+                                    reminders. The patient details popup still shows the full identity so staff can
+                                    confirm who the patient is.</p>
 
                                 <!-- Preview Card -->
                                 <div class="bg-gray-100 rounded-lg p-4 mb-4">
@@ -193,7 +235,8 @@
                                         class="bg-white rounded-lg shadow-sm border border-blue-500 overflow-hidden max-w-xs mx-auto">
                                         <div class="px-4 py-2 bg-blue-500 text-white flex items-center justify-between">
                                             <span class="font-bold">Bed 01</span>
-                                            <span class="text-sm">MRN: 12345678</span>
+                                            <span class="text-sm" x-show="getMaskedMrnPreview('12345678') !== null"
+                                                x-text="'MRN: ' + getMaskedMrnPreview('12345678')"></span>
                                         </div>
                                         <div class="p-3">
                                             <div class="flex items-center text-sm font-semibold text-gray-800">
@@ -209,7 +252,8 @@
                                     </div>
                                 </div>
 
-                                <!-- Options -->
+                                <!-- Name Options -->
+                                <h5 class="text-xs font-semibold text-gray-600 mb-2">Patient Name</h5>
                                 <div class="space-y-2">
                                     <label
                                         class="flex items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 cursor-pointer transition-colors"
@@ -283,6 +327,46 @@
                                         <div class="ml-3">
                                             <span class="text-sm font-medium text-gray-700">Full Asterisk</span>
                                             <p class="text-xs text-gray-500">Completely masked: **** ******* *****</p>
+                                        </div>
+                                    </label>
+                                </div>
+
+                                <!-- MRN Options -->
+                                <h5 class="text-xs font-semibold text-gray-600 mt-4 mb-2">MRN</h5>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    <label
+                                        class="flex items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 cursor-pointer transition-colors"
+                                        :class="dashboardDisplaySettings.patient_mrn_mask === 'full' ? 'ring-2 ring-blue-500 border-blue-500' : ''">
+                                        <input type="radio" name="patient_mrn_mask_radio" value="full"
+                                            x-model="dashboardDisplaySettings.patient_mrn_mask"
+                                            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300">
+                                        <div class="ml-3">
+                                            <span class="text-sm font-medium text-gray-700">Full MRN</span>
+                                            <p class="text-xs text-gray-500">12345678</p>
+                                        </div>
+                                    </label>
+
+                                    <label
+                                        class="flex items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 cursor-pointer transition-colors"
+                                        :class="dashboardDisplaySettings.patient_mrn_mask === 'last4' ? 'ring-2 ring-blue-500 border-blue-500' : ''">
+                                        <input type="radio" name="patient_mrn_mask_radio" value="last4"
+                                            x-model="dashboardDisplaySettings.patient_mrn_mask"
+                                            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300">
+                                        <div class="ml-3">
+                                            <span class="text-sm font-medium text-gray-700">Last 4 Digits</span>
+                                            <p class="text-xs text-gray-500">****5678</p>
+                                        </div>
+                                    </label>
+
+                                    <label
+                                        class="flex items-center p-3 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 cursor-pointer transition-colors"
+                                        :class="dashboardDisplaySettings.patient_mrn_mask === 'hidden' ? 'ring-2 ring-blue-500 border-blue-500' : ''">
+                                        <input type="radio" name="patient_mrn_mask_radio" value="hidden"
+                                            x-model="dashboardDisplaySettings.patient_mrn_mask"
+                                            class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300">
+                                        <div class="ml-3">
+                                            <span class="text-sm font-medium text-gray-700">Hidden</span>
+                                            <p class="text-xs text-gray-500">MRN not shown</p>
                                         </div>
                                     </label>
                                 </div>
@@ -494,6 +578,7 @@
                                 'info' => 'Patient Info',
                                 'additional' => 'Additional Info',
                                 'vitals' => 'Vital Signs',
+                                'oxygen' => 'Oxygen Therapy',
                                 'io' => 'I/O Chart',
                                 'medications' => 'Medication Monitoring',
                                 'movement' => 'Patient Movement',
@@ -511,6 +596,7 @@
                                 'info' => 'Basic demographics and admission details.',
                                 'additional' => 'Extended details, contacts, and allergies.',
                                 'vitals' => 'Vital signs charts and tables.',
+                                'oxygen' => 'The oxygen the patient is on (device, flow rate or FiO₂, SpO₂ target): change it or switch to room air, with a chart of its progression against SpO₂. Includes the oxygen recorded with vital signs.',
                                 'io' => 'Intake and output, a daily fluid limit and urine target, and signs of fluid overload such as edema. Adds an I/O button to the bed boxes.',
                                 'medications' => 'Medication orders and doses given, with overdue dose warnings here and on the bed boxes. Off by default.',
                                 'movement' => 'Schedule procedures outside the ward.',
@@ -1230,6 +1316,71 @@
                             </button>
                         </div>
                     </form>
+
+                    {{-- Lab Investigations tab in Patient Details, fed by the HIS --}}
+                    <div class="mt-6 border-t border-gray-200 pt-5"
+                        x-data="{ enabled: @js($labSettings['enabled'] ?? true), sample: @js($labSettings['sample'] ?? false) }">
+                        <h4 class="text-base font-semibold text-gray-800 mb-1">Lab Investigations</h4>
+                        <p class="text-sm text-gray-600 mb-3">
+                            Lab orders and results from the HIS, shown in Patient Details after Patient Movement:
+                            investigation type, ordering doctor and priority, results, and when to review.
+                        </p>
+
+                        <form method="POST" action="{{ route('ward.lab-investigations.settings') }}">
+                            @csrf
+                            <div class="divide-y divide-gray-100 border border-gray-200 rounded-lg">
+                                <label class="flex items-center justify-between gap-3 p-4 cursor-pointer">
+                                    <span class="min-w-0">
+                                        <span class="block text-sm font-semibold text-gray-800">Show Lab Investigations</span>
+                                        <span class="block text-xs text-gray-500">Adds the tab to Patient Details for all users. HIS results are still
+                                            received while it is off.</span>
+                                    </span>
+                                    <input type="hidden" name="enabled" value="0">
+                                    <input type="checkbox" name="enabled" value="1" x-model="enabled" class="sr-only">
+                                    <span class="relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors"
+                                        :class="enabled ? 'bg-blue-600' : 'bg-gray-300'">
+                                        <span class="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
+                                            :class="enabled ? 'translate-x-5' : ''"></span>
+                                    </span>
+                                </label>
+                                <label class="flex items-center justify-between gap-3 p-4 cursor-pointer" :class="enabled ? '' : 'opacity-50'">
+                                    <span class="min-w-0">
+                                        <span class="block text-sm font-semibold text-gray-800">Sample data</span>
+                                        <span class="block text-xs text-gray-500">Gives every patient a demo set of HIS lab orders (marked SAMPLE) to show how
+                                            the integration looks. Switching it off deletes the sample rows.</span>
+                                    </span>
+                                    <input type="hidden" name="sample" value="0">
+                                    <input type="checkbox" name="sample" value="1" x-model="sample" class="sr-only">
+                                    <span class="relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors"
+                                        :class="sample ? 'bg-amber-500' : 'bg-gray-300'">
+                                        <span class="absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform"
+                                            :class="sample ? 'translate-x-5' : ''"></span>
+                                    </span>
+                                </label>
+                            </div>
+
+                            <details class="mt-3 text-xs text-gray-600">
+                                <summary class="cursor-pointer font-semibold text-gray-700">HIS integration</summary>
+                                <div class="mt-2 space-y-2">
+                                    <p>The HIS (or its interface engine, e.g. from HL7 ORM/ORU messages) sends each lab order, and
+                                        resends it as it is collected and resulted:</p>
+                                    <p class="font-mono bg-gray-100 rounded px-2 py-1 break-all">POST {{ route('api.his.lab-investigations') }}</p>
+                                    <p>Authorization: <span class="font-mono">Bearer &lt;token&gt;</span> of an Integration User
+                                        (Users &gt; Edit &gt; Generate token). The patient is matched on MRN (and RN, when sent).
+                                        Without <span class="font-mono">review_due_at</span>, a result is due for review 1 h (STAT),
+                                        4 h (Urgent) or 24 h (Routine) after it is resulted. An amended result has to be reviewed again.</p>
+                                    <pre class="bg-gray-900 text-gray-100 rounded p-3 overflow-x-auto text-[11px] leading-snug">{{ json_encode(\App\Services\LabInvestigations::examplePayload(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</pre>
+                                </div>
+                            </details>
+
+                            <div class="pt-4 flex justify-end">
+                                <button type="submit"
+                                    class="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                    Save Lab Investigations
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
 
                 <!-- Clinical Setting Tab Panel -->
@@ -1864,6 +2015,8 @@
                     // Dashboard display settings
                     const defaultDashboardDisplay = {
                         patient_name_mask: 'full',
+                        patient_mrn_mask: 'full',
+                        refresh_interval: 60,
                         fullscreen_mode: 'medium',
                         fullscreen_text_size: 'medium',
                         fullscreen_resolution: 'default'
@@ -1888,6 +2041,16 @@
                         patientInfoItems: patientInfoItems,
                         clinicalOptions: clinicalOptions,
                         dashboardDisplaySettings: dashboardDisplaySettings,
+                        refreshOptions: [
+                            { value: 0, label: 'Off' },
+                            { value: 30, label: '30 sec' },
+                            { value: 60, label: '1 min' },
+                            { value: 120, label: '2 min' },
+                            { value: 300, label: '5 min' },
+                            { value: 600, label: '10 min' },
+                            { value: 900, label: '15 min' },
+                            { value: 1800, label: '30 min' },
+                        ],
                         clinicalSettings: clinicalSettingsData,
                         patientVitalsMode: savedPatientVitalsMode,
                         bedBoxVitalsMode: savedBedBoxVitalsMode,
@@ -1942,6 +2105,41 @@
                                 default:
                                     return fullName;
                             }
+                        },
+
+                        // Mirrors PatientPrivacy::mrn(): null when hidden
+                        getMaskedMrnPreview(mrn) {
+                            switch (this.dashboardDisplaySettings.patient_mrn_mask) {
+                                case 'hidden':
+                                    return null;
+                                case 'last4':
+                                    return mrn.length <= 4 ? '*'.repeat(mrn.length) : '*'.repeat(mrn.length - 4) + mrn.slice(-4);
+                                default:
+                                    return mrn;
+                            }
+                        },
+
+                        isPrivacyModeOn() {
+                            return this.dashboardDisplaySettings.patient_name_mask !== 'full'
+                                || this.dashboardDisplaySettings.patient_mrn_mask !== 'full';
+                        },
+
+                        getRefreshSummary() {
+                            const value = this.dashboardDisplaySettings.refresh_interval;
+                            if (value === '' || value === null || isNaN(Number(value))) {
+                                return 'Enter a number of seconds, or pick an option above.';
+                            }
+                            const seconds = Number(value);
+                            if (seconds <= 0) {
+                                return 'Auto refresh is off: the dashboard only updates when reloaded.';
+                            }
+                            const clamped = Math.min(3600, Math.max(10, seconds));
+                            const minutes = Math.floor(clamped / 60);
+                            const rest = clamped % 60;
+                            const parts = [];
+                            if (minutes) parts.push(minutes + (minutes === 1 ? ' minute' : ' minutes'));
+                            if (rest) parts.push(rest + (rest === 1 ? ' second' : ' seconds'));
+                            return 'The dashboard reloads every ' + parts.join(' ') + '.';
                         },
 
                         getFullscreenCount() {

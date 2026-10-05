@@ -7,6 +7,7 @@ use App\Models\ClinicalIndicatorScore;
 use App\Models\Patient;
 use App\Support\ClinicalIndicatorLibrary;
 use App\Support\ClinicalIndicatorReadings;
+use App\Support\ClinicalIndicatorScreen;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 
@@ -31,6 +32,7 @@ final class DemoClinicalData
     ];
 
     public const KIND_READINGS = 'readings';
+    public const KIND_SCREEN = 'screen';
     public const KIND_SCORED = 'scored';
     public const KIND_SCORE = 'score';
 
@@ -70,9 +72,10 @@ final class DemoClinicalData
     ];
 
     /**
-     * How a clinical indicator is seeded: monitor readings, a scale scored item
-     * by item, or a total alone (Pain Score). Null for the scales still
-     * awaiting their local detail, which have nothing to seed from.
+     * How a clinical indicator is seeded: monitor readings, a screen answered
+     * question by question (C-SSRS), a scale scored item by item, or a total
+     * alone (Pain Score). Null for the scales still awaiting their local
+     * detail, which have nothing to seed from.
      */
     public static function kind(?array $definition): ?string
     {
@@ -82,6 +85,10 @@ final class DemoClinicalData
 
         if (empty($definition['bands'])) {
             return null;
+        }
+
+        if (ClinicalIndicatorLibrary::isScreen($definition)) {
+            return self::KIND_SCREEN;
         }
 
         if (ClinicalIndicatorLibrary::isScorable($definition)) {
@@ -96,6 +103,7 @@ final class DemoClinicalData
     {
         return match (self::kind($definition)) {
             self::KIND_READINGS => 'Monitor readings: ' . implode(', ', array_column($definition['items'], 'abbr')),
+            self::KIND_SCREEN => 'Screened question by question: ' . count($definition['items']) . ' questions, risk from the most serious answer',
             self::KIND_SCORED => 'Scored item by item, ' . $definition['score_min'] . ' to ' . $definition['score_max'],
             self::KIND_SCORE => 'Scored as a total, ' . $definition['score_min'] . ' to ' . $definition['score_max'],
             default => 'Details still to confirm: nothing to seed yet',
@@ -193,6 +201,7 @@ final class DemoClinicalData
 
             $entry = match ($kind) {
                 self::KIND_READINGS => self::readingsEntry($definition, $severity, $set),
+                self::KIND_SCREEN => self::screenEntry($definition, self::tone($severity)),
                 self::KIND_SCORED => self::scoredEntry($definition, self::tone($severity)),
                 default => self::scoreEntry($definition, self::tone($severity)),
             };
@@ -368,6 +377,37 @@ final class DemoClinicalData
         }
 
         return ['score' => self::total($items, $picks), 'items' => $entries];
+    }
+
+    /**
+     * Answers to a screen whose most serious one lands in a band of the given
+     * tone, worked out by ClinicalIndicatorScreen as a nurse's screen is, so
+     * a question is only answered where the screen asks it. Drawn at random
+     * from the answers no more serious than the band until the band is
+     * reached; null in the rare case it is not.
+     *
+     * @return array{score: int, items: array<int, array<string, mixed>>}|null
+     */
+    private static function screenEntry(array $definition, string $tone): ?array
+    {
+        $band = self::bandOfTone($definition, $tone);
+        $floor = $band['min'] ?? $definition['score_min'];
+        $ceiling = $band['max'] ?? $definition['score_max'];
+
+        for ($attempt = 0; $attempt < 50; $attempt++) {
+            $answers = [];
+            foreach (array_values($definition['items']) as $index => $item) {
+                $options = array_values(array_filter($item['options'], fn (array $option) => $option['value'] <= $ceiling)) ?: $item['options'];
+                $answers[$index] = $options[array_rand($options)]['value'];
+            }
+
+            $screen = ClinicalIndicatorScreen::evaluate($definition, $answers);
+            if ($screen['error'] === null && $screen['score'] >= $floor && $screen['score'] <= $ceiling) {
+                return ['score' => $screen['score'], 'items' => $screen['items']];
+            }
+        }
+
+        return null;
     }
 
     /** The total of the option picked for each item. */

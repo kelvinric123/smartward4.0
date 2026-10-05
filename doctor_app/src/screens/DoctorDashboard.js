@@ -15,7 +15,7 @@ import StatCard from '../components/StatCard';
 import BedCard from '../components/BedCard';
 import CriticalListModal from '../components/CriticalListModal';
 import { fetchDoctorDashboard } from '../api/endpoints';
-import * as mock from '../data/mockData';
+import { buildDemoDashboard } from '../data/demoDashboard';
 
 const REFRESH_INTERVAL_MS = 60000;
 
@@ -60,12 +60,8 @@ export default function DoctorDashboard({ session, onLogout }) {
 
   const load = useCallback(async (isRefresh = false) => {
     if (isDemo) {
-      setData({
-        doctor: mock.doctor,
-        summary: mock.summary,
-        wards: mock.wards,
-        beds: mock.consultantBeds,
-      });
+      // Worked out from the demo charts each time, as the server's dashboard is from its records
+      setData(buildDemoDashboard(session?.doctor?.name));
       setLoadError(null);
       setLoading(false);
       setRefreshing(false);
@@ -223,7 +219,7 @@ export default function DoctorDashboard({ session, onLogout }) {
           <StatCard
             label="REVIEWS"
             value={summary.pending_reviews}
-            sub="Pending consultant review"
+            sub="Lab results to review"
             tone="amber"
           />
           <StatCard

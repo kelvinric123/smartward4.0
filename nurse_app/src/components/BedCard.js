@@ -24,8 +24,15 @@ function headerGradientFor(status) {
 }
 
 function fallRiskLabel(fr) {
-  if (!fr) return 'None';
+  // The ADT feed sends 1 / 0 for an active fall risk alert / none
+  if (!fr || fr === '0' || fr === 'none') return 'None';
+  if (fr === '1') return 'Alert Active';
   return fr.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/** "Patient +1 · Nursing level 3 +1 · Isolation +0.5" */
+function workloadFactors(workload) {
+  return (workload?.factors ?? []).map((f) => `${f.label} +${f.points}`).join(' · ');
 }
 
 function VitalTile({ label, value }) {
@@ -64,6 +71,16 @@ function todoItems(badges) {
   if (badges.transfusions_running) items.push({ label: `${badges.transfusions_running === 1 ? 'Blood unit' : `${badges.transfusions_running} blood units`} running`, critical: true });
   else if (badges.transfusions_pending) items.push({ label: 'Blood unit to check', critical: false });
   if (badges.alerts_pending) items.push({ label: `${badges.alerts_pending} ${badges.alerts_pending === 1 ? 'call' : 'calls'}`, critical: false });
+  if (badges.labs_review) {
+    items.push({
+      label: badges.labs_critical
+        ? `${badges.labs_critical} critical ${badges.labs_critical === 1 ? 'lab' : 'labs'} to review`
+        : `${badges.labs_review} ${badges.labs_review === 1 ? 'lab' : 'labs'} to review${badges.labs_overdue ? ' (overdue)' : ''}`,
+      critical: !!(badges.labs_critical || badges.labs_overdue),
+    });
+  }
+  if (badges.assess_overdue) items.push({ label: `${badges.assess_overdue} ${badges.assess_overdue === 1 ? 'assessment' : 'assessments'} overdue`, critical: true });
+  else if (badges.assess_due) items.push({ label: `${badges.assess_due} ${badges.assess_due === 1 ? 'assessment' : 'assessments'} due`, critical: false });
   return items;
 }
 
@@ -136,7 +153,16 @@ export default function BedCard({ bed, fallbackNurse, onOpen }) {
               {bed.nurse_on_duty ?? fallbackNurse}
             </Text>
           </View>
+          {bed.workload ? (
+            <View style={styles.miniBox}>
+              <Text style={styles.miniLabel}>WORKLOAD</Text>
+              <Text style={styles.miniValue}>{bed.workload.score}</Text>
+            </View>
+          ) : null}
         </View>
+        {bed.workload?.factors?.length ? (
+          <Text style={styles.workloadText}>Workload: {workloadFactors(bed.workload)}</Text>
+        ) : null}
 
         <View style={styles.sectionBordered}>
           <View style={styles.sectionHeader}>
@@ -340,6 +366,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: colors.slate900,
+  },
+  workloadText: {
+    marginTop: -4,
+    fontSize: 11,
+    color: colors.slate500,
   },
   sectionBordered: {
     borderRadius: radius.lg,

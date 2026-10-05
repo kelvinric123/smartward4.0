@@ -3,7 +3,7 @@
 // and answer the same shapes ({ success, message, chart }), so the chart
 // screen never needs to know which one it has.
 
-import { fetchPatientChart, createOrder, cancelOrder } from './endpoints';
+import { fetchPatientChart, createOrder, cancelOrder, reviewLab } from './endpoints';
 import { createDemoChartClient } from '../data/mockChart';
 
 function createLiveChartClient(patientId) {
@@ -11,6 +11,7 @@ function createLiveChartClient(patientId) {
     load: ({ ioDay } = {}) => fetchPatientChart(patientId, { ioDay }),
     createOrder: (body) => createOrder(patientId, body),
     cancelOrder: (orderId, reason) => cancelOrder(patientId, orderId, reason),
+    reviewLab: (labId) => reviewLab(patientId, labId),
   };
 }
 

@@ -408,7 +408,11 @@ class IntegrationDemoController extends Controller
                     : ($request->integer('assessments_per_day') ?: 2);
 
                 $count = DemoClinicalData::seedIndicator($patient, $indicator, $from, $endDate, $perDay, $pattern, Auth::id());
-                $indicatorsSeeded[] = $count . ' ' . $indicator->code . ($kind === DemoClinicalData::KIND_READINGS ? ' readings' : ' scores');
+                $indicatorsSeeded[] = $count . ' ' . $indicator->code . match ($kind) {
+                    DemoClinicalData::KIND_READINGS => ' readings',
+                    DemoClinicalData::KIND_SCREEN => ' screens',
+                    default => ' scores',
+                };
             }
         });
 

@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\DescribesOxygen;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Str;
 
 class VitalSign extends Model
 {
+    use DescribesOxygen;
     use SoftDeletes;
 
     protected $fillable = [
@@ -157,47 +158,6 @@ class VitalSign extends Model
     public function getPulseRateDisplayAttribute(): ?string
     {
         return $this->rangeDisplay($this->pulse_rate_min, $this->pulse_rate_max, $this->pulse_rate);
-    }
-
-    /**
-     * Oxygen delivery label, e.g. "Nasal Cannula / Prongs". Null when nothing was recorded.
-     */
-    public function oxygenDeliveryLabel(): ?string
-    {
-        if (!$this->oxygen_delivery) {
-            return null;
-        }
-
-        return self::OXYGEN_DELIVERY_OPTIONS[$this->oxygen_delivery] ?? Str::headline($this->oxygen_delivery);
-    }
-
-    /**
-     * Short chart label, e.g. "NP 2L" or "VM 40%". Null when nothing was recorded.
-     */
-    public function oxygenShortLabel(): ?string
-    {
-        if (!$this->oxygen_delivery) {
-            return null;
-        }
-
-        $label = self::OXYGEN_DELIVERY_SHORT[$this->oxygen_delivery] ?? strtoupper(substr($this->oxygen_delivery, 0, 4));
-
-        if ($this->oxygen_flow_rate !== null) {
-            $label .= ' ' . rtrim(rtrim(number_format((float) $this->oxygen_flow_rate, 1), '0'), '.') . 'L';
-        } elseif ($this->fio2_percent !== null) {
-            $label .= ' ' . $this->fio2_percent . '%';
-        }
-
-        return $label;
-    }
-
-    /**
-     * On supplemental oxygen: anything recorded other than room air.
-     * Display only - the EWS score deliberately does not use this.
-     */
-    public function isOnOxygen(): bool
-    {
-        return $this->oxygen_delivery !== null && $this->oxygen_delivery !== self::OXYGEN_ROOM_AIR;
     }
 
     /**

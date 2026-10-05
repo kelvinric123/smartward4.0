@@ -1,6 +1,6 @@
 // Patient chart API: one patient's consultant orders, I/O chart, medication
-// doses, infusions, blood transfusion, alerts and nursing plan
-// (NurseAppPatientController).
+// doses, infusions, blood transfusion, alerts, nursing plan, lab results,
+// oxygen therapy and assessment scales (NurseAppPatientController).
 //
 // Every action answers { success, message, patient }, where `patient` is the
 // whole refreshed chart, so the screen simply redraws from it.
@@ -24,6 +24,11 @@
 //   POST /api/nurse/patients/{id}/care-plan/{i}/update   { related_to?, goal?, interventions[]? }
 //   POST /api/nurse/patients/{id}/care-plan/{i}/evaluate { outcome: 'met'|'partly_met'|'not_met', note? }
 //   POST /api/nurse/patients/{id}/care-plan/{i}/close    { status: 'resolved'|'discontinued', note? }
+//   POST /api/nurse/patients/{id}/labs/{l}/review
+//   POST /api/nurse/patients/{id}/oxygen              { oxygen_delivery, oxygen_flow_rate?, fio2_percent?,
+//                                                       target_spo2_min?, target_spo2_max?, notes?, minutes_ago? }
+//   POST /api/nurse/patients/{id}/oxygen/{c}/void     { void_reason }
+//   POST /api/nurse/patients/{id}/assessments/{scale} { item_scores[] | score, notes? }
 //   POST /api/nurse/notifications/{n}/respond
 //
 // Times are sent as "minutes ago", never as clock times, so a phone on the
@@ -64,6 +69,11 @@ function createLivePatientClient(patientId) {
     updateCarePlanItem: (itemId, body) => post(`${base}/care-plan/${itemId}/update`, body),
     evaluateCarePlanItem: (itemId, body) => post(`${base}/care-plan/${itemId}/evaluate`, body),
     closeCarePlanItem: (itemId, body) => post(`${base}/care-plan/${itemId}/close`, body),
+
+    reviewLab: (labId) => post(`${base}/labs/${labId}/review`),
+    changeOxygen: (body) => post(`${base}/oxygen`, body),
+    voidOxygen: (changeId, body) => post(`${base}/oxygen/${changeId}/void`, body),
+    scoreAssessment: (scaleId, body) => post(`${base}/assessments/${scaleId}`, body),
 
     respondAlert: (alertId) => post(`/api/nurse/notifications/${alertId}/respond`),
   };

@@ -29,6 +29,13 @@ use Illuminate\Support\Collection;
  * ventilator settings are recorded. ClinicalIndicatorReadings describes those
  * items and flags them.
  *
+ * A scale with `result => 'highest'` is a screen rather than a total: each
+ * option's value is the level of risk that answer points to, and the most
+ * serious answer sets the result, which is how the C-SSRS triages. An item
+ * with `asked_when => [abbr, label]` is asked only after that answer to an
+ * earlier item, and each band carries the `action` it calls for.
+ * ClinicalIndicatorScreen works the answers out.
+ *
  * Every scale names one of CATEGORIES as its category, which is what it is
  * listed under. Scales appear category by category in CATEGORIES order, and in
  * INDICATORS order within a category.
@@ -52,6 +59,9 @@ final class ClinicalIndicatorLibrary
 
     public const OTHER_CATEGORY = 'Other';
 
+    /** A screen's result: the most serious answer, not a total. */
+    public const RESULT_HIGHEST = 'highest';
+
     /**
      * The categories scales are listed under, in display order, each with the
      * line shown beneath its heading. Other is never named by a scale here: it
@@ -67,6 +77,7 @@ final class ClinicalIndicatorLibrary
         'Hemodynamics' => 'Invasive pressures and cardiac output from the bedside monitor, for critical care',
         'Ventilation' => 'Ventilator settings and airway readings for intubated patients, for critical care',
         'Delirium' => 'Screening for delirium and cognitive impairment',
+        'Mental state' => 'Screening for suicidal thoughts and behaviour, so a patient at risk is referred and kept safe',
         'Frailty' => 'Screening older adults for frailty',
         self::OTHER_CATEGORY => 'Added locally, with no clinical detail in the library yet',
     ];
@@ -567,6 +578,84 @@ final class ClinicalIndicatorLibrary
             'note' => 'Copy what the ventilator and capnograph display: the set FiO2 and PEEP, the measured peak pressure and the exhaled tidal volume. A sudden fall in EtCO2 or a lost waveform means a displaced, disconnected or blocked tube, or falling cardiac output, until proven otherwise: check the patient and the tube at once. When PIP rises, check the plateau pressure: a high PIP with an unchanged plateau points to the airway (secretions, bronchospasm, a kinked or bitten tube), a rising plateau to stiffer lungs or chest wall (pneumothorax, atelectasis, pulmonary oedema, abdominal distension); keep the plateau at 30 cmH₂O or below. The right tidal volume depends on height and sex, about 6 to 8 mL/kg of predicted body weight, so the mL range here is only a prompt to check it. FiO2 above 40% or PEEP above 8 cmH₂O is more support than a patient ready to wean usually needs, and FiO2 above 60% for long risks oxygen toxicity. These are adult defaults: where the ICU team has set targets for the patient, such as permissive hypercapnia in ARDS or tight CO2 control after brain injury, those targets apply.',
             'confirmed' => true,
         ],
+        [
+            'code' => 'CSSRS',
+            'name' => 'Mental State Assessment (C-SSRS)',
+            'category' => 'Mental state',
+            'population' => 'Adolescents and adults on medical and surgical wards who can answer for themselves',
+            'purpose' => 'Screens for suicidal thoughts and behaviour with the six questions of the Columbia-Suicide Severity Rating Scale (C-SSRS) screener, and gives the response the answers call for: a behavioural health referral at discharge, or a psychiatric consultation with patient safety precautions.',
+            // A screen, not a total: each answer's value is the risk it points to, and the most
+            // serious answer sets the result. See ClinicalIndicatorScreen.
+            'result' => self::RESULT_HIGHEST,
+            'form_title' => 'Columbia-Suicide Severity Rating Scale: screen with triage points for medical and surgical inpatients',
+            'how_to_ask' => 'Ask the questions in bold, in order and in these words.',
+            // Question wording as on the Columbia form. Values: 1 low (yellow), 2 moderate (orange), 3 high (red)
+            'items' => [
+                ['name' => 'Wish to be dead', 'abbr' => 'Q1', 'period' => 'Past month',
+                    'before' => 'Ask questions 1 and 2.',
+                    'question' => 'Have you wished you were dead or wished you could go to sleep and not wake up?',
+                    'options' => [
+                        ['label' => 'No', 'value' => 0],
+                        ['label' => 'Yes', 'value' => 1],
+                    ]],
+                ['name' => 'Suicidal thoughts', 'abbr' => 'Q2', 'period' => 'Past month',
+                    'question' => 'Have you actually had any thoughts of killing yourself?',
+                    'options' => [
+                        ['label' => 'No', 'value' => 0],
+                        ['label' => 'Yes', 'value' => 1],
+                    ]],
+                ['name' => 'Suicidal thoughts with a method', 'abbr' => 'Q3', 'period' => 'Past month',
+                    'before' => 'If YES to 2, ask questions 3, 4, 5, and 6. If NO to 2, go directly to question 6.',
+                    'asked_when' => ['Q2', 'Yes'],
+                    'question' => 'Have you been thinking about how you might do this?',
+                    'prompt' => 'E.g. “I thought about taking an overdose but I never made a specific plan as to when where or how I would actually do it... and I would never go through with it.”',
+                    'options' => [
+                        ['label' => 'No', 'value' => 0],
+                        ['label' => 'Yes', 'value' => 2],
+                    ]],
+                ['name' => 'Suicidal intent', 'abbr' => 'Q4', 'period' => 'Past month',
+                    'asked_when' => ['Q2', 'Yes'],
+                    'question' => 'Have you had these thoughts and had some intention of acting on them?',
+                    'prompt' => 'As opposed to “I have the thoughts but I definitely will not do anything about them.”',
+                    'options' => [
+                        ['label' => 'No', 'value' => 0],
+                        ['label' => 'Yes', 'value' => 3],
+                    ]],
+                ['name' => 'Suicidal intent with a plan', 'abbr' => 'Q5', 'period' => 'Past month',
+                    'asked_when' => ['Q2', 'Yes'],
+                    'question' => 'Have you started to work out or worked out the details of how to kill yourself? Did you intend to carry out this plan?',
+                    'options' => [
+                        ['label' => 'No', 'value' => 0],
+                        ['label' => 'Yes', 'value' => 3],
+                    ]],
+                ['name' => 'Suicidal behaviour', 'abbr' => 'Q6', 'period' => 'Lifetime, then the past 3 months',
+                    'question' => 'Have you ever done anything, started to do anything, or prepared to do anything to end your life?',
+                    'prompt' => 'Examples: Took pills, tried to shoot yourself, cut yourself, or hang yourself, took out pills but didn’t swallow any, held a gun but changed your mind or it was grabbed from your hand, went to the roof but didn’t jump, collected pills, obtained a gun, gave away valuables, wrote a will or suicide note, etc.',
+                    'follow_up' => 'If YES, ask: Was this within the past 3 months?',
+                    'options' => [
+                        ['label' => 'No', 'value' => 0],
+                        ['label' => 'Yes, over 3 months ago', 'short' => 'over 3 months ago', 'value' => 2],
+                        ['label' => 'Yes, within the past 3 months', 'short' => 'within the past 3 months', 'value' => 3],
+                    ]],
+            ],
+            'notes_example' => 'e.g. who was informed and which precautions were started',
+            // The most serious answer sets the risk (see ClinicalIndicatorScreen), not a total
+            'score_min' => 0,
+            'score_max' => 3,
+            'bands' => [
+                ['label' => 'No risk identified', 'range' => 'No to every question asked', 'min' => 0, 'max' => 0, 'tone' => self::TONE_LOW,
+                    'action' => 'Nothing to act on from this screen. Screen again whenever there is concern.'],
+                ['label' => 'Low risk', 'range' => 'Yes to question 1 or 2', 'min' => 1, 'max' => 1, 'tone' => self::TONE_MODERATE,
+                    'action' => 'Behavioural health referral at discharge.'],
+                ['label' => 'Moderate risk', 'range' => 'Yes to question 3, or to 6 over 3 months ago', 'min' => 2, 'max' => 2, 'tone' => self::TONE_MODERATE,
+                    'action' => 'Behavioural health referral at discharge.'],
+                ['label' => 'High risk', 'range' => 'Yes to question 4 or 5, or to 6 within the past 3 months', 'min' => 3, 'max' => 3, 'tone' => self::TONE_HIGH,
+                    'action' => 'Psychiatric consultation and patient safety precautions.'],
+            ],
+            'reference' => 'Posner et al., 2011; C-SSRS Screen with Triage Points for Medical/Surgery Inpatient, The Columbia Lighthouse Project, 2026',
+            'note' => 'Questions 1 to 5 ask about the past month and question 6 about the patient’s lifetime. The most serious answer sets the risk, and the response follows Columbia’s triage for medical and surgical inpatients: confirm it against your hospital’s suicide risk policy, which sets the patient safety precautions. For repeat screens in the same stay, Columbia’s Since Last Asked and frequent-monitoring screeners ask about the time since the last screen instead. Children and patients with cognitive impairment have their own C-SSRS versions. A screen supports clinical judgement and does not replace it.',
+            'confirmed' => true,
+        ],
 
         // --- Awaiting confirmation of the local variant ---------------------
         // These exist so ward types can already be bound to them, but the
@@ -730,11 +819,27 @@ final class ClinicalIndicatorLibrary
     }
 
     /**
-     * Whether the scale can be scored item by item, which needs every item to
-     * carry options. False for Pain Score, whose items name which tool to use,
-     * and for the scales still awaiting their local variant.
+     * Whether the scale can be scored item by item into a total, which needs
+     * every item to carry options. False for Pain Score, whose items name
+     * which tool to use, for the scales still awaiting their local variant,
+     * and for screens, whose answers are not added up (see isScreen()).
      */
     public static function isScorable(?array $definition): bool
+    {
+        return self::everyItemHasOptions($definition) && !self::isScreen($definition);
+    }
+
+    /**
+     * Whether the scale is a screen (the C-SSRS): asked question by question,
+     * some only after a given answer to an earlier one, with the most serious
+     * answer setting the result. See ClinicalIndicatorScreen.
+     */
+    public static function isScreen(?array $definition): bool
+    {
+        return ($definition['result'] ?? null) === self::RESULT_HIGHEST && self::everyItemHasOptions($definition);
+    }
+
+    private static function everyItemHasOptions(?array $definition): bool
     {
         if (empty($definition['items'])) {
             return false;
@@ -870,6 +975,8 @@ final class ClinicalIndicatorLibrary
 
         if (self::takesReadings($definition)) {
             $summary .= ' (readings: ' . implode(', ', array_column($definition['items'], 'abbr')) . ')';
+        } elseif (self::isScreen($definition)) {
+            $summary .= ' (screen: ' . count($definition['items']) . ' questions)';
         } elseif ($definition['score_min'] !== null && $definition['score_max'] !== null) {
             $summary .= ' (score ' . $definition['score_min'] . ' to ' . $definition['score_max'] . ')';
         }

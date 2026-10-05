@@ -4,14 +4,19 @@ namespace App\Http\Controllers;
 
 use App\Models\Nurse;
 use App\Models\NurseLeave;
+use App\Models\NurseRosterAcknowledgement;
 use App\Models\NurseRosterEntry;
+use App\Models\NurseRosterRequest;
 use App\Models\PublicHoliday;
 use App\Models\User;
 use App\Models\Ward;
 use App\Models\WardRosterSetting;
 use App\Models\WardScheduleAssignment;
 use App\Services\NurseScheduling\BedAssigner;
+use App\Services\NurseScheduling\LeaveBooking;
+use App\Services\NurseScheduling\NurseRoster;
 use App\Services\NurseScheduling\RosterBoard;
+use App\Services\NurseScheduling\RosterRequests;
 use App\Services\NurseScheduling\RosterGenerator;
 use App\Services\NurseScheduling\RosterRules;
 use App\Services\NurseScheduling\WardShifts;
@@ -37,7 +42,7 @@ class AiNurseScheduleController extends Controller
 {
     private const TABS = ['roster', 'assign', 'workload', 'leave'];
 
-    private const MAX_LEAVE_DAYS = 366;
+    private const MAX_LEAVE_DAYS = LeaveBooking::MAX_DAYS;
 
     public function index(Request $request)
     {
@@ -114,7 +119,48 @@ class AiNurseScheduleController extends Controller
             'holidays' => PublicHoliday::where('holiday_date', '>=', now()->startOfYear()->toDateString())
                 ->orderBy('holiday_date')
                 ->get(),
+            // Requests from the nurse app: open ones, and those decided in the last two weeks
+            'rosterRequests' => NurseRosterRequest::with(['nurse:id,name', 'colleague:id,name'])
+                ->where('ward_id', $ward->id)
+                ->where(fn ($query) => $query->open()->orWhere('decided_at', '>=', now()->subDays(14)))
+                // Waiting for the manager first, then for a colleague, then decided
+                ->orderByRaw("FIELD(status, 'awaiting_colleague', 'pending') DESC")
+                ->latest('id')
+                ->get(),
+            // Who has seen their roster for the week shown, in the nurse app
+            'acknowledgements' => $this->acknowledgements($board),
         ]);
+    }
+
+    /**
+     * Each nurse's acknowledgement of the week shown: seen (as it stands now), changed
+     * since they saw it, or not seen. Only for nurses with something rostered that week.
+     *
+     * @return array<int, array{state: string, at: ?string}>
+     */
+    private function acknowledgements(array $board): array
+    {
+        $weekStart = $board['dates']->first();
+        $acks = NurseRosterAcknowledgement::whereIn('nurse_id', $board['team']->pluck('id'))
+            ->whereDate('week_start', $weekStart->toDateString())
+            ->get()
+            ->keyBy('nurse_id');
+
+        $states = [];
+        foreach ($board['team'] as $nurse) {
+            $ack = $acks->get($nurse->id);
+            if (!$ack) {
+                $states[$nurse->id] = ['state' => 'new', 'at' => null];
+                continue;
+            }
+            $week = NurseRoster::week($nurse, $weekStart);
+            $states[$nurse->id] = [
+                'state' => $ack->fingerprint === $week['fingerprint'] ? 'seen' : 'changed',
+                'at' => $ack->acknowledged_at?->format('d M H:i'),
+            ];
+        }
+
+        return $states;
     }
 
     /** Plan the roster for the week shown, or the next two or four weeks. */
@@ -351,28 +397,12 @@ class AiNurseScheduleController extends Controller
             return $back->withInput()->with('error', 'Leave can be at most ' . self::MAX_LEAVE_DAYS . ' days at a time.');
         }
 
-        $leave = NurseLeave::create([
-            'nurse_id' => $validated['nurse_id'],
-            'type' => $validated['type'],
-            'start_date' => $start->toDateString(),
-            'end_date' => $end->toDateString(),
-            'note' => $validated['note'] ?? null,
-            'created_by' => Auth::id(),
-        ]);
-
         // AI-planned shifts on those days no longer stand
-        $removed = NurseRosterEntry::where('nurse_id', $leave->nurse_id)
-            ->where('source', NurseRosterEntry::SOURCE_AUTO)
-            ->whereBetween('roster_date', [$start->toDateString(), $end->toDateString()])
-            ->delete();
+        ['leave' => $leave, 'removed' => $removed] = LeaveBooking::book(
+            (int) $validated['nurse_id'], $validated['type'], $start, $end, $validated['note'] ?? null, Auth::id()
+        );
 
-        $message = $leave->label() . ' added for ' . $leave->nurse->name . ', ' . $start->format('j M')
-            . ($start->equalTo($end) ? '' : ' to ' . $end->format('j M')) . '.';
-        if ($removed) {
-            $message .= ' ' . $removed . ' AI-planned shifts on those days were removed; generate the roster again to fill the gaps.';
-        }
-
-        return $back->with('success', $message);
+        return $back->with('success', LeaveBooking::message($leave, $removed));
     }
 
     public function destroyLeave(Request $request, NurseLeave $leave)
@@ -382,6 +412,40 @@ class AiNurseScheduleController extends Controller
 
         return $this->backTo($this->wardFrom($request), $this->weekStart($request->input('week')), 'leave')
             ->with('success', 'Leave removed.');
+    }
+
+    /**
+     * Approve a leave or swap request made in the nurse app: the leave is booked, or
+     * the two nurses' shifts that day are swapped (roster and beds).
+     */
+    public function approveRequest(Request $request, NurseRosterRequest $rosterRequest)
+    {
+        $this->authorizeEdit();
+        $validated = $request->validate(['week' => 'nullable|date', 'decision_note' => 'nullable|string|max:255']);
+        $back = $this->backTo($rosterRequest->ward ?? $this->wardFrom($request), $this->weekStart($validated['week'] ?? null), 'leave');
+
+        try {
+            $message = RosterRequests::approve($rosterRequest, Auth::id(), Auth::user()?->name, $validated['decision_note'] ?? null);
+        } catch (\RuntimeException $e) {
+            return $back->with('error', $e->getMessage());
+        }
+
+        return $back->with('success', 'Approved. ' . $message);
+    }
+
+    public function declineRequest(Request $request, NurseRosterRequest $rosterRequest)
+    {
+        $this->authorizeEdit();
+        $validated = $request->validate(['week' => 'nullable|date', 'decision_note' => 'nullable|string|max:255']);
+        $back = $this->backTo($rosterRequest->ward ?? $this->wardFrom($request), $this->weekStart($validated['week'] ?? null), 'leave');
+
+        try {
+            RosterRequests::decline($rosterRequest, Auth::id(), Auth::user()?->name, $validated['decision_note'] ?? null);
+        } catch (\RuntimeException $e) {
+            return $back->with('error', $e->getMessage());
+        }
+
+        return $back->with('success', 'Declined: ' . $rosterRequest->summary() . ' (' . ($rosterRequest->nurse?->name ?? 'nurse') . ').');
     }
 
     public function storeHoliday(Request $request)

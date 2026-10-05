@@ -296,6 +296,45 @@ class PatientViewTest extends TestCase
         $this->assertSame('Malay', $patient->race);
     }
 
+    public function test_details_section_saves_vip_status_and_view_shows_it(): void
+    {
+        $patient = $this->makePatient();
+        $user = User::factory()->create();
+        $details = [
+            '_section' => 'details',
+            'name' => 'Siti Aminah',
+            'mrn' => 'MRN900001',
+            'rn' => 'RN900001',
+            'ic_passport' => '800101-14-5566',
+            'age' => 45,
+            'gender' => 'Female',
+            'phone' => '012-3456789',
+        ];
+
+        $this->actingAs($user)
+            ->put(route('patients.update', $patient), $details + ['vip_status' => 'vvip'])
+            ->assertSessionHasNoErrors();
+        $patient->refresh();
+        $this->assertSame('vvip', $patient->vip_status);
+
+        // The badge, not just the option in the edit form
+        $this->actingAs($user)
+            ->get(route('patients.show', $patient))
+            ->assertOk()
+            ->assertSee($patient->vipStatusBadgeClass() . '">VVIP</span>', false);
+
+        // Unknown statuses are refused; a blank choice clears it
+        $this->actingAs($user)
+            ->put(route('patients.update', $patient), $details + ['vip_status' => 'royal'])
+            ->assertSessionHasErrors('vip_status');
+        $this->assertSame('vvip', $patient->fresh()->vip_status);
+
+        $this->actingAs($user)
+            ->put(route('patients.update', $patient), $details + ['vip_status' => ''])
+            ->assertSessionHasNoErrors();
+        $this->assertNull($patient->fresh()->vip_status);
+    }
+
     public function test_alias_name_is_optional_saved_shown_and_searchable(): void
     {
         $patient = $this->makePatient();

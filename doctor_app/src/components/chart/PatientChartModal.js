@@ -1,7 +1,8 @@
-// Full-screen patient chart for one bed: the I/O chart, the medications and
-// the consultant orders, from the same records the ward dashboard and the
-// nurse app use. Opened from the bed card; every change answers with the
-// refreshed chart, which is simply drawn again.
+// Full-screen patient chart for one bed: the I/O chart, the medications, the
+// consultant orders, the oxygen therapy and the lab investigations, from the
+// same records the ward dashboard and the nurse app use. Opened from the bed
+// card; every change answers with the refreshed chart, which is simply drawn
+// again.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -22,12 +23,26 @@ import { createChartClient } from '../../api/chart';
 import IoTab from './IoTab';
 import MedsTab from './MedsTab';
 import OrdersTab from './OrdersTab';
+import OxygenTab from './OxygenTab';
+import LabsTab from './LabsTab';
 
 const TABS = [
-  { key: 'io', label: 'I/O chart' },
-  { key: 'meds', label: 'Medications' },
+  { key: 'io', label: 'I/O' },
+  { key: 'meds', label: 'Meds' },
   { key: 'orders', label: 'Orders' },
+  { key: 'oxygen', label: 'O₂' },
+  { key: 'labs', label: 'Labs' },
 ];
+
+const FLUID_ORDER_TEXT = 'Fluid restriction. Strict input/output chart.';
+
+/** The active allergies as "Penicillin (Severe) · Latex"; older servers send plain names. */
+function allergyLine(patient) {
+  if (Array.isArray(patient?.allergy_list)) {
+    return patient.allergy_list.filter((a) => !a.resolved).map((a) => a.label).join('  ·  ');
+  }
+  return (patient?.allergies ?? []).filter((a) => typeof a === 'string').join('  ·  ');
+}
 
 function useKeyboardHeight() {
   const [height, setHeight] = useState(0);
@@ -49,10 +64,18 @@ function TabBadge({ tab, badges }) {
   if (tab === 'io' && badges.io_level) {
     return <View style={[styles.dot, { backgroundColor: badges.io_level === 'critical' ? colors.rose500 : colors.amber500 }]} />;
   }
-  const count = tab === 'meds' ? badges.meds_overdue : tab === 'orders' ? badges.orders_open : 0;
+  // SpO2 against the target: red below it, amber above it while on oxygen
+  if (tab === 'oxygen' && badges.oxygen_level) {
+    return <View style={[styles.dot, { backgroundColor: badges.oxygen_level === 'critical' ? colors.rose500 : colors.amber500 }]} />;
+  }
+  const count = tab === 'meds' ? badges.meds_overdue
+    : tab === 'orders' ? badges.orders_open
+    : tab === 'labs' ? badges.labs_review
+    : 0;
   if (!count) return null;
+  const urgent = tab === 'meds' || (tab === 'labs' && badges.labs_overdue > 0);
   return (
-    <View style={[styles.count, tab === 'meds' && { backgroundColor: colors.rose500 }]}>
+    <View style={[styles.count, urgent && { backgroundColor: colors.rose500 }]}>
       <Text style={styles.countText}>{count}</Text>
     </View>
   );
@@ -76,7 +99,8 @@ export default function PatientChartModal({ visible, onClose, bed, doctorName, d
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
   const [ioDay, setIoDay] = useState(null);
-  const [composeRequest, setComposeRequest] = useState(0);
+  // Another tab asking for an order: { id, text, fluid }
+  const [composeRequest, setComposeRequest] = useState(null);
   const noticeTimer = useRef(null);
 
   const load = useCallback(async (day, isRefresh = false) => {
@@ -118,7 +142,7 @@ export default function PatientChartModal({ visible, onClose, bed, doctorName, d
     load(day);
   }
 
-  // Orders: the answer carries today's chart, so the I/O tab goes back to today
+  // Orders and reviews: the answer carries today's chart, so the I/O tab goes back to today
   async function act(action) {
     const data = await action();
     setChart(data.chart);
@@ -128,12 +152,15 @@ export default function PatientChartModal({ visible, onClose, bed, doctorName, d
     return data;
   }
 
-  function orderFluidRestriction() {
+  // Open the order form on the Orders tab, started with the text for what was asked
+  function composeOrder(text, fluid = false) {
     setTab('orders');
-    setComposeRequest((n) => n + 1);
+    setComposeRequest({ id: Date.now(), text, fluid });
   }
 
   const patient = chart?.patient;
+  const allergies = allergyLine(patient ?? bed);
+  const vip = patient?.vip ?? bed?.vip_status ?? null;
 
   return (
     <Modal visible={visible} animationType="slide" statusBarTranslucent onRequestClose={onClose}>
@@ -142,7 +169,14 @@ export default function PatientChartModal({ visible, onClose, bed, doctorName, d
           <View style={styles.headerRow}>
             <View style={{ flex: 1, paddingRight: 12 }}>
               <Text style={styles.eyebrow}>{demo ? 'PATIENT CHART · DEMO' : 'PATIENT CHART'}</Text>
-              <Text style={styles.name} numberOfLines={1}>{patient?.name ?? bed?.patient_name ?? 'Patient'}</Text>
+              <View style={styles.nameRow}>
+                <Text style={styles.name} numberOfLines={1}>{patient?.name ?? bed?.patient_name ?? 'Patient'}</Text>
+                {vip ? (
+                  <View style={[styles.vip, vip === 'VVIP' && styles.vvip]}>
+                    <Text style={styles.vipText}>{vip}</Text>
+                  </View>
+                ) : null}
+              </View>
               <Text style={styles.sub} numberOfLines={1}>
                 Bed {patient?.bed ?? bed?.number ?? '-'}  ·  {patient?.ward ?? bed?.ward_name ?? ''}
                 {patient?.mrn ? `  ·  MRN ${patient.mrn}` : ''}
@@ -152,11 +186,16 @@ export default function PatientChartModal({ visible, onClose, bed, doctorName, d
               <Text style={styles.closeText}>Done</Text>
             </TouchableOpacity>
           </View>
-          {patient?.allergies?.length ? (
-            <Text style={styles.allergies} numberOfLines={2}>Allergies: {patient.allergies.join(', ')}</Text>
+          {allergies ? (
+            <Text style={styles.allergies} numberOfLines={2}>⚠ Allergies: {allergies}</Text>
           ) : null}
 
-          <View style={styles.tabs}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.tabsScroll}
+            contentContainerStyle={styles.tabs}
+          >
             {TABS.map((t) => (
               <TouchableOpacity
                 key={t.key}
@@ -168,7 +207,7 @@ export default function PatientChartModal({ visible, onClose, bed, doctorName, d
                 <TabBadge tab={t.key} badges={chart?.badges} />
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
         </View>
 
         <ScrollView
@@ -194,17 +233,20 @@ export default function PatientChartModal({ visible, onClose, bed, doctorName, d
           {chart ? (
             <>
               {tab === 'io' ? (
-                <IoTab io={chart.io} onDay={changeDay} onRestrict={orderFluidRestriction} busy={loading} />
+                <IoTab io={chart.io} onDay={changeDay} onRestrict={() => composeOrder(FLUID_ORDER_TEXT, true)} busy={loading} />
               ) : null}
               {tab === 'meds' ? <MedsTab medications={chart.medications} /> : null}
               {tab === 'orders' ? (
                 <OrdersTab
                   orders={chart.orders}
                   composeRequest={composeRequest}
+                  onComposeHandled={() => setComposeRequest(null)}
                   onCreate={(body) => act(() => client.createOrder(body))}
                   onCancel={(orderId, reason) => act(() => client.cancelOrder(orderId, reason))}
                 />
               ) : null}
+              {tab === 'oxygen' ? <OxygenTab oxygen={chart.oxygen} onOrder={(text) => composeOrder(text)} /> : null}
+              {tab === 'labs' ? <LabsTab labs={chart.labs} onReview={(labId) => act(() => client.reviewLab(labId))} /> : null}
               <Text style={styles.updated}>Updated {chart.generated_label} · pull down to refresh</Text>
             </>
           ) : null}
@@ -229,7 +271,11 @@ const styles = StyleSheet.create({
   },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start' },
   eyebrow: { fontSize: 10, fontWeight: '800', letterSpacing: 2, color: '#93c5fd' },
-  name: { marginTop: 4, fontSize: 20, fontWeight: '800', color: '#fff' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  name: { flexShrink: 1, fontSize: 20, fontWeight: '800', color: '#fff' },
+  vip: { backgroundColor: colors.amber100, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
+  vvip: { backgroundColor: '#fbbf24' },
+  vipText: { fontSize: 11, fontWeight: '900', color: '#451a03', letterSpacing: 0.5 },
   sub: { marginTop: 2, fontSize: 12, color: '#cbd5e1' },
   allergies: {
     marginTop: 8,
@@ -244,21 +290,27 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   closeText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  tabs: {
-    flexDirection: 'row',
+  // Five tabs fill the bar on most phones, and scroll sideways on the narrowest
+  tabsScroll: {
     marginTop: 14,
+    flexGrow: 0,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: radius.md,
+  },
+  tabs: {
+    flexGrow: 1,
+    flexDirection: 'row',
     padding: 4,
     gap: 4,
   },
   tab: {
-    flex: 1,
+    flexGrow: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 5,
     paddingVertical: 9,
+    paddingHorizontal: 8,
     borderRadius: radius.sm,
   },
   tabActive: { backgroundColor: '#fff' },

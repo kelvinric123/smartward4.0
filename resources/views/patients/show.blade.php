@@ -13,6 +13,8 @@
     $payorStatusLabel = $patient->payorStatusLabel();
     $payorStatusClass = $patient->payorStatusBadgeClass();
     $payorTypeLabel = \App\Models\Patient::PAYOR_TYPES[$patient->payor_type] ?? null;
+    $vipStatusLabel = $patient->vipStatusLabel();
+    $vipStatusClass = $patient->vipStatusBadgeClass();
 
     // Which tabs each section belongs to; "overview" shows them all side by side
     $sectionTabs = \App\Http\Controllers\PatientController::TAB_SECTIONS;
@@ -78,12 +80,7 @@
         : null;
     $expected = $summary['expected_discharge'];
     $expectedRelative = $summary['expected_relative'];
-    $expectedRelativeClass = match (true) {
-        $expectedRelative === null => '',
-        str_starts_with($expectedRelative, 'Overdue') => 'bg-red-100 text-red-700',
-        in_array($expectedRelative, ['Today', 'Tomorrow']) => 'bg-amber-100 text-amber-800',
-        default => 'bg-blue-100 text-blue-700',
-    };
+    $expectedRelativeClass = $summary['expected_relative_class'];
 
     $charges = $summary['charges'];
     $careProviders = $patient->activeCareProviders;
@@ -184,6 +181,9 @@
                         <div class="flex flex-wrap items-center gap-2">
                             <h1 class="text-2xl font-bold text-gray-900 break-words">{{ $patient->name }}</h1>
                             <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold {{ $statusClass }}">{{ $statusLabel }}</span>
+                            @if ($vipStatusLabel)
+                                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold {{ $vipStatusClass }}">{{ $vipStatusLabel }}</span>
+                            @endif
                             @unless ($patient->is_active)
                                 <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800">Inactive Record</span>
                             @endunless
@@ -337,6 +337,11 @@
                         <x-patient.field label="Religion" :value="$patient->religion" />
                         <x-patient.field label="Phone" :value="$patient->phone" />
                         <x-patient.field label="Address" :value="$address" />
+                        <x-patient.field label="VIP Status">
+                            @if ($vipStatusLabel)
+                                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold {{ $vipStatusClass }}">{{ $vipStatusLabel }}</span>
+                            @endif
+                        </x-patient.field>
                         <x-patient.field label="Record">
                             <span @class([
                                 'px-2.5 py-0.5 rounded-full text-xs font-semibold',
@@ -362,6 +367,8 @@
                                 :value="$patient->date_of_birth?->format('Y-m-d')" />
                             <x-patient.input name="race" label="Race" :value="$patient->race" />
                             <x-patient.input name="religion" label="Religion" :value="$patient->religion" />
+                            <x-patient.input name="vip_status" label="VIP Status" type="select" :value="$patient->vip_status"
+                                :options="\App\Models\Patient::VIP_STATUSES" placeholder="Not a VIP" />
                         </div>
                     </x-slot:form>
                 </x-patient.section>

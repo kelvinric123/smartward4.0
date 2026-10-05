@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Patient Details</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <x-theme-style />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -101,6 +102,7 @@
             'info' => true,
             'additional' => true,
             'vitals' => true,
+            'oxygen' => true,
             'io' => true,
             'medications' => false,
             'movement' => true,
@@ -210,7 +212,10 @@
                 <h2 class="text-xl font-bold text-gray-800">Patient Details</h2>
                 @if($patient)
                     <p class="text-sm text-gray-600 mt-1">
-                        {{ $patient->name }} 
+                        {{ $patient->name }}
+                        @if($patient->vipStatusLabel())
+                            <span class="ml-1 px-2 py-0.5 rounded-full text-[11px] font-bold align-middle {{ $patient->vipStatusBadgeClass() }}">{{ $patient->vipStatusLabel() }}</span>
+                        @endif
                         <span class="text-gray-400 mx-1">•</span>
                         MRN: <span class="font-semibold">{{ $patient->mrn }}</span>
                         @if($patient->bed_number)
@@ -284,6 +289,27 @@
                         class="whitespace-nowrap py-2 px-3 border-b-2 font-medium">
                         Vital Signs
                     </button>
+                    @if($patientTabs['oxygen'] ?? false)
+                        @php
+                            // Loaded once here for the badge, and reused by the tab (wards.partials.oxygen-therapy)
+                            $oxygenTherapy = \App\Support\OxygenTherapyChart::forPatient($patient);
+                            $oxygenNow = $oxygenTherapy['current'];
+                            $oxygenSpo2Low = ($oxygenTherapy['latest_spo2']['state'] ?? null) === 'below'
+                                && !($oxygenTherapy['latest_spo2']['stale'] ?? false);
+                        @endphp
+                        <button type="button"
+                            @click="activeTab = 'oxygen'"
+                            :class="activeTab === 'oxygen' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-2 px-3 border-b-2 font-medium">
+                            Oxygen Therapy
+                            @if($oxygenNow && $oxygenNow['on_oxygen'])
+                                <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold {{ $oxygenSpo2Low ? 'bg-red-600 text-white' : 'bg-sky-100 text-sky-800' }}"
+                                    title="{{ $oxygenNow['label'] }}{{ $oxygenNow['settings'] ? ', ' . $oxygenNow['settings'] : '' }}{{ $oxygenSpo2Low ? ' - latest SpO₂ below target' : '' }}">{{ $oxygenNow['short'] }}</span>
+                            @elseif($oxygenSpo2Low)
+                                <span class="ml-1 inline-block h-2 w-2 rounded-full align-middle bg-red-500" title="Latest SpO₂ below target"></span>
+                            @endif
+                        </button>
+                    @endif
                     @if(($patientTabs['io'] ?? false) && ($fluidBalance ?? null))
                         @php
                             // Worst flag on the I/O chart: over the limit, low urine, overload signs, weight gain
@@ -324,6 +350,23 @@
                         class="whitespace-nowrap py-2 px-3 border-b-2 font-medium">
                         Patient Movement
                     </button>
+                    @if(($labSettings['enabled'] ?? false) && ($patientTabs['lab'] ?? true))
+                        @php
+                            $labOverdueCount = ($labInvestigations ?? collect())
+                                ->filter(fn ($lab) => $lab->reviewState() === 'overdue')
+                                ->count();
+                        @endphp
+                        <button type="button"
+                            @click="activeTab = 'lab'"
+                            :class="activeTab === 'lab' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-2 px-3 border-b-2 font-medium">
+                            Lab Investigations
+                            @if($labOverdueCount > 0)
+                                <span class="ml-1 inline-flex items-center justify-center min-w-[1.25rem] px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-red-600 text-white"
+                                    title="{{ $labOverdueCount }} result(s) overdue for review">{{ $labOverdueCount }}</span>
+                            @endif
+                        </button>
+                    @endif
                     <button type="button"
                         @click="activeTab = 'careprovider'"
                         x-show="patientTabs.careprovider"
@@ -500,6 +543,74 @@
                             </div>
                         </div>
                     </div>
+
+                    {{-- VIP, payor, COE and expected discharge: edited on the patient profile page --}}
+                    @php
+                        $expectedDischarge = $patient->expectedDischarge();
+                        $payorStatusLabel = $patient->payorStatusLabel();
+                        $payorDetail = $patient->payor_name ?: (\App\Models\Patient::PAYOR_TYPES[$patient->payor_type] ?? null);
+                        $coeIndicators = collect($patient->coe_indicators ?? [])->filter()->values();
+                    @endphp
+                    <div class="mt-5 pt-4 border-t border-gray-100">
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="text-sm font-semibold text-gray-700">Admission &amp; Payor</h4>
+                            <a href="{{ route('patients.show', $patient) }}" target="_blank" rel="noopener"
+                               class="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline">
+                                Edit in Patient Profile &nearr;
+                            </a>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <div class="text-gray-500">VIP Status</div>
+                                <div class="font-medium text-gray-900">
+                                    @if($patient->vipStatusLabel())
+                                        <span class="inline-block mt-0.5 px-2 py-0.5 rounded-full text-xs font-bold {{ $patient->vipStatusBadgeClass() }}">{{ $patient->vipStatusLabel() }}</span>
+                                    @else
+                                        -
+                                    @endif
+                                </div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500">Payor Status</div>
+                                <div class="font-medium text-gray-900">
+                                    @if($payorStatusLabel)
+                                        <span class="inline-block mt-0.5 px-2 py-0.5 rounded-full text-xs font-semibold {{ $patient->payorStatusBadgeClass() }}">{{ $payorStatusLabel }}</span>
+                                    @elseif(!$payorDetail)
+                                        -
+                                    @endif
+                                    @if($payorDetail)
+                                        <div class="mt-0.5 text-xs font-normal text-gray-500">{{ $payorDetail }}</div>
+                                    @endif
+                                </div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500">COE Indicators</div>
+                                <div class="font-medium text-gray-900">
+                                    @forelse($coeIndicators as $coe)
+                                        <span class="inline-block mt-0.5 mr-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-100 text-violet-800 border border-violet-200">{{ $coe }}</span>
+                                    @empty
+                                        -
+                                    @endforelse
+                                </div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500">Expected Discharge</div>
+                                <div class="font-medium text-gray-900">
+                                    @if($expectedDischarge['at'])
+                                        {{ $expectedDischarge['at']->format($expectedDischarge['projected'] ? 'Y-m-d' : 'Y-m-d H:i') }}
+                                        @if($expectedDischarge['relative'])
+                                            <span class="ml-1 px-2 py-0.5 rounded-full text-xs font-semibold {{ $expectedDischarge['relative_class'] }}">{{ $expectedDischarge['relative'] }}</span>
+                                        @endif
+                                        @if($expectedDischarge['projected'])
+                                            <div class="mt-0.5 text-xs font-normal text-gray-400">Projected from est. length of stay</div>
+                                        @endif
+                                    @else
+                                        -
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Patient Additional Info - Clinical Indicators -->
@@ -515,6 +626,7 @@
                             return [
                                 'name' => $name,
                                 'status' => $a['status'] ?? 'Active', // Default to Active if not specified
+                                'severity' => \App\Models\Patient::allergySeverity($a), // Optional (HL7 AL1-4)
                             ];
                         }
                         // Simple string legacy data
@@ -523,7 +635,8 @@
 
                         return [
                             'name' => $name,
-                            'status' => 'Active'
+                            'status' => 'Active',
+                            'severity' => null,
                         ];
                     })->values()->toArray();
 
@@ -552,7 +665,14 @@
                 @endphp
                 <div x-show="activeTab === 'additional'" x-cloak
                      x-data="{
-                        allergies: @json($allergyList)
+                        allergies: @json($allergyList),
+                        severityBadge(severity) {
+                            return {
+                                Severe: 'bg-red-600 text-white',
+                                Moderate: 'bg-orange-500 text-white',
+                                Mild: 'bg-yellow-200 text-yellow-900',
+                            }[severity] ?? 'bg-gray-200 text-gray-700';
+                        }
                      }">
                     <h3 class="text-lg font-semibold text-gray-800 mb-3">Patient Additional Info</h3>
                     <p class="text-sm text-gray-600 mb-4">
@@ -838,6 +958,7 @@
                                             <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium border"
                                                   :class="entry.status === 'Resolved' ? 'bg-green-100 text-green-800 border-green-200' : 'bg-pink-100 text-pink-800 border-pink-200'">
                                                 <span x-text="entry.name"></span>
+                                                <span class="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide" x-show="entry.severity" x-text="entry.severity" :class="severityBadge(entry.severity)"></span>
                                                 <span class="ml-1 text-xs font-semibold" x-text="entry.status === 'Resolved' ? '(Resolved)' : ''"></span>
                                                 <button type="button" @click="entries.splice(index, 1)" title="Remove"
                                                     class="ml-2 -mr-1 rounded-full px-1 text-current opacity-60 hover:opacity-100">&times;</button>
@@ -846,11 +967,25 @@
                                         </template>
                                         <p x-show="entries.length === 0" class="text-sm text-gray-400 italic">No allergies recorded</p>
                                     </div>
-                                    <div class="mt-3 max-w-md">
-                                        <label for="new_allergy" class="block text-xs font-semibold text-gray-600 mb-1">Add allergy</label>
-                                        <input type="text" id="new_allergy" name="new_allergy" maxlength="100" autocomplete="off"
-                                            placeholder="e.g. Penicillin (saved with the form)"
-                                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-pink-500 focus:ring-pink-500 text-sm">
+                                    <div class="mt-3 max-w-lg">
+                                        <div class="flex gap-2">
+                                            <div class="flex-1">
+                                                <label for="new_allergy" class="block text-xs font-semibold text-gray-600 mb-1">Add allergy</label>
+                                                <input type="text" id="new_allergy" name="new_allergy" maxlength="100" autocomplete="off"
+                                                    placeholder="e.g. Penicillin (saved with the form)"
+                                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-pink-500 focus:ring-pink-500 text-sm">
+                                            </div>
+                                            <div class="w-36">
+                                                <label for="new_allergy_severity" class="block text-xs font-semibold text-gray-600 mb-1">Severity <span class="font-normal text-gray-400">(optional)</span></label>
+                                                <select id="new_allergy_severity" name="new_allergy_severity"
+                                                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-pink-500 focus:ring-pink-500 text-sm">
+                                                    <option value="">Not specified</option>
+                                                    @foreach(\App\Models\Patient::ALLERGY_SEVERITIES as $code => $label)
+                                                        <option value="{{ $code }}">{{ $label }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                        </div>
                                         <p class="mt-1 text-xs text-gray-400">Removed allergies and the new one are applied when you save.</p>
                                     </div>
                                 </div>
@@ -864,6 +999,7 @@
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                                             </svg>
                                             <span x-text="allergy.name"></span>
+                                            <span class="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide" x-show="allergy.severity" x-text="allergy.severity" :class="severityBadge(allergy.severity)"></span>
                                             <span class="ml-1 text-xs font-semibold" x-text="allergy.status === 'Resolved' ? '(Resolved)' : ''"></span>
                                         </span>
                                     </template>
@@ -1190,6 +1326,13 @@
                         <div class="p-4 text-sm text-red-500">No patient selected.</div>
                     @endif
                 </div>
+
+                {{-- Oxygen therapy: the oxygen now, changing it, and its progression against SpO2 --}}
+                @if(($patientTabs['oxygen'] ?? false) && isset($oxygenTherapy))
+                    <div x-show="activeTab === 'oxygen'" x-cloak>
+                        @include('wards.partials.oxygen-therapy', ['oxygen' => $oxygenTherapy])
+                    </div>
+                @endif
 
                 {{-- I/O chart: intake and output, the fluid plan and signs of overload --}}
                 @if(($patientTabs['io'] ?? false) && ($fluidBalance ?? null))
@@ -1629,6 +1772,197 @@
                         @endif
                     </div>
                 </div>
+
+                {{-- Lab Investigations: orders and results from the HIS (Settings > Patient Additional Info) --}}
+                @if(($labSettings['enabled'] ?? false) && ($patientTabs['lab'] ?? true))
+                    @php
+                        $labs = $labInvestigations ?? collect();
+                        $labStates = $labs->mapWithKeys(fn ($lab) => [$lab->id => $lab->reviewState()]);
+                        $labAwaitingReview = $labs->filter(fn ($lab) => $lab->awaitingReview())->count();
+                        $labOverdue = $labStates->filter(fn ($state) => $state === 'overdue')->count();
+                        $labPending = $labs->filter(fn ($lab) => in_array($lab->status, ['ordered', 'collected', 'in_progress'], true))->count();
+                        $labCritical = $labs->filter(fn ($lab) => $lab->awaitingReview() && $lab->resultFlag() === 'critical')->count();
+                        $priorityClasses = [
+                            'stat' => 'bg-red-600 text-white',
+                            'urgent' => 'bg-orange-100 text-orange-800',
+                            'routine' => 'bg-gray-100 text-gray-700',
+                        ];
+                        $labStatusClasses = [
+                            'ordered' => 'bg-yellow-100 text-yellow-800',
+                            'collected' => 'bg-blue-100 text-blue-800',
+                            'in_progress' => 'bg-indigo-100 text-indigo-800',
+                            'resulted' => 'bg-green-100 text-green-800',
+                            'cancelled' => 'bg-gray-100 text-gray-500',
+                        ];
+                        $reviewStates = [
+                            'overdue' => ['Review overdue', 'bg-red-600 text-white'],
+                            'due_soon' => ['Review due soon', 'bg-amber-400 text-amber-950'],
+                            'due' => ['Review by', 'bg-blue-50 text-blue-800 border border-blue-200'],
+                            'awaiting_result' => ['Awaiting result', 'bg-gray-100 text-gray-700'],
+                            'result_late' => ['Result late', 'bg-orange-100 text-orange-800'],
+                            'reviewed' => ['Reviewed', 'bg-green-100 text-green-800'],
+                            'none' => ['-', 'bg-gray-50 text-gray-400'],
+                        ];
+                        $isFlagged = fn ($flag) => !in_array(strtoupper(trim((string) $flag)), ['', 'N'], true);
+                        $flagClass = fn ($flag) => match (true) {
+                            in_array(strtoupper(trim((string) $flag)), \App\Models\LabInvestigation::CRITICAL_FLAGS, true) => 'text-red-700 font-bold',
+                            $isFlagged($flag) => 'text-orange-700 font-semibold',
+                            default => 'text-gray-700',
+                        };
+                    @endphp
+                    <div x-show="activeTab === 'lab'" x-cloak>
+                        <h3 class="text-lg font-semibold text-gray-800 mb-3">Lab Investigations</h3>
+                        <p class="text-sm text-gray-600 mb-4">
+                            Lab orders and results received from the HIS: what was ordered, how urgently and by whom,
+                            and when each result should be reviewed.
+                        </p>
+
+                        @if($labSettings['sample'] ?? false)
+                            <div class="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-900">
+                                <span class="font-semibold">Sample data is on.</span>
+                                Rows marked <span class="px-1 rounded bg-amber-200 font-bold">SAMPLE</span> are demo data showing how
+                                HIS lab orders appear here &mdash; they are not this patient's results.
+                                Switch it off in Settings &gt; Patient Additional Info.
+                            </div>
+                        @endif
+
+                        @if($labs->isEmpty())
+                            <div class="border border-dashed border-gray-300 rounded-lg p-4 text-xs text-gray-500">
+                                No lab investigations received from the HIS for this patient.
+                            </div>
+                        @else
+                            <div class="mb-4 flex flex-wrap gap-2 text-xs">
+                                <span class="px-2.5 py-1 rounded-full {{ $labOverdue ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-700' }}">
+                                    <span class="font-bold">{{ $labAwaitingReview }}</span> awaiting review{{ $labOverdue ? ' · ' . $labOverdue . ' overdue' : '' }}
+                                </span>
+                                @if($labCritical)
+                                    <span class="px-2.5 py-1 rounded-full bg-red-100 text-red-800 border border-red-300">
+                                        <span class="font-bold">{{ $labCritical }}</span> critical result{{ $labCritical > 1 ? 's' : '' }} unreviewed
+                                    </span>
+                                @endif
+                                <span class="px-2.5 py-1 rounded-full bg-gray-100 text-gray-700">
+                                    <span class="font-bold">{{ $labPending }}</span> pending in lab
+                                </span>
+                            </div>
+
+                            <div class="overflow-x-auto border border-gray-200 rounded-lg">
+                                <table class="min-w-full text-xs">
+                                    <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-3 py-2 text-left font-medium text-gray-600 border-b">Investigation</th>
+                                        <th class="px-3 py-2 text-left font-medium text-gray-600 border-b">Ordered</th>
+                                        <th class="px-3 py-2 text-left font-medium text-gray-600 border-b">Status</th>
+                                        <th class="px-3 py-2 text-left font-medium text-gray-600 border-b">Results</th>
+                                        <th class="px-3 py-2 text-left font-medium text-gray-600 border-b">When to review</th>
+                                        <th class="px-3 py-2 text-right font-medium text-gray-600 border-b">Actions</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    @foreach($labs as $lab)
+                                        @php
+                                            $reviewState = $labStates[$lab->id];
+                                            $reviewDue = $lab->reviewDueAt();
+                                            $flagged = collect($lab->results ?? [])->filter(fn ($row) => $isFlagged($row['flag'] ?? ''));
+                                            $resultFlag = $lab->resultFlag();
+                                        @endphp
+                                        <tr class="align-top {{ $reviewState === 'overdue' ? 'bg-red-50' : 'hover:bg-gray-50' }}">
+                                            <td class="px-3 py-2 border-b">
+                                                <div class="font-semibold text-gray-900">
+                                                    {{ $lab->test_name }}
+                                                    @if($lab->isSample())
+                                                        <span class="ml-1 px-1 rounded bg-amber-200 text-amber-900 text-[10px] font-bold" title="Demo data, not from the HIS">SAMPLE</span>
+                                                    @endif
+                                                </div>
+                                                <div class="mt-0.5 flex flex-wrap items-center gap-1 text-[11px] text-gray-500">
+                                                    <span class="px-1.5 rounded bg-slate-100 text-slate-700 uppercase tracking-wide">{{ $lab->categoryLabel() }}</span>
+                                                    @if($lab->test_code)<span>{{ $lab->test_code }}</span>@endif
+                                                </div>
+                                                @if($lab->specimen)
+                                                    <div class="text-[11px] text-gray-500">{{ $lab->specimen }}</div>
+                                                @endif
+                                            </td>
+                                            <td class="px-3 py-2 border-b whitespace-nowrap">
+                                                <span class="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold uppercase {{ $priorityClasses[$lab->priority] ?? 'bg-gray-100 text-gray-700' }}">{{ $lab->priorityLabel() }}</span>
+                                                <div class="mt-0.5 text-gray-800">{{ $lab->ordered_at->format('Y-m-d H:i') }}</div>
+                                                @if($lab->ordered_by)<div class="text-[11px] text-gray-500">{{ $lab->ordered_by }}</div>@endif
+                                                <div class="text-[11px] text-gray-400">Order {{ $lab->order_no }}</div>
+                                            </td>
+                                            <td class="px-3 py-2 border-b whitespace-nowrap">
+                                                <span class="inline-flex items-center px-2 py-1 rounded-full text-[11px] font-semibold {{ $labStatusClasses[$lab->status] ?? 'bg-gray-100 text-gray-800' }}">{{ $lab->statusLabel() }}</span>
+                                                @if($lab->collected_at)<div class="mt-1 text-[11px] text-gray-500">Collected {{ $lab->collected_at->format('d/m H:i') }}</div>@endif
+                                                @if($lab->resulted_at)<div class="text-[11px] text-gray-500">Resulted {{ $lab->resulted_at->format('d/m H:i') }}</div>@endif
+                                            </td>
+                                            <td class="px-3 py-2 border-b min-w-[14rem]">
+                                                @if(!empty($lab->results))
+                                                    @if($resultFlag === 'critical')
+                                                        <span class="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white">CRITICAL</span>
+                                                    @elseif($resultFlag === 'abnormal')
+                                                        <span class="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-800">ABNORMAL</span>
+                                                    @else
+                                                        <span class="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-800">NORMAL</span>
+                                                    @endif
+                                                    {{-- Flagged values always visible; the full panel on demand --}}
+                                                    @foreach($flagged as $row)
+                                                        <div class="mt-0.5 {{ $flagClass($row['flag'] ?? '') }}">
+                                                            {{ $row['name'] }} {{ $row['value'] ?? '' }} {{ $row['unit'] ?? '' }}
+                                                            <span class="text-[10px]">({{ strtoupper($row['flag']) }})</span>
+                                                        </div>
+                                                    @endforeach
+                                                    <details class="mt-1">
+                                                        <summary class="cursor-pointer text-[11px] text-blue-600 hover:underline">All {{ count($lab->results) }} results</summary>
+                                                        <table class="mt-1 w-full text-[11px]">
+                                                            @foreach($lab->results as $row)
+                                                                <tr>
+                                                                    <td class="pr-2 text-gray-600">{{ $row['name'] }}</td>
+                                                                    <td class="pr-2 {{ $flagClass($row['flag'] ?? '') }}">
+                                                                        {{ $row['value'] ?? '' }} {{ $row['unit'] ?? '' }}
+                                                                        @if($isFlagged($row['flag'] ?? ''))({{ strtoupper($row['flag']) }})@endif
+                                                                    </td>
+                                                                    <td class="text-gray-400">{{ $row['range'] ?? '' }}</td>
+                                                                </tr>
+                                                            @endforeach
+                                                        </table>
+                                                    </details>
+                                                @else
+                                                    <span class="text-gray-400 italic">{{ $lab->status === 'cancelled' ? 'Cancelled' : 'No result yet' }}</span>
+                                                @endif
+                                                @if($lab->comment)
+                                                    <div class="mt-1 text-[11px] text-gray-600 italic">{{ $lab->comment }}</div>
+                                                @endif
+                                            </td>
+                                            <td class="px-3 py-2 border-b whitespace-nowrap">
+                                                <span class="inline-flex px-2 py-1 rounded-full text-[11px] font-semibold {{ $reviewStates[$reviewState][1] }}">{{ $reviewStates[$reviewState][0] }}</span>
+                                                @if($reviewState === 'reviewed')
+                                                    <div class="mt-1 text-[11px] text-gray-600">{{ $lab->reviewed_at->format('d/m H:i') }}</div>
+                                                    @if($lab->reviewed_by_name)<div class="text-[11px] text-gray-500">{{ $lab->reviewed_by_name }}</div>@endif
+                                                @elseif($reviewDue)
+                                                    <div class="mt-1 text-gray-800 font-medium">{{ $reviewDue->format('d/m H:i') }}</div>
+                                                    <div class="text-[11px] {{ $reviewDue->isPast() ? 'text-red-600' : 'text-gray-500' }}">{{ $reviewDue->diffForHumans(['parts' => 2, 'short' => true]) }}</div>
+                                                @endif
+                                            </td>
+                                            <td class="px-3 py-2 border-b text-right whitespace-nowrap">
+                                                @if($lab->awaitingReview() && !($additionalInfoReadOnly ?? false))
+                                                    <form method="POST" action="{{ route('ward.lab-investigations.review', $lab) }}">
+                                                        @csrf
+                                                        <button type="submit"
+                                                                class="inline-flex items-center px-2 py-1 bg-green-600 text-white text-[11px] font-semibold rounded hover:bg-green-700">
+                                                            Mark reviewed
+                                                        </button>
+                                                    </form>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @endforeach
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p class="mt-2 text-[11px] text-gray-400">
+                                When the HIS sends no review time, a result is due for review 1 hour (STAT), 4 hours (Urgent)
+                                or 24 hours (Routine) after it is resulted.
+                            </p>
+                        @endif
+                    </div>
+                @endif
 
                 {{-- Consultant tab (settings key 'careprovider', formerly "Care Provider") --}}
                 <div x-show="activeTab === 'careprovider'" x-cloak>
@@ -2896,6 +3230,11 @@
                     @if (\App\Support\ClinicalIndicatorLibrary::takesReadings($indicator['definition']))
                         {{-- Monitor readings (the hemodynamic numerics) are typed in rather than scored --}}
                         @include('wards.partials.clinical-indicator-readings')
+                        @continue
+                    @endif
+                    @if (\App\Support\ClinicalIndicatorLibrary::isScreen($indicator['definition']))
+                        {{-- Screens (the C-SSRS) are asked question by question; the most serious answer sets the risk --}}
+                        @include('wards.partials.clinical-indicator-screen')
                         @continue
                     @endif
                     @php

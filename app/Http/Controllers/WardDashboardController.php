@@ -26,7 +26,9 @@ use App\Models\ClinicalIndicatorScore;
 use App\Support\ClinicalIndicatorLibrary;
 use App\Support\ClinicalIndicatorMonitoring;
 use App\Support\ClinicalIndicatorReadings;
+use App\Support\ClinicalIndicatorScreen;
 use App\Support\FluidBalanceChart;
+use App\Support\PatientPrivacy;
 use App\Models\PatientCareProvider;
 use App\Models\Infusion;
 use App\Models\WardNotification;
@@ -36,11 +38,27 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use App\Services\EkadService;
 use App\Services\PatientInfoSources;
+use App\Services\LabInvestigations;
+use App\Models\LabInvestigation;
 use App\Services\InfusionNotificationService;
 use App\Models\WardSpecialDuty;
 
 class WardDashboardController extends Controller
 {
+    /** Dashboard Display defaults: Privacy Mode off, and the page reloads every 60s. */
+    private const DEFAULT_DASHBOARD_DISPLAY = [
+        'patient_name_mask' => 'full',
+        'patient_mrn_mask' => 'full',
+        'refresh_interval' => 60,
+        'fullscreen_mode' => 'medium',
+        'fullscreen_text_size' => 'medium',
+        'fullscreen_resolution' => 'default',
+    ];
+
+    /** Auto refresh: 0 switches it off, otherwise seconds between reloads within these bounds. */
+    private const MIN_REFRESH_INTERVAL = 10;
+    private const MAX_REFRESH_INTERVAL = 3600;
+
     public function index(Request $request)
     {
         // Get all wards
@@ -166,9 +184,9 @@ class WardDashboardController extends Controller
         $statistics = $this->calculateWardStatistics($selectedWardId, $beds, $admittedPatients);
 
         // Preparations for view
-        $consultantPatients = $this->getConsultantPatients($selectedWardId);
-        $nursePatients = $this->getNursePatients($selectedWardId);
-        $anaesthetistPatients = $this->getAnaesthetistPatients($selectedWardId);
+        $consultantPatients = $this->maskStaffPatientLists($this->getConsultantPatients($selectedWardId), $settings['dashboardDisplay']);
+        $nursePatients = $this->maskStaffPatientLists($this->getNursePatients($selectedWardId), $settings['dashboardDisplay']);
+        $anaesthetistPatients = $this->maskStaffPatientLists($this->getAnaesthetistPatients($selectedWardId), $settings['dashboardDisplay']);
 
         $bedBoxVitalsMode = $userSettings ? ($userSettings->bed_box_vitals_mode ?? 'demo') : 'demo';
 
@@ -1276,6 +1294,12 @@ class WardDashboardController extends Controller
             ? FluidBalanceChart::forPatient($patient, $request->input('io_day'))
             : null;
 
+        // Lab Investigations tab (system-wide, Settings > Patient Additional Info); sample data on demand
+        $labSettings = LabInvestigations::settings();
+        if ($patient && $labSettings['enabled'] && $labSettings['sample']) {
+            LabInvestigations::ensureSamples($patient);
+        }
+
         return view('wards.patient-details', [
             'patient' => $patient,
             'consultants' => $consultants,
@@ -1303,6 +1327,10 @@ class WardDashboardController extends Controller
                 ? Medication::active()->orderBy('category')->orderBy('name')->get()
                 : collect(),
             'fluidBalance' => $fluidBalance,
+            'labSettings' => $labSettings,
+            'labInvestigations' => $patient && $labSettings['enabled']
+                ? LabInvestigation::forPatient($patient, $labSettings['sample'])
+                : collect(),
         ]);
     }
 
@@ -1407,6 +1435,16 @@ class WardDashboardController extends Controller
 
             $score = $readings['score'];
             $itemScores = $readings['items'];
+        } elseif (ClinicalIndicatorLibrary::isScreen($definition)) {
+            // Asked question by question (the C-SSRS): the most serious answer sets the risk
+            $screen = ClinicalIndicatorScreen::evaluate($definition, $validated['item_scores'] ?? []);
+
+            if ($screen['error'] !== null) {
+                return back()->withInput()->with('error', $screen['error']);
+            }
+
+            $score = $screen['score'];
+            $itemScores = $screen['items'];
         } elseif (ClinicalIndicatorLibrary::isScorable($definition)) {
             $items = $definition['items'];
             $posted = $validated['item_scores'] ?? [];
@@ -1457,10 +1495,13 @@ class WardDashboardController extends Controller
         $record->applyBand($indicator->code)->save();
         $breakdown = $record->breakdown();
 
-        return back()->withInput()->with('success', ($record->isReadings()
-                ? $indicator->name . ' recorded: ' . $breakdown
-                : $indicator->name . ' scored ' . $score . ($breakdown ? ' (' . $breakdown . ')' : ''))
-            . ($record->band_label ? ' - ' . $record->band_label : '') . '.');
+        $message = match (true) {
+            $record->isReadings() => $indicator->name . ' recorded: ' . $breakdown,
+            $record->isScreen() => $indicator->name . ' recorded' . ($breakdown ? ': ' . $breakdown : ''),
+            default => $indicator->name . ' scored ' . $score . ($breakdown ? ' (' . $breakdown . ')' : ''),
+        };
+
+        return back()->withInput()->with('success', $message . ($record->band_label ? ' - ' . $record->band_label : '') . '.');
     }
 
     /**
@@ -1597,6 +1638,7 @@ class WardDashboardController extends Controller
             'info' => true,
             'additional' => true,
             'vitals' => true,
+            'oxygen' => true, // Oxygen therapy, read together with the oxygen on vital signs
             'io' => true, // I/O chart (fluid balance)
             'medications' => false, // Medication monitoring: off until a user switches it on
             'movement' => true,
@@ -1646,14 +1688,11 @@ class WardDashboardController extends Controller
         $bedBoxDisplay = $settings->bed_box_display ?? $defaultBedBoxDisplay;
         $patientInfoDisplay = $settings->patient_info_display ?? $defaultPatientInfoDisplay;
 
-        // Dashboard display settings (patient name masking & fullscreen mode)
-        $defaultDashboardDisplay = [
-            'patient_name_mask' => 'full',
-            'fullscreen_mode' => 'medium',
-            'fullscreen_text_size' => 'medium',
-        ];
-        $dashboardDisplay = $settings->dashboard_display ?? $defaultDashboardDisplay;
-        $dashboardDisplay = array_merge($defaultDashboardDisplay, $dashboardDisplay);
+        // Dashboard display settings (Privacy Mode, auto refresh & fullscreen mode)
+        $dashboardDisplay = array_merge(
+            self::DEFAULT_DASHBOARD_DISPLAY,
+            is_array($settings->dashboard_display) ? $settings->dashboard_display : []
+        );
 
         // Clinical settings (EWS system, etc.)
         $defaultClinicalSettings = [
@@ -1718,6 +1757,7 @@ class WardDashboardController extends Controller
             'bedBoxVitalsMode' => $bedBoxVitalsMode,
             'additionalInfoReadOnly' => $additionalInfoReadOnly,
             'infoSources' => PatientInfoSources::all(),
+            'labSettings' => LabInvestigations::settings(),
         ]);
     }
 
@@ -1759,12 +1799,12 @@ class WardDashboardController extends Controller
         }
 
         if ($settingType === 'dashboard_display') {
-            // Handle dashboard display settings (patient name mask & fullscreen mode)
+            // Handle dashboard display settings (Privacy Mode, auto refresh & fullscreen mode)
             $dashboardConfig = $request->input('dashboard_display_config');
             $dashboardDisplay = json_decode($dashboardConfig, true);
 
             if (is_array($dashboardDisplay)) {
-                $settings->dashboard_display = $dashboardDisplay;
+                $settings->dashboard_display = $this->sanitizeDashboardDisplay($dashboardDisplay);
                 $settings->save();
             }
 
@@ -1838,6 +1878,7 @@ class WardDashboardController extends Controller
             'info' => true,
             'additional' => true,
             'vitals' => true,
+            'oxygen' => true,
             'io' => true,
             'medications' => false,
             'movement' => true,
@@ -2685,6 +2726,7 @@ class WardDashboardController extends Controller
             'allergies_kept' => 'nullable|array',
             'allergies_kept.*' => 'nullable|string',
             'new_allergy' => 'nullable|string|max:100',
+            'new_allergy_severity' => ['nullable', Rule::in(array_keys(Patient::ALLERGY_SEVERITIES))],
             'hgt_enabled' => 'nullable|boolean',
             'hgt_frequency' => 'nullable|string|in:bd,tds,qid,pid',
         ]);
@@ -2736,7 +2778,14 @@ class WardDashboardController extends Controller
 
             $newAllergy = trim((string) $request->input('new_allergy', ''));
             if ($newAllergy !== '') {
-                $allergies->push($newAllergy);
+                // Severity is optional; when given, store it the way the ADT feed does (AL1-4)
+                $severityCode = $request->input('new_allergy_severity');
+                $allergies->push($severityCode ? [
+                    'allergen' => $newAllergy,
+                    'severity_code' => $severityCode,
+                    'severity' => Patient::ALLERGY_SEVERITIES[$severityCode],
+                    'status' => 'Active',
+                ] : $newAllergy);
             }
 
             $changes['allergies'] = $allergies->values()->all() ?: null;
@@ -2862,12 +2911,36 @@ class WardDashboardController extends Controller
         // EWS scores and patient calls without a separate watcher process.
         app(InfusionNotificationService::class)->syncWardThrottled((int) $wardId);
 
+        // The panel opens over the board, so it follows the same Privacy Mode
+        $display = $this->resolveDashboardSettings(
+            WardDashboardSetting::where('user_id', Auth::id())->first()
+        )['dashboardDisplay'];
+        $nameMask = $display['patient_name_mask'] ?? 'full';
+        $mrnMask = $display['patient_mrn_mask'] ?? 'full';
+
+        // Some messages name the patient ("Patient call: <name> (Bed 3) ...")
+        $maskedMessage = function (WardNotification $notification) use ($nameMask, $mrnMask): ?string {
+            $message = $notification->message;
+            $patient = $notification->patient;
+            if ($message === null || !$patient) {
+                return $message;
+            }
+            if (filled($patient->name)) {
+                $message = str_replace($patient->name, PatientPrivacy::name($patient->name, $nameMask), $message);
+            }
+            if (filled($patient->mrn)) {
+                $message = str_replace($patient->mrn, PatientPrivacy::mrn($patient->mrn, $mrnMask) ?? '', $message);
+            }
+
+            return $message;
+        };
+
         $pendingNotifications = WardNotification::forWard($wardId)
             ->pending()
             ->with('patient:id,name,mrn')
             ->orderBy('created_at', 'desc')
             ->get()
-            ->map(function ($notification) {
+            ->map(function ($notification) use ($nameMask, $mrnMask, $maskedMessage) {
                 return [
                     'id' => $notification->id,
                     'type' => $notification->type,
@@ -2877,13 +2950,17 @@ class WardDashboardController extends Controller
                     'severity_label' => $notification->severity_label,
                     'severity_bg_class' => $notification->severity_bg_class,
                     'severity_border_class' => $notification->severity_border_class,
-                    'message' => $notification->message,
+                    'message' => $maskedMessage($notification),
                     'ews_score' => $notification->ews_score,
                     'meta' => $notification->meta,
                     'detail_lines' => $this->notificationDetailLines($notification),
                     'bed_number' => $notification->bed_number,
-                    'patient_name' => $notification->patient->name ?? 'Unknown',
-                    'patient_mrn' => $notification->patient->mrn ?? 'N/A',
+                    'patient_name' => $notification->patient
+                        ? PatientPrivacy::name($notification->patient->name, $nameMask)
+                        : 'Unknown',
+                    'patient_mrn' => $notification->patient
+                        ? PatientPrivacy::mrn($notification->patient->mrn, $mrnMask)
+                        : 'N/A',
                     'created_at' => $notification->created_at->diffForHumans(),
                     'created_at_full' => $notification->created_at->format('Y-m-d H:i:s'),
                 ];
@@ -2895,19 +2972,21 @@ class WardDashboardController extends Controller
             ->orderBy('responded_at', 'desc')
             ->limit(20)
             ->get()
-            ->map(function ($notification) {
+            ->map(function ($notification) use ($nameMask, $maskedMessage) {
                 return [
                     'id' => $notification->id,
                     'type' => $notification->type,
                     'type_label' => $this->notificationTypeLabel($notification->type),
                     'category' => $notification->category,
                     'severity' => $notification->severity,
-                    'message' => $notification->message,
+                    'message' => $maskedMessage($notification),
                     'ews_score' => $notification->ews_score,
                     'meta' => $notification->meta,
                     'detail_lines' => $this->notificationDetailLines($notification),
                     'bed_number' => $notification->bed_number,
-                    'patient_name' => $notification->patient->name ?? 'Unknown',
+                    'patient_name' => $notification->patient
+                        ? PatientPrivacy::name($notification->patient->name, $nameMask)
+                        : 'Unknown',
                     'responded_at' => $notification->responded_at?->diffForHumans(),
                     'responded_by' => $notification->responder->name ?? 'Auto-cleared',
                 ];
@@ -3708,9 +3787,11 @@ class WardDashboardController extends Controller
             'info' => true,
             'additional' => true,
             'vitals' => true,
+            'oxygen' => true,
             'io' => true,
             'medications' => false,
             'movement' => true,
+            'lab' => true, // Lab Investigations; also needs the system-wide switch (LabInvestigations)
             'careprovider' => true, // shown as "Consultant"
             'anaesthetist' => true,
             'nurses' => true, // from the ward roster
@@ -3997,11 +4078,7 @@ class WardDashboardController extends Controller
             ['key' => 'allergies', 'visible' => true],
         ];
 
-        $defaultDashboardDisplay = [
-            'patient_name_mask' => 'full',
-            'fullscreen_mode' => 'medium',
-            'fullscreen_text_size' => 'medium',
-        ];
+        $defaultDashboardDisplay = self::DEFAULT_DASHBOARD_DISPLAY;
 
         $bedBoxDisplay = $userSettings && is_array($userSettings->bed_box_display)
             ? $userSettings->bed_box_display
@@ -4020,6 +4097,55 @@ class WardDashboardController extends Controller
             'patientInfoConfig' => collect($patientInfoDisplay)->keyBy('key')->toArray(),
             'dashboardDisplay' => $dashboardDisplay
         ];
+    }
+
+    /**
+     * The consultant, nurse and anaesthetist lists with each patient's name and
+     * MRN put through Privacy Mode, so the lists match the bed boxes. A hidden
+     * MRN comes out null.
+     */
+    private function maskStaffPatientLists(array $staff, array $dashboardDisplay): array
+    {
+        if (!PatientPrivacy::isActive($dashboardDisplay)) {
+            return $staff;
+        }
+
+        return array_map(function (array $member) use ($dashboardDisplay) {
+            $member['patients'] = array_map(function (array $patient) use ($dashboardDisplay) {
+                $patient['name'] = PatientPrivacy::name($patient['name'] ?? '', $dashboardDisplay['patient_name_mask'] ?? 'full');
+                $patient['mrn'] = PatientPrivacy::mrn($patient['mrn'] ?? '', $dashboardDisplay['patient_mrn_mask'] ?? 'full');
+
+                return $patient;
+            }, $member['patients'] ?? []);
+
+            return $member;
+        }, $staff);
+    }
+
+    /**
+     * Dashboard Display as posted by the settings page, with the Privacy Mode
+     * choices and the auto refresh interval held to values the dashboard knows.
+     */
+    private function sanitizeDashboardDisplay(array $display): array
+    {
+        $display = array_merge(self::DEFAULT_DASHBOARD_DISPLAY, $display);
+
+        if (!in_array($display['patient_name_mask'], PatientPrivacy::NAME_MODES, true)) {
+            $display['patient_name_mask'] = self::DEFAULT_DASHBOARD_DISPLAY['patient_name_mask'];
+        }
+
+        if (!in_array($display['patient_mrn_mask'], PatientPrivacy::MRN_MODES, true)) {
+            $display['patient_mrn_mask'] = self::DEFAULT_DASHBOARD_DISPLAY['patient_mrn_mask'];
+        }
+
+        $interval = filter_var($display['refresh_interval'], FILTER_VALIDATE_INT);
+        $display['refresh_interval'] = match (true) {
+            $interval === false => self::DEFAULT_DASHBOARD_DISPLAY['refresh_interval'],
+            $interval <= 0 => 0,
+            default => max(self::MIN_REFRESH_INTERVAL, min(self::MAX_REFRESH_INTERVAL, $interval)),
+        };
+
+        return $display;
     }
 
     public function slideshowViewer(Request $request)

@@ -12,6 +12,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "nurse_app", "run", "web", "--", "--port", "8082"],
       "port": 8082
+    },
+    {
+      "name": "doctor-app-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "doctor_app", "run", "web", "--", "--port", "8084"],
+      "port": 8084
     }
   ]
 }
