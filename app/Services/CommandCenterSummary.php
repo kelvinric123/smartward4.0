@@ -21,6 +21,8 @@ use Illuminate\Support\Str;
 /**
  * Command Center V2: every ward summed up for hospital management, on the
  * command centre's screen. Aggregate figures only, never a patient's name.
+ * Wards of an Emergency ward type are left out: the ED has its own board
+ * (CommandCenterEd).
  *
  * Four areas, hospital-wide and per ward:
  *  - capacity: beds by status, and occupancy against OCCUPANCY_TARGET;
@@ -82,7 +84,8 @@ final class CommandCenterSummary
     public static function build(string $ewsSystem = 'ews_ihh'): array
     {
         $now = now();
-        $wards = Ward::where('is_active', true)->orderBy('ward_name')->get();
+        // The ED's zones (Emergency ward types) have their own board, Command Center V2 (ED)
+        $wards = Ward::where('is_active', true)->notEmergency()->orderBy('ward_name')->get();
         // Also loads each ward's type and active beds, which the rest reuses
         $live = CommandCenterLive::build($wards, $ewsSystem);
         $wardIds = $wards->modelKeys();

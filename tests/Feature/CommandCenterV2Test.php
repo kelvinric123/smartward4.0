@@ -201,6 +201,18 @@ class CommandCenterV2Test extends TestCase
         $this->assertSame(30, $response->viewData('snapshot')['refresh_seconds']);
     }
 
+    public function test_the_board_has_settings_for_the_screen_it_is_on(): void
+    {
+        $this->actingAs($this->admin)->get(route('command-center-v2.index'))
+            ->assertOk()
+            ->assertSee('@click="openSettings()"', false)
+            ->assertSee('<dialog class="ccx-settings"', false)
+            ->assertSeeInOrder(['Display settings', 'Screen', 'Size', 'Theme'])
+            // The screen presets, and the key each screen keeps its settings under
+            ->assertSee("key: 'uhd', label: '4K', sub: 'UHD · 3840 × 2160'", false)
+            ->assertSee("SETTINGS_KEY = 'ccv2Display'", false);
+    }
+
     public function test_no_patient_is_named(): void
     {
         $page = $this->actingAs($this->admin)->get(route('command-center-v2.index'))->getContent();

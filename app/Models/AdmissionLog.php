@@ -80,17 +80,26 @@ class AdmissionLog extends Model
 
     public function sourceLabel(): string
     {
-        return $this->source === 'adt' ? 'ADT/HIS' : 'Manual';
+        return match ($this->source) {
+            'adt' => 'ADT/HIS',
+            'cplus' => 'C+ Bed Management',
+            default => 'Manual',
+        };
     }
 
     public function recordedByLabel(): string
     {
-        return $this->user?->name ?? ($this->source === 'adt' ? 'System (ADT)' : 'System');
+        return $this->user?->name ?? match ($this->source) {
+            'adt' => 'System (ADT)',
+            'cplus' => 'System (C+)',
+            default => 'System',
+        };
     }
 
     protected $fillable = [
         'patient_id',
         'ward_id',
+        'to_ward_id', // on a discharge: the ward the patient went on to (an ED visit ending in an admission)
         'user_id',
         'bed_number',
         'action',
@@ -104,7 +113,7 @@ class AdmissionLog extends Model
         'admitted_at',
         'discharged_at',
         'booked_at',
-        'source', // 'manual' or 'adt'
+        'source', // 'manual', 'adt' or 'cplus'
     ];
 
     protected $casts = [
@@ -121,6 +130,11 @@ class AdmissionLog extends Model
     public function ward(): BelongsTo
     {
         return $this->belongsTo(Ward::class);
+    }
+
+    public function toWard(): BelongsTo
+    {
+        return $this->belongsTo(Ward::class, 'to_ward_id');
     }
 
     public function user(): BelongsTo

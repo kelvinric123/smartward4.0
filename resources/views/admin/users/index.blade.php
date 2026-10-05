@@ -169,6 +169,11 @@
                                                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                                     <a href="{{ route('users.edit', $user) }}"
                                                                         class="text-indigo-600 hover:text-indigo-900 mr-2">Edit</a>
+                                                                    @if($user->isIntegration())
+                                                                        <a href="{{ route('users.edit', $user) }}#api-token"
+                                                                            class="text-blue-600 hover:text-blue-900 mr-2"
+                                                                            title="{{ $user->hasApiToken() ? 'Token generated ' . $user->api_token_created_at?->format('d/m/Y H:i') : 'No token yet' }}">API token{{ $user->hasApiToken() ? '' : ' (none)' }}</a>
+                                                                    @endif
 
                                                                     @if(!$user->isSuperadmin() && $user->id !== auth()->id())
                                                                         <form action="{{ route('users.toggle-status', $user) }}" method="POST" class="inline-block mr-2">

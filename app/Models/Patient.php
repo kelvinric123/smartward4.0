@@ -131,6 +131,7 @@ class Patient extends Model
         'address' => 'array',
         'diet_types' => 'array',
         'hgt_enabled' => 'boolean',
+        'cplus_isolation' => 'boolean',
         'feeding_routes' => 'array',
         'coe_indicators' => 'array',
         'payor_gl_amount' => 'decimal:2',

@@ -1,0 +1,33 @@
+# Secrets: the C+ password and the SmartWard token come in at run time from an
+# env file, never from an image layer.
+.env
+.env.*
+!.env.example
+*.env
+
+# Live C+ session and login state. Shipping them would make every container
+# share one session and one login block; they belong on the /data volume.
+cookies*.txt
+his_state.json*
+
+# Patient data
+scratch/
+logs/
+isolation_cache.json*
+
+# Host virtualenv (Windows binaries) and local artefacts
+venv/
+__pycache__/
+*.py[cod]
+*.log
+*.tmp
+
+# Not needed at run time
+tests/
+Dockerfile
+.dockerignore
+docker-compose.yml
+build_and_push.ps1
+*.bat
+.gitignore
+rpa.env.example

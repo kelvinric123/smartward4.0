@@ -5,11 +5,13 @@ namespace App\Services;
 use App\Models\EkadConfiguration;
 use App\Models\EkadBedMapping;
 use App\Models\EkadResponseLog;
+use App\Models\EkadTemplate;
 use App\Models\Patient;
 use App\Models\Bed;
 use App\Models\ShiftSetting;
 use App\Models\WardScheduleAssignment;
 use App\Models\DietType;
+use App\Models\IsolationType;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -132,9 +134,60 @@ class EkadService
     }
 
     /**
-     * Get patient info payload (without pushing)
+     * Get patient info payload (without pushing): the template's fields
+     * (Templates on /ekad, else the default ones) filled for this patient.
+     * No template means the one under Configuration & Login.
      */
-    public function getPatientInfoPayload(Patient $patient, Bed $bed, array $overrides = []): array
+    public function getPatientInfoPayload(Patient $patient, Bed $bed, array $overrides = [], ?string $templateId = null): array
+    {
+        return $this->templateData($templateId, $this->patientValues($patient, $bed, $overrides));
+    }
+
+    /**
+     * A template's fields filled from values by source (EkadTemplate::SOURCES).
+     * Fixed texts go as typed; a field SmartWard has nothing for gets "-", so a
+     * screen never keeps an old value.
+     */
+    public function templateData(?string $templateId, array $values): array
+    {
+        $data = [];
+        foreach (EkadTemplate::fieldsFor($templateId ?: $this->config->template_id) as $field) {
+            $data[$field['key']] = $field['source'] === 'text'
+                ? $this->normalizeValue($field['value'] ?? null)
+                : ($values[$field['source']] ?? '-');
+        }
+
+        return $data;
+    }
+
+    /**
+     * The patient's name as the screens show it (masked when set to)
+     */
+    public function displayName(Patient $patient): string
+    {
+        return $this->normalizeValue($this->config->mask_patient_name
+            ? $this->config->maskPatientName($patient->name)
+            : $patient->name);
+    }
+
+    /**
+     * An empty bed: its number and ward, "Vacant" for the MRN; "-" for the rest
+     */
+    protected function vacantValues(Bed $bed): array
+    {
+        return [
+            'bed_number' => $this->normalizeValue($bed->bed_number),
+            'mrn' => 'Vacant',
+            'ward' => $this->normalizeValue($bed->ward?->ward_name),
+        ];
+    }
+
+    /**
+     * Everything SmartWard can show for this patient in this bed, by source
+     * (EkadTemplate::SOURCES). Overrides use the default field names
+     * (bed_no, mrn, patient_name, diet_type, doctor, nurse, anaesthetist, isolation_type).
+     */
+    protected function patientValues(Patient $patient, Bed $bed, array $overrides = []): array
     {
         // Build patient data
         // Check for patient_name override first (e.g., 'vacant' for discharge)
@@ -251,6 +304,15 @@ class EkadService
         }
         $anaesthetist = $this->normalizeValue($anaesthetist);
 
+        // Isolation precaution: Patient Details > Isolation Precautions, or as the ADT feed set it
+        $isolationType = '-';
+        if (isset($overrides['isolation_type'])) {
+            $isolationType = $overrides['isolation_type'];
+        } elseif ($patient->isolation_type && strtolower($patient->isolation_type) !== 'none') {
+            $isolationType = IsolationType::getDisplayName($patient->isolation_type);
+        }
+        $isolationType = $this->normalizeValue($isolationType);
+
         // Get bed number
         $bedNo = $overrides['bed_no'] ?? $patient->bed_number ?? '-';
         $bedNo = $this->normalizeValue($bedNo);
@@ -265,42 +327,52 @@ class EkadService
 
         $mrn = $this->normalizeValue($mrn);
 
-        // Build data array in the exact order and format required by E-Ink API
-        // Order matches the "Update Card" payload from Ekad Real.postman_collection.json
+        // Allergies still active: names only, as Patient Details lists them
+        $allergies = collect($patient->allergies ?? [])
+            ->reject(fn ($allergy) => is_array($allergy) && ($allergy['status'] ?? 'Active') === 'Resolved')
+            ->map(function ($allergy) {
+                $name = is_array($allergy) ? (string) ($allergy['allergen'] ?? $allergy['allergen_code'] ?? '') : (string) $allergy;
+
+                return str_contains($name, '^') ? (explode('^', $name)[1] ?? $name) : $name;
+            })
+            ->map(fn ($name) => trim($name))
+            ->filter()
+            ->unique()
+            ->implode(', ');
+
         return [
-            'bed no' => $bedNo,
-            'MRN' => $mrn,
+            'bed_number' => $bedNo,
+            'mrn' => $mrn,
             'patient_name' => $patientName,
-            'diet_type' => $dietType,
+            'diet' => $dietType,
             'doctor' => $doctor,
             'nurse' => $nurse,
             'anaesthetist' => $anaesthetist,
+            'isolation' => $isolationType,
+            'allergies' => $this->normalizeValue($allergies),
+            'ward' => $this->normalizeValue($bed->ward?->ward_name),
+            'rn' => $this->normalizeValue($patient->rn),
+            'gender' => $this->normalizeValue($patient->gender),
+            'age' => $this->normalizeValue($patient->age),
+            'admitted_at' => $this->normalizeValue($patient->admitted_at?->format('d/m/Y')),
         ];
     }
 
     /**
-     * Get payload for a bed (handles admitted, vacant, prebook logic)
+     * Get payload for a bed (handles admitted, vacant, prebook logic), in the
+     * template's fields; no template means the one under Configuration & Login
      */
-    public function getBedPayload(Bed $bed): array
+    public function getBedPayload(Bed $bed, ?string $templateId = null): array
     {
         // Check if bed is occupied
         $patient = $bed->patient;
 
         if ($patient && $patient->is_active && $patient->isAdmitted()) {
             // Bed Occupied - only real admissions (admitted/pending_discharge), not prebook
-            return $this->getPatientInfoPayload($patient, $bed);
-        } else {
-            // Bed Vacant
-            return [
-                'bed no' => $this->normalizeValue($bed->bed_number),
-                'MRN' => 'VACANT',
-                'patient_name' => '-',
-                'diet_type' => '-',
-                'doctor' => '-',
-                'nurse' => '-',
-                'anaesthetist' => '-',
-            ];
+            return $this->getPatientInfoPayload($patient, $bed, [], $templateId);
         }
+
+        return $this->templateData($templateId, $this->vacantValues($bed));
     }
 
     /**
@@ -322,16 +394,18 @@ class EkadService
             ];
         }
 
-        // Generate payload using the extracted method
-        $data = $this->getPatientInfoPayload($patient, $bed, $overrides);
+        // Generate payload using the extracted method, in this screen's template's fields
+        $data = $this->getPatientInfoPayload($patient, $bed, $overrides, $mapping->template_id);
 
-        return $this->pushToBed($mapping->mac_address, $data, $bed->id, $patient->id, $eventType);
+        return $this->pushToBed($mapping->mac_address, $data, $bed->id, $patient->id, $eventType, $mapping->template_id);
     }
 
     /**
      * Push data to a specific MAC address
+     *
+     * @param string|null $templateId The screen's own template (Bed Mapping); null uses the configured one
      */
-    public function pushToBed(string $mac, array $data, ?int $bedId = null, ?int $patientId = null, string $eventType = 'observer'): array
+    public function pushToBed(string $mac, array $data, ?int $bedId = null, ?int $patientId = null, string $eventType = 'observer', ?string $templateId = null): array
     {
         $token = $this->getToken();
         if (!$token) {
@@ -345,7 +419,7 @@ class EkadService
         }
 
         $payload = [
-            'id' => $this->config->template_id,
+            'id' => $templateId ?: $this->config->template_id,
             'macList' => [EkadBedMapping::formatMac($mac)],
             'data' => [$data],
         ];
@@ -384,7 +458,7 @@ class EkadService
                 $this->config->clearToken();
 
                 // Retry once with fresh token (don't log this attempt, the retry will log)
-                return $this->pushToBed($mac, $data, $bedId, $patientId, $eventType);
+                return $this->pushToBed($mac, $data, $bedId, $patientId, $eventType, $templateId);
             }
 
             Log::warning('EKad: Push failed', ['response' => $result]);
@@ -480,16 +554,8 @@ class EkadService
             ];
         }
 
-        $data = [
-            'bed no' => $bed->bed_number,
-            'MRN' => 'Vacant',
-            'patient_name' => '-',
-            'diet_type' => '-',
-            'doctor' => '-',
-            'nurse' => '-',
-            'anaesthetist' => '-',
-        ];
+        $data = $this->templateData($mapping->template_id, $this->vacantValues($bed));
 
-        return $this->pushToBed($mapping->mac_address, $data, $bed->id, null, $eventType);
+        return $this->pushToBed($mapping->mac_address, $data, $bed->id, null, $eventType, $mapping->template_id);
     }
 }

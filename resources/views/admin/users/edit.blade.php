@@ -9,6 +9,13 @@
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-blue-100">
                 <div class="p-8 text-gray-900">
+                    @if(session('success'))
+                        <div class="mb-4 text-sm text-green-600">{{ session('success') }}</div>
+                    @endif
+                    @if(session('error'))
+                        <div class="mb-4 text-sm text-red-600">{{ session('error') }}</div>
+                    @endif
+
                     <form method="POST" action="{{ route('users.update', $user) }}">
                         @csrf
                         @method('PUT')
@@ -51,6 +58,7 @@
                             <x-input-error :messages="$errors->get('role')" class="mt-2" />
                         </div>
 
+                        @unless($user->isIntegration())
                         <!-- Password -->
                         <div class="mt-4 border-t pt-4">
                             <h3 class="font-medium mb-2">Change Password (Optional)</h3>
@@ -67,6 +75,7 @@
                                 name="password_confirmation" autocomplete="new-password" />
                             <x-input-error :messages="$errors->get('password_confirmation')" class="mt-2" />
                         </div>
+                        @endunless
 
                         <div class="flex items-center justify-end mt-4">
                             <a href="{{ route('users.index') }}"
@@ -80,6 +89,10 @@
                     </form>
                 </div>
             </div>
+
+            @if($user->isIntegration())
+                @include('admin.users.partials.api-token')
+            @endif
         </div>
     </div>
 </x-app-layout>

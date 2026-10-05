@@ -22,6 +22,7 @@ final class NavigationMenu
         'dashboard' => 'Dashboard',
         'command-center' => 'Command Center',
         'command-center-v2' => 'Command Center V2',
+        'command-center-ed' => 'Command Center V2 (ED)',
         'patient' => ['label' => 'Patient', 'items' => [
             'patients' => 'Patient List',
         ]],

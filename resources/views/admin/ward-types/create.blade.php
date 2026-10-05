@@ -79,6 +79,29 @@
                         </div>
 
                         <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700">Emergency Ward</label>
+                            <div class="mt-2 flex items-center gap-4">
+                                <label class="inline-flex items-center">
+                                    <input type="radio" name="is_emergency" value="0"
+                                        {{ !old('is_emergency', false) ? 'checked' : '' }}
+                                        class="form-radio text-blue-600 focus:ring-blue-500">
+                                    <span class="ml-2 text-gray-700">No</span>
+                                </label>
+                                <label class="inline-flex items-center">
+                                    <input type="radio" name="is_emergency" value="1"
+                                        {{ old('is_emergency', false) ? 'checked' : '' }}
+                                        class="form-radio text-blue-600 focus:ring-blue-500">
+                                    <span class="ml-2 text-gray-700">Yes</span>
+                                </label>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Wards of this type (the ED's zones) are counted on Command Center V2 (ED)
+                                and left out of the hospital-wide Command Center V2.</p>
+                            @error('is_emergency')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-2">Clinical Indicator</label>
                             <p class="text-xs text-gray-500 mb-3">Select one or more scoring scales for this ward type.
                                 Manage the list on the Clinical Indicator tab.</p>

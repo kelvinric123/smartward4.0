@@ -273,10 +273,10 @@
                     <!-- Add New Mapping -->
                     <div class="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
                         <h4 class="text-sm font-semibold text-gray-700 mb-3">Add New Mapping</h4>
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-start">
                             <div>
                                 <label class="block text-sm font-medium text-gray-700 mb-1">Ward</label>
-                                <select x-model="selectedWardId" @change="selectedBedId = ''"
+                                <select x-model="selectedWardId" @change="selectedBedId = ''; newTemplateChoice = wardTemplateChoice(selectedWardId)"
                                     class="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                                     <option value="">Select Ward</option>
                                     @foreach($wards as $ward)
@@ -301,9 +301,27 @@
                                     class="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 font-mono text-sm"
                                     placeholder="D43D393CC02C">
                             </div>
-                            <div class="flex items-end">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Template ID</label>
+                                <select x-model="newTemplateChoice"
+                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                                    <option value="">Default</option>
+                                    <template x-for="option in templateOptions()" :key="option.id">
+                                        <option :value="option.id" x-text="option.name ? option.name + ' · ' + option.id : option.id"></option>
+                                    </template>
+                                    <option value="__other">Other template ID…</option>
+                                </select>
+                                <input type="text" x-show="newTemplateChoice === '__other'" x-model="newCustomTemplateId"
+                                    class="mt-2 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 font-mono text-sm"
+                                    placeholder="SEEKINK template ID">
+                                <p x-show="newTemplateChoice === ''" class="mt-1 text-xs text-gray-500 truncate"
+                                    title="The Template ID under Configuration & Login">
+                                    Uses <span class="font-mono" x-text="defaultTemplateId || 'none set'"></span>
+                                </p>
+                            </div>
+                            <div class="md:pt-6">
                                 <button @click="addBedMapping()"
-                                    :disabled="!selectedBedId || !newMacAddress || addingMapping"
+                                    :disabled="!selectedBedId || !newMacAddress || (newTemplateChoice === '__other' && !newCustomTemplateId.trim()) || addingMapping"
                                     class="w-full inline-flex items-center justify-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-medium rounded-lg transition-colors">
                                     <svg x-show="!addingMapping" class="w-4 h-4 mr-2" fill="none" stroke="currentColor"
                                         viewBox="0 0 24 24">
@@ -326,6 +344,8 @@
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bed</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">MAC
                                         Address</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Template
+                                        ID</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status
                                     </th>
                                     <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions
@@ -342,25 +362,104 @@
                                         </td>
                                         <td class="px-4 py-3 text-sm font-mono text-gray-900"
                                             x-text="mapping.mac_address"></td>
+                                        <td class="px-4 py-3 text-sm whitespace-nowrap">
+                                            <span class="font-mono"
+                                                :class="mapping.template_id ? 'text-indigo-700 font-medium' : 'text-gray-500'"
+                                                x-text="mapping.template_id || defaultTemplateId || '-'"></span>
+                                            <span x-show="!mapping.template_id"
+                                                class="ml-1 inline-flex px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide rounded bg-gray-100 text-gray-600"
+                                                title="Follows the Template ID under Configuration & Login">Default</span>
+                                            <div x-show="templateName(mapping.template_id || defaultTemplateId)"
+                                                class="text-xs text-gray-500" x-text="templateName(mapping.template_id || defaultTemplateId)"></div>
+                                        </td>
                                         <td class="px-4 py-3">
                                             <span
                                                 :class="mapping.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
                                                 class="inline-flex px-2 py-1 text-xs font-medium rounded-full"
                                                 x-text="mapping.is_active ? 'Active' : 'Inactive'"></span>
                                         </td>
-                                        <td class="px-4 py-3 text-right">
+                                        <td class="px-4 py-3 text-right whitespace-nowrap">
+                                            <button @click="openTemplateModal(mapping)"
+                                                class="text-indigo-600 hover:text-indigo-800 text-sm font-medium mr-3">Template</button>
                                             <button @click="confirmDeleteMapping(mapping.id)"
                                                 class="text-red-600 hover:text-red-800 text-sm font-medium">Delete</button>
                                         </td>
                                     </tr>
                                 </template>
                                 <tr x-show="bedMappings.length === 0">
-                                    <td colspan="5" class="px-4 py-8 text-center text-gray-500">No bed mappings
+                                    <td colspan="6" class="px-4 py-8 text-center text-gray-500">No bed mappings
                                         configured yet.</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+
+            <!-- Templates: the fields of each SEEKINK template -->
+            <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-indigo-100">
+                <div class="p-6 border-b border-indigo-100 bg-gradient-to-r from-violet-50 to-indigo-50">
+                    <div class="flex items-center justify-between gap-4">
+                        <div class="flex items-center">
+                            <div class="p-3 bg-violet-600 rounded-xl mr-4">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h3 class="text-lg font-bold text-gray-800">Templates</h3>
+                                <p class="text-sm text-gray-500">The fields each SEEKINK template has, and what SmartWard puts in them</p>
+                            </div>
+                        </div>
+                        <button @click="openFieldsModal(null)"
+                            class="shrink-0 inline-flex items-center px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white font-medium rounded-lg transition-colors">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                            Add Template
+                        </button>
+                    </div>
+                </div>
+                <div class="p-6 overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Template</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Screens</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fields</th>
+                                <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <template x-for="row in templateRows()" :key="row.id">
+                                <tr>
+                                    <td class="px-4 py-3 text-sm whitespace-nowrap align-top">
+                                        <div class="font-medium text-gray-900" x-show="row.name" x-text="row.name"></div>
+                                        <div class="font-mono text-gray-600" :class="row.name ? 'text-xs' : ''">
+                                            <span x-text="row.id"></span><span x-show="row.isDefault"
+                                                class="ml-1 inline-flex px-1.5 py-0.5 text-[10px] font-sans font-semibold uppercase tracking-wide rounded bg-gray-100 text-gray-600"
+                                                title="The Template ID under Configuration & Login">Default</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-3 text-sm text-gray-700 align-top" x-text="row.screens"></td>
+                                    <td class="px-4 py-3 align-top">
+                                        <div class="flex flex-wrap gap-1">
+                                            <template x-for="field in row.fields" :key="field.key">
+                                                <span class="inline-flex px-2 py-0.5 text-xs font-mono rounded bg-indigo-50 text-indigo-700"
+                                                    :title="field.key + ' ← ' + sourceLabel(field)" x-text="field.key"></span>
+                                            </template>
+                                            <span x-show="!row.saved" class="self-center text-xs text-gray-400">default fields</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-3 text-right whitespace-nowrap align-top">
+                                        <button @click="openFieldsModal(row.id)"
+                                            class="text-violet-600 hover:text-violet-800 text-sm font-medium">Edit Fields</button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
@@ -413,7 +512,7 @@
                         </div>
                     </div>
 
-                    <!-- Patient Information (order matches E-Ink API: bed no, MRN, patient_name, diet_type, doctor, nurse, anaesthetist) -->
+                    <!-- Patient Information (order matches E-Ink API: bed no, MRN, patient_name, diet_type, doctor, nurse, anaesthetist, isolation_type) -->
                     <div class="mb-6">
                         <h4 class="text-sm font-semibold text-gray-700 mb-3">Patient Information</h4>
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -458,6 +557,12 @@
                                 <input type="text" x-model="anaesthetist"
                                     class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
                                     placeholder="-">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Isolation</label>
+                                <input type="text" x-model="isolationType"
+                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+                                    placeholder="Contact Isolation">
                             </div>
                         </div>
                     </div>
@@ -901,7 +1006,7 @@
                                                         Bed</th>
                                                     <th scope="col"
                                                         class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                        MAC Address</th>
+                                                        MAC Address / Template</th>
                                                     <th scope="col"
                                                         class="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                                         Status</th>
@@ -924,8 +1029,13 @@
                                                         </td>
                                                         <td class="px-3 py-4 whitespace-nowrap text-sm text-gray-900"
                                                             x-text="item.bed_number"></td>
-                                                        <td class="px-3 py-4 whitespace-nowrap text-sm text-gray-500 font-mono"
-                                                            x-text="item.mac_address"></td>
+                                                        <td class="px-3 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">
+                                                            <div x-text="item.mac_address"></div>
+                                                            <div class="text-xs text-gray-400">
+                                                                <span x-text="item.template_id || '-'"></span><span
+                                                                    x-show="item.template_is_default" class="font-sans"> (default)</span>
+                                                            </div>
+                                                        </td>
                                                         <td class="px-3 py-4 whitespace-nowrap">
                                                             <span
                                                                 class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
@@ -933,20 +1043,16 @@
                                                                 x-text="item.status"></span>
                                                         </td>
                                                         <td class="px-3 py-4 whitespace-nowrap text-sm text-gray-500"
-                                                            x-text="item.payload.patient_name"></td>
+                                                            x-text="item.patient"></td>
                                                         <td class="px-3 py-4 text-xs text-gray-500">
-                                                            <div class="grid grid-cols-2 gap-1 max-w-xs">
-                                                                <div>MRN: <span class="font-medium"
-                                                                        x-text="item.payload.MRN"></span></div>
-                                                                <div>Doc: <span class="font-medium"
-                                                                        x-text="item.payload.doctor.substring(0, 10) + (item.payload.doctor.length > 10 ? '...' : '')"></span>
-                                                                </div>
-                                                                <div>Nur: <span class="font-medium"
-                                                                        x-text="item.payload.nurse.substring(0, 10) + (item.payload.nurse.length > 10 ? '...' : '')"></span>
-                                                                </div>
-                                                                <div>Diet: <span class="font-medium"
-                                                                        x-text="item.payload.diet_type.substring(0, 10) + (item.payload.diet_type.length > 10 ? '...' : '')"></span>
-                                                                </div>
+                                                            {{-- Every field of the screen's template, as it will be sent --}}
+                                                            <div class="grid grid-cols-2 gap-x-3 gap-y-1 w-80">
+                                                                <template x-for="[field, value] in Object.entries(item.payload)" :key="field">
+                                                                    <div class="truncate" :title="field + ': ' + value">
+                                                                        <span x-text="field + ':'"></span>
+                                                                        <span class="font-medium" x-text="value"></span>
+                                                                    </div>
+                                                                </template>
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -1026,6 +1132,165 @@
                 </div>
             </div>
         </div>
+
+        <!-- Screen Template Modal -->
+        <div x-show="showTemplateModal" x-cloak class="fixed inset-0 z-[9998] overflow-y-auto" style="display: none;">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+                <div class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" @click="showTemplateModal = false"></div>
+
+                <div class="relative inline-block w-full max-w-md p-0 my-8 text-left align-middle transition-all transform bg-white shadow-2xl rounded-2xl border border-gray-200 overflow-hidden">
+                    <div class="bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-4">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center mr-3">
+                                <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/>
+                                </svg>
+                            </div>
+                            <div class="min-w-0">
+                                <h3 class="text-lg font-bold text-white">Screen Template</h3>
+                                <p class="text-indigo-100 text-sm break-words" x-text="templateMappingLabel()"></p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-6 space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Template ID</label>
+                            <select x-model="editTemplateChoice"
+                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                                <option value="">Default (Configuration &amp; Login)</option>
+                                <template x-for="option in templateOptions()" :key="option.id">
+                                    <option :value="option.id" x-text="(option.name ? option.name + ' · ' : '') + option.id + ' · ' + option.screens + (option.screens === 1 ? ' screen' : ' screens')"></option>
+                                </template>
+                                <option value="__other">Other template ID…</option>
+                            </select>
+                            <input type="text" x-show="editTemplateChoice === '__other'" x-model="editCustomTemplateId"
+                                class="mt-2 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 font-mono text-sm"
+                                placeholder="SEEKINK template ID">
+                            <p x-show="editTemplateChoice === ''" class="mt-1.5 text-xs text-gray-500">
+                                Uses <span class="font-mono" x-text="defaultTemplateId || 'none set'"></span>, and follows it when it
+                                changes under Configuration &amp; Login.
+                            </p>
+                            <p x-show="editTemplateChoice !== ''" class="mt-1.5 text-xs text-gray-500">
+                                The template needs the same fields as the default one: bed no, MRN, patient_name, diet_type,
+                                doctor, nurse and anaesthetist.
+                            </p>
+                        </div>
+
+                        <label x-show="templateWardScreens() > 1" class="flex items-start p-3 bg-indigo-50 rounded-lg cursor-pointer">
+                            <input type="checkbox" x-model="applyTemplateToWard"
+                                class="mt-0.5 form-checkbox h-4 w-4 text-indigo-600 rounded">
+                            <span class="ml-2 text-sm text-gray-700">
+                                Use it for all <span x-text="templateWardScreens()"></span> mapped screens in
+                                <span class="font-medium" x-text="templateMapping?.bed?.ward?.ward_name || 'this ward'"></span>
+                            </span>
+                        </label>
+
+                        <p class="text-xs text-gray-400">A screen is repainted with its template on its next update. Use Sync
+                            EKAD to repaint it now.</p>
+
+                        <div class="mt-6 flex justify-end space-x-3">
+                            <button type="button" @click="showTemplateModal = false"
+                                class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                                Cancel
+                            </button>
+                            <button type="button" @click="saveTemplate()"
+                                :disabled="savingTemplate || (editTemplateChoice === '__other' && !editCustomTemplateId.trim())"
+                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 rounded-lg transition-colors shadow-md">
+                                <span x-text="savingTemplate ? 'Saving...' : 'Save Template'"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Template Fields Modal -->
+        <div x-show="showFieldsModal" x-cloak class="fixed inset-0 z-[9998] overflow-y-auto" style="display: none;">
+            <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+                <div class="fixed inset-0 bg-gray-900 bg-opacity-75 transition-opacity" @click="showFieldsModal = false"></div>
+
+                <div class="relative inline-block w-full max-w-2xl p-0 my-8 text-left align-middle transition-all transform bg-white shadow-2xl rounded-2xl border border-gray-200 overflow-hidden">
+                    <div class="bg-gradient-to-r from-violet-600 to-indigo-600 px-6 py-4">
+                        <h3 class="text-lg font-bold text-white">Template Fields</h3>
+                        <p class="text-indigo-100 text-sm">The field names as they are in the SEEKINK template, and what SmartWard puts in each</p>
+                    </div>
+
+                    <div class="p-6 space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Template ID</label>
+                                <input type="text" x-model="fieldsForm.template_id" :readonly="!fieldsForm.isNew"
+                                    :class="fieldsForm.isNew ? '' : 'bg-gray-50 text-gray-600'"
+                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 font-mono text-sm"
+                                    placeholder="SEEKINK template ID">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                                <input type="text" x-model="fieldsForm.name" maxlength="100"
+                                    class="w-full rounded-lg border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 text-sm"
+                                    placeholder="e.g. ICU 7.5-inch screen">
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-medium text-gray-700">Fields</span>
+                                <button type="button" @click="fieldsForm.fields = copyFields(defaultFields)"
+                                    class="text-xs font-medium text-violet-600 hover:text-violet-800">Use default fields</button>
+                            </div>
+                            <div class="space-y-2 max-h-96 overflow-y-auto pr-1">
+                                <template x-for="(field, index) in fieldsForm.fields" :key="field.uid">
+                                    <div class="flex items-start gap-2">
+                                        <input type="text" x-model="field.key" maxlength="64"
+                                            class="w-36 sm:w-44 shrink-0 rounded-lg border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 font-mono text-sm"
+                                            placeholder="Field name">
+                                        <div class="flex-1 min-w-0 space-y-1">
+                                            <select x-model="field.source"
+                                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 text-sm">
+                                                <option value="" disabled>Choose what to show…</option>
+                                                <template x-for="option in templateSources" :key="option.source">
+                                                    <option :value="option.source" x-text="option.label" :selected="option.source === field.source"></option>
+                                                </template>
+                                            </select>
+                                            <input type="text" x-show="field.source === 'text'" x-model="field.value" maxlength="255"
+                                                class="w-full rounded-lg border-gray-300 shadow-sm focus:border-violet-500 focus:ring-violet-500 text-sm"
+                                                placeholder="Text to show">
+                                        </div>
+                                        <div class="flex items-center gap-1 pt-2 text-gray-400">
+                                            <button type="button" @click="moveField(index, -1)" :disabled="index === 0"
+                                                class="hover:text-gray-700 disabled:opacity-30" title="Move up">&uarr;</button>
+                                            <button type="button" @click="moveField(index, 1)" :disabled="index === fieldsForm.fields.length - 1"
+                                                class="hover:text-gray-700 disabled:opacity-30" title="Move down">&darr;</button>
+                                            <button type="button" @click="fieldsForm.fields.splice(index, 1)"
+                                                class="ml-1 hover:text-red-600" title="Remove">&times;</button>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                            <button type="button" @click="fieldsForm.fields.push({ uid: ++fieldUid, key: '', source: '', value: '' })"
+                                class="mt-2 text-sm font-medium text-violet-600 hover:text-violet-800">+ Add field</button>
+                        </div>
+
+                        <p class="text-xs text-gray-400">Field names must match the SEEKINK template exactly (e.g. "bed no",
+                            "isolation_type"). An empty bed shows its bed number and ward, "Vacant" as the MRN and "-" in the
+                            other fields. Screens get the new fields on their next update; use Sync EKAD to repaint them now.</p>
+                        <p x-show="fieldsFormProblem()" class="text-sm text-amber-700" x-text="fieldsFormProblem()"></p>
+
+                        <div class="flex justify-end space-x-3">
+                            <button type="button" @click="showFieldsModal = false"
+                                class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                                Cancel
+                            </button>
+                            <button type="button" @click="saveFields()" :disabled="savingFields || fieldsFormProblem() !== ''"
+                                class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-violet-600 hover:bg-violet-700 disabled:bg-gray-400 rounded-lg transition-colors shadow-md">
+                                <span x-text="savingFields ? 'Saving...' : 'Save Fields'"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -1049,7 +1314,27 @@
                 selectedWardId: '',
                 selectedBedId: '',
                 newMacAddress: '',
+                newTemplateChoice: '', // '' = default, '__other' = typed into newCustomTemplateId, else a template ID in use
+                newCustomTemplateId: '',
                 addingMapping: false,
+
+                // Screen templates: the saved Template ID under Configuration & Login is the default
+                defaultTemplateId: @json($config->template_id ?? ''),
+                showTemplateModal: false,
+                templateMapping: null,
+                editTemplateChoice: '',
+                editCustomTemplateId: '',
+                applyTemplateToWard: false,
+                savingTemplate: false,
+
+                // Template fields: templates saved with their own fields; the rest get defaultFields
+                templates: @json($templates),
+                templateSources: @json($templateSources),
+                defaultFields: @json($defaultFields),
+                showFieldsModal: false,
+                fieldsForm: { isNew: true, template_id: '', name: '', fields: [] },
+                fieldUid: 0,
+                savingFields: false,
                 syncingAll: false,
                 showDeleteMappingModal: false,
                 deleteMappingPassphrase: '',
@@ -1065,6 +1350,7 @@
                 doctor: '',
                 nurse: '',
                 anaesthetist: '-',
+                isolationType: '-',
                 pushingInfo: false,
 
                 // Response Log
@@ -1110,6 +1396,183 @@
                     if (!wardId) return [];
                     const ward = this.wards.find(w => w.id == wardId);
                     return ward ? ward.beds : [];
+                },
+
+                // Template IDs screens have of their own, with how many screens use each
+                templateOptions() {
+                    const options = {};
+                    const add = (id) => options[id] ??= { id: id, name: '', screens: 0 };
+                    // Templates saved under Templates can be picked before any screen uses them
+                    this.templates.forEach(t => {
+                        if (t.template_id !== this.defaultTemplateId) add(t.template_id).name = t.name || '';
+                    });
+                    this.bedMappings.forEach(m => {
+                        if (m.template_id) add(m.template_id).screens++;
+                    });
+                    return Object.values(options).sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+                },
+
+                // Every template: the default one, those saved with their own fields, and those on a screen
+                templateRows() {
+                    const rows = {};
+                    const add = (id) => rows[id] ??= {
+                        id: id, name: '', saved: false, fields: this.defaultFields, screens: 0, isDefault: id === this.defaultTemplateId,
+                    };
+                    if (this.defaultTemplateId) add(this.defaultTemplateId);
+                    this.templates.forEach(t => Object.assign(add(t.template_id), { name: t.name || '', saved: true, fields: t.fields }));
+                    this.bedMappings.forEach(m => {
+                        const id = m.template_id || this.defaultTemplateId;
+                        if (id) add(id).screens++;
+                    });
+                    return Object.values(rows).sort((a, b) => (b.isDefault - a.isDefault) || (a.name || a.id).localeCompare(b.name || b.id));
+                },
+
+                templateName(id) {
+                    return this.templates.find(t => t.template_id === id)?.name || '';
+                },
+
+                sourceLabel(field) {
+                    if (field.source === 'text') return 'fixed text "' + (field.value || '') + '"';
+                    return this.templateSources.find(s => s.source === field.source)?.label || field.source;
+                },
+
+                copyFields(fields) {
+                    return fields.map(f => ({ uid: ++this.fieldUid, key: f.key, source: f.source, value: f.value || '' }));
+                },
+
+                openFieldsModal(templateId) {
+                    const saved = templateId ? this.templates.find(t => t.template_id === templateId) : null;
+                    this.fieldsForm = {
+                        isNew: !templateId,
+                        template_id: templateId || '',
+                        name: saved?.name || '',
+                        fields: this.copyFields(saved ? saved.fields : this.defaultFields),
+                    };
+                    this.showFieldsModal = true;
+                },
+
+                moveField(index, step) {
+                    const fields = this.fieldsForm.fields;
+                    [fields[index], fields[index + step]] = [fields[index + step], fields[index]];
+                },
+
+                // Why the fields cannot be saved yet; '' when they can
+                fieldsFormProblem() {
+                    const form = this.fieldsForm;
+                    if (!/^[A-Za-z0-9_-]{1,64}$/.test(form.template_id.trim())) return 'Enter the template ID (letters, digits, - and _).';
+                    if (form.isNew && this.templateRows().some(row => row.id === form.template_id.trim())) {
+                        return 'This template is already listed: use Edit Fields on its row.';
+                    }
+                    if (form.fields.length === 0) return 'Add at least one field.';
+                    const keys = form.fields.map(f => f.key.trim());
+                    if (keys.some(key => key === '')) return 'Every field needs its name from the SEEKINK template.';
+                    if (new Set(keys).size !== keys.length) return 'Each field name can only be used once.';
+                    if (form.fields.some(f => !f.source)) return 'Choose what each field shows.';
+                    return '';
+                },
+
+                async saveFields() {
+                    this.savingFields = true;
+                    const form = this.fieldsForm;
+                    try {
+                        const response = await fetch(`{{ url('ekad/templates') }}/${encodeURIComponent(form.template_id.trim())}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            },
+                            body: JSON.stringify({
+                                name: form.name.trim() || null,
+                                fields: form.fields.map(f => ({ key: f.key.trim(), source: f.source, value: f.source === 'text' ? f.value : null }))
+                            })
+                        });
+                        const data = await response.json();
+                        if (response.ok && data.success) {
+                            const at = this.templates.findIndex(t => t.template_id === data.template.template_id);
+                            if (at >= 0) {
+                                this.templates.splice(at, 1, data.template);
+                            } else {
+                                this.templates.push(data.template);
+                            }
+                            this.addLog('TEMPLATE FIELDS', true, data.message);
+                            this.showFieldsModal = false;
+                        } else {
+                            this.addLog('TEMPLATE FIELDS', false, data.message || 'Validation failed', data);
+                            alert(data.message || 'Validation failed');
+                        }
+                    } catch (error) {
+                        this.addLog('TEMPLATE FIELDS', false, 'Request failed: ' + error.message);
+                        alert('Request failed: ' + error.message);
+                    }
+                    this.savingFields = false;
+                },
+
+                // A ward whose screens all share one template gets it for a new screen too; otherwise the default
+                wardTemplateChoice(wardId) {
+                    const templates = [...new Set(this.bedMappings
+                        .filter(m => m.bed && m.bed.ward_id == wardId)
+                        .map(m => m.template_id || ''))];
+                    return templates.length === 1 ? templates[0] : '';
+                },
+
+                // null = the default template
+                chosenTemplateId(choice, customTemplateId) {
+                    const templateId = choice === '__other' ? customTemplateId.trim() : choice;
+                    return templateId || null;
+                },
+
+                templateWardScreens() {
+                    const wardId = this.templateMapping?.bed?.ward_id;
+                    return wardId ? this.bedMappings.filter(m => m.bed && m.bed.ward_id == wardId).length : 0;
+                },
+
+                templateMappingLabel() {
+                    const bed = this.templateMapping?.bed;
+                    if (!bed) return '';
+                    return (bed.ward?.ward_name || '-') + ' · Bed ' + (bed.bed_display_name || bed.bed_number)
+                        + ' · ' + this.templateMapping.mac_address;
+                },
+
+                openTemplateModal(mapping) {
+                    this.templateMapping = mapping;
+                    this.editTemplateChoice = mapping.template_id || '';
+                    this.editCustomTemplateId = '';
+                    this.applyTemplateToWard = false;
+                    this.showTemplateModal = true;
+                },
+
+                async saveTemplate() {
+                    this.savingTemplate = true;
+                    try {
+                        const response = await fetch(`{{ url('ekad/bed-mappings') }}/${this.templateMapping.id}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            },
+                            body: JSON.stringify({
+                                template_id: this.chosenTemplateId(this.editTemplateChoice, this.editCustomTemplateId),
+                                apply_to_ward: this.applyTemplateToWard
+                            })
+                        });
+                        const data = await response.json();
+                        if (response.ok && data.success) {
+                            this.bedMappings.forEach(m => {
+                                if (data.updated_ids.includes(m.id)) m.template_id = data.mapping.template_id;
+                            });
+                            this.addLog('SCREEN TEMPLATE', true, data.message);
+                            this.showTemplateModal = false;
+                        } else {
+                            this.addLog('SCREEN TEMPLATE', false, data.message || 'Validation failed', data);
+                            alert(data.message || 'Validation failed');
+                        }
+                    } catch (error) {
+                        this.addLog('SCREEN TEMPLATE', false, 'Request failed: ' + error.message);
+                        alert('Request failed: ' + error.message);
+                    }
+                    this.savingTemplate = false;
                 },
 
                 getMaskedName(name) {
@@ -1160,6 +1623,7 @@
                         });
                         const data = await response.json();
                         if (data.success) {
+                            this.defaultTemplateId = data.config.template_id;
                             this.addLog('SAVE CONFIG', true, data.message);
                         } else {
                             this.addLog('SAVE CONFIG', false, data.message, data);
@@ -1209,11 +1673,13 @@
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
+                                'Accept': 'application/json',
                                 'X-CSRF-TOKEN': '{{ csrf_token() }}'
                             },
                             body: JSON.stringify({
                                 bed_id: this.selectedBedId,
-                                mac_address: this.newMacAddress
+                                mac_address: this.newMacAddress,
+                                template_id: this.chosenTemplateId(this.newTemplateChoice, this.newCustomTemplateId)
                             })
                         });
                         const data = await response.json();
@@ -1222,6 +1688,8 @@
                             this.selectedWardId = '';
                             this.selectedBedId = '';
                             this.newMacAddress = '';
+                            this.newTemplateChoice = '';
+                            this.newCustomTemplateId = '';
                             this.addLog('ADD MAPPING', true, data.message);
                         } else {
                             this.addLog('ADD MAPPING', false, data.message, data);
@@ -1291,6 +1759,7 @@
                                 doctor: this.doctor,
                                 nurse: this.nurse,
                                 anaesthetist: this.anaesthetist,
+                                isolation_type: this.isolationType,
                                 apply_masking: this.maskPatientName
                             })
                         });

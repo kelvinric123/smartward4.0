@@ -27,14 +27,18 @@ class AuthenticatedSessionController extends Controller
         $request->authenticate();
 
 
-        if ($request->user()->isDeactivated()) {
+        if ($request->user()->isDeactivated() || $request->user()->isIntegration()) {
+            $message = $request->user()->isIntegration()
+                ? 'Integration users connect with an API token and cannot sign in here.'
+                : 'Your account has been deactivated.';
+
             Auth::guard('web')->logout();
 
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 
             throw \Illuminate\Validation\ValidationException::withMessages([
-                'email' => 'Your account has been deactivated.',
+                'email' => $message,
             ]);
         }
 

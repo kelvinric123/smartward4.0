@@ -90,6 +90,19 @@
             </a>
         @endif
 
+        <!-- Command Center V2 (ED): the emergency department's board, over the Emergency wards (same viewers) -->
+        @if($isAdmin && $menu->shows('command-center-ed'))
+            <a href="{{ route('command-center-ed.index') }}"
+                class="flex items-center px-3 py-2.5 rounded-lg text-white transition-all {{ request()->routeIs('command-center-ed.*') ? 'bg-white/25 shadow-lg' : 'hover:bg-white/10' }}">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.5 12h4l1.5-3 2 5 1.5-2h8" />
+                </svg>
+                <span x-show="sidebarOpen" x-transition class="ml-3 font-medium">Command Center V2 (ED)</span>
+            </a>
+        @endif
+
 
         <!-- Patient Section -->
         @if(!Auth::user()->hasRole(App\Models\User::ROLE_WARD_DASHBOARD) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE) && !Auth::user()->hasRole(App\Models\User::ROLE_NURSE_HEAD) && !Auth::user()->hasRole(App\Models\User::ROLE_USER) && $menu->shows('patients'))

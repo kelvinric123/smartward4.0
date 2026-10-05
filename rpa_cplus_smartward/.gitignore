@@ -1,0 +1,18 @@
+# Secrets and session state
+.env
+cookies*.txt
+his_state.json*
+*.tmp
+
+# Raw C+ pages — they carry patient data
+scratch/
+logs/
+isolation_cache.json*
+
+# Python
+venv/
+__pycache__/
+*.py[cod]
+
+# Filled-in container settings (C+ password)
+rpa.env

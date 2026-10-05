@@ -22,6 +22,7 @@ class PatientCareProvider extends Model
      */
     const SOURCE_ADT = 'adt';
     const SOURCE_MANUAL = 'manual';
+    const SOURCE_CPLUS = 'cplus'; // the physician C+ Bed Management lists for the patient
 
     protected $fillable = [
         'patient_id',

@@ -23,10 +23,15 @@ class Bed extends Model
         'anaesthetist_id',
         'patient_id',
         'is_active',
+        'cplus_bed_id',
+        'cplus_room_no',
+        'cplus_status',
+        'cplus_synced_at',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'cplus_synced_at' => 'datetime',
     ];
 
     public function ward()

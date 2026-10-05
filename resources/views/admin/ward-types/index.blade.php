@@ -83,6 +83,8 @@
                                         <th class="px-3 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                                             Critical Care</th>
                                         <th class="px-3 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                            Emergency</th>
+                                        <th class="px-3 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                                             Status</th>
                                         <th class="px-3 py-3 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
                                             Actions</th>
@@ -122,6 +124,16 @@
                                                 @if ($wardType->is_critical_care)
                                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800"
                                                         title="Wards of this type are on the Critical Care Ward Dashboard">
+                                                        Yes
+                                                    </span>
+                                                @else
+                                                    <span class="text-gray-400">No</span>
+                                                @endif
+                                            </td>
+                                            <td class="px-3 py-3 whitespace-nowrap text-sm">
+                                                @if ($wardType->is_emergency)
+                                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800"
+                                                        title="Wards of this type are on Command Center V2 (ED)">
                                                         Yes
                                                     </span>
                                                 @else
@@ -173,7 +185,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="7" class="px-6 py-12 text-center">
+                                            <td colspan="8" class="px-6 py-12 text-center">
                                                 <div class="flex flex-col items-center">
                                                     <svg class="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

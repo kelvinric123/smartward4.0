@@ -19,11 +19,13 @@ class Hospital extends Model
         'theme_primary_color',
         'theme_secondary_color',
         'hidden_nav_items',
+        'ed_target_minutes',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'hidden_nav_items' => 'array',
+        'ed_target_minutes' => 'integer',
     ];
 
     public function wards()

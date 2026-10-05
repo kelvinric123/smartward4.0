@@ -16,12 +16,14 @@ class WardType extends Model
         'name',
         'description',
         'is_critical_care',
+        'is_emergency',
         'sort_order',
         'is_active',
     ];
 
     protected $casts = [
         'is_critical_care' => 'boolean',
+        'is_emergency' => 'boolean',
         'sort_order' => 'integer',
         'is_active' => 'boolean',
     ];
@@ -81,6 +83,15 @@ class WardType extends Model
     public function scopeCriticalCare(Builder $query): Builder
     {
         return $query->where('is_critical_care', true);
+    }
+
+    /**
+     * Types marked emergency (the ED's zones): their wards are the ones on
+     * Command Center V2 (ED), and not on the hospital-wide Command Center V2.
+     */
+    public function scopeEmergency(Builder $query): Builder
+    {
+        return $query->where('is_emergency', true);
     }
 
     /**

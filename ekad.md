@@ -15,7 +15,8 @@ The system must generate the following JSON structure for the SEEKINK API.
       "doctor": "DATO DR MAHENDRA RAJ A/L P SUNDRAMOORTHY",
       "diet_type": "BF",
       "anaesthetist": "-",
-      "patient_name": "N** A***** b**** I******"
+      "patient_name": "N** A***** b**** I******",
+      "isolation_type": "CONTACT ISOLATION"
     }
   ],
   "macList": [
@@ -23,6 +24,16 @@ The system must generate the following JSON structure for the SEEKINK API.
   ]
 }
 ```
+
+`id` is the SEEKINK template the screen is painted with: the screen's own **Template ID** (Bed Mapping on `/ekad`, for screens of another size or another ward's layout), else the Template ID under **Configuration & Login**.
+
+`data` holds the template's fields. The ones above are the **default fields**, which every template gets until its fields are edited under **Templates** on `/ekad` (`ekad_templates`, `App\Models\EkadTemplate`). There, each field is the name it has in the SEEKINK template, plus what SmartWard puts in it:
+- The patient's data: bed number, MRN, patient name (masked as configured), diet, doctor, nurse on shift, anaesthetist, isolation, allergies (still active), ward, RN, gender, age, admission date.
+- A fixed text.
+
+Values are sent in capitals. An empty bed sends its bed number and ward, `Vacant` as the MRN, the fixed texts, and `-` in every other field, so a screen never keeps an old value.
+
+`isolation_type` (default fields) is the patient's isolation precaution by name (Patient Details → Patient Additional Info → Isolation Precautions, set by staff, ADT or the C+ sync); `-` when there is none or the bed is vacant.
 
 ## 2. Trigger Strategy (REFINED)
 We use the **Observer Pattern** exclusively. ADT Controller triggers are DISABLED to prevent race conditions and duplicate pushes.
@@ -48,6 +59,7 @@ Watch for changes to patient fields that display on the Bed Box.
 *   **Status**: **NEEDS RE-ENABLE** - Currently disabled (line 55)
 *   **Fields to Watch**:
     *   `diet_types` - Patient can have multiple diets (located in Patient Details modal → Patient Additional Info → Diet Types)
+    *   `isolation_type` - Isolation Precautions (Patient Details modal → Patient Additional Info), set by staff or the ADT feed
     *   `name` - Patient name
     *   `mrn` - Medical Record Number
 *   **Logic**: When any watched field changes, trigger EKAD push if patient has an assigned bed

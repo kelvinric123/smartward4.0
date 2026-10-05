@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules;
 
@@ -57,10 +58,13 @@ class UsersController extends Controller
 
     public function store(Request $request)
     {
+        $integration = $request->input('role') === User::ROLE_INTEGRATION;
+
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:' . User::class],
-            'password' => ['required', 'confirmed', Rules\Password::defaults()],
+            // An Integration User signs in with an API token, never a password
+            'password' => $integration ? ['nullable'] : ['required', 'confirmed', Rules\Password::defaults()],
             'role' => ['required', Rule::in(array_keys(User::getRoles()))],
         ]);
 
@@ -71,12 +75,17 @@ class UsersController extends Controller
             return back()->withErrors(['role' => 'Superadmin cannot be created manually.']);
         }
 
-        User::create([
+        $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => Hash::make($request->password),
+            'password' => Hash::make($integration ? Str::random(64) : $request->password),
             'role' => $request->role,
         ]);
+
+        if ($integration) {
+            return redirect()->route('users.edit', $user)
+                ->with('success', 'Integration user created. Generate its API token below.');
+        }
 
         return redirect()->route('users.index')->with('success', 'User created successfully.');
     }
@@ -116,6 +125,7 @@ class UsersController extends Controller
         $user->email = $request->email;
         $user->role = $request->role;
         $user->save();
+        $this->dropTokenUnlessIntegration($user);
 
         return redirect()->route('users.index')->with('success', 'User updated successfully.');
     }
@@ -152,6 +162,7 @@ class UsersController extends Controller
         $oldRole = User::getRoles()[$user->role] ?? $user->role;
         $user->role = $request->role;
         $user->save();
+        $this->dropTokenUnlessIntegration($user);
 
         $newRole = User::getRoles()[$user->role] ?? $user->role;
 
@@ -197,5 +208,36 @@ class UsersController extends Controller
         }
 
         return redirect()->back()->with('success', $message);
+    }
+
+    /**
+     * A new API token for an Integration User, replacing the old one. It is
+     * shown once on the edit page; only its hash is kept.
+     */
+    public function generateApiToken(User $user)
+    {
+        if (! $user->isIntegration()) {
+            return back()->with('error', 'Only Integration Users have an API token.');
+        }
+
+        $token = $user->generateApiToken();
+
+        return redirect()->route('users.edit', $user)
+            ->with('api_token', $token)
+            ->with('success', 'New API token generated. Copy it now: it will not be shown again. Any old token no longer works.');
+    }
+
+    public function revokeApiToken(User $user)
+    {
+        $user->revokeApiToken();
+
+        return redirect()->route('users.edit', $user)->with('success', 'API token revoked. Calls with it are now refused.');
+    }
+
+    private function dropTokenUnlessIntegration(User $user): void
+    {
+        if (! $user->isIntegration() && $user->hasApiToken()) {
+            $user->revokeApiToken();
+        }
     }
 }

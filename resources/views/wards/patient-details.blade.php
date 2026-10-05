@@ -801,6 +801,9 @@
                                     </div>
                                 @endif
                                 <p class="mt-1 text-xs text-gray-500">Infection control measures</p>
+                                @if($patient->cplus_isolation)
+                                    <p class="mt-1 text-xs text-amber-700">Isolation is ticked on the C+ admission card, so it stays on until it is unticked in C+. The kind can be picked here.</p>
+                                @endif
                             </div>
                         </div>
 

@@ -22,6 +22,8 @@ class User extends Authenticatable
     public const ROLE_NURSE = 'nurse';
     public const ROLE_SIEM_AUDITOR = 'siem_auditor';
     public const ROLE_USER = 'user';
+    /** A system that calls SmartWard's API with a token (e.g. the C+ RPA). It cannot sign in to the web UI. */
+    public const ROLE_INTEGRATION = 'integration';
 
     public static function getRoles(): array
     {
@@ -33,6 +35,7 @@ class User extends Authenticatable
             self::ROLE_IT_ADMIN => 'IT Admin',
             self::ROLE_NURSE => 'Nurse',
             self::ROLE_USER => 'User',
+            self::ROLE_INTEGRATION => 'Integration User',
         ];
     }
 
@@ -63,6 +66,7 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'api_token',
     ];
 
     /**
@@ -78,7 +82,54 @@ class User extends Authenticatable
             'is_ldap_user' => 'boolean',
             'ldap_synced_at' => 'datetime',
             'deactivated_at' => 'datetime',
+            'api_token_created_at' => 'datetime',
+            'api_token_last_used_at' => 'datetime',
         ];
+    }
+
+    public function isIntegration(): bool
+    {
+        return $this->role === self::ROLE_INTEGRATION;
+    }
+
+    public function hasApiToken(): bool
+    {
+        return $this->api_token !== null;
+    }
+
+    /**
+     * A new API token for this Integration User, replacing any old one. Only
+     * its hash is stored, so the returned token can be shown this once.
+     */
+    public function generateApiToken(): string
+    {
+        $token = \Illuminate\Support\Str::random(48);
+
+        $this->forceFill([
+            'api_token' => hash('sha256', $token),
+            'api_token_created_at' => now(),
+            'api_token_last_used_at' => null,
+        ])->save();
+
+        return $token;
+    }
+
+    public function revokeApiToken(): void
+    {
+        $this->forceFill(['api_token' => null, 'api_token_created_at' => null, 'api_token_last_used_at' => null])->save();
+    }
+
+    /** The active Integration User a bearer token belongs to, if any. */
+    public static function findByApiToken(?string $token): ?self
+    {
+        if (! $token) {
+            return null;
+        }
+
+        return static::where('api_token', hash('sha256', $token))
+            ->where('role', self::ROLE_INTEGRATION)
+            ->whereNull('deactivated_at')
+            ->first();
     }
 
     /**

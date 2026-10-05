@@ -1,0 +1,35 @@
+# rpa_cplus_smartward on a server, e.g. next to SmartWard on 10.14.16.100:
+#
+#   cp rpa.env.example rpa.env         then fill in HIS_PASSWORD and SMARTWARD_TOKEN
+#   docker compose pull && docker compose up -d
+#   docker compose logs -f
+#
+# The container needs to reach https://cerebral.ihhmy.com and SMARTWARD_URL.
+
+services:
+  rpa_cplus_smartward:
+    image: kelvinric/rpa_cplus_smartward:latest
+    container_name: rpa_cplus_smartward
+    restart: unless-stopped
+    env_file:
+      - rpa.env
+    environment:
+      TZ: Asia/Kuala_Lumpur
+      RPA_DATA_DIR: /data
+    # --allow-login: the RPA logs in to C+ by itself when the session is gone,
+    # under the same rules as login.py. One attempt; a failed login blocks all
+    # further logins until someone checks the account and runs
+    #   docker exec rpa_cplus_smartward python login.py --clear-login-block
+    # Without it, log in by hand (one attempt) whenever the session is gone:
+    #   docker exec rpa_cplus_smartward python login.py
+    command: ["python", "-u", "sync_smartward.py", "--allow-login"]
+    volumes:
+      - rpa_data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+volumes:
+  rpa_data:

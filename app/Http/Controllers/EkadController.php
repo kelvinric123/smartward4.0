@@ -5,11 +5,13 @@ namespace App\Http\Controllers;
 use App\Models\EkadConfiguration;
 use App\Models\EkadBedMapping;
 use App\Models\EkadResponseLog;
+use App\Models\EkadTemplate;
 use App\Models\Bed;
 use App\Models\Ward;
 use App\Services\EkadService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class EkadController extends Controller
@@ -41,7 +43,46 @@ class EkadController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        return view('integration.ekad.index', compact('config', 'wards', 'bedMappings'));
+        // Templates whose fields have been edited; the rest get the default fields
+        $templates = EkadTemplate::orderBy('name')->orderBy('template_id')->get(['template_id', 'name', 'fields']);
+        $templateSources = collect(EkadTemplate::SOURCES)
+            ->map(fn (string $label, string $source) => ['source' => $source, 'label' => $label])
+            ->values();
+        $defaultFields = EkadTemplate::DEFAULT_FIELDS;
+
+        return view('integration.ekad.index', compact('config', 'wards', 'bedMappings', 'templates', 'templateSources', 'defaultFields'));
+    }
+
+    /**
+     * Save a SEEKINK template's fields: the field names the template was
+     * designed with, and what SmartWard puts in each (EkadTemplate::SOURCES)
+     */
+    public function saveTemplate(Request $request, string $templateId)
+    {
+        $validated = $request->validate([
+            'name' => 'nullable|string|max:100',
+            'fields' => 'required|array|min:1|max:40',
+            'fields.*.key' => 'required|string|max:64|distinct',
+            'fields.*.source' => ['required', 'string', Rule::in(array_keys(EkadTemplate::SOURCES))],
+            'fields.*.value' => 'nullable|string|max:255',
+        ], [
+            'fields.*.key.distinct' => 'Each field name can only be used once.',
+        ]);
+
+        $template = EkadTemplate::updateOrCreate(['template_id' => $templateId], [
+            'name' => $validated['name'] ?? null,
+            'fields' => collect($validated['fields'])
+                ->map(fn (array $field) => ['key' => trim($field['key']), 'source' => $field['source']]
+                    + ($field['source'] === 'text' ? ['value' => (string) ($field['value'] ?? '')] : []))
+                ->values()
+                ->all(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Fields saved for template ' . ($template->name ?: $template->template_id),
+            'template' => $template->only(['template_id', 'name', 'fields']),
+        ]);
     }
 
     /**
@@ -147,6 +188,8 @@ class EkadController extends Controller
         $validated = $request->validate([
             'bed_id' => 'required|exists:beds,id',
             'mac_address' => 'required|string|max:20',
+            // The screen's own template; left out or blank, it uses the one under Configuration & Login
+            'template_id' => 'nullable|string|max:64',
             'device_name' => 'nullable|string|max:255',
         ]);
 
@@ -175,18 +218,33 @@ class EkadController extends Controller
     public function updateBedMapping(Request $request, EkadBedMapping $mapping)
     {
         $validated = $request->validate([
-            'mac_address' => 'required|string|max:20',
+            'mac_address' => 'sometimes|required|string|max:20',
+            'template_id' => 'nullable|string|max:64',
             'device_name' => 'nullable|string|max:255',
             'is_active' => 'boolean',
+            // Give every mapped screen in this bed's ward the same template
+            'apply_to_ward' => 'boolean',
         ]);
 
-        $mapping->update($validated);
+        $mapping->update(collect($validated)->except('apply_to_ward')->all());
         $mapping->load('bed.ward');
+
+        $updatedIds = [$mapping->id];
+        if ($request->boolean('apply_to_ward') && array_key_exists('template_id', $validated) && $mapping->bed) {
+            $wardMappings = EkadBedMapping::whereHas('bed', fn ($query) => $query->where('ward_id', $mapping->bed->ward_id))->get();
+            $wardMappings->each(fn (EkadBedMapping $wardMapping) => $wardMapping->update(['template_id' => $mapping->template_id]));
+            $updatedIds = $wardMappings->pluck('id')->all();
+        }
+
+        $screens = count($updatedIds) === 1 ? '1 screen' : count($updatedIds) . ' screens';
 
         return response()->json([
             'success' => true,
-            'message' => 'Bed mapping updated successfully',
+            'message' => array_key_exists('template_id', $validated)
+                ? "Template updated for {$screens}"
+                : 'Bed mapping updated successfully',
             'mapping' => $mapping,
+            'updated_ids' => $updatedIds,
         ]);
     }
 
@@ -221,6 +279,7 @@ class EkadController extends Controller
             'doctor' => 'nullable|string',
             'nurse' => 'nullable|string',
             'anaesthetist' => 'nullable|string',
+            'isolation_type' => 'nullable|string',
             'apply_masking' => 'boolean',
         ]);
 
@@ -246,6 +305,7 @@ class EkadController extends Controller
                         'doctor' => $validated['doctor'] ?? '-',
                         'nurse' => $validated['nurse'] ?? '-',
                         'anaesthetist' => $validated['anaesthetist'] ?? '-',
+                        'isolation_type' => $validated['isolation_type'] ?? '-',
                     ],
                 ],
             ];
@@ -610,7 +670,7 @@ class EkadController extends Controller
         $config = EkadConfiguration::getActive();
         $service = new EkadService($config);
 
-        $previewData = $mappings->map(function ($mapping) use ($service) {
+        $previewData = $mappings->map(function ($mapping) use ($service, $config) {
             $bed = $mapping->bed;
 
             if (!$bed) {
@@ -621,8 +681,10 @@ class EkadController extends Controller
             $this->syncBedWithPatients($bed);
             $bed->refresh();
 
-            // Get payload using the service logic (handles occupied/vacant/prebook)
-            $payload = $service->getBedPayload($bed);
+            // Get payload using the service logic (handles occupied/vacant/prebook), in the screen's template's fields
+            $payload = $service->getBedPayload($bed, $mapping->template_id);
+            $patient = $bed->patient;
+            $occupied = $patient && $patient->is_active && $patient->isAdmitted();
 
             return [
                 'mapping_id' => $mapping->id,
@@ -630,8 +692,11 @@ class EkadController extends Controller
                 'bed_id' => $bed->id,
                 'bed_number' => $bed->bed_number, // Normalized in payload but kept raw here for display if needed
                 'mac_address' => $mapping->mac_address,
+                'template_id' => $mapping->templateIdOr($config?->template_id),
+                'template_is_default' => $mapping->template_id === null,
                 'payload' => $payload,
-                'status' => $payload['MRN'] === 'VACANT' ? 'Vacant' : 'Occupied',
+                'patient' => $occupied ? $service->displayName($patient) : '-',
+                'status' => $occupied ? 'Occupied' : 'Vacant',
             ];
         })->filter()->values();
 

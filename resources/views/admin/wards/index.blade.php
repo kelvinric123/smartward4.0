@@ -60,6 +60,10 @@
                                                     <span class="ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800"
                                                         title="Listed on the Critical Care Ward Dashboard">Critical care</span>
                                                 @endif
+                                                @if ($ward->wardType->is_emergency)
+                                                    <span class="ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800"
+                                                        title="Counted on Command Center V2 (ED)">Emergency</span>
+                                                @endif
                                             @else
                                                 <span class="text-gray-400">-</span>
                                             @endif

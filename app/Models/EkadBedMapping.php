@@ -13,6 +13,7 @@ class EkadBedMapping extends Model
     protected $fillable = [
         'bed_id',
         'mac_address',
+        'template_id',
         'device_name',
         'is_active',
     ];
@@ -69,5 +70,23 @@ class EkadBedMapping extends Model
     public function setMacAddressAttribute($value)
     {
         $this->attributes['mac_address'] = self::formatMac($value);
+    }
+
+    /**
+     * Set the screen's own template ID; blank means the default one
+     */
+    public function setTemplateIdAttribute($value)
+    {
+        $value = trim((string) $value);
+        $this->attributes['template_id'] = $value === '' ? null : $value;
+    }
+
+    /**
+     * The template this screen is painted with: its own, else the Template ID
+     * under Configuration & Login
+     */
+    public function templateIdOr(?string $defaultTemplateId): ?string
+    {
+        return $this->template_id ?? $defaultTemplateId;
     }
 }

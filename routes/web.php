@@ -62,6 +62,10 @@ Route::middleware('auth')->group(function () {
     // Command Center V2: the executive summary for management, refreshed live from its data route
     Route::get('/command-center-v2', [CommandCenterV2Controller::class, 'index'])->name('command-center-v2.index');
     Route::get('/command-center-v2/data', [CommandCenterV2Controller::class, 'data'])->name('command-center-v2.data');
+    // Command Center V2 (ED): the emergency department's board, over the Emergency wards (the ED's zones)
+    Route::get('/command-center-ed', [\App\Http\Controllers\CommandCenterEdController::class, 'index'])->name('command-center-ed.index');
+    Route::get('/command-center-ed/data', [\App\Http\Controllers\CommandCenterEdController::class, 'data'])->name('command-center-ed.data');
+    Route::post('/command-center-ed/settings', [\App\Http\Controllers\CommandCenterEdController::class, 'settings'])->name('command-center-ed.settings');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -116,6 +120,8 @@ Route::middleware('auth')->group(function () {
     Route::resource('users', \App\Http\Controllers\UsersController::class)->except(['show']);
     Route::post('users/{user}/update-role', [\App\Http\Controllers\UsersController::class, 'updateRole'])->name('users.update-role');
     Route::post('users/{user}/toggle-status', [\App\Http\Controllers\UsersController::class, 'toggleStatus'])->name('users.toggle-status');
+    Route::post('users/{user}/api-token', [\App\Http\Controllers\UsersController::class, 'generateApiToken'])->name('users.api-token.generate');
+    Route::post('users/{user}/api-token/revoke', [\App\Http\Controllers\UsersController::class, 'revokeApiToken'])->name('users.api-token.revoke');
     Route::get('user-activities', [UserActivityController::class, 'index'])->name('user-activities.index');
     Route::get('user-activities/export', [UserActivityController::class, 'export'])->name('user-activities.export');
 
@@ -350,6 +356,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/ekad/sync-all', [EkadController::class, 'syncAll'])->name('ekad.sync-all');
     Route::get('/ekad/sync-preview', [EkadController::class, 'syncPreview'])->name('ekad.sync-preview');
     Route::post('/ekad/sync-selected', [EkadController::class, 'syncSelected'])->name('ekad.sync-selected');
+    Route::put('/ekad/templates/{templateId}', [EkadController::class, 'saveTemplate'])->where('templateId', '[A-Za-z0-9_-]{1,64}')->name('ekad.templates.save');
 
 
     // ADT Integration Routes
@@ -406,6 +413,12 @@ Route::prefix('api/infusion')->group(function () {
 Route::prefix('api/adt')->group(function () {
     Route::post('/message', [\App\Http\Controllers\AdtApiController::class, 'receiveMessage']);
     Route::get('/debug', [\App\Http\Controllers\AdtApiController::class, 'debug']);
+});
+
+// C+ Bed Management sync from the rpa_cplus_smartward RPA (no CSRF; bearer token of an Integration User)
+Route::prefix('api/cplus')->middleware([\App\Http\Middleware\AuthenticateIntegrationUser::class, 'throttle:60,1'])->group(function () {
+    Route::get('/ping', [\App\Http\Controllers\Api\CplusBedSyncController::class, 'ping']);
+    Route::post('/bed-sync', [\App\Http\Controllers\Api\CplusBedSyncController::class, 'sync']);
 });
 
 // Public API V1 Routes for Vital Sign Gateway (Raspberry Pi - comennc5)

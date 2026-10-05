@@ -34,6 +34,7 @@ class PatientObserver
             'nurse_id',
             'anaesthetist_id',
             'diet_types',
+            'isolation_type',
             'mrn',
         ]);
 
