@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors, radius } from '../theme';
 import Pill from './Pill';
+import VitalsTrendModal from './VitalsTrendModal';
 
 function ewsTone(ews) {
   if (ews == null) return { bg: 'rgba(255,255,255,0.18)', color: '#fff', label: 'No vitals' };
@@ -35,12 +36,23 @@ function workloadFactors(workload) {
   return (workload?.factors ?? []).map((f) => `${f.label} +${f.points}`).join(' · ');
 }
 
-function VitalTile({ label, value }) {
-  return (
-    <View style={styles.vital}>
+function VitalTile({ label, value, onPress, disabled }) {
+  const inner = (
+    <>
       <Text style={styles.vitalLabel}>{label}</Text>
       <Text style={styles.vitalValue}>{value ?? '--'}</Text>
-    </View>
+      {!disabled && onPress ? (
+        <Text style={styles.vitalTapHint}>tap ›</Text>
+      ) : null}
+    </>
+  );
+  if (disabled || !onPress) {
+    return <View style={styles.vital}>{inner}</View>;
+  }
+  return (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={styles.vital}>
+      {inner}
+    </TouchableOpacity>
   );
 }
 
@@ -86,6 +98,12 @@ function todoItems(badges) {
 
 export default function BedCard({ bed, fallbackNurse, onOpen }) {
   const todo = todoItems(bed.badges);
+  const [trendOpen, setTrendOpen] = useState(false);
+  const [trendMetric, setTrendMetric] = useState('systolic_bp');
+  const openTrend = (metricKey) => {
+    setTrendMetric(metricKey);
+    setTrendOpen(true);
+  };
   const ews = bed.ews_has_vitals ? bed.ews : null;
   const ewsBadge = ewsTone(ews);
   const headerBg = headerGradientFor(bed.status);
@@ -189,16 +207,18 @@ export default function BedCard({ bed, fallbackNurse, onOpen }) {
             <Text style={[styles.sectionTitle, { color: colors.cyan100 }]}>LATEST VITALS</Text>
             <Text style={styles.darkMeta}>{v.recorded_at_label ?? 'Awaiting data'}</Text>
           </View>
+          <Text style={styles.trendHintText}>Tap any value to view its trend chart</Text>
           <View style={styles.vitalsGrid}>
-            <VitalTile label="PULSE" value={v.pulse_rate} />
-            <VitalTile label="BP" value={bp} />
-            <VitalTile label="SPO2" value={v.spo2 ? `${v.spo2}%` : '--'} />
-            <VitalTile label="RESP" value={v.respiratory_rate} />
+            <VitalTile label="PULSE" value={v.pulse_rate} onPress={() => openTrend('pulse_rate')} />
+            <VitalTile label="BP" value={bp} onPress={() => openTrend('systolic_bp')} />
+            <VitalTile label="SPO2" value={v.spo2 ? `${v.spo2}%` : '--'} onPress={() => openTrend('spo2')} />
+            <VitalTile label="RESP" value={v.respiratory_rate} onPress={() => openTrend('respiratory_rate')} />
             <VitalTile
               label="TEMP"
               value={v.temperature != null ? `${Number(v.temperature).toFixed(1)}°C` : '--'}
+              onPress={() => openTrend('temperature')}
             />
-            <VitalTile label="HGT" value={bed.last_hgt?.value ?? '--'} />
+            <VitalTile label="HGT" value={bed.last_hgt?.value ?? '--'} disabled />
           </View>
         </View>
 
@@ -264,6 +284,13 @@ export default function BedCard({ bed, fallbackNurse, onOpen }) {
           )}
         </View>
       </View>
+
+      <VitalsTrendModal
+        visible={trendOpen}
+        onClose={() => setTrendOpen(false)}
+        bed={bed}
+        initialMetric={trendMetric}
+      />
     </View>
   );
 }
@@ -440,6 +467,20 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '800',
+  },
+  vitalTapHint: {
+    marginTop: 4,
+    color: 'rgba(165, 243, 252, 0.65)',
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+  trendHintText: {
+    color: colors.cyan200,
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 8,
+    fontStyle: 'italic',
   },
   emptyText: {
     color: colors.muted,

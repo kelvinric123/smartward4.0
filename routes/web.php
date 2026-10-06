@@ -517,6 +517,9 @@ Route::prefix('api/nurse')->group(function () {
     Route::post('/requests/{rosterRequest}/respond', [\App\Http\Controllers\NurseAppRosterController::class, 'respondRequest']);
     Route::get('/team', [\App\Http\Controllers\NurseAppRosterController::class, 'team']);
     Route::post('/notifications/{notification}/respond', [\App\Http\Controllers\NurseAppPatientController::class, 'respondNotification']);
+    Route::get('/handovers', [\App\Http\Controllers\NurseAppApiController::class, 'handovers']);
+    Route::post('/handovers', [\App\Http\Controllers\NurseAppApiController::class, 'submitHandovers']);
+    Route::post('/handovers/receive', [\App\Http\Controllers\NurseAppApiController::class, 'receiveHandovers']);
 });
 
 // Public API Routes for the bedside Patient Information Terminal (no CSRF)

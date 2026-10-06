@@ -14,7 +14,16 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, radius } from '../theme';
 import StatCard from '../components/StatCard';
 import BedCard from '../components/BedCard';
+import HandoverCard from '../components/HandoverCard';
+import HandoverModal from '../components/HandoverModal';
 import { fetchNurseDashboard } from '../api/endpoints';
+import {
+  getHandoverState,
+  loadHandovers,
+  subscribe as subscribeHandovers,
+  latestOutgoingByPatient,
+  pendingIncomingCount,
+} from '../data/handoverStore';
 import * as mock from '../data/mockData';
 import { demoBadgesFor } from '../data/mockPatient';
 import PatientScreen from './PatientScreen';
@@ -76,6 +85,30 @@ export default function NurseDashboard({ session, onLogout }) {
   const canPrev = safeIndex > 0;
   const canNext = safeIndex < total - 1;
 
+  const [handoverState, setHandoverState] = useState(getHandoverState);
+  const [handoverOpen, setHandoverOpen] = useState(false);
+  const [handoverTab, setHandoverTab] = useState('give');
+
+  useEffect(() => subscribeHandovers(() => setHandoverState(getHandoverState())), []);
+
+  // Patients to hand over this shift come from the roster-based handover state
+  const handoverPatients = handoverState.patients ?? [];
+  const latestOutgoing = latestOutgoingByPatient(handoverState.outgoing);
+  const handedOverCount = handoverPatients.filter((b) => latestOutgoing.has(b.patient_id)).length;
+
+  function openHandover(tab) {
+    setHandoverTab(tab);
+    setHandoverOpen(true);
+  }
+
+  function jumpToPatient(patientId) {
+    const idx = assignedBeds.findIndex((b) => b.patient_id === patientId);
+    if (idx >= 0) {
+      setHandoverOpen(false);
+      setCurrentIndex(idx);
+    }
+  }
+
   const load = useCallback(async (isRefresh = false) => {
     if (isDemo) {
       // Demo beds carry the same "what needs doing" badges and workload the server sends
@@ -108,6 +141,8 @@ export default function NurseDashboard({ session, onLogout }) {
       if (!mountedRef.current) return;
       setData(payload);
       setLoadError(null);
+      // Handover counts on the main page; failures here don't block the beds.
+      loadHandovers().catch(() => {});
     } catch (e) {
       if (!mountedRef.current) return;
       setLoadError(e?.message ?? 'Could not load your assigned beds.');
@@ -294,6 +329,16 @@ export default function NurseDashboard({ session, onLogout }) {
           />
         </ScrollView>
 
+        <HandoverCard
+          fromShift={handoverState.from_shift ?? currentShift}
+          toShift={handoverState.to_shift}
+          patientCount={handoverPatients.length}
+          handedOverCount={handedOverCount}
+          pendingIncoming={pendingIncomingCount(handoverState)}
+          onGive={() => openHandover('give')}
+          onReceive={() => openHandover('receive')}
+        />
+
         <View style={styles.sectionHead}>
           <View>
             <Text style={styles.sectionEyebrow}>BEDSIDE QUEUE</Text>
@@ -365,6 +410,14 @@ export default function NurseDashboard({ session, onLogout }) {
           </TouchableOpacity>
         </View>
       </View>
+
+      <HandoverModal
+        visible={handoverOpen}
+        onClose={() => setHandoverOpen(false)}
+        initialTab={handoverTab}
+        beds={assignedBeds}
+        onOpenBed={jumpToPatient}
+      />
     </View>
   );
 }
