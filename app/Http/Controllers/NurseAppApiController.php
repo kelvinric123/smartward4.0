@@ -28,16 +28,17 @@ use Illuminate\Validation\Rule;
  * to that nurse (current-shift schedule assignments, plus patients where the
  * nurse is set as the primary nurse).
  *
- * Shift handover: the outgoing nurse passes each patient's condition and
- * nursing plan to the next-shift nurse, who receives (acknowledges) it.
+ * Shift handover: every shift, following the ward roster, the outgoing nurse
+ * passes each patient's condition and nursing plan to the nurse rostered on
+ * the next shift, who receives (acknowledges) it.
  */
 class NurseAppApiController extends Controller
 {
     /**
-     * How far back handovers are shown (and pending ones can be edited or
-     * received), in hours.
+     * How long after their shift ends a nurse can still hand over its
+     * patients (handover usually runs past the shift change), in minutes.
      */
-    private const HANDOVER_WINDOW_HOURS = 24;
+    private const HANDOVER_GRACE_MINUTES = 60;
 
     /**
      * POST /api/nurse/ping — connectivity test for the app settings screen.
@@ -179,9 +180,11 @@ class NurseAppApiController extends Controller
     /**
      * GET /api/nurse/handovers
      *
-     * Shift handover state for this nurse: what they handed over this shift
-     * (outgoing), what is waiting for them to receive (incoming), the next
-     * shift and the colleagues they can hand over to.
+     * Shift handover state for this nurse, following the ward roster: the
+     * shift change they are handing over (from_shift -> to_shift), the
+     * patients to hand over, what they already sent for that shift change
+     * (outgoing), handovers into their current or upcoming shift (incoming)
+     * and the colleagues they can hand over to.
      */
     public function handovers(Request $request): JsonResponse
     {
@@ -199,8 +202,9 @@ class NurseAppApiController extends Controller
      * POST /api/nurse/handovers
      * body: { to_nurse_id?, items: [{ patient_id, condition_status?, patient_condition?, nursing_plan? }] }
      *
-     * Without to_nurse_id each patient goes to the nurse scheduled on that
-     * bed for the next shift, or stays open for whoever takes the patient over.
+     * Each patient is handed over to the shift that follows the nurse's
+     * shift. Without to_nurse_id it goes to the nurse rostered on that bed
+     * for that shift, or stays open for whoever takes the patient over.
      */
     public function submitHandovers(Request $request): JsonResponse
     {
@@ -231,9 +235,8 @@ class NurseAppApiController extends Controller
         // Validate every item before saving anything
         $items = [];
         foreach ($validated['items'] as $item) {
-            $patientId = (int) $item['patient_id'];
-            $pair = $context['pairsByPatient'][$patientId] ?? null;
-            if (!$pair) {
+            $entry = $context['handoverable'][(int) $item['patient_id']] ?? null;
+            if (!$entry) {
                 return response()->json([
                     'success' => false,
                     'message' => 'One of the patients is no longer assigned to you. Refresh and try again.',
@@ -249,14 +252,14 @@ class NurseAppApiController extends Controller
                 ], 422);
             }
 
-            $items[] = [$pair, $item['condition_status'] ?? null, $condition, $plan];
+            $items[] = [$entry, $item['condition_status'] ?? null, $condition, $plan];
         }
 
         $dashboard = app(WardDashboardController::class);
 
-        foreach ($items as [[$bed, $patient], $conditionStatus, $condition, $plan]) {
-            $currentShift = $context['shiftByWard'][$patient->ward_id] ?? null;
-            $nextShift = $context['nextShiftByWard'][$patient->ward_id] ?? null;
+        foreach ($items as [$entry, $conditionStatus, $condition, $plan]) {
+            $patient = $entry['patient'];
+            [$toShift, $toShiftDate] = $entry['key'];
 
             $receiverId = $toNurseId ?? ($context['suggestedByPatient'][$patient->id]['id'] ?? null);
             if ($receiverId === $nurse->id) {
@@ -269,22 +272,25 @@ class NurseAppApiController extends Controller
 
             $attributes = [
                 'ward_id' => $patient->ward_id,
-                'bed_id' => $bed?->id,
+                'bed_id' => $entry['bed']?->id,
                 'to_nurse_id' => $receiverId,
-                'from_shift' => $currentShift?->shift_code,
-                'to_shift' => $nextShift ? $nextShift['shift']->shift_code : null,
+                'from_shift' => $entry['from']?->shift_code,
+                'to_shift' => $toShift,
+                'to_shift_date' => $toShiftDate,
                 'condition_status' => $conditionStatus,
                 'patient_condition' => $condition !== '' ? $condition : null,
                 'nursing_plan' => $plan !== '' ? $plan : null,
                 'ews' => $dashboard->calculateEWS($latestVitals)['score'],
             ];
 
-            // Re-submitting before the counterpart has received it edits the
-            // pending handover instead of stacking a second one.
+            // Re-submitting for the same shift change before the counterpart
+            // has received it edits the pending handover instead of stacking
+            // a second one.
             $pending = NurseHandover::where('from_nurse_id', $nurse->id)
                 ->where('patient_id', $patient->id)
                 ->where('status', NurseHandover::STATUS_PENDING)
-                ->where('created_at', '>=', now()->subHours(self::HANDOVER_WINDOW_HOURS))
+                ->where('to_shift', $toShift)
+                ->whereDate('to_shift_date', $toShiftDate)
                 ->latest()
                 ->first();
 
@@ -436,121 +442,221 @@ class NurseAppApiController extends Controller
     }
 
     /**
-     * Everything the handover endpoints need to know about this nurse:
-     * current patients, the wards involved, each ward's next shift, the
-     * nurses scheduled on it, and the patients this nurse is taking over.
+     * Everything the handover endpoints need, following the ward roster.
+     *
+     * A handover is addressed to one shift instance, keyed by
+     * [ward_id, to_shift, to_shift_date] where to_shift_date is the date that
+     * shift starts. The nurse hands over the patients of their current shift
+     * to the next shift — or, for up to HANDOVER_GRACE_MINUTES after their
+     * shift ends, the patients of the shift that just ended to the shift now
+     * running. Handovers are received by the nurses of that shift.
      */
     private function handoverContext(Nurse $nurse): array
     {
-        [
-            'assignments' => $currentAssignments,
-            'pairs' => $pairs,
-            'shiftByWard' => $shiftByWard,
-        ] = $this->resolveAssignments($nurse);
+        ['pairs' => $pairs] = $this->resolveAssignments($nurse);
+        $now = now();
 
-        $pairsByPatient = [];
-        foreach ($pairs as [$bed, $patient]) {
-            if ($patient) {
-                $pairsByPatient[$patient->id] = [$bed, $patient];
-            }
-        }
-
-        $nextShiftByWard = [];
-        $nextShiftFor = function (?int $wardId) use (&$nextShiftByWard) {
+        $periods = [];
+        $periodsFor = function ($wardId) use (&$periods) {
+            $wardId = $wardId ? (int) $wardId : null;
             if (!$wardId) {
-                return null;
+                return ['current' => null, 'next' => null, 'previous' => null];
             }
-            if (!array_key_exists($wardId, $nextShiftByWard)) {
-                $nextShiftByWard[$wardId] = ShiftSetting::getNextShift($wardId);
-            }
-            return $nextShiftByWard[$wardId];
+            return $periods[$wardId] ??= [
+                'current' => ShiftSetting::getCurrentPeriod($wardId),
+                'next' => ShiftSetting::getNextShift($wardId),
+                'previous' => ShiftSetting::getPreviousShift($wardId),
+            ];
         };
 
-        // Beds this nurse is scheduled on for the upcoming shift: the
-        // incoming nurse usually opens the app before their shift starts.
-        $upcomingAssignments = WardScheduleAssignment::where('nurse_id', $nurse->id)
-            ->whereIn('scheduled_date', [now()->toDateString(), now()->addDay()->toDateString()])
-            ->with('bed')
-            ->get()
-            ->filter(function ($assignment) use ($nextShiftFor) {
-                $next = $nextShiftFor($assignment->ward_id);
-                return $next
-                    && $assignment->shift === $next['shift']->shift_code
-                    && $assignment->scheduled_date->toDateString() === $next['starts_at']->toDateString();
-            });
+        // [shift_code, date the shift starts]; wards without shift settings
+        // fall back to one handover per calendar day.
+        $keyOf = fn(?array $period) => $period
+            ? [$period['shift']->shift_code, $period['starts_at']->toDateString()]
+            : [null, $now->toDateString()];
 
-        $incomingPatientIds = collect(array_keys($pairsByPatient));
-        foreach ($upcomingAssignments as $assignment) {
-            if ($assignment->bed && ($patient = $this->patientInBed($assignment->bed))) {
+        // Patients this nurse hands over, keyed by patient id
+        $handoverable = [];
+        foreach ($pairs as [$bed, $patient]) {
+            if (!$patient) {
+                continue;
+            }
+            $p = $periodsFor($patient->ward_id);
+            $handoverable[$patient->id] = [
+                'bed' => $bed,
+                'patient' => $patient,
+                'from' => $p['current']['shift'] ?? null,
+                'to' => $p['next'],
+                'key' => $keyOf($p['next']),
+                // Date the receiving shift's roster rows are filed under
+                'roster_date' => $p['next'] ? $p['next']['starts_at']->toDateString() : null,
+                'previous_shift' => false,
+            ];
+        }
+
+        // This nurse's roster around now (yesterday's night shift .. tomorrow)
+        $myAssignments = WardScheduleAssignment::where('nurse_id', $nurse->id)
+            ->whereIn('scheduled_date', [
+                $now->copy()->subDay()->toDateString(),
+                $now->toDateString(),
+                $now->copy()->addDay()->toDateString(),
+            ])
+            ->with('bed')
+            ->get();
+
+        // Handover usually runs past the end of the shift: keep the patients
+        // of the shift that just ended for a grace period.
+        foreach ($myAssignments as $assignment) {
+            $p = $periodsFor($assignment->ward_id);
+            $previous = $p['previous'];
+            if (!$previous || !$assignment->bed
+                || $assignment->shift !== $previous['shift']->shift_code
+                || $previous['ends_at']->lt($now->copy()->subMinutes(self::HANDOVER_GRACE_MINUTES))
+                // The roster files a shift under the calendar date it is worked on
+                || $assignment->scheduled_date->toDateString() !== $previous['ends_at']->copy()->subMinute()->toDateString()) {
+                continue;
+            }
+            $patient = $this->patientInBed($assignment->bed);
+            if (!$patient || isset($handoverable[$patient->id])) {
+                continue;
+            }
+            $to = $p['current'] ?? $p['next'];
+            $handoverable[$patient->id] = [
+                'bed' => $assignment->bed,
+                'patient' => $patient,
+                'from' => $previous['shift'],
+                'to' => $to,
+                'key' => $keyOf($to),
+                'roster_date' => $p['current']
+                    ? $now->toDateString()
+                    : ($p['next'] ? $p['next']['starts_at']->toDateString() : null),
+                'previous_shift' => true,
+            ];
+        }
+
+        // Patients this nurse is taking over: current patients plus the beds
+        // they are rostered on next shift (the incoming nurse usually opens
+        // the app before their shift starts).
+        $incomingPatientIds = collect($pairs)->map(fn($pair) => $pair[1]?->id)->filter();
+        foreach ($myAssignments as $assignment) {
+            $next = $periodsFor($assignment->ward_id)['next'];
+            if ($next && $assignment->bed
+                && $assignment->shift === $next['shift']->shift_code
+                && $assignment->scheduled_date->toDateString() === $next['starts_at']->toDateString()
+                && ($patient = $this->patientInBed($assignment->bed))) {
                 $incomingPatientIds->push($patient->id);
             }
         }
 
-        $homeWardIds = collect([$nurse->ward_id])->filter()->values();
+        $homeWardIds = collect([$nurse->ward_id])->filter()->map(fn($id) => (int) $id)->values();
         $wardIds = $homeWardIds
-            ->merge(collect($pairsByPatient)->map(fn($pair) => $pair[1]->ward_id))
-            ->merge($upcomingAssignments->pluck('ward_id'))
+            ->merge(collect($handoverable)->map(fn($entry) => $entry['patient']->ward_id))
+            ->merge($myAssignments->pluck('ward_id'))
             ->filter()
             ->map(fn($id) => (int) $id)
             ->unique()
             ->values();
 
-        // Who is scheduled on the next shift, per ward -> bed
+        // Who is rostered on the receiving shift, per bed
         $suggestedByPatient = [];
-        $nextShiftNurseIds = collect();
-        foreach ($wardIds as $wardId) {
-            $next = $nextShiftFor($wardId);
-            if (!$next) {
+        $receivingNurseIds = collect();
+        $rosters = [];
+        foreach ($handoverable as $patientId => $entry) {
+            $wardId = (int) $entry['patient']->ward_id;
+            if (!$wardId || !$entry['to'] || !$entry['roster_date']) {
                 continue;
             }
-            $rows = WardScheduleAssignment::where('ward_id', $wardId)
-                ->where('scheduled_date', $next['starts_at']->toDateString())
-                ->where('shift', $next['shift']->shift_code)
+            $shiftCode = $entry['to']['shift']->shift_code;
+            $rows = $rosters["{$wardId}|{$shiftCode}|{$entry['roster_date']}"] ??= WardScheduleAssignment::where('ward_id', $wardId)
+                ->where('scheduled_date', $entry['roster_date'])
+                ->where('shift', $shiftCode)
                 ->with('nurse')
                 ->get();
-            $nextShiftNurseIds = $nextShiftNurseIds->merge($rows->pluck('nurse_id'));
+            $receivingNurseIds = $receivingNurseIds->merge($rows->pluck('nurse_id'));
 
-            $nurseByBed = $rows->filter(fn($row) => $row->nurse && (int) $row->nurse_id !== $nurse->id)
-                ->keyBy('bed_id');
-            foreach ($pairsByPatient as $patientId => [$bed, $patient]) {
-                if ($bed && (int) $patient->ward_id === $wardId && $nurseByBed->has($bed->id)) {
-                    $receiver = $nurseByBed->get($bed->id)->nurse;
-                    $suggestedByPatient[$patientId] = ['id' => $receiver->id, 'name' => $receiver->name];
-                }
+            $row = $entry['bed']
+                ? $rows->first(fn($r) => (int) $r->bed_id === (int) $entry['bed']->id
+                    && $r->nurse && (int) $r->nurse_id !== $nurse->id)
+                : null;
+            if ($row) {
+                $suggestedByPatient[$patientId] = ['id' => $row->nurse->id, 'name' => $row->nurse->name];
             }
         }
 
-        $primaryWardId = $nurse->ward_id
-            ?: $currentAssignments->pluck('ward_id')->filter()->first()
-            ?: collect($pairsByPatient)->map(fn($pair) => $pair[1]->ward_id)->filter()->first()
-            ?: $wardIds->first();
+        // The shift change shown in the header: this nurse's own handover,
+        // otherwise the ward's current -> next shift.
+        $primary = collect($handoverable)->sortBy(fn($entry) => $entry['previous_shift'])->first();
+        $primaryWardId = $primary ? (int) $primary['patient']->ward_id : $wardIds->first();
+        $from = $primary ? $primary['from'] : ($periodsFor($primaryWardId)['current']['shift'] ?? null);
+        $to = $primary ? $primary['to'] : $periodsFor($primaryWardId)['next'];
+
+        $outgoingKeys = collect($handoverable)
+            ->map(fn($entry) => [$entry['patient']->ward_id ? (int) $entry['patient']->ward_id : null, ...$entry['key']])
+            ->values();
+        if ($outgoingKeys->isEmpty() && $primaryWardId) {
+            $outgoingKeys->push([$primaryWardId, ...$keyOf($periodsFor($primaryWardId)['next'])]);
+        }
+
+        // Handovers into this nurse's current or upcoming shift, in their
+        // wards and any ward a handover was addressed to them from.
+        $addressedWardIds = NurseHandover::where('to_nurse_id', $nurse->id)
+            ->where('created_at', '>=', $now->copy()->subDays(2))
+            ->distinct()
+            ->pluck('ward_id');
+        $incomingKeys = collect();
+        foreach ($wardIds->merge($addressedWardIds)->filter()->map(fn($id) => (int) $id)->unique() as $wardId) {
+            $p = $periodsFor($wardId);
+            $incomingKeys->push([$wardId, ...$keyOf($p['current'])]);
+            $incomingKeys->push([$wardId, ...$keyOf($p['next'])]);
+        }
+
+        $unique = fn($keys) => $keys->unique(fn($key) => implode('|', array_map('strval', $key)))->values()->all();
 
         return [
-            'pairsByPatient' => $pairsByPatient,
-            'shiftByWard' => $shiftByWard,
-            'nextShiftByWard' => $nextShiftByWard,
-            'primaryWardId' => $primaryWardId,
-            'currentShift' => $primaryWardId
-                ? ($shiftByWard[$primaryWardId] ?? ShiftSetting::getCurrentShift($primaryWardId))
-                : null,
-            'nextShift' => $nextShiftFor($primaryWardId),
+            'handoverable' => $handoverable,
+            'from' => $from,
+            'to' => $to,
             'homeWardIds' => $homeWardIds->all(),
             'wardIds' => $wardIds->all(),
             'incomingPatientIds' => $incomingPatientIds->unique()->values()->all(),
             'suggestedByPatient' => $suggestedByPatient,
-            'nextShiftNurseIds' => $nextShiftNurseIds->filter()->map(fn($id) => (int) $id)->unique()->values()->all(),
+            'receivingNurseIds' => $receivingNurseIds->filter()->map(fn($id) => (int) $id)->unique()->values()->all(),
+            'outgoingKeys' => $unique($outgoingKeys),
+            'incomingKeys' => $unique($incomingKeys),
         ];
     }
 
     /**
-     * Handovers this nurse can see on the receiving side: pending ones
-     * addressed to them (or open ones for their patients/ward), plus the
-     * ones they already received, within the handover window.
+     * Limit a handover query to the given shift instances
+     * ([ward_id, to_shift, to_shift_date] triples).
+     */
+    private function whereShiftKeys($query, array $keys)
+    {
+        if (empty($keys)) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->where(function ($q) use ($keys) {
+            foreach ($keys as [$wardId, $shiftCode, $date]) {
+                $q->orWhere(function ($q) use ($wardId, $shiftCode, $date) {
+                    $q->where('ward_id', $wardId)
+                        ->where('to_shift', $shiftCode)
+                        ->whereDate('to_shift_date', $date);
+                });
+            }
+        });
+    }
+
+    /**
+     * Handovers this nurse can see on the receiving side, for their current
+     * or upcoming shift: pending ones addressed to them (or open ones for
+     * their patients/ward), plus the ones they already received.
      */
     private function incomingHandoversQuery(Nurse $nurse, array $context)
     {
-        return NurseHandover::where('from_nurse_id', '!=', $nurse->id)
-            ->where('created_at', '>=', now()->subHours(self::HANDOVER_WINDOW_HOURS))
+        $query = NurseHandover::where('from_nurse_id', '!=', $nurse->id);
+
+        return $this->whereShiftKeys($query, $context['incomingKeys'])
             ->where(function ($q) use ($nurse, $context) {
                 $q->where('received_by_nurse_id', $nurse->id)
                     ->orWhere(function ($q) use ($nurse, $context) {
@@ -573,8 +679,7 @@ class NurseAppApiController extends Controller
     {
         $with = ['patient', 'ward', 'bed', 'fromNurse', 'toNurse', 'receivedBy'];
 
-        $outgoing = NurseHandover::where('from_nurse_id', $nurse->id)
-            ->where('created_at', '>=', now()->subHours(self::HANDOVER_WINDOW_HOURS))
+        $outgoing = $this->whereShiftKeys(NurseHandover::where('from_nurse_id', $nurse->id), $context['outgoingKeys'])
             ->with($with)
             ->orderBy('created_at', 'desc')
             ->get();
@@ -588,31 +693,39 @@ class NurseAppApiController extends Controller
             ->where('id', '!=', $nurse->id)
             ->where(function ($q) use ($context) {
                 $q->whereIn('ward_id', $context['wardIds'])
-                    ->orWhereIn('id', $context['nextShiftNurseIds']);
+                    ->orWhereIn('id', $context['receivingNurseIds']);
             })
             ->orderBy('name')
             ->limit(200)
             ->get();
 
-        $currentShift = $context['currentShift'];
-        $nextShift = $context['nextShift'];
+        $patients = collect($context['handoverable'])
+            ->map(fn($entry) => $this->handoverPatientPayload($entry))
+            ->sort(fn($a, $b) => strnatcmp((string) ($a['number'] ?? ''), (string) ($b['number'] ?? '')))
+            ->values()
+            ->all();
+
+        $from = $context['from'];
+        $to = $context['to'];
 
         return [
-            'current_shift' => $currentShift ? [
-                'shift_code' => $currentShift->shift_code,
-                'shift_name' => $currentShift->shift_name,
+            'from_shift' => $from ? [
+                'shift_code' => $from->shift_code,
+                'shift_name' => $from->shift_name,
             ] : null,
-            'next_shift' => $nextShift ? [
-                'shift_code' => $nextShift['shift']->shift_code,
-                'shift_name' => $nextShift['shift']->shift_name,
-                'starts_at' => $nextShift['starts_at']->toIso8601String(),
-                'starts_at_label' => $nextShift['starts_at']->format('d M H:i'),
+            'to_shift' => $to ? [
+                'shift_code' => $to['shift']->shift_code,
+                'shift_name' => $to['shift']->shift_name,
+                'starts_at' => $to['starts_at']->toIso8601String(),
+                'starts_at_label' => $to['starts_at']->format('d M H:i'),
+                'started' => $to['starts_at']->lte(now()),
             ] : null,
+            'patients' => $patients,
             'nurses' => $nurses->map(fn(Nurse $n) => [
                 'id' => $n->id,
                 'name' => $n->name,
                 'designation' => $n->designation,
-                'on_next_shift' => in_array($n->id, $context['nextShiftNurseIds'], true),
+                'on_next_shift' => in_array($n->id, $context['receivingNurseIds'], true),
             ])->values()->all(),
             'suggested_receivers' => collect($context['suggestedByPatient'])
                 ->map(fn($receiver, $patientId) => ['patient_id' => $patientId, 'nurse' => $receiver])
@@ -620,6 +733,45 @@ class NurseAppApiController extends Controller
                 ->all(),
             'outgoing' => $outgoing->map(fn($h) => $this->handoverPayload($h))->values()->all(),
             'incoming' => $incoming->map(fn($h) => $this->handoverPayload($h))->values()->all(),
+        ];
+    }
+
+    /**
+     * What the handover form shows for a patient being handed over.
+     */
+    private function handoverPatientPayload(array $entry): array
+    {
+        $patient = $entry['patient'];
+        $bed = $entry['bed'];
+
+        $latestVitals = VitalSign::where('patient_id', $patient->id)
+            ->orderBy('recorded_at', 'desc')
+            ->first();
+        $ewsData = app(WardDashboardController::class)->calculateEWS($latestVitals);
+
+        return [
+            'id' => $bed?->id ?? (1000000 + $patient->id),
+            'patient_id' => $patient->id,
+            'patient_name' => $patient->name,
+            'mrn' => $patient->mrn,
+            'number' => $patient->bed_number,
+            'ward_id' => $patient->ward_id,
+            'ward_name' => $patient->ward?->ward_name,
+            'ews' => $ewsData['score'],
+            'ews_has_vitals' => $ewsData['has_vitals'],
+            'vitals' => $this->vitalsPayload($latestVitals),
+            'last_hgt' => $this->hgtPayload($patient),
+            'infusions' => Infusion::where('patient_id', $patient->id)
+                ->active()
+                ->orderBy('last_updated_at', 'desc')
+                ->get()
+                ->map(fn(Infusion $inf) => [
+                    'id' => $inf->id,
+                    'medication_name' => $inf->medication_name ?: 'Unknown medication',
+                    'flow_rate' => $inf->flow_rate !== null ? (float) $inf->flow_rate : null,
+                    'status' => $inf->status,
+                ])->values()->all(),
+            'from_previous_shift' => $entry['previous_shift'],
         ];
     }
 
@@ -638,6 +790,7 @@ class NurseAppApiController extends Controller
             'to_nurse' => $person($handover->toNurse),
             'from_shift' => $handover->from_shift,
             'to_shift' => $handover->to_shift,
+            'to_shift_date' => $handover->to_shift_date?->toDateString(),
             'condition_status' => $handover->condition_status,
             'patient_condition' => $handover->patient_condition,
             'nursing_plan' => $handover->nursing_plan,
@@ -648,6 +801,27 @@ class NurseAppApiController extends Controller
             'created_at' => $handover->created_at?->toIso8601String(),
             'updated_at' => $handover->updated_at?->toIso8601String(),
         ];
+    }
+
+    private function vitalsPayload(?VitalSign $vitals): ?array
+    {
+        return $vitals ? [
+            'recorded_at_label' => $vitals->recorded_at?->format('d M H:i'),
+            'pulse_rate' => $vitals->pulse_rate,
+            'systolic_bp' => $vitals->systolic_bp,
+            'diastolic_bp' => $vitals->diastolic_bp,
+            'spo2' => $vitals->spo2,
+            'respiratory_rate' => $vitals->respiratory_rate,
+            'temperature' => $vitals->temperature !== null ? (float) $vitals->temperature : null,
+        ] : null;
+    }
+
+    private function hgtPayload(Patient $patient): ?array
+    {
+        return $patient->latestSugarReading ? [
+            'value' => number_format((float) $patient->latestSugarReading->value, 1) . ' mmol/L',
+            'recorded_at' => $patient->latestSugarReading->recorded_at?->format('d M H:i'),
+        ] : null;
     }
 
     private function nursePayload(Nurse $nurse): array
@@ -789,19 +963,8 @@ class NurseAppApiController extends Controller
             'is_outside' => $currentMovement !== null,
             'current_movement_location' => $currentMovement?->location,
             'is_pending_discharge' => $isPendingDischarge,
-            'last_hgt' => $patient->latestSugarReading ? [
-                'value' => number_format((float) $patient->latestSugarReading->value, 1) . ' mmol/L',
-                'recorded_at' => $patient->latestSugarReading->recorded_at?->format('d M H:i'),
-            ] : null,
-            'vitals' => $latestVitals ? [
-                'recorded_at_label' => $latestVitals->recorded_at?->format('d M H:i'),
-                'pulse_rate' => $latestVitals->pulse_rate,
-                'systolic_bp' => $latestVitals->systolic_bp,
-                'diastolic_bp' => $latestVitals->diastolic_bp,
-                'spo2' => $latestVitals->spo2,
-                'respiratory_rate' => $latestVitals->respiratory_rate,
-                'temperature' => $latestVitals->temperature !== null ? (float) $latestVitals->temperature : null,
-            ] : null,
+            'last_hgt' => $this->hgtPayload($patient),
+            'vitals' => $this->vitalsPayload($latestVitals),
             'vitals_history' => $vitalsHistory,
             'infusions' => $infusions,
         ];

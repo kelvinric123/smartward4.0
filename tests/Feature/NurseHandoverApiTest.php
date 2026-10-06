@@ -90,6 +90,16 @@ class NurseHandoverApiTest extends TestCase
         $overnight = ShiftSetting::getNextShift($this->ward->id, Carbon::parse('2026-10-06 23:30:00'));
         $this->assertSame('AM', $overnight['shift']->shift_code);
         $this->assertSame('2026-10-07 07:00', $overnight['starts_at']->format('Y-m-d H:i'));
+
+        // Past midnight the night shift started the day before
+        $night = ShiftSetting::getCurrentPeriod($this->ward->id, Carbon::parse('2026-10-07 03:00:00'));
+        $this->assertSame('ON', $night['shift']->shift_code);
+        $this->assertSame('2026-10-06 23:00', $night['starts_at']->format('Y-m-d H:i'));
+        $this->assertSame('2026-10-07 07:00', $night['ends_at']->format('Y-m-d H:i'));
+
+        $previous = ShiftSetting::getPreviousShift($this->ward->id, Carbon::parse('2026-10-06 14:20:00'));
+        $this->assertSame('AM', $previous['shift']->shift_code);
+        $this->assertSame('2026-10-06 14:00', $previous['ends_at']->format('Y-m-d H:i'));
     }
 
     public function test_dashboard_includes_vitals_history_oldest_first()
@@ -113,8 +123,8 @@ class NurseHandoverApiTest extends TestCase
         $pmToken = $this->pmNurse->generateAppToken();
 
         $state = $this->withToken($amToken)->getJson('/api/nurse/handovers')->assertOk();
-        $state->assertJsonPath('current_shift.shift_code', 'AM');
-        $state->assertJsonPath('next_shift.shift_code', 'PM');
+        $state->assertJsonPath('from_shift.shift_code', 'AM');
+        $state->assertJsonPath('to_shift.shift_code', 'PM');
         $state->assertJsonPath('suggested_receivers.0.patient_id', $this->patient->id);
         $state->assertJsonPath('suggested_receivers.0.nurse.id', $this->pmNurse->id);
 
@@ -133,6 +143,7 @@ class NurseHandoverApiTest extends TestCase
         $handover = NurseHandover::sole();
         $this->assertSame('AM', $handover->from_shift);
         $this->assertSame('PM', $handover->to_shift);
+        $this->assertSame('2026-10-06', $handover->to_shift_date->toDateString());
         $this->assertNotNull($handover->ews);
 
         // Incoming nurse sees it before their shift starts...
@@ -156,6 +167,69 @@ class NurseHandoverApiTest extends TestCase
         $this->withToken($amToken)->getJson('/api/nurse/handovers')
             ->assertOk()
             ->assertJsonPath('outgoing.0.status', 'received');
+    }
+
+    public function test_handover_state_resets_every_shift()
+    {
+        $this->withToken($this->amNurse->generateAppToken())->postJson('/api/nurse/handovers', [
+            'items' => [['patient_id' => $this->patient->id, 'patient_condition' => 'Day 1 handover.']],
+        ])->assertOk();
+
+        // Next day, same roster: Maria on AM, Hannah on PM
+        $this->travelTo(Carbon::parse('2026-10-07 10:00:00'));
+        $this->assign($this->amNurse, $this->bed, 'AM');
+        $this->assign($this->pmNurse, $this->bed, 'PM');
+
+        $this->withToken($this->amNurse->generateAppToken())->getJson('/api/nurse/handovers')
+            ->assertOk()
+            ->assertJsonPath('from_shift.shift_code', 'AM')
+            ->assertJsonPath('to_shift.shift_code', 'PM')
+            ->assertJsonPath('patients.0.patient_id', $this->patient->id)
+            ->assertJsonCount(0, 'outgoing');
+
+        // Yesterday's pending handover is not today's: a new one is created
+        $this->withToken($this->amNurse->generateAppToken())->postJson('/api/nurse/handovers', [
+            'items' => [['patient_id' => $this->patient->id, 'patient_condition' => 'Day 2 handover.']],
+        ])->assertOk()->assertJsonCount(1, 'outgoing');
+        $this->assertSame(2, NurseHandover::count());
+
+        $this->withToken($this->pmNurse->generateAppToken())->getJson('/api/nurse/handovers')
+            ->assertOk()
+            ->assertJsonCount(1, 'incoming')
+            ->assertJsonPath('incoming.0.patient_condition', 'Day 2 handover.');
+    }
+
+    public function test_nurse_can_still_hand_over_shortly_after_shift_ends()
+    {
+        // 14:20 — the AM shift ended 20 minutes ago, PM is running
+        $this->travelTo(Carbon::parse('2026-10-06 14:20:00'));
+        $amToken = $this->amNurse->generateAppToken();
+
+        $this->withToken($amToken)->getJson('/api/nurse/handovers')
+            ->assertOk()
+            ->assertJsonPath('from_shift.shift_code', 'AM')
+            ->assertJsonPath('to_shift.shift_code', 'PM')
+            ->assertJsonPath('to_shift.started', true)
+            ->assertJsonPath('patients.0.patient_id', $this->patient->id)
+            ->assertJsonPath('patients.0.from_previous_shift', true)
+            ->assertJsonPath('suggested_receivers.0.nurse.id', $this->pmNurse->id);
+
+        $this->withToken($amToken)->postJson('/api/nurse/handovers', [
+            'items' => [['patient_id' => $this->patient->id, 'patient_condition' => 'Late handover.']],
+        ])->assertOk()->assertJsonPath('outgoing.0.to_nurse.id', $this->pmNurse->id);
+
+        $this->withToken($this->pmNurse->generateAppToken())->getJson('/api/nurse/handovers')
+            ->assertOk()
+            ->assertJsonCount(1, 'incoming');
+
+        // After the grace period the patient can no longer be handed over
+        $this->travelTo(Carbon::parse('2026-10-06 15:10:00'));
+        $this->withToken($amToken)->getJson('/api/nurse/handovers')
+            ->assertOk()
+            ->assertJsonCount(0, 'patients');
+        $this->withToken($amToken)->postJson('/api/nurse/handovers', [
+            'items' => [['patient_id' => $this->patient->id, 'patient_condition' => 'Too late.']],
+        ])->assertForbidden();
     }
 
     public function test_resubmitting_a_pending_handover_updates_it()

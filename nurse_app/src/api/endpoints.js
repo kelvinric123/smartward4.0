@@ -15,8 +15,12 @@
 //         resp:  { nurse, current_shift, ward, summary, beds: [...] }
 //
 //   GET   {BASE_URL}/api/nurse/handovers
-//         resp:  { current_shift, next_shift, nurses, suggested_receivers,
-//                  outgoing: [...], incoming: [...] }
+//         resp:  { from_shift, to_shift, patients: [...], nurses,
+//                  suggested_receivers, outgoing: [...], incoming: [...] }
+//         Scoped per shift following the ward roster: `patients` are the
+//         ones this nurse hands over (current shift, or the shift that just
+//         ended), `outgoing` what they sent for that shift change and
+//         `incoming` handovers into their current or upcoming shift.
 //   POST  {BASE_URL}/api/nurse/handovers
 //         body:  { to_nurse_id?, items: [{ patient_id, condition_status,
 //                  patient_condition, nursing_plan }] }

@@ -4,11 +4,14 @@
 //   POST {BASE_URL}/api/nurse/handovers          body: { to_nurse_id?, items: [...] }
 //   POST {BASE_URL}/api/nurse/handovers/receive  body: { ids: [...] }
 //
-// The outgoing nurse passes each patient's condition and nursing plan to the
-// next-shift nurse; the counterpart receives (acknowledges) it. The latest
-// state is cached in memory and subscribers are notified on every change.
+// Every shift, following the ward roster, the outgoing nurse passes each
+// patient's condition and nursing plan to the nurse rostered on the next
+// shift; the counterpart receives (acknowledges) it. The server scopes the
+// state to the current shift change. The latest state is cached in memory and
+// subscribers are notified on every change.
 
 import { fetchHandovers, postHandovers, postReceiveHandovers } from '../api/endpoints';
+import * as mock from './mockData';
 
 export const CONDITION_STATUSES = [
   { key: 'stable', label: 'Stable' },
@@ -18,8 +21,9 @@ export const CONDITION_STATUSES = [
 ];
 
 const EMPTY_STATE = {
-  current_shift: null,
-  next_shift: null,
+  from_shift: null,
+  to_shift: null,
+  patients: [],
   nurses: [],
   suggested_receivers: [],
   outgoing: [],
@@ -94,8 +98,8 @@ export async function submitHandovers({ toNurseId, items }) {
             bed_number: item.bed_number ?? null,
             ward_name: item.ward_name ?? null,
             from_nurse: demoNurse ? { id: demoNurse.id, name: demoNurse.name } : null,
-            from_shift: state.current_shift?.shift_code ?? null,
-            to_shift: state.next_shift?.shift_code ?? null,
+            from_shift: state.from_shift?.shift_code ?? null,
+            to_shift: state.to_shift?.shift_code ?? null,
             status: 'pending',
             received_by: null,
             received_at: null,
@@ -169,6 +173,23 @@ export function pendingIncomingCount(s = state) {
   return (s.incoming ?? []).filter((h) => h.status === 'pending').length;
 }
 
+// "Morning → Afternoon" and when the receiving shift starts (or started,
+// when handing over after the end of the shift).
+export function shiftChangeLabels(fromShift, toShift) {
+  const name = (s) => s?.shift_name ?? s?.shift_code;
+  const title = fromShift && toShift
+    ? `${name(fromShift)} → ${name(toShift)}`
+    : toShift
+      ? `To ${name(toShift)} shift`
+      : 'Pass over to the next shift';
+  const when = toShift?.starts_at_label
+    ? toShift.started
+      ? `${name(toShift)} shift started ${toShift.starts_at_label}`
+      : `Next shift starts ${toShift.starts_at_label}`
+    : null;
+  return { title, when };
+}
+
 export function formatTime(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -179,8 +200,9 @@ export function formatTime(iso) {
 
 function setState(data) {
   state = {
-    current_shift: data?.current_shift ?? null,
-    next_shift: data?.next_shift ?? null,
+    from_shift: data?.from_shift ?? null,
+    to_shift: data?.to_shift ?? null,
+    patients: data?.patients ?? [],
     nurses: data?.nurses ?? [],
     suggested_receivers: data?.suggested_receivers ?? [],
     outgoing: data?.outgoing ?? [],
@@ -211,8 +233,9 @@ function demoSeed() {
   const nightNurse = { id: 12, name: 'Sr. Aisyah Rahman' };
   const me = demoNurse ? { id: demoNurse.id, name: demoNurse.name } : null;
   return {
-    current_shift: { shift_code: 'AM', shift_name: 'Morning' },
-    next_shift: { shift_code: 'PM', shift_name: 'Afternoon', starts_at: null, starts_at_label: nextShiftLabel() },
+    from_shift: { shift_code: 'AM', shift_name: 'Morning' },
+    to_shift: { shift_code: 'PM', shift_name: 'Afternoon', starts_at: null, starts_at_label: nextShiftLabel(), started: false },
+    patients: mock.assignedBeds.filter((b) => b.patient_id != null),
     nurses: [
       { id: 12, name: 'Sr. Aisyah Rahman', designation: 'STAFF NURSE I', on_next_shift: false },
       { id: 13, name: 'Sr. Daniel Wong', designation: 'STAFF NURSE II', on_next_shift: false },

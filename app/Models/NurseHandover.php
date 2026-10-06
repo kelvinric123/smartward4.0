@@ -7,6 +7,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Shift handover of a patient from one nurse to the next (nurse_app).
+ *
+ * Each handover is addressed to one shift instance on the ward roster:
+ * `to_shift` (shift code) + `to_shift_date` (the date that shift starts).
  */
 class NurseHandover extends Model
 {
@@ -23,6 +26,7 @@ class NurseHandover extends Model
         'to_nurse_id',
         'from_shift',
         'to_shift',
+        'to_shift_date',
         'condition_status',
         'patient_condition',
         'nursing_plan',
@@ -34,6 +38,7 @@ class NurseHandover extends Model
 
     protected $casts = [
         'ews' => 'integer',
+        'to_shift_date' => 'date',
         'received_at' => 'datetime',
     ];
 

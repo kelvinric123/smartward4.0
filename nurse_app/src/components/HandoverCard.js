@@ -2,22 +2,19 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { colors, radius } from '../theme';
 import Pill from './Pill';
+import { shiftChangeLabels } from '../data/handoverStore';
 
 // Main-page entry point for the shift handover (see HandoverModal).
 export default function HandoverCard({
-  currentShift,
-  nextShift,
+  fromShift,
+  toShift,
   patientCount,
   handedOverCount,
   pendingIncoming,
   onGive,
   onReceive,
 }) {
-  const shiftLine = currentShift && nextShift
-    ? `${currentShift.shift_name ?? currentShift.shift_code} → ${nextShift.shift_name ?? nextShift.shift_code}`
-    : nextShift
-      ? `To ${nextShift.shift_name ?? nextShift.shift_code} shift`
-      : 'Pass over to the next shift';
+  const labels = shiftChangeLabels(fromShift, toShift);
   const allSent = patientCount > 0 && handedOverCount >= patientCount;
 
   return (
@@ -25,11 +22,9 @@ export default function HandoverCard({
       <View style={styles.headRow}>
         <View style={{ flex: 1, paddingRight: 8 }}>
           <Text style={styles.eyebrow}>SHIFT HANDOVER</Text>
-          <Text style={styles.title} numberOfLines={1}>{shiftLine}</Text>
+          <Text style={styles.title} numberOfLines={1}>{labels.title}</Text>
           <Text style={styles.meta} numberOfLines={1}>
-            {nextShift?.starts_at_label
-              ? `Next shift starts ${nextShift.starts_at_label}`
-              : 'Patient condition & nursing plan'}
+            {labels.when ?? 'Patient condition & nursing plan'}
           </Text>
         </View>
         {pendingIncoming > 0 ? (

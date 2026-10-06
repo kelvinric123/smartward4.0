@@ -20,7 +20,9 @@ return new class extends Migration
             // Null = open handover: any nurse taking over the patient can receive it
             $table->foreignId('to_nurse_id')->nullable()->constrained('nurses')->onDelete('set null');
             $table->string('from_shift', 10)->nullable();
+            // The shift instance this is handed over to: shift code + the date that shift starts
             $table->string('to_shift', 10)->nullable();
+            $table->date('to_shift_date')->nullable();
             $table->string('condition_status', 20)->nullable(); // stable, improving, deteriorating, critical
             $table->text('patient_condition')->nullable();
             $table->text('nursing_plan')->nullable();
@@ -30,6 +32,7 @@ return new class extends Migration
             $table->timestamp('received_at')->nullable();
             $table->timestamps();
 
+            $table->index(['ward_id', 'to_shift', 'to_shift_date']);
             $table->index(['patient_id', 'created_at']);
             $table->index(['to_nurse_id', 'status']);
             $table->index(['from_nurse_id', 'created_at']);

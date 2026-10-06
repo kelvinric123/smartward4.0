@@ -89,6 +89,70 @@ class ShiftSetting extends Model
     }
 
     /**
+     * The shift running at $time, with the datetimes it started and ends.
+     *
+     * Returns ['shift' => ShiftSetting, 'starts_at' => Carbon, 'ends_at' => Carbon]
+     * or null when no shift is running.
+     */
+    public static function getCurrentPeriod(?int $wardId, ?\Carbon\Carbon $time = null): ?array
+    {
+        $time = $time ?? now();
+        $shift = self::getCurrentShift($wardId, $time);
+        if (!$shift) {
+            return null;
+        }
+
+        // Overnight shifts started the day before when we are past midnight
+        $startsAt = $time->copy()->setTimeFromTimeString($shift->start_time);
+        if ($startsAt->gt($time)) {
+            $startsAt->subDay();
+        }
+        $endsAt = $startsAt->copy()->setTimeFromTimeString($shift->end_time);
+        if ($endsAt->lte($startsAt)) {
+            $endsAt->addDay();
+        }
+
+        return [
+            'shift' => $shift,
+            'starts_at' => $startsAt,
+            'ends_at' => $endsAt,
+        ];
+    }
+
+    /**
+     * The shift that ended most recently before $time, and when it ended.
+     *
+     * Returns ['shift' => ShiftSetting, 'ends_at' => Carbon] or null when the
+     * ward has no active shifts.
+     */
+    public static function getPreviousShift(?int $wardId, ?\Carbon\Carbon $time = null): ?array
+    {
+        if (!$wardId) {
+            return null;
+        }
+
+        $time = $time ?? now();
+
+        $previous = null;
+        $shifts = self::where('ward_id', $wardId)
+            ->where('is_active', true)
+            ->orderBy('display_order')
+            ->get();
+
+        foreach ($shifts as $shift) {
+            $endsAt = $time->copy()->setTimeFromTimeString($shift->end_time);
+            if ($endsAt->gt($time)) {
+                $endsAt->subDay();
+            }
+            if (!$previous || $endsAt->gt($previous['ends_at'])) {
+                $previous = ['shift' => $shift, 'ends_at' => $endsAt];
+            }
+        }
+
+        return $previous;
+    }
+
+    /**
      * Determine the shift that follows the current one, and when it starts.
      *
      * Returns ['shift' => ShiftSetting, 'starts_at' => Carbon] or null when

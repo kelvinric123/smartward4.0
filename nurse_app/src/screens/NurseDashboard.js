@@ -79,9 +79,10 @@ export default function NurseDashboard({ session, onLogout }) {
 
   useEffect(() => subscribeHandovers(() => setHandoverState(getHandoverState())), []);
 
-  const patientBeds = assignedBeds.filter((b) => b.patient_id != null);
+  // Patients to hand over this shift come from the roster-based handover state
+  const handoverPatients = handoverState.patients ?? [];
   const latestOutgoing = latestOutgoingByPatient(handoverState.outgoing);
-  const handedOverCount = patientBeds.filter((b) => latestOutgoing.has(b.patient_id)).length;
+  const handedOverCount = handoverPatients.filter((b) => latestOutgoing.has(b.patient_id)).length;
 
   function openHandover(tab) {
     setHandoverTab(tab);
@@ -244,9 +245,9 @@ export default function NurseDashboard({ session, onLogout }) {
         </ScrollView>
 
         <HandoverCard
-          currentShift={handoverState.current_shift ?? currentShift}
-          nextShift={handoverState.next_shift}
-          patientCount={patientBeds.length}
+          fromShift={handoverState.from_shift ?? currentShift}
+          toShift={handoverState.to_shift}
+          patientCount={handoverPatients.length}
           handedOverCount={handedOverCount}
           pendingIncoming={pendingIncomingCount(handoverState)}
           onGive={() => openHandover('give')}

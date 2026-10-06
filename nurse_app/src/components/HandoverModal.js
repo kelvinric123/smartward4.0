@@ -25,6 +25,7 @@ import {
   latestOutgoingByPatient,
   pendingIncomingCount,
   formatTime,
+  shiftChangeLabels,
 } from '../data/handoverStore';
 
 const CONDITION_TONES = {
@@ -318,7 +319,8 @@ export default function HandoverModal({ visible, onClose, initialTab = 'give', b
     }
   }
 
-  const patients = useMemo(() => (beds ?? []).filter((b) => b.patient_id != null), [beds]);
+  // Patients this nurse hands over this shift, from the server (roster-based)
+  const patients = hs.patients ?? [];
   const latestOutgoing = useMemo(() => latestOutgoingByPatient(hs.outgoing), [hs.outgoing]);
   const suggestedByPatient = useMemo(() => {
     const map = new Map();
@@ -394,13 +396,7 @@ export default function HandoverModal({ visible, onClose, initialTab = 'give', b
     }
   }
 
-  const current = hs.current_shift;
-  const next = hs.next_shift;
-  const shiftLine = current && next
-    ? `${current.shift_name ?? current.shift_code} → ${next.shift_name ?? next.shift_code}`
-    : next
-      ? `To ${next.shift_name ?? next.shift_code} shift`
-      : 'Next shift';
+  const labels = shiftChangeLabels(hs.from_shift, hs.to_shift);
 
   const sheetHeight = kbHeight
     ? Math.max(260, winHeight - kbHeight - insets.top - 8)
@@ -420,9 +416,9 @@ export default function HandoverModal({ visible, onClose, initialTab = 'give', b
           <View style={styles.sheetHeader}>
             <View style={{ flex: 1 }}>
               <Text style={styles.sheetEyebrow}>SHIFT HANDOVER</Text>
-              <Text style={styles.sheetTitle} numberOfLines={1}>{shiftLine}</Text>
+              <Text style={styles.sheetTitle} numberOfLines={1}>{labels.title}</Text>
               <Text style={styles.sheetMeta} numberOfLines={1}>
-                {next?.starts_at_label ? `Next shift starts ${next.starts_at_label}` : 'Pass over condition & nursing plan'}
+                {labels.when ?? 'Pass over condition & nursing plan'}
               </Text>
             </View>
             {loading ? <ActivityIndicator color={colors.cyan700} style={{ marginRight: 10, marginTop: 6 }} /> : null}
@@ -527,7 +523,7 @@ export default function HandoverModal({ visible, onClose, initialTab = 'give', b
                   <View style={styles.empty}>
                     <Text style={styles.emptyTitle}>No patients to hand over</Text>
                     <Text style={styles.emptyMeta}>
-                      Patients assigned to you this shift will appear here.
+                      Patients rostered to you this shift will appear here.
                     </Text>
                   </View>
                 ) : (
@@ -601,7 +597,7 @@ export default function HandoverModal({ visible, onClose, initialTab = 'give', b
                     busy={receivingId === h.id || receivingId === 'all'}
                     onReceive={(id) => receive([id], id)}
                     onOpenBed={
-                      onOpenBed && patients.some((b) => b.patient_id === h.patient_id)
+                      onOpenBed && (beds ?? []).some((b) => b.patient_id === h.patient_id)
                         ? onOpenBed
                         : null
                     }
