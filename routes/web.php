@@ -362,6 +362,9 @@ Route::prefix('api/nurse')->group(function () {
     Route::post('/login', [\App\Http\Controllers\NurseAppApiController::class, 'login']);
     Route::post('/logout', [\App\Http\Controllers\NurseAppApiController::class, 'logout']);
     Route::get('/dashboard', [\App\Http\Controllers\NurseAppApiController::class, 'dashboard']);
+    Route::get('/handovers', [\App\Http\Controllers\NurseAppApiController::class, 'handovers']);
+    Route::post('/handovers', [\App\Http\Controllers\NurseAppApiController::class, 'submitHandovers']);
+    Route::post('/handovers/receive', [\App\Http\Controllers\NurseAppApiController::class, 'receiveHandovers']);
 });
 
 // Public API Routes for the bedside Patient Information Terminal (no CSRF)

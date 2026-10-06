@@ -1,5 +1,12 @@
 // Hardcoded data mirroring the nurse dashboard at /nurses/9/dashboard.
-// Swap this file with real API calls when wiring up the backend later.
+// Used only when the user taps "Demo Login" on the login screen.
+
+// Helper: build a vitals trend (oldest -> newest, last entry should mirror
+// the bed's current `vitals`). Used to render the "tap latest vitals -> trend"
+// modal.
+function trend(rows) {
+  return rows.map((r, i) => ({ id: `vh-${i}`, ...r }));
+}
 
 export const nurse = {
   id: 9,
@@ -60,6 +67,13 @@ export const assignedBeds = [
       respiratory_rate: 22,
       temperature: 38.4,
     },
+    vitals_history: trend([
+      { recorded_at_label: '15 Jun 21:00', pulse_rate: 96,  systolic_bp: 138, diastolic_bp: 82, spo2: 96, respiratory_rate: 18, temperature: 37.4, ews: 2 },
+      { recorded_at_label: '16 Jun 01:00', pulse_rate: 102, systolic_bp: 142, diastolic_bp: 86, spo2: 95, respiratory_rate: 20, temperature: 37.8, ews: 3 },
+      { recorded_at_label: '16 Jun 05:00', pulse_rate: 108, systolic_bp: 146, diastolic_bp: 88, spo2: 94, respiratory_rate: 20, temperature: 38.1, ews: 4 },
+      { recorded_at_label: '16 Jun 07:30', pulse_rate: 110, systolic_bp: 150, diastolic_bp: 92, spo2: 94, respiratory_rate: 21, temperature: 38.3, ews: 5 },
+      { recorded_at_label: '16 Jun 09:42', pulse_rate: 112, systolic_bp: 152, diastolic_bp: 94, spo2: 93, respiratory_rate: 22, temperature: 38.4, ews: 5 },
+    ]),
     infusions: [
       {
         id: 'i-1',
@@ -115,6 +129,13 @@ export const assignedBeds = [
       respiratory_rate: 16,
       temperature: 36.9,
     },
+    vitals_history: trend([
+      { recorded_at_label: '15 Jun 21:00', pulse_rate: 92, systolic_bp: 136, diastolic_bp: 84, spo2: 97, respiratory_rate: 18, temperature: 37.3, ews: 1 },
+      { recorded_at_label: '16 Jun 01:00', pulse_rate: 90, systolic_bp: 132, diastolic_bp: 82, spo2: 97, respiratory_rate: 17, temperature: 37.2, ews: 1 },
+      { recorded_at_label: '16 Jun 05:00', pulse_rate: 88, systolic_bp: 130, diastolic_bp: 80, spo2: 98, respiratory_rate: 16, temperature: 37.0, ews: 2 },
+      { recorded_at_label: '16 Jun 07:30', pulse_rate: 86, systolic_bp: 128, diastolic_bp: 78, spo2: 98, respiratory_rate: 16, temperature: 36.9, ews: 2 },
+      { recorded_at_label: '16 Jun 09:30', pulse_rate: 84, systolic_bp: 128, diastolic_bp: 78, spo2: 98, respiratory_rate: 16, temperature: 36.9, ews: 2 },
+    ]),
     infusions: [
       {
         id: 'i-3',
@@ -160,6 +181,13 @@ export const assignedBeds = [
       respiratory_rate: 28,
       temperature: 39.1,
     },
+    vitals_history: trend([
+      { recorded_at_label: '15 Jun 21:00', pulse_rate: 98,  systolic_bp: 118, diastolic_bp: 72, spo2: 95, respiratory_rate: 20, temperature: 38.2, ews: 4 },
+      { recorded_at_label: '16 Jun 01:00', pulse_rate: 108, systolic_bp: 108, diastolic_bp: 66, spo2: 93, respiratory_rate: 22, temperature: 38.6, ews: 5 },
+      { recorded_at_label: '16 Jun 05:00', pulse_rate: 116, systolic_bp: 102, diastolic_bp: 62, spo2: 91, respiratory_rate: 25, temperature: 38.9, ews: 6 },
+      { recorded_at_label: '16 Jun 07:30', pulse_rate: 120, systolic_bp: 96,  diastolic_bp: 60, spo2: 90, respiratory_rate: 27, temperature: 39.0, ews: 7 },
+      { recorded_at_label: '16 Jun 09:15', pulse_rate: 124, systolic_bp: 92,  diastolic_bp: 58, spo2: 89, respiratory_rate: 28, temperature: 39.1, ews: 7 },
+    ]),
     infusions: [
       {
         id: 'i-4',
@@ -226,6 +254,13 @@ export const assignedBeds = [
       respiratory_rate: 14,
       temperature: 36.6,
     },
+    vitals_history: trend([
+      { recorded_at_label: '15 Jun 21:00', pulse_rate: 82, systolic_bp: 122, diastolic_bp: 78, spo2: 98, respiratory_rate: 15, temperature: 37.0, ews: 1 },
+      { recorded_at_label: '16 Jun 01:00', pulse_rate: 80, systolic_bp: 120, diastolic_bp: 76, spo2: 98, respiratory_rate: 15, temperature: 36.8, ews: 1 },
+      { recorded_at_label: '16 Jun 05:00', pulse_rate: 78, systolic_bp: 118, diastolic_bp: 74, spo2: 99, respiratory_rate: 14, temperature: 36.7, ews: 1 },
+      { recorded_at_label: '16 Jun 07:30', pulse_rate: 76, systolic_bp: 118, diastolic_bp: 74, spo2: 99, respiratory_rate: 14, temperature: 36.6, ews: 1 },
+      { recorded_at_label: '16 Jun 09:50', pulse_rate: 76, systolic_bp: 118, diastolic_bp: 74, spo2: 99, respiratory_rate: 14, temperature: 36.6, ews: 1 },
+    ]),
     infusions: [],
   },
 ];

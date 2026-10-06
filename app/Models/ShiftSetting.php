@@ -89,6 +89,59 @@ class ShiftSetting extends Model
     }
 
     /**
+     * Determine the shift that follows the current one, and when it starts.
+     *
+     * Returns ['shift' => ShiftSetting, 'starts_at' => Carbon] or null when
+     * the ward has no active shifts. `starts_at->toDateString()` is the
+     * scheduled_date used for that shift's schedule assignments.
+     */
+    public static function getNextShift(?int $wardId, ?\Carbon\Carbon $time = null): ?array
+    {
+        if (!$wardId) {
+            return null;
+        }
+
+        $time = $time ?? now();
+
+        $shifts = self::where('ward_id', $wardId)
+            ->where('is_active', true)
+            ->orderBy('display_order')
+            ->get()
+            ->values();
+
+        if ($shifts->isEmpty()) {
+            return null;
+        }
+
+        $startsAt = function (self $shift) use ($time) {
+            $start = $time->copy()->setTimeFromTimeString($shift->start_time);
+            return $start->lte($time) ? $start->addDay() : $start;
+        };
+
+        $currentTime = $time->format('H:i:s');
+        $current = $shifts->first(fn($s) => $s->isTimeInShift($currentTime));
+
+        if ($current) {
+            // Prefer the shift that starts when the current one ends,
+            // otherwise the next one in display order (wrapping around).
+            $next = $shifts->first(fn($s) => $s->id !== $current->id
+                && substr((string) $s->start_time, 0, 5) === substr((string) $current->end_time, 0, 5));
+            if (!$next) {
+                $index = $shifts->search(fn($s) => $s->id === $current->id);
+                $next = $shifts[($index + 1) % $shifts->count()];
+            }
+        } else {
+            // Between shifts: whichever starts soonest
+            $next = $shifts->sortBy(fn($s) => $startsAt($s)->timestamp)->first();
+        }
+
+        return [
+            'shift' => $next,
+            'starts_at' => $startsAt($next),
+        ];
+    }
+
+    /**
      * Check if a given time falls within this shift.
      */
     public function isTimeInShift(string $time): bool
