@@ -15,14 +15,13 @@ use App\Models\Patient;
 use App\Models\PatientCareProvider;
 use App\Models\PatientMedication;
 use App\Models\PatientMovement;
-use App\Models\ShiftSetting;
 use App\Models\VitalSign;
 use App\Models\Ward;
 use App\Models\WardNotification;
-use App\Models\WardScheduleAssignment;
 use App\Services\LabInvestigations;
 use App\Services\NurseApp\NurseAppSchedule;
 use App\Services\NurseScheduling\NurseRoster;
+use App\Services\NurseScheduling\RosterSlot;
 use App\Support\ClinicalIndicatorMonitoring;
 use App\Support\FluidBalanceChart;
 use Illuminate\Http\JsonResponse;
@@ -112,24 +111,10 @@ class NurseAppApiController extends Controller
             ], 401);
         }
 
-        $today = now()->toDateString();
-
-        // Today's schedule assignments for this nurse, filtered to each
-        // ward's current shift (mirrors the web nurse dashboard).
-        $assignments = WardScheduleAssignment::where('nurse_id', $nurse->id)
-            ->where('scheduled_date', $today)
-            ->with('bed')
-            ->get();
-
-        $shiftByWard = [];
-        $currentAssignments = $assignments->filter(function ($assignment) use (&$shiftByWard) {
-            $wardId = $assignment->ward_id;
-            if (!array_key_exists($wardId, $shiftByWard)) {
-                $shiftByWard[$wardId] = ShiftSetting::getCurrentShift($wardId);
-            }
-            $shift = $shiftByWard[$wardId];
-            return $shift ? $assignment->shift === $shift->shift_code : true;
-        });
+        // This nurse's schedule assignments in the roster slot on duty on each
+        // ward: after midnight in the night shift, last night's ON (mirrors the
+        // web nurse dashboard).
+        $currentAssignments = RosterSlot::assignmentsOnDuty($nurse->id);
 
         // Beds assigned via schedule
         $assignedBedIds = $currentAssignments->pluck('bed_id')->filter()->unique();
@@ -184,9 +169,7 @@ class NurseAppApiController extends Controller
             ?: $currentAssignments->pluck('ward_id')->filter()->first()
             ?: collect($beds)->pluck('ward_id')->filter()->first();
         $ward = $wardId ? Ward::find($wardId) : null;
-        $currentShift = $wardId
-            ? ($shiftByWard[$wardId] ?? ShiftSetting::getCurrentShift($wardId))
-            : null;
+        $currentSlot = $wardId ? RosterSlot::current($wardId) : null;
 
         // Ward occupancy
         $occupancy = 0;
@@ -217,9 +200,9 @@ class NurseAppApiController extends Controller
 
         return response()->json([
             'nurse' => $this->nursePayload($nurse),
-            'current_shift' => $currentShift ? [
-                'shift_code' => $currentShift->shift_code,
-                'shift_name' => $currentShift->shift_name,
+            'current_shift' => $currentSlot ? [
+                'shift_code' => $currentSlot['code'],
+                'shift_name' => $currentSlot['name'],
             ] : null,
             'ward' => $ward ? [
                 'id' => $ward->id,

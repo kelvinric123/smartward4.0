@@ -44,13 +44,17 @@ export function currentShift(now = new Date()) {
   return { ...shift, start, end, date: ymd(start), time: `${pad(shift.from)}:00 - ${pad(shift.to % 24)}:00` };
 }
 
-/** "PM", "AM yesterday", "ON 21 Sep": a shift code with its date, as ShiftHandover::label. */
+/**
+ * "PM", "AM yesterday", "ON 21 Sep": a shift code with its date, as ShiftHandover::label.
+ * The shift on now counts from the day it started, so after midnight the night on duty reads "ON".
+ */
 export function shiftLabel(code, date) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const on = currentShift();
+  const from = new Date(code === on.code ? on.start : Date.now());
+  from.setHours(0, 0, 0, 0);
   const [y, m, d] = date.split('-').map(Number);
   const day = new Date(y, m - 1, d);
-  const offset = Math.round((day - today) / 86400000);
+  const offset = Math.round((day - from) / 86400000);
   if (offset === 0) return code;
   if (offset === 1) return `${code} tomorrow`;
   if (offset === -1) return `${code} yesterday`;

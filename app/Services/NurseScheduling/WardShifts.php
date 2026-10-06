@@ -9,7 +9,8 @@ use Illuminate\Support\Carbon;
 
 /**
  * The three shifts of a ward's day (AM, PM and the ON night shift) with their
- * times and lengths, from the ward's shift settings or the defaults.
+ * times and lengths, from the ward's shift settings or the defaults. Which one
+ * is on now, and on which roster date, is RosterSlot's.
  */
 final class WardShifts
 {
@@ -40,24 +41,6 @@ final class WardShifts
         }
 
         return $shifts;
-    }
-
-    /** The shift the clock is in, by the ward's shift times. */
-    public static function currentCode(array $shifts, ?CarbonInterface $now = null): ?string
-    {
-        $time = ($now ? Carbon::instance($now) : now())->format('H:i');
-
-        foreach ($shifts as $code => $shift) {
-            $inShift = $shift['start'] < $shift['end']
-                ? $time >= $shift['start'] && $time < $shift['end']
-                : $time >= $shift['start'] || $time < $shift['end'];
-
-            if ($inShift) {
-                return $code;
-            }
-        }
-
-        return null;
     }
 
     /**

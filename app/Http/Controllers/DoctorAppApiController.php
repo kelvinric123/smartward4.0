@@ -11,7 +11,6 @@ use App\Models\IsolationType;
 use App\Models\Patient;
 use App\Models\PatientCareProvider;
 use App\Models\PatientMovement;
-use App\Models\ShiftSetting;
 use App\Models\VitalSign;
 use App\Models\WardScheduleAssignment;
 use App\Models\ConsultantOrder;
@@ -19,6 +18,7 @@ use App\Models\LabInvestigation;
 use App\Models\PatientMedication;
 use App\Services\DoctorApp\DoctorAppPatientChart;
 use App\Services\LabInvestigations;
+use App\Services\NurseScheduling\RosterSlot;
 use App\Support\DoctorAppAccess;
 use App\Support\FluidBalanceChart;
 use Illuminate\Http\JsonResponse;
@@ -111,21 +111,21 @@ class DoctorAppApiController extends Controller
         $beds = [];
         $linked = $this->linkedData($patients);
 
-        // Per-ward caches for shift + nurse-on-duty lookups
-        $shiftByWard = [];
+        // Per-ward caches for the slot on duty + nurse-on-duty lookups
+        // (after midnight in the night shift, the slot is last night's ON)
+        $slotByWard = [];
         $assignmentsByWard = [];
-        $today = now()->toDateString();
 
         foreach ($patients as $patient) {
             $wardId = $patient->ward_id;
 
-            if (!array_key_exists($wardId, $shiftByWard)) {
-                $shiftByWard[$wardId] = ShiftSetting::getCurrentShift($wardId);
+            if (!array_key_exists($wardId, $slotByWard)) {
+                $slotByWard[$wardId] = $wardId ? RosterSlot::current($wardId) : null;
                 $assignments = [];
-                if ($shiftByWard[$wardId]) {
+                if ($slotByWard[$wardId]) {
                     $rows = WardScheduleAssignment::where('ward_id', $wardId)
-                        ->where('scheduled_date', $today)
-                        ->where('shift', $shiftByWard[$wardId]->shift_code)
+                        ->where('scheduled_date', $slotByWard[$wardId]['date'])
+                        ->where('shift', $slotByWard[$wardId]['code'])
                         ->with('nurse')
                         ->get();
                     foreach ($rows as $row) {

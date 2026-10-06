@@ -8,12 +8,12 @@ use App\Models\IsolationType;
 use App\Models\Patient;
 use App\Models\PatientCareProvider;
 use App\Models\PatientMovement;
-use App\Models\ShiftSetting;
 use App\Models\SugarReading;
 use App\Models\VitalSign;
 use App\Models\Ward;
 use App\Models\WardNotification;
 use App\Models\WardScheduleAssignment;
+use App\Services\NurseScheduling\RosterSlot;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -445,12 +445,13 @@ class TerminalApiController extends Controller
             ];
         }
 
-        // Nurse on duty for this bed in the current shift
-        $currentShift = ShiftSetting::getCurrentShift($bed->ward_id);
-        if ($currentShift) {
+        // Nurse on duty for this bed in the roster slot on duty (after
+        // midnight in the night shift, last night's ON)
+        $currentSlot = $bed->ward_id ? RosterSlot::current($bed->ward_id) : null;
+        if ($currentSlot) {
             $assignment = WardScheduleAssignment::where('ward_id', $bed->ward_id)
-                ->where('scheduled_date', now()->toDateString())
-                ->where('shift', $currentShift->shift_code)
+                ->where('scheduled_date', $currentSlot['date'])
+                ->where('shift', $currentSlot['code'])
                 ->where('bed_id', $bed->id)
                 ->with('nurse')
                 ->first();
@@ -461,7 +462,7 @@ class TerminalApiController extends Controller
                     'role' => 'Nurse on Duty',
                     'group' => 'nurse',
                     'detail' => 'Looking after your bed this shift.',
-                    'status' => 'On shift · ' . ($currentShift->shift_name ?? $currentShift->shift_code),
+                    'status' => 'On shift · ' . ($currentSlot['name'] ?? $currentSlot['code']),
                 ];
             }
         }

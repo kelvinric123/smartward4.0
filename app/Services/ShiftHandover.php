@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Patient;
 use App\Models\ShiftSetting;
+use App\Services\NurseScheduling\RosterSlot;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -13,13 +14,14 @@ use Illuminate\Support\Collection;
  * next, each with the nurse the ward roster puts on the bed. A slot is a date
  * plus a shift code, the key the roster (Ward Schedule) is stored under.
  *
- * "Now" follows the rule the bed boxes use: today's entry for the shift the
- * clock is in. "Next" is whichever shift is on the moment the current one
- * ends, on the date it ends. So at 02:00 in the night shift the next slot is
- * this morning's AM, while at 23:30 it is tomorrow's.
+ * "Now" is the slot on duty (RosterSlot): a shift belongs to the date it
+ * starts, so after midnight the night on duty is last night's ON. "Next" is
+ * whichever shift is on the moment the current one ends, on the date it
+ * starts. So at 02:00 in the night shift the next slot is this morning's AM,
+ * while at 23:30 it is tomorrow's.
  *
- * The nurses come from PatientRoster, which covers today and tomorrow; the
- * next slot never falls later than that.
+ * The nurses come from PatientRoster, which covers the day the slot on duty
+ * started and the day after; the next slot never falls later than that.
  */
 class ShiftHandover
 {
@@ -29,52 +31,23 @@ class ShiftHandover
     public static function slotsFor(Patient $patient, ?CarbonInterface $now = null): array
     {
         $now = $now ? Carbon::instance($now) : now();
-        $shifts = self::shifts($patient->ward_id);
-        $current = self::shiftAt($shifts, $now);
-
-        if ($current) {
-            $nextAt = $now->copy()->setTimeFromTimeString((string) $current->end_time);
-            if ($nextAt->lessThanOrEqualTo($now)) {
-                $nextAt->addDay();
-            }
-        } else {
-            // In a gap between shifts: next is whichever starts soonest
-            $nextAt = $shifts
-                ->map(function (ShiftSetting $shift) use ($now) {
-                    $start = $now->copy()->setTimeFromTimeString((string) $shift->start_time);
-
-                    return $start->lessThanOrEqualTo($now) ? $start->addDay() : $start;
-                })
-                ->sort()
-                ->first();
-        }
-
-        $next = $nextAt ? self::shiftAt($shifts, $nextAt) : null;
+        $current = RosterSlot::current($patient->ward_id, $now);
+        $next = RosterSlot::next($patient->ward_id, $now);
         $roster = PatientRoster::forPatient($patient, $now);
 
         return [
-            'current' => $current ? self::slot($current, $now, $roster, $now) : null,
-            'next' => $next ? self::slot($next, $nextAt, $roster, $now) : null,
+            'current' => $current ? self::slot($current, $roster) : null,
+            'next' => $next ? self::slot($next, $roster) : null,
         ];
     }
 
-    /** "AM", "AM tomorrow", "ON yesterday", "PM 19 Sep". */
+    /**
+     * "AM", "AM tomorrow", "ON yesterday", "PM 19 Sep". The night on duty
+     * reads "ON" after midnight too (see RosterSlot::label).
+     */
     public static function label(string $code, ?string $date, ?CarbonInterface $now = null): string
     {
-        if ($date === null) {
-            return $code;
-        }
-
-        $today = ($now ? Carbon::instance($now) : now())->copy()->startOfDay();
-        $day = Carbon::parse($date)->startOfDay();
-        $offset = (int) round(($day->getTimestamp() - $today->getTimestamp()) / 86400);
-
-        return $code . match ($offset) {
-            0 => '',
-            1 => ' tomorrow',
-            -1 => ' yesterday',
-            default => ' ' . $day->format('j M'),
-        };
+        return $date === null ? $code : RosterSlot::label($code, $date, $now);
     }
 
     /** The ward's own shift times, or the defaults the dashboard would create. */
@@ -89,25 +62,18 @@ class ShiftHandover
             : collect(ShiftSetting::getDefaults())->map(fn (array $shift) => new ShiftSetting($shift));
     }
 
-    private static function shiftAt(Collection $shifts, Carbon $at): ?ShiftSetting
+    /** A RosterSlot slot with the nurse the roster puts on the patient's bed. */
+    private static function slot(array $slot, array $roster): array
     {
-        $time = $at->format('H:i:s');
-
-        return $shifts->first(fn (ShiftSetting $shift) => $shift->isTimeInShift($time));
-    }
-
-    private static function slot(ShiftSetting $shift, Carbon $at, array $roster, Carbon $now): array
-    {
-        $date = $at->toDateString();
-        $day = collect($roster['days'])->first(fn (array $day) => $day['date']->toDateString() === $date);
-        $entry = $day ? collect($day['shifts'])->firstWhere('code', $shift->shift_code) : null;
+        $day = collect($roster['days'])->first(fn (array $day) => $day['date']->toDateString() === $slot['date']);
+        $entry = $day ? collect($day['shifts'])->firstWhere('code', $slot['code']) : null;
 
         return [
-            'date' => $date,
-            'code' => $shift->shift_code,
-            'name' => $shift->shift_name,
-            'time' => substr((string) $shift->start_time, 0, 5) . ' - ' . substr((string) $shift->end_time, 0, 5),
-            'label' => self::label($shift->shift_code, $date, $now),
+            'date' => $slot['date'],
+            'code' => $slot['code'],
+            'name' => $slot['name'],
+            'time' => $slot['time'],
+            'label' => $slot['label'],
             'nurse' => $entry['nurse'] ?? null,
         ];
     }

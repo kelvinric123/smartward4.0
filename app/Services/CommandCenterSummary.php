@@ -11,6 +11,7 @@ use App\Models\Ward;
 use App\Models\WardNotification;
 use App\Models\WardScheduleAssignment;
 use App\Services\NurseScheduling\RosterRules;
+use App\Services\NurseScheduling\RosterSlot;
 use App\Services\NurseScheduling\WardShifts;
 use App\Support\ClinicalIndicatorReadings;
 use Carbon\CarbonInterface;
@@ -420,7 +421,7 @@ final class CommandCenterSummary
      * Ward Schedule do. A ward with neither for the day has no roster (null).
      *
      * The ON shift on a date is the night that starts that evening, so in the
-     * small hours the night on duty is the one dated yesterday.
+     * small hours the night on duty is the one dated yesterday (RosterSlot).
      *
      * @param  Collection<int, int>  $inpatients  per ward id
      * @return array<int, array|null>
@@ -429,16 +430,14 @@ final class CommandCenterSummary
     {
         $plans = [];
         foreach ($wards as $ward) {
-            $shifts = WardShifts::forWard($ward->id);
-            $code = WardShifts::currentCode($shifts, $now);
-            if ($code === null) {
+            $slot = RosterSlot::current($ward->id, $now);
+            if ($slot === null) {
                 continue;
             }
-            $afterMidnight = $code === NurseRosterEntry::SHIFT_NIGHT && $now->format('H:i') < $shifts[$code]['start'];
             $plans[$ward->id] = [
                 'ward' => $ward,
-                'shift' => $shifts[$code],
-                'date' => ($afterMidnight ? $now->copy()->subDay() : $now)->toDateString(),
+                'shift' => ['code' => $slot['code'], 'name' => $slot['name'], 'time' => $slot['time']],
+                'date' => $slot['date'],
             ];
         }
 

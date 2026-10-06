@@ -7,20 +7,23 @@ use App\Models\Patient;
 use App\Models\ShiftSetting;
 use App\Models\WardScheduleAssignment;
 use App\Models\WardSpecialDuty;
+use App\Services\NurseScheduling\RosterSlot;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 
 /**
- * The nurses the ward roster puts on a patient's bed: for each shift of today
- * and tomorrow, the rostered nurse with anyone tagging along, and that shift's
- * team leader. Read-only here; nurses are assigned in the roster (Ward Schedule).
+ * The nurses the ward roster puts on a patient's bed: for each shift of two
+ * days, the rostered nurse with anyone tagging along, and that shift's team
+ * leader. Read-only here; nurses are assigned in the roster (Ward Schedule).
  *
- * "On duty now" is today's entry for the current shift, the same rule the bed
- * boxes and the bedside patient app use.
+ * "On duty now" is the slot on duty (RosterSlot), the same one the bed boxes
+ * and the bedside patient app show. The days start on the day that slot
+ * started: today, or after midnight in the night shift yesterday, whose ON is
+ * the night still on.
  */
 class PatientRoster
 {
-    /** Days shown, starting today. */
+    /** Days shown, starting on the day of the slot on duty. */
     public const DAYS = 2;
 
     /**
@@ -39,16 +42,12 @@ class PatientRoster
         }
 
         // The ward's own shift times, or the defaults the dashboard would create
-        $shifts = ShiftSetting::where('ward_id', $bed->ward_id)
-            ->where('is_active', true)
-            ->orderBy('display_order')
-            ->get();
-        if ($shifts->isEmpty()) {
-            $shifts = collect(ShiftSetting::getDefaults())->map(fn (array $shift) => new ShiftSetting($shift));
-        }
-        $currentCode = ShiftSetting::getCurrentShift($bed->ward_id, $now)?->shift_code;
+        $shifts = ShiftHandover::shifts($bed->ward_id);
+        $current = RosterSlot::current($bed->ward_id, $now);
+        $first = $current ? Carbon::parse($current['date']) : $now->copy()->startOfDay();
+        $today = $now->copy()->startOfDay();
 
-        $dates = collect(range(0, self::DAYS - 1))->map(fn (int $offset) => $now->copy()->startOfDay()->addDays($offset));
+        $dates = collect(range(0, self::DAYS - 1))->map(fn (int $offset) => $first->copy()->addDays($offset));
         $between = [$dates->first()->toDateString(), $dates->last()->toDateString()];
 
         $assignments = WardScheduleAssignment::where('bed_id', $bed->id)
@@ -64,19 +63,24 @@ class PatientRoster
             ->get()
             ->keyBy(fn (WardSpecialDuty $duty) => $duty->date->toDateString() . '|' . $duty->shift);
 
-        $days = $dates->map(function (Carbon $date, int $offset) use ($shifts, $assignments, $teamLeaders, $currentCode) {
+        $days = $dates->map(function (Carbon $date) use ($shifts, $assignments, $teamLeaders, $current, $today) {
             $day = $date->toDateString();
 
             return [
                 'date' => $date,
-                'label' => $offset === 0 ? 'Today' : ($offset === 1 ? 'Tomorrow' : $date->format('l')),
+                'label' => match ((int) round(($date->getTimestamp() - $today->getTimestamp()) / 86400)) {
+                    -1 => 'Yesterday',
+                    0 => 'Today',
+                    1 => 'Tomorrow',
+                    default => $date->format('l'),
+                },
                 'shifts' => $shifts->map(fn (ShiftSetting $shift) => [
                     'code' => $shift->shift_code,
                     'name' => $shift->shift_name,
                     'time' => substr((string) $shift->start_time, 0, 5) . ' - ' . substr((string) $shift->end_time, 0, 5),
                     'nurse' => $assignments->get($day . '|' . $shift->shift_code)?->nurse,
                     'team_leader' => $teamLeaders->get($day . '|' . $shift->shift_code)?->nurse,
-                    'is_current' => $offset === 0 && $shift->shift_code === $currentCode,
+                    'is_current' => $current !== null && $day === $current['date'] && $shift->shift_code === $current['code'],
                 ])->values()->all(),
             ];
         })->all();

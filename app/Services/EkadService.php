@@ -8,10 +8,10 @@ use App\Models\EkadResponseLog;
 use App\Models\EkadTemplate;
 use App\Models\Patient;
 use App\Models\Bed;
-use App\Models\ShiftSetting;
 use App\Models\WardScheduleAssignment;
 use App\Models\DietType;
 use App\Models\IsolationType;
+use App\Services\NurseScheduling\RosterSlot;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -247,16 +247,17 @@ class EkadService
         } elseif ($patient->nurse) {
             $nurse = $patient->nurse->name;
         } else {
-            // Fallback to Ward Schedule (Roster) for today
+            // Fallback to Ward Schedule (Roster): the slot on duty (after
+            // midnight in the night shift, last night's ON)
             try {
                 $wardId = $patient->ward_id;
-                $currentShift = ShiftSetting::getCurrentShift($wardId);
+                $currentSlot = $wardId ? RosterSlot::current($wardId) : null;
 
-                if ($currentShift) {
+                if ($currentSlot) {
                     $assignment = WardScheduleAssignment::where('ward_id', $wardId)
                         ->where('bed_id', $bed->id)
-                        ->where('scheduled_date', now()->toDateString())
-                        ->where('shift', $currentShift->shift_code)
+                        ->where('scheduled_date', $currentSlot['date'])
+                        ->where('shift', $currentSlot['code'])
                         ->with('nurse')
                         ->first();
 

@@ -3,13 +3,13 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
-use App\Models\ShiftSetting;
 use App\Models\Ward;
 use App\Models\Bed;
 use App\Models\Patient;
 use App\Models\WardScheduleAssignment;
 use App\Models\EkadConfiguration;
 use App\Services\EkadService;
+use App\Services\NurseScheduling\RosterSlot;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -53,26 +53,20 @@ class UpdateEkadShiftNurses extends Command
         foreach ($wards as $ward) {
             $this->info("Processing Ward: {$ward->ward_name} ({$ward->id})");
 
-            // Calculate target shift if not provided
-            if (!$targetShiftCode) {
-                // We look ahead 15-30 minutes
-                $futureTime = now()->addMinutes(20);
-                $shift = ShiftSetting::getCurrentShift($ward->id, $futureTime);
+            // The roster slot on duty a little ahead (we look ahead 15-30 minutes),
+            // or of the shift asked for. A night is dated the evening it starts,
+            // so after midnight the ON slot is last night's.
+            $futureTime = now()->addMinutes(20);
+            $slot = $this->targetSlot($ward, $targetShiftCode ? strtoupper($targetShiftCode) : null, $futureTime);
 
-                if (!$shift) {
-                    $this->warn("  No active shift found for time {$futureTime->format('H:i')}. Skipping.");
-                    continue;
-                }
-                $currentShiftCodeCandidate = $shift->shift_code;
-            } else {
-                $currentShiftCodeCandidate = strtoupper($targetShiftCode);
+            if (!$slot) {
+                $this->warn("  No active shift found for time {$futureTime->format('H:i')}. Skipping.");
+                continue;
             }
+            $currentShiftCodeCandidate = $slot['code'];
+            $slotDate = $slot['date'];
 
-            $today = now()->toDateString();
-            // Handle ON shift spanning across days if needed, but usually schedule is date-based
-            // For 'ON' shift starting at 23:00, it usually belongs to 'today' in schedule
-
-            $this->info("  Target Shift: {$currentShiftCodeCandidate} for Date: {$today}");
+            $this->info("  Target Shift: {$currentShiftCodeCandidate} for Date: {$slotDate}");
 
             // 2. Find Occupied Beds in this Ward
             $beds = Bed::where('ward_id', $ward->id)
@@ -113,7 +107,7 @@ class UpdateEkadShiftNurses extends Command
                 // Let's resolve the nurse manually here to be precise.
                 $assignment = WardScheduleAssignment::where('ward_id', $ward->id)
                     ->where('bed_id', $bed->id)
-                    ->where('scheduled_date', $today)
+                    ->where('scheduled_date', $slotDate)
                     ->where('shift', $currentShiftCodeCandidate)
                     ->with('nurse')
                     ->first();
@@ -149,5 +143,24 @@ class UpdateEkadShiftNurses extends Command
 
         $this->info('EKad Shift Nurse Update Completed.');
         return 0;
+    }
+
+    /**
+     * The slot on duty at a time; given a shift code, that shift's slot on
+     * then, or else the next of it to start.
+     */
+    private function targetSlot(Ward $ward, ?string $code, Carbon $at): ?array
+    {
+        $slot = RosterSlot::current($ward->id, $at);
+        if ($code === null) {
+            return $slot;
+        }
+
+        $slot ??= RosterSlot::next($ward->id, $at);
+        for ($i = 0; $slot && $slot['code'] !== $code && $i < 4; $i++) {
+            $slot = RosterSlot::next($ward->id, $slot['starts_at']);
+        }
+
+        return $slot && $slot['code'] === $code ? $slot : null;
     }
 }

@@ -11,9 +11,9 @@ use App\Models\NursingCarePlanItem;
 use App\Models\Patient;
 use App\Models\PatientMedication;
 use App\Models\PatientMovement;
-use App\Models\ShiftSetting;
 use App\Models\SugarReading;
 use App\Models\VitalSign;
+use App\Services\NurseScheduling\RosterSlot;
 use App\Services\ShiftHandover;
 use App\Support\ClinicalIndicatorMonitoring;
 use App\Support\FluidBalanceChart;
@@ -103,28 +103,18 @@ class ShiftTasks
     }
 
     /**
-     * The shift on now for the patient's ward, as [start, end, ShiftSetting].
-     * Between shifts (a gap in the ward's times) the next eight hours stand in.
+     * The shift on now for the patient's ward, as [start, end, ShiftSetting]:
+     * the roster slot on duty (RosterSlot), so a night that began yesterday
+     * runs to this morning. Between shifts (a gap in the ward's times) the
+     * next eight hours stand in.
      */
     public static function window(Patient $patient, Carbon $now): array
     {
-        $shift = ShiftHandover::shifts($patient->ward_id)
-            ->first(fn(ShiftSetting $s) => $s->isTimeInShift($now->format('H:i:s')));
+        $slot = RosterSlot::current($patient->ward_id, $now);
 
-        if (!$shift) {
-            return [$now->copy(), $now->copy()->addHours(8), null];
-        }
-
-        $start = $now->copy()->setTimeFromTimeString((string) $shift->start_time);
-        if ($start->greaterThan($now)) {
-            $start->subDay(); // a night shift that began yesterday
-        }
-        $end = $start->copy()->setTimeFromTimeString((string) $shift->end_time);
-        if ($end->lessThanOrEqualTo($start)) {
-            $end->addDay();
-        }
-
-        return [$start, $end, $shift];
+        return $slot
+            ? [$slot['starts_at'], $slot['ends_at'], $slot['shift']]
+            : [$now->copy(), $now->copy()->addHours(8), null];
     }
 
     // --------------------------------------------------------------- sources

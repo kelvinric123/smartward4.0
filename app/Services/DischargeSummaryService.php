@@ -13,6 +13,7 @@ use App\Models\VitalSign;
 use App\Models\WardDashboardSetting;
 use App\Models\WardNotification;
 use App\Models\WardScheduleAssignment;
+use App\Services\NurseScheduling\RosterSlot;
 use App\Support\AdmissionEpisode;
 use App\Support\AdmissionTimeline;
 use Carbon\Carbon;
@@ -452,6 +453,10 @@ class DischargeSummaryService
      * The patient's nurse_id is only ever the one nurse currently attached to
      * the record, which for a stay of any length is not the team that looked
      * after them - the ward schedule is.
+     *
+     * A stay that began in the small hours began in the night dated the day
+     * before (ON on a date is the night that starts that evening, RosterSlot):
+     * that night counts, the rest of that day does not.
      */
     protected function nursingRoster(AdmissionEpisode $episode): array
     {
@@ -469,15 +474,19 @@ class DischargeSummaryService
             return $empty;
         }
 
+        $admittedIn = RosterSlot::current($episode->admissionLog->ward_id, $episode->windowStart);
+        $firstDay = $episode->windowStart->toDateString();
+
         $assignments = WardScheduleAssignment::with(['nurse.taggingNurses', 'bed'])
             ->whereIn('bed_id', $beds->pluck('id')->all())
             ->whereBetween('scheduled_date', [
-                $episode->windowStart->toDateString(),
+                $admittedIn['date'] ?? $firstDay,
                 $episode->windowEnd->toDateString(),
             ])
             ->orderBy('scheduled_date')
             ->get()
-            ->filter(fn(WardScheduleAssignment $a) => $a->nurse !== null);
+            ->filter(fn(WardScheduleAssignment $a) => $a->nurse !== null
+                && ($a->scheduled_date->toDateString() >= $firstDay || $a->shift === ($admittedIn['code'] ?? null)));
 
         if ($assignments->isEmpty()) {
             return $empty;

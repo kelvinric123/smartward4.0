@@ -79,7 +79,7 @@
                         class="rounded-lg border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500">
                         @foreach ($shifts as $code => $info)
                             <option value="{{ $code }}" @selected($code === $shift)>
-                                {{ $code }} &middot; {{ $info['time'] }}{{ $day === $today && $code === $currentCode ? ' (now)' : '' }}
+                                {{ $code }} &middot; {{ $info['time'] }}{{ $nowSlot && $day === $nowSlot['date'] && $code === $nowSlot['code'] ? ' (now)' : '' }}
                             </option>
                         @endforeach
                     </select>

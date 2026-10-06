@@ -10,11 +10,11 @@ use App\Models\WardScheduleAssignment;
 use App\Models\WardSpecialDuty;
 use App\Services\NurseScheduling\BedAssigner;
 use App\Services\NurseScheduling\NurseRoster;
-use App\Services\NurseScheduling\WardShifts;
+use App\Services\NurseScheduling\RosterSlot;
 use App\Services\NurseScheduling\WorkloadCalculator;
 use App\Services\NurseScheduling\WorkloadWeights;
 use Carbon\CarbonInterface;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 
 /**
@@ -25,48 +25,19 @@ use Illuminate\Support\Collection;
 final class NurseAppSchedule
 {
     /**
-     * The shift on now and the one after it, for a ward: date + shift code.
-     *
-     * "Now" is today's entry for the shift the clock is in, the rule the ward
-     * dashboard and the nurse app's bed list use (see the night-shift note in
-     * NurseRosterEntry: after midnight that reads the night starting tonight).
+     * The shift on now and the one after it, for a ward: date + shift code,
+     * as RosterSlot reads them for every screen (after midnight the night on
+     * duty is last night's ON, labelled plain "ON").
      *
      * @return array{current: ?array, next: array}
      */
     public static function slots(?int $wardId, ?CarbonInterface $now = null): array
     {
-        $now = $now ? Carbon::instance($now) : now();
-        $shifts = WardShifts::forWard($wardId);
-        $code = WardShifts::currentCode($shifts, $now);
-        $today = $now->toDateString();
-
-        $order = WardShifts::CODES;
-        if ($code === null) {
-            // Between shifts: next is whichever starts soonest
-            $next = collect($shifts)
-                ->map(fn (array $shift) => Carbon::parse($today . ' ' . $shift['start']))
-                ->map(fn (Carbon $start) => $start->lessThanOrEqualTo($now) ? $start->addDay() : $start)
-                ->sort()
-                ->keys()
-                ->first();
-            $nextDate = Carbon::parse($today . ' ' . $shifts[$next]['start'])->lessThanOrEqualTo($now) ? $now->copy()->addDay()->toDateString() : $today;
-        } else {
-            $next = $order[(array_search($code, $order, true) + 1) % count($order)];
-            // After the night: this morning's AM when past midnight, tomorrow's before it
-            $nextDate = $code === 'ON' && $now->format('H:i') >= $shifts['ON']['start'] ? $now->copy()->addDay()->toDateString() : $today;
-        }
-
-        $slot = fn (string $c, string $date) => [
-            'date' => $date,
-            'code' => $c,
-            'name' => $shifts[$c]['name'],
-            'time' => $shifts[$c]['time'],
-            'label' => $c . ($date === $today ? '' : ($date === $now->copy()->addDay()->toDateString() ? ' tomorrow' : ' ' . Carbon::parse($date)->format('j M'))),
-        ];
+        $slot = fn (?array $slot) => $slot ? Arr::only($slot, ['date', 'code', 'name', 'time', 'label']) : null;
 
         return [
-            'current' => $code ? $slot($code, $today) : null,
-            'next' => $slot($next, $nextDate),
+            'current' => $slot(RosterSlot::current($wardId, $now)),
+            'next' => $slot(RosterSlot::next($wardId, $now)),
         ];
     }
 

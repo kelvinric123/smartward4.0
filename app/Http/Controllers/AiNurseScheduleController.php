@@ -19,6 +19,7 @@ use App\Services\NurseScheduling\RosterBoard;
 use App\Services\NurseScheduling\RosterRequests;
 use App\Services\NurseScheduling\RosterGenerator;
 use App\Services\NurseScheduling\RosterRules;
+use App\Services\NurseScheduling\RosterSlot;
 use App\Services\NurseScheduling\WardShifts;
 use App\Services\NurseScheduling\WardTeam;
 use App\Services\NurseScheduling\WorkloadCalculator;
@@ -58,16 +59,19 @@ class AiNurseScheduleController extends Controller
         $board = RosterBoard::build($ward, $weekStart, $rules);
         $shifts = $board['shifts'];
         $today = now()->toDateString();
-        $currentCode = WardShifts::currentCode($shifts);
+        // The roster slot on duty: after midnight in the night shift, last night's ON
+        $nowSlot = RosterSlot::current($ward->id);
+        $nowSlot = $nowSlot && in_array($nowSlot['code'], WardShifts::CODES, true) ? $nowSlot : null;
 
         // Bed assignment: one shift of the week, the shift on now by default
         $days = $board['dates']->map->toDateString()->all();
+        $onThisWeek = $nowSlot && in_array($nowSlot['date'], $days, true);
         $day = in_array($request->input('day'), $days, true)
             ? $request->input('day')
-            : (in_array($today, $days, true) ? $today : $days[0]);
+            : ($onThisWeek ? $nowSlot['date'] : (in_array($today, $days, true) ? $today : $days[0]));
         $shift = in_array($request->input('shift'), WardShifts::CODES, true)
             ? $request->input('shift')
-            : ($day === $today && $currentCode ? $currentCode : 'AM');
+            : ($onThisWeek && $day === $nowSlot['date'] ? $nowSlot['code'] : 'AM');
 
         $weights = WorkloadWeights::forWard($ward);
         $beds = WorkloadCalculator::forWard($ward, $weights);
@@ -85,8 +89,8 @@ class AiNurseScheduleController extends Controller
             ->keyBy('id');
 
         // Workload now: the shift on duty, as the dashboard shows it
-        $liveCode = $currentCode ?? 'AM';
-        $liveLoads = WorkloadCalculator::loads($beds, BedAssigner::current($ward, $today, $liveCode), [], $weights->band());
+        $liveCode = $nowSlot['code'] ?? 'AM';
+        $liveLoads = WorkloadCalculator::loads($beds, BedAssigner::current($ward, $nowSlot['date'] ?? $today, $liveCode), [], $weights->band());
 
         return view('wards.ai-schedule.index', [
             'wards' => $wards,
@@ -97,7 +101,7 @@ class AiNurseScheduleController extends Controller
             'board' => $board,
             'shifts' => $shifts,
             'today' => $today,
-            'currentCode' => $currentCode,
+            'nowSlot' => $nowSlot,
             'canEdit' => !Auth::user()?->hasRole(User::ROLE_NURSE),
             'day' => $day,
             'shift' => $shift,
@@ -324,6 +328,9 @@ class AiNurseScheduleController extends Controller
      * Share the beds out by AI for every shift left this week that has nurses
      * on the roster, and save them to the ward dashboard. Each day follows on
      * from the day before, so nurses keep their beds where the load allows.
+     *
+     * A shift is left until it ends, like the one on now: after midnight that
+     * includes last night's ON, dated yesterday but on until the morning.
      */
     public function applyWeek(Request $request)
     {
@@ -338,7 +345,6 @@ class AiNurseScheduleController extends Controller
         $board = RosterBoard::build($ward, $from, RosterRules::forWard($ward));
         $weights = WorkloadWeights::forWard($ward);
         $beds = WorkloadCalculator::forWard($ward, $weights);
-        $today = now()->toDateString();
 
         $applied = 0;
         $empty = 0;
@@ -348,7 +354,7 @@ class AiNurseScheduleController extends Controller
             $day = $date->toDateString();
 
             foreach (WardShifts::CODES as $code) {
-                if ($day < $today || WardShifts::hasEnded($day, $board['shifts'][$code])) {
+                if (WardShifts::hasEnded($day, $board['shifts'][$code])) {
                     continue;
                 }
 

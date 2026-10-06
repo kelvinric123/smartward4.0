@@ -41,6 +41,7 @@ use App\Services\PatientInfoSources;
 use App\Services\LabInvestigations;
 use App\Models\LabInvestigation;
 use App\Services\InfusionNotificationService;
+use App\Services\NurseScheduling\RosterSlot;
 use App\Models\WardSpecialDuty;
 
 class WardDashboardController extends Controller
@@ -197,7 +198,8 @@ class WardDashboardController extends Controller
 
         $notificationCount = WardNotification::forWard($selectedWardId)->pending()->count();
 
-        $currentShift = ShiftSetting::getCurrentShift($selectedWardId);
+        // The shift on duty, for the nurses' list heading (the list is that slot's)
+        $currentShift = RosterSlot::current($selectedWardId)['shift'] ?? null;
 
         // Fetch all special duties for the day regardless of current shift
         $specialDuties = WardSpecialDuty::where('ward_id', $selectedWardId)
@@ -257,8 +259,10 @@ class WardDashboardController extends Controller
             ->where('scheduled_date', now()->toDateString())
             ->get();
 
+        // Without a home ward: where the nurse holds beds now (after midnight, last night's), else today
         $selectedWardId = $request->integer('ward_id')
             ?: $nurse->ward_id
+            ?: RosterSlot::assignmentsOnDuty($nurse->id)->pluck('ward_id')->filter()->first()
             ?: $todaysAssignments->pluck('ward_id')->filter()->first()
             ?: ($wards->first()->id ?? null);
 
@@ -329,15 +333,18 @@ class WardDashboardController extends Controller
             $clinicalSettings['ews_system'] ?? 'ews_ihh'
         ));
 
-        $currentShift = ShiftSetting::getCurrentShift($selectedWard->id);
+        // The nurse's beds in the slot on duty (after midnight, last night's ON);
+        // between shifts, all of today's
+        $currentSlot = RosterSlot::current($selectedWard->id);
+        $currentShift = $currentSlot['shift'] ?? null;
 
         $assignmentQuery = WardScheduleAssignment::where('nurse_id', $nurse->id)
             ->where('ward_id', $selectedWard->id)
-            ->where('scheduled_date', now()->toDateString())
+            ->where('scheduled_date', $currentSlot['date'] ?? now()->toDateString())
             ->with('bed');
 
-        if ($currentShift) {
-            $assignmentQuery->where('shift', $currentShift->shift_code);
+        if ($currentSlot) {
+            $assignmentQuery->where('shift', $currentSlot['code']);
         }
 
         $assignments = $assignmentQuery->get();
@@ -492,17 +499,16 @@ class WardDashboardController extends Controller
             }
         }
 
-        // Get current shift and nurse assignments for today
-        $currentShift = ShiftSetting::getCurrentShift($ward->id);
-        $currentShiftCode = $currentShift ? $currentShift->shift_code : null;
-        $today = now()->toDateString();
+        // The roster slot on duty: after midnight in the night shift, last night's ON
+        $currentSlot = RosterSlot::current($ward->id);
+        $currentShiftCode = $currentSlot['code'] ?? null;
 
-        // Get all nurse assignments for this ward, today, and current shift
+        // Get all nurse assignments for this ward in that slot
         $nurseAssignments = [];
-        if ($currentShiftCode) {
+        if ($currentSlot) {
             $assignments = WardScheduleAssignment::where('ward_id', $ward->id)
-                ->where('scheduled_date', $today)
-                ->where('shift', $currentShiftCode)
+                ->where('scheduled_date', $currentSlot['date'])
+                ->where('shift', $currentSlot['code'])
                 ->with('nurse')
                 ->get();
 
@@ -3309,19 +3315,20 @@ class WardDashboardController extends Controller
     {
         $nurses = [];
 
-        // Get current shift to determine which schedule to look at
-        $currentShift = ShiftSetting::getCurrentShift($wardId);
+        // The roster slot on duty decides which schedule to look at
+        // (after midnight in the night shift, last night's ON)
+        $currentSlot = RosterSlot::current($wardId);
 
         // If for some reason no shift is active (unlikely with defaults), return empty
-        if (!$currentShift) {
+        if (!$currentSlot) {
             return [];
         }
 
-        // Fetch assignments for this ward, today, and current shift
+        // Fetch assignments for this ward in that slot
         // We need the nurse and the bed (and patient in that bed)
         $assignments = WardScheduleAssignment::where('ward_id', $wardId)
-            ->where('scheduled_date', now()->toDateString())
-            ->where('shift', $currentShift->shift_code)
+            ->where('scheduled_date', $currentSlot['date'])
+            ->where('shift', $currentSlot['code'])
             ->with(['nurse', 'bed.patient'])
             ->get();
 
@@ -3918,24 +3925,18 @@ class WardDashboardController extends Controller
             }
         }
 
-        // Nurse
-        $currentShift = null;
-        $currentShiftCode = null;
+        // Nurse: the one rostered to the bed in the slot on duty
+        $currentSlot = $patient->ward_id ? RosterSlot::current($patient->ward_id) : null;
 
-        if ($patient->ward_id) {
-            $currentShift = ShiftSetting::getCurrentShift($patient->ward_id);
-            $currentShiftCode = $currentShift ? $currentShift->shift_code : null;
-        }
-
-        if ($currentShiftCode && $patient->bed_number && $patient->ward_id) {
+        if ($currentSlot && $patient->bed_number && $patient->ward_id) {
             $bed = Bed::where('ward_id', $patient->ward_id)
                 ->where('bed_number', $patient->bed_number)
                 ->first();
 
             if ($bed) {
                 $assignment = WardScheduleAssignment::where('bed_id', $bed->id)
-                    ->where('scheduled_date', now()->toDateString())
-                    ->where('shift', $currentShiftCode)
+                    ->where('scheduled_date', $currentSlot['date'])
+                    ->where('shift', $currentSlot['code'])
                     ->with('nurse')
                     ->first();
 
@@ -4011,14 +4012,14 @@ class WardDashboardController extends Controller
         $anaesthetistCount = $uniqueAnaesthetistIds->unique()->count();
         $patientCount = $admittedPatients->count();
 
-        // Calculate nurse count based on schedule for current shift
+        // Calculate nurse count based on schedule for the slot on duty
         $nurseCount = 0;
         if ($wardId) {
-            $currentShift = ShiftSetting::getCurrentShift($wardId);
-            if ($currentShift) {
+            $currentSlot = RosterSlot::current($wardId);
+            if ($currentSlot) {
                 $nurseCount = WardScheduleAssignment::where('ward_id', $wardId)
-                    ->where('scheduled_date', now()->toDateString())
-                    ->where('shift', $currentShift->shift_code)
+                    ->where('scheduled_date', $currentSlot['date'])
+                    ->where('shift', $currentSlot['code'])
                     ->distinct('nurse_id')
                     ->count('nurse_id');
             }

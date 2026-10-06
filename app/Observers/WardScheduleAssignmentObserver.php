@@ -6,7 +6,7 @@ use App\Models\WardScheduleAssignment;
 use App\Models\EkadConfiguration;
 use App\Models\EkadBedMapping;
 use App\Services\EkadService;
-use App\Models\ShiftSetting;
+use App\Services\NurseScheduling\RosterSlot;
 use Illuminate\Support\Facades\Log;
 
 class WardScheduleAssignmentObserver
@@ -69,15 +69,14 @@ class WardScheduleAssignmentObserver
         // 3. We typically ignore past dates or far future dates (though future dates don't hurt, just bandwidth)
 
         try {
-            $assignmentDate = $assignment->scheduled_date;
+            $assignmentDate = $assignment->scheduled_date->format('Y-m-d');
             $today = now()->toDateString();
 
-            // If assignment is not for today, we might skip it unless we want to support pre-loading
-            // For now, let's strictly update only if the change affects TODAY's display
-            if ($assignmentDate->format('Y-m-d') !== $today) {
-                // Special case: If it's ON shift for "yesterday" but we are in the early morning hours (before shift end)
-                // However, our system generally treats dates as calendar dates.
-                // Let's stick to: Update only if assignment is for TODAY.
+            // Only a change to today's roster, or to last night's while that
+            // night is still on duty (ON on a date runs into the next morning),
+            // affects what the display shows now. Anything else is skipped
+            // before any lookups.
+            if ($assignmentDate !== $today && $assignmentDate !== now()->subDay()->toDateString()) {
                 return;
             }
 
@@ -117,10 +116,14 @@ class WardScheduleAssignmentObserver
                 return;
             }
 
-            // Determine if the updated shift is the ACTIVE shift
-            $currentShift = ShiftSetting::getCurrentShift($assignment->ward_id);
-            if (!$currentShift) {
+            // The roster slot on duty (after midnight in the night shift, last night's ON)
+            $currentSlot = $assignment->ward_id ? RosterSlot::current($assignment->ward_id) : null;
+            if (!$currentSlot) {
                 // Fallback or skip
+                return;
+            }
+            if ($assignmentDate !== $today && $assignmentDate !== $currentSlot['date']) {
+                // Yesterday's roster, but its night is over
                 return;
             }
 
