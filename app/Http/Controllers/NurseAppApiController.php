@@ -60,14 +60,7 @@ class NurseAppApiController extends Controller
             'password' => 'required|string',
         ]);
 
-        $nurse = Nurse::where('is_active', true)
-            ->whereNotNull('app_username')
-            ->whereNotNull('app_password')
-            ->where(function ($q) use ($validated) {
-                $q->where('app_username', $validated['username'])
-                    ->orWhere('registration_number', $validated['username']);
-            })
-            ->first();
+        $nurse = Nurse::findByAppLogin($validated['username']);
 
         if (!$nurse || !$nurse->verifyAppPassword($validated['password'])) {
             return response()->json([

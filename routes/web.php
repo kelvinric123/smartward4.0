@@ -42,8 +42,12 @@ Route::get('/', function () {
 Route::get('/login/ldap', [LdapConfigurationController::class, 'showLdapLogin'])->name('login.ldap');
 Route::post('/login/ldap', [LdapConfigurationController::class, 'ldapLogin'])->name('login.ldap.submit');
 
-// Public ECG PDF Route (for PDF viewer in iframes - authentication handled by signed URL or session)
-Route::get('/ecg/pdf/view', [EcgController::class, 'servePdf'])->name('ecg.pdf.public');
+// ECG PDF for the PDF viewer iframes: a logged-in session, or the signed URL the
+// ECG pages generate (EcgController::signedPdfUrl). The download options don't
+// change which file is served, so the export button may append them.
+Route::get('/ecg/pdf/view', [EcgController::class, 'servePdf'])
+    ->middleware(\App\Http\Middleware\SignedUrlOrAuthenticated::relative(['download', 'dl_name']))
+    ->name('ecg.pdf.public');
 
 // Public Command Centre Routes (session-based auth, no Laravel auth)
 Route::get('/command-centre/login', [PatientFlowCommandCentreController::class, 'showLogin'])->name('command-centre.login');
@@ -51,6 +55,13 @@ Route::post('/command-centre/login', [PatientFlowCommandCentreController::class,
 Route::post('/command-centre/logout', [PatientFlowCommandCentreController::class, 'logout'])->name('command-centre.logout');
 Route::get('/command-centre/{id}/view', [PatientFlowCommandCentreController::class, 'publicDashboard'])->name('command-centre.view');
 Route::get('/command-centre/{id}/data', [PatientFlowCommandCentreController::class, 'publicDashboardData'])->name('command-centre.view.data');
+
+// AI Nurse Schedule shared with staff by link: view only, no login, revocable (the token is the access).
+// Its own rate-limit bucket (the prefix), so link views never use up the integration APIs' limits
+Route::get('/roster/shared/{token}', [\App\Http\Controllers\AiNurseScheduleShareController::class, 'show'])
+    ->middleware('throttle:60,1,roster-shared')
+    ->where('token', '[A-Za-z0-9]{32,128}')
+    ->name('ward.ai-schedule.shared');
 
 Route::get('/dashboard', function () {
     return view('dashboard');
@@ -209,6 +220,15 @@ Route::middleware('auth')->group(function () {
     // Leave and shift-swap requests from the nurse app
     Route::post('/ward-schedule/ai/requests/{rosterRequest}/approve', [\App\Http\Controllers\AiNurseScheduleController::class, 'approveRequest'])->name('ward.ai-schedule.requests.approve');
     Route::post('/ward-schedule/ai/requests/{rosterRequest}/decline', [\App\Http\Controllers\AiNurseScheduleController::class, 'declineRequest'])->name('ward.ai-schedule.requests.decline');
+    // Patient acuity: classify care levels, and the ward's acuity-based staffing settings
+    Route::post('/ward-schedule/ai/acuity', [\App\Http\Controllers\AiNurseScheduleController::class, 'saveAcuity'])->name('ward.ai-schedule.acuity');
+    Route::post('/ward-schedule/ai/acuity/settings', [\App\Http\Controllers\AiNurseScheduleController::class, 'updateAcuitySettings'])->name('ward.ai-schedule.acuity.settings');
+    Route::post('/ward-schedule/ai/acuity/settings/reset', [\App\Http\Controllers\AiNurseScheduleController::class, 'resetAcuitySettings'])->name('ward.ai-schedule.acuity.settings.reset');
+    Route::post('/ward-schedule/ai/acuity/min-staff', [\App\Http\Controllers\AiNurseScheduleController::class, 'applyAcuityMinimum'])->name('ward.ai-schedule.acuity.min-staff');
+    // Print in a chosen format, and view-only links for other staff
+    Route::get('/ward-schedule/ai/print', [\App\Http\Controllers\AiNurseSchedulePrintController::class, 'show'])->name('ward.ai-schedule.print');
+    Route::post('/ward-schedule/ai/shares', [\App\Http\Controllers\AiNurseScheduleShareController::class, 'store'])->name('ward.ai-schedule.shares.store');
+    Route::post('/ward-schedule/ai/shares/{share}/revoke', [\App\Http\Controllers\AiNurseScheduleShareController::class, 'revoke'])->name('ward.ai-schedule.shares.revoke');
 
     // Shift Settings Routes
     Route::get('/ward-schedule/shift-settings', [ShiftSettingController::class, 'index'])->name('ward.shift-settings');
@@ -519,17 +539,24 @@ Route::prefix('api/nurse')->group(function () {
     Route::post('/notifications/{notification}/respond', [\App\Http\Controllers\NurseAppPatientController::class, 'respondNotification']);
 });
 
-// Public API Routes for the bedside Patient Information Terminal (no CSRF)
+// API Routes for the bedside Patient Information Terminal (no CSRF). The setup
+// pickers are open (bed picker: initials only); a terminal pairs with its bed via
+// a nurse-app login and sends that token to the bed routes (AuthenticateTerminalDevice).
 Route::prefix('api/terminal')->group(function () {
     Route::get('/ping', [\App\Http\Controllers\TerminalApiController::class, 'ping']);
     Route::post('/ping', [\App\Http\Controllers\TerminalApiController::class, 'ping']);
     Route::get('/wards', [\App\Http\Controllers\TerminalApiController::class, 'wards']);
     Route::get('/beds', [\App\Http\Controllers\TerminalApiController::class, 'beds']);
-    Route::get('/beds/{bed}/snapshot', [\App\Http\Controllers\TerminalApiController::class, 'snapshot']);
+    Route::post('/pair', [\App\Http\Controllers\TerminalApiController::class, 'pair'])->middleware('throttle:10,1');
+    Route::post('/unpair', [\App\Http\Controllers\TerminalApiController::class, 'unpair']);
 
-    // Patient smart call -> ward dashboard notifications
-    Route::get('/beds/{bed}/requests', [\App\Http\Controllers\TerminalApiController::class, 'listRequests']);
-    Route::post('/beds/{bed}/requests', [\App\Http\Controllers\TerminalApiController::class, 'storeRequest']);
+    Route::middleware(\App\Http\Middleware\AuthenticateTerminalDevice::class)->group(function () {
+        Route::get('/beds/{bed}/snapshot', [\App\Http\Controllers\TerminalApiController::class, 'snapshot']);
+
+        // Patient smart call -> ward dashboard notifications
+        Route::get('/beds/{bed}/requests', [\App\Http\Controllers\TerminalApiController::class, 'listRequests']);
+        Route::post('/beds/{bed}/requests', [\App\Http\Controllers\TerminalApiController::class, 'storeRequest']);
+    });
 });
 
 // Bedside Patient Information Terminal web app (static SPA build in public/terminal).

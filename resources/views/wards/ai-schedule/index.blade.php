@@ -115,12 +115,19 @@
                             no nurse has {{ $ward->ward_name }} as a home ward yet, so every active nurse without one is listed.
                         @endif
                     </p>
+
+                    {{-- Print in a chosen format, and share a view-only link with other staff --}}
+                    <div class="flex items-center gap-2">
+                        @include('wards.ai-schedule.partials.print-dialog')
+                        @include('wards.ai-schedule.partials.share-dialog')
+                    </div>
                 </div>
 
                 {{-- Tabs --}}
                 @php
                     $tabs = [
                         'roster' => 'Roster',
+                        'acuity' => 'Patient acuity',
                         'assign' => 'Bed assignment',
                         'workload' => 'Workload',
                         'leave' => 'Leave & holidays',
@@ -144,6 +151,7 @@
                 </div>
 
                 @include('wards.ai-schedule.partials.roster')
+                @include('wards.ai-schedule.partials.acuity')
                 @include('wards.ai-schedule.partials.assign')
                 @include('wards.ai-schedule.partials.workload')
                 @include('wards.ai-schedule.partials.leave')

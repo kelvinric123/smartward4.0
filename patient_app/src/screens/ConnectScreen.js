@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radius } from '../theme';
-import { fetchWards, fetchBeds, fetchBedSnapshot, pingServer } from '../api/endpoints';
+import { fetchWards, fetchBeds, fetchBedSnapshot, pairDevice, pingServer } from '../api/endpoints';
 import {
   DEFAULT_BASE_URL,
   SETTINGS_PASSWORD,
@@ -22,6 +22,8 @@ import {
   getBaseUrl,
   setBaseUrl,
   normalizeBaseUrl,
+  getDevicePairing,
+  setDevicePairing,
 } from '../config';
 
 export default function ConnectScreen({ onConnect }) {
@@ -33,6 +35,9 @@ export default function ConnectScreen({ onConnect }) {
   const [loadingBeds, setLoadingBeds] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // Nurse login that pairs this device with the chosen bed
+  const [nurseUser, setNurseUser] = useState('');
+  const [nursePass, setNursePass] = useState('');
 
   // Settings dialog state
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -87,9 +92,27 @@ export default function ConnectScreen({ onConnect }) {
       setError('Please choose your ward and bed.');
       return;
     }
+    if (Boolean(nurseUser.trim()) !== Boolean(nursePass)) {
+      setError('Enter both the nurse username and password, or leave both empty.');
+      return;
+    }
     setError(null);
     setBusy(true);
     try {
+      if (nurseUser.trim()) {
+        const pairing = await pairDevice(selectedBed.id, {
+          username: nurseUser.trim(),
+          password: nursePass,
+        });
+        await setDevicePairing({
+          token: pairing.token,
+          bedId: pairing.device.bed_id,
+          baseUrl: getBaseUrl(),
+          pairedBy: pairing.device.paired_by,
+        });
+        setNurseUser('');
+        setNursePass('');
+      }
       const snapshot = await fetchBedSnapshot(selectedBed.id);
       onConnect({
         demo: false,
@@ -203,7 +226,7 @@ export default function ConnectScreen({ onConnect }) {
                 <Text style={styles.brandTagName}>QMed Smart Ward System</Text>
                 <Text style={styles.brandTagDesc}>
                   Choose your ward and bed to see your live care team, vitals and stay
-                  information — no login needed.
+                  information. A nurse confirms your bed once.
                 </Text>
               </View>
             </View>
@@ -294,6 +317,34 @@ export default function ConnectScreen({ onConnect }) {
                   ) : beds ? (
                     <Text style={styles.emptyText}>No active beds in this ward.</Text>
                   ) : null}
+                </View>
+              ) : null}
+
+              {selectedBed ? (
+                <View style={styles.field}>
+                  <Text style={styles.fieldLabel}>3 · A NURSE CONFIRMS YOUR BED</Text>
+                  <Text style={styles.fieldHint}>
+                    {getDevicePairing()?.bedId === selectedBed.id
+                      ? `Paired with this bed${getDevicePairing().pairedBy ? ` by ${getDevicePairing().pairedBy}` : ''}. A nurse signs in only to pair it again.`
+                      : 'A nurse signs in once with their nurse app login so your name and details show. Without it, only your initials show.'}
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    value={nurseUser}
+                    onChangeText={setNurseUser}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    placeholder="Nurse username"
+                    placeholderTextColor={colors.mutedSoft}
+                  />
+                  <TextInput
+                    style={[styles.input, { marginTop: 8 }]}
+                    value={nursePass}
+                    onChangeText={setNursePass}
+                    secureTextEntry
+                    placeholder="Nurse password"
+                    placeholderTextColor={colors.mutedSoft}
+                  />
                 </View>
               ) : null}
 

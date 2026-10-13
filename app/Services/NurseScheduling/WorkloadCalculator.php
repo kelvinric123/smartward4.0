@@ -5,7 +5,6 @@ namespace App\Services\NurseScheduling;
 use App\Http\Controllers\WardDashboardController;
 use App\Models\Bed;
 use App\Models\ConsultantOrder;
-use App\Models\Infusion;
 use App\Models\Patient;
 use App\Models\VitalSign;
 use App\Models\Ward;
@@ -35,24 +34,11 @@ final class WorkloadCalculator
     public static function forWard(Ward $ward, ?WorkloadWeights $weights = null): Collection
     {
         $weights ??= WorkloadWeights::forWard($ward);
-
-        // A bed under maintenance has no patient and needs no nurse
-        $beds = Bed::where('ward_id', $ward->id)
-            ->where('is_active', true)
-            ->where('status', '<>', Bed::STATUS_MAINTENANCE)
-            ->orderByRaw('CAST(bed_number AS UNSIGNED)')
-            ->orderBy('bed_number')
-            ->get();
-
-        $patients = Patient::where('ward_id', $ward->id)
-            ->where('is_active', true)
-            ->whereIn('status', [Patient::STATUS_ADMITTED, Patient::STATUS_PENDING_DISCHARGE])
-            ->whereNotNull('bed_number')
-            ->get()
-            ->keyBy('bed_number');
+        ['beds' => $beds, 'patients' => $patients] = self::wardBeds($ward);
 
         $patientIds = $patients->pluck('id');
-        $withInfusion = Infusion::whereIn('patient_id', $patientIds)->active()->pluck('patient_id')->flip();
+        // Live from the infusion engine when it is in use: the local table is then only snapshots
+        $withInfusion = ActiveInfusions::patientIds($patientIds);
         $withStatOrder = ConsultantOrder::whereIn('patient_id', $patientIds)->open()
             ->where('urgency', 'stat')->pluck('patient_id')->flip();
 
@@ -111,6 +97,31 @@ final class WorkloadCalculator
     }
 
     /**
+     * The ward's beds that need a nurse, in bed order, and the patients in them
+     * keyed by bed number. A bed under maintenance has no patient and needs no nurse.
+     *
+     * @return array{beds: Collection<int, Bed>, patients: Collection<string, Patient>}
+     */
+    public static function wardBeds(Ward $ward): array
+    {
+        $beds = Bed::where('ward_id', $ward->id)
+            ->where('is_active', true)
+            ->where('status', '<>', Bed::STATUS_MAINTENANCE)
+            ->orderByRaw('CAST(bed_number AS UNSIGNED)')
+            ->orderBy('bed_number')
+            ->get();
+
+        $patients = Patient::where('ward_id', $ward->id)
+            ->where('is_active', true)
+            ->whereIn('status', [Patient::STATUS_ADMITTED, Patient::STATUS_PENDING_DISCHARGE])
+            ->whereNotNull('bed_number')
+            ->get()
+            ->keyBy('bed_number');
+
+        return ['beds' => $beds, 'patients' => $patients];
+    }
+
+    /**
      * Each nurse's share of a shift, from a bed id => nurse id map. Every
      * nurse listed gets a row, even with nothing assigned. A load more than
      * $band (a fraction) above or below the shift average is heavy or light.
@@ -160,7 +171,7 @@ final class WorkloadCalculator
     }
 
     /** The early warning score system the signed-in user set on the ward dashboard. */
-    private static function ewsSystem(): string
+    public static function ewsSystem(): string
     {
         $settings = Auth::id() ? WardDashboardSetting::where('user_id', Auth::id())->first() : null;
         $clinical = is_array($settings?->clinical_settings) ? $settings->clinical_settings : [];

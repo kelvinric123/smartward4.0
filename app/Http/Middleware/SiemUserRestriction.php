@@ -45,6 +45,7 @@ class SiemUserRestriction
                 'adt.log-files',
                 'vital-sign-integration.logs', // Added consistent with other logs
                 'infusion-integration.logs', // Added consistent with other logs (if exists in route list)
+                'ward.ai-schedule.shared', // Public view-only roster link: opens for anyone, signed in or not
             ];
 
             // Check exact match

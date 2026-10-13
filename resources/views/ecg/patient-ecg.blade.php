@@ -130,7 +130,7 @@
                     <!-- ECG List -->
                     <div class="flex-1 overflow-y-auto">
                         @foreach($ecgFiles as $index => $ecg)
-                            <div onclick="selectEcg({{ $index }}, '{{ $ecg['pdf_file'] ?? '' }}', {{ $ecg['has_pdf'] ? 'true' : 'false' }})"
+                            <div onclick="selectEcg({{ $index }}, @js($ecg['pdf_url'] ?? ''), {{ $ecg['has_pdf'] ? 'true' : 'false' }})"
                                 class="ecg-item w-full px-3 py-2 text-left cursor-pointer hover:bg-emerald-50 transition-colors border-b border-gray-100 {{ $index === 0 ? 'active' : '' }}"
                                 data-index="{{ $index }}"
                                 @if(($ecg['source'] ?? '') === 'manual') title="Manually uploaded" @endif>
@@ -219,7 +219,7 @@
                     <!-- PDF Container -->
                     <div id="ecgViewer" class="flex-1 bg-gray-50">
                         @if($latestEcg && $latestEcg['has_pdf'])
-                            <iframe id="pdfFrame" src="{{ route('ecg.pdf.public', ['file' => $latestEcg['pdf_file']]) }}"
+                            <iframe id="pdfFrame" src="{{ $latestEcg['pdf_url'] }}"
                                 class="w-full h-full pdf-viewer" title="ECG PDF Viewer"></iframe>
                         @else
                             <div id="noPdfMessage" class="flex items-center justify-center h-full">
@@ -292,7 +292,7 @@
     </div>
 
     <script>
-        let currentPdfUrl = '{{ $latestEcg && $latestEcg["has_pdf"] ? route("ecg.pdf.public", ["file" => $latestEcg["pdf_file"]]) : "" }}';
+        let currentPdfUrl = @js($latestEcg && $latestEcg['has_pdf'] ? $latestEcg['pdf_url'] : '');
         let currentEcgDate = '{{ $latestEcg && $latestEcg["recorded_at"] ? \Carbon\Carbon::parse($latestEcg["recorded_at"])->format("d M Y H:i") : "" }}';
         let isFullscreen = false;
 
@@ -376,7 +376,8 @@
                 });
         }
 
-        function selectEcg(index, pdfFile, hasPdf) {
+        // pdfUrl: the signed viewer URL the server generated for this ECG
+        function selectEcg(index, pdfUrl, hasPdf) {
             // Update active state on list items
             document.querySelectorAll('.ecg-item').forEach((item, i) => {
                 if (i === index) {
@@ -398,8 +399,8 @@
             currentEcgDate = dateText + ' ' + timeText;
             dateSpan.textContent = currentEcgDate;
 
-            if (hasPdf && pdfFile) {
-                currentPdfUrl = '{{ route("ecg.pdf.public") }}?file=' + encodeURIComponent(pdfFile);
+            if (hasPdf && pdfUrl) {
+                currentPdfUrl = pdfUrl;
                 viewer.innerHTML = `<iframe id="pdfFrame" src="${currentPdfUrl}" class="w-full h-full pdf-viewer" title="ECG PDF Viewer"></iframe>`;
                 enlargeBtn.classList.remove('hidden');
                 if (exportBtn) exportBtn.classList.remove('hidden');

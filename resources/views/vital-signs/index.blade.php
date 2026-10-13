@@ -714,10 +714,11 @@
             
             this.cameraActive = true;
             
-            // Load html5-qrcode if not already loaded
+            // Load html5-qrcode if not already loaded: the bundled copy (resources/js/qr-scanner.js), not a CDN
             if (typeof Html5Qrcode === 'undefined') {
                 const script = document.createElement('script');
-                script.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+                script.type = 'module';
+                script.src = @js(\Illuminate\Support\Facades\Vite::asset('resources/js/qr-scanner.js'));
                 script.onload = () => this.initCamera();
                 document.head.appendChild(script);
             } else {

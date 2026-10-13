@@ -7,14 +7,20 @@ use App\Models\NurseLeave;
 use App\Models\NurseRosterAcknowledgement;
 use App\Models\NurseRosterEntry;
 use App\Models\NurseRosterRequest;
+use App\Models\PatientAcuityRating;
 use App\Models\PublicHoliday;
 use App\Models\User;
 use App\Models\Ward;
 use App\Models\WardRosterSetting;
+use App\Models\WardRosterShareLink;
 use App\Models\WardScheduleAssignment;
+use App\Services\NurseScheduling\AcuityRatingCheck;
+use App\Services\NurseScheduling\AcuitySettings;
+use App\Services\NurseScheduling\AcuityStaffing;
 use App\Services\NurseScheduling\BedAssigner;
 use App\Services\NurseScheduling\LeaveBooking;
 use App\Services\NurseScheduling\NurseRoster;
+use App\Services\NurseScheduling\PatientAcuity;
 use App\Services\NurseScheduling\RosterBoard;
 use App\Services\NurseScheduling\RosterRequests;
 use App\Services\NurseScheduling\RosterGenerator;
@@ -24,16 +30,19 @@ use App\Services\NurseScheduling\WardShifts;
 use App\Services\NurseScheduling\WardTeam;
 use App\Services\NurseScheduling\WorkloadCalculator;
 use App\Services\NurseScheduling\WorkloadWeights;
+use App\Services\PatientInfoSources;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
  * Schedule > AI Nurse Schedule: the staff roster (who works which shift),
- * smart bed assignment by workload, workload and fairness, and leave and
- * public holidays.
+ * patient acuity and the nurses it calls for, smart bed assignment by
+ * workload, workload and fairness, and leave and public holidays.
  *
  * Bed assignments are saved to ward_schedule_assignments, the table the Ward
  * Schedule page, the ward dashboard and the bedside screens already use, so
@@ -41,7 +50,7 @@ use Illuminate\Validation\Rule;
  */
 class AiNurseScheduleController extends Controller
 {
-    private const TABS = ['roster', 'assign', 'workload', 'leave'];
+    private const TABS = ['roster', 'acuity', 'assign', 'workload', 'leave'];
 
     private const MAX_LEAVE_DAYS = LeaveBooking::MAX_DAYS;
 
@@ -92,6 +101,13 @@ class AiNurseScheduleController extends Controller
         $liveCode = $nowSlot['code'] ?? 'AM';
         $liveLoads = WorkloadCalculator::loads($beds, BedAssigner::current($ward, $nowSlot['date'] ?? $today, $liveCode), [], $weights->band());
 
+        // Patient acuity, from the same beds and patients as the workload, and the
+        // nurses it calls for on each shift of the week shown. The early warning
+        // score is the ward's system, so every viewer sees the same suggestions
+        $acuitySettings = AcuitySettings::forWard($ward);
+        $acuity = PatientAcuity::fromBeds($ward, $beds, $acuitySettings->ewsSystem());
+        $acuityStaffing = AcuityStaffing::forShifts($acuity, $shifts, $acuitySettings);
+
         return view('wards.ai-schedule.index', [
             'wards' => $wards,
             'ward' => $ward,
@@ -115,6 +131,12 @@ class AiNurseScheduleController extends Controller
             'liveCode' => $liveCode,
             'liveLoads' => $liveLoads,
             'liveNurses' => Nurse::whereIn('id', array_keys($liveLoads))->get()->keyBy('id'),
+            'acuitySettings' => $acuitySettings,
+            'acuity' => $acuity,
+            'acuitySummary' => PatientAcuity::summary($acuity),
+            'acuityStaffing' => $acuityStaffing,
+            'acuityWeek' => AcuityStaffing::week($board, $acuityStaffing),
+            'acuityCheck' => AcuityRatingCheck::forWard($ward),
             'leaves' => NurseLeave::with('nurse:id,name')
                 ->whereIn('nurse_id', $board['team']->pluck('id'))
                 ->where('end_date', '>=', now()->subDays(7)->toDateString())
@@ -133,6 +155,8 @@ class AiNurseScheduleController extends Controller
                 ->get(),
             // Who has seen their roster for the week shown, in the nurse app
             'acknowledgements' => $this->acknowledgements($board),
+            // View-only links to this ward's schedule that still work, for the Share dialog
+            'shareLinks' => WardRosterShareLink::where('ward_id', $ward->id)->active()->latest('id')->get(),
         ]);
     }
 
@@ -548,6 +572,186 @@ class AiNurseScheduleController extends Controller
 
         return $this->backToShift($ward, $request, $validated)
             ->with('success', 'Workload weights reset to the defaults.');
+    }
+
+    /**
+     * Save care level ratings from the Patient acuity tab. Anyone signed in may
+     * rate: nurses classify the patients they care for, as Patient details
+     * already lets them set the nursing level. Each rating is kept with what
+     * the indicators suggested at that moment, for the rating check, and a
+     * changed level is written to the patient (the level the ward dashboard shows).
+     */
+    public function saveAcuity(Request $request)
+    {
+        $validated = $request->validate([
+            'ward_id' => 'required|exists:wards,id',
+            'week' => 'required|date',
+            'levels' => 'nullable|array',
+            'levels.*' => 'nullable|in:1,2,3,4',
+            'notes' => 'nullable|array',
+            'notes.*' => 'nullable|string|max:255',
+        ]);
+
+        $ward = Ward::findOrFail($validated['ward_id']);
+        $back = $this->backTo($ward, $this->weekStart($validated['week']), 'acuity');
+        // "No change" posts nothing to save for that patient
+        $chosen = collect($validated['levels'] ?? [])->reject(fn ($level) => $level === null || $level === '')->map(fn ($level) => (int) $level);
+
+        if ($chosen->isEmpty()) {
+            return $back->with('error', 'Choose a new rating for at least one patient, then save.');
+        }
+
+        // Each patient's suggestion as it stands now, on the ward's early warning score, so every
+        // rating is checked against the same scale; only patients in a bed on this ward can be rated here
+        $rows = PatientAcuity::forWard($ward, AcuitySettings::forWard($ward)->ewsSystem())
+            ->filter(fn (array $row) => $row['patient'])
+            ->keyBy(fn (array $row) => $row['patient']->id);
+        $ratings = $chosen->filter(fn (int $level, $patientId) => $rows->has((int) $patientId));
+        $skipped = $chosen->count() - $ratings->count();
+
+        if ($ratings->isEmpty()) {
+            return $back->with('error', 'Nothing saved: the patients rated are no longer in a bed on ' . $ward->ward_name . '. The list has been refreshed.');
+        }
+
+        // The roster slot on duty, so a rating can be read against the shift it was made on
+        $slot = RosterSlot::current($ward->id);
+        $slot = $slot && in_array($slot['code'], WardShifts::CODES, true) ? $slot : null;
+        // The same rule as Patient details: the level is only written where the ward keeps it
+        $writeLevel = PatientInfoSources::isManual('nursing_level');
+        $notes = $validated['notes'] ?? [];
+
+        $counts = DB::transaction(function () use ($ratings, $rows, $notes, $slot, $writeLevel, $ward) {
+            $counts = ['changed' => 0, 'confirmed' => 0];
+
+            foreach ($ratings as $patientId => $level) {
+                $row = $rows->get((int) $patientId);
+                $patient = $row['patient'];
+                $previous = PatientAcuity::levelFrom($patient->nursing_level);
+                $note = trim((string) ($notes[$patientId] ?? ''));
+
+                PatientAcuityRating::create([
+                    'patient_id' => $patient->id,
+                    'ward_id' => $ward->id,
+                    'bed_number' => $row['bed']->bed_number,
+                    'level' => $level,
+                    'suggested_level' => $row['suggested'],
+                    'previous_level' => $previous,
+                    'reasons' => $row['reasons'],
+                    'note' => $note !== '' ? $note : null,
+                    'shift_date' => $slot['date'] ?? null,
+                    'shift' => $slot['code'] ?? null,
+                    'rated_by' => Auth::id(),
+                    'rated_by_name' => Auth::user()?->name,
+                    'rated_at' => now(),
+                ]);
+
+                if ($previous !== $level && $writeLevel) {
+                    $patient->update(['nursing_level' => PatientAcuity::nursingLevel($level)]);
+                }
+                $counts[$previous === $level ? 'confirmed' : 'changed']++;
+            }
+
+            return $counts;
+        });
+
+        $message = 'Saved ' . $ratings->count() . ' ' . Str::plural('rating', $ratings->count()) . ': '
+            . $counts['changed'] . ' changed, ' . $counts['confirmed'] . ' confirmed.';
+        if ($skipped) {
+            $message .= ' Skipped ' . $skipped . ' no longer in a bed on ' . $ward->ward_name . '.';
+        }
+        if (!$writeLevel && $counts['changed']) {
+            $message .= ' The nursing level is set to come from the ADT feed (Integration settings), so patient records were not changed.';
+        }
+
+        return $back->with('success', $message);
+    }
+
+    /**
+     * Save the ward's hours of care per level, the share of the day's care on
+     * each shift, and the early warning score system the indicators use.
+     */
+    public function updateAcuitySettings(Request $request)
+    {
+        $this->authorizeEdit();
+        $validated = $request->validate([
+            'ward_id' => 'required|exists:wards,id',
+            'week' => 'required|date',
+        ] + AcuitySettings::validationRules());
+
+        $ward = Ward::findOrFail($validated['ward_id']);
+        $back = $this->backTo($ward, $this->weekStart($validated['week']), 'acuity', ['acuity_settings' => 1]);
+        $values = array_map(fn ($value) => round((float) $value, 2), array_intersect_key($validated['acuity'], AcuitySettings::DEFAULTS));
+        $total = AcuitySettings::shareTotal($values);
+
+        if (abs($total - 100) > AcuitySettings::SHARE_TOLERANCE) {
+            return $back->withInput()->with('error', 'The shares of the day\'s care on each shift must add up to 100%. They add up to '
+                . AcuitySettings::format($total) . '%.');
+        }
+
+        $ewsSystem = $validated['acuity']['ews_system'] ?? AcuitySettings::forWard($ward)->ewsSystem();
+        $this->saveSettings($ward, fn (array $rules) => array_merge($rules, ['acuity' => $values + ['ews_system' => $ewsSystem]]));
+
+        return $back->with('success', 'Acuity staffing settings saved. The suggested levels and the recommended nurses per shift now use them.');
+    }
+
+    public function resetAcuitySettings(Request $request)
+    {
+        $this->authorizeEdit();
+        $validated = $request->validate([
+            'ward_id' => 'required|exists:wards,id',
+            'week' => 'required|date',
+        ]);
+
+        $ward = Ward::findOrFail($validated['ward_id']);
+        $this->saveSettings($ward, function (array $rules) {
+            unset($rules['acuity']);
+
+            return $rules;
+        });
+
+        return $this->backTo($ward, $this->weekStart($validated['week']), 'acuity', ['acuity_settings' => 1])
+            ->with('success', 'Acuity staffing settings reset to the defaults.');
+    }
+
+    /**
+     * Make the nurses the patients on the ward now need the minimum staff per
+     * shift in the staffing rules, which the roster generator fills first. The
+     * other rules are kept; the roster changes when it is generated again.
+     *
+     * The recommendation is registered nurses, but the minimum counts anyone
+     * on the shift: the generator may fill it with students or care assistants.
+     * The messages say so, and the Patient acuity tab's week shows the
+     * registered nurses against the recommendation after generating.
+     */
+    public function applyAcuityMinimum(Request $request)
+    {
+        $this->authorizeEdit();
+        $validated = $request->validate([
+            'ward_id' => 'required|exists:wards,id',
+            'week' => 'required|date',
+        ]);
+
+        $ward = Ward::findOrFail($validated['ward_id']);
+        $back = $this->backTo($ward, $this->weekStart($validated['week']), 'acuity');
+        $settings = AcuitySettings::forWard($ward);
+        $staffing = AcuityStaffing::forShifts(PatientAcuity::forWard($ward, $settings->ewsSystem()), WardShifts::forWard($ward->id), $settings);
+
+        if (!$staffing['patients']) {
+            return $back->with('error', 'There are no patients on ' . $ward->ward_name . ' now, so there is no acuity to set the minimum staff from.');
+        }
+
+        $minimum = [];
+        foreach (WardShifts::CODES as $code) {
+            // The staffing rules allow at most 50 a shift
+            $minimum[$code] = min(50, $staffing['shifts'][$code]['recommended']);
+        }
+
+        $this->saveSettings($ward, fn (array $rules) => array_merge($rules, ['min_staff' => $minimum]));
+
+        return $back->with('success', 'Minimum staff set from patient acuity: '
+            . collect($minimum)->map(fn (int $count, string $code) => $code . ' ' . $count)->implode(', ')
+            . '. The minimum counts everyone on a shift, students and care assistants too, while the recommendation is registered nurses:'
+            . ' generate the roster again, then check the registered nurses against it on this tab.');
     }
 
     /** Change a ward's stored settings without losing the parts not being changed. */

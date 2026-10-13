@@ -7,10 +7,17 @@ use App\Models\Patient;
 use App\Services\EcgArchive;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\URL;
 use Illuminate\View\View;
 
 class EcgController extends Controller
 {
+    /**
+     * Minutes a signed ECG PDF link stays valid. A logged-in user needs no
+     * signature, so this only bounds a link that is used without the session.
+     */
+    private const PDF_URL_TTL_MINUTES = 30;
+
     public function __construct(private EcgArchive $ecgArchive)
     {
     }
@@ -20,7 +27,7 @@ class EcgController extends Controller
      */
     public function index(): View
     {
-        $ecgFiles = $this->getAllEcgFilesWithPatients();
+        $ecgFiles = $this->withPdfUrls($this->getAllEcgFilesWithPatients());
 
         // Calculate stats
         $ecgXmlFiles = array_filter($ecgFiles, fn($f) => ($f['type'] ?? '') === 'ecg_xml');
@@ -201,7 +208,7 @@ class EcgController extends Controller
             if ($patient) {
                 // Search for ECG files matching this patient's MRN or RN,
                 // plus manually uploaded PDFs matched by patient ID
-                $ecgFiles = $this->findEcgFilesForPatient($patient->mrn, $patient->rn, $patient->id);
+                $ecgFiles = $this->withPdfUrls($this->findEcgFilesForPatient($patient->mrn, $patient->rn, $patient->id));
 
                 // Get the latest ECG file
                 if (!empty($ecgFiles)) {
@@ -257,6 +264,35 @@ class EcgController extends Controller
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="' . $filename . '"',
         ]);
+    }
+
+    /**
+     * Add the signed viewer URL (pdf_url) to each ECG file that has a PDF.
+     */
+    private function withPdfUrls(array $ecgFiles): array
+    {
+        return array_map(function (array $ecg) {
+            $ecg['pdf_url'] = !empty($ecg['has_pdf']) && !empty($ecg['pdf_file'])
+                ? $this->signedPdfUrl($ecg['pdf_file'])
+                : null;
+
+            return $ecg;
+        }, $ecgFiles);
+    }
+
+    /**
+     * Time-limited signed URL of the ECG PDF viewer route (ecg.pdf.public).
+     * Signed over the path only, so it holds whatever host or scheme the
+     * proxy presents; url() puts the app root back for the browser.
+     */
+    private function signedPdfUrl(string $file): string
+    {
+        return url(URL::temporarySignedRoute(
+            'ecg.pdf.public',
+            now()->addMinutes(self::PDF_URL_TTL_MINUTES),
+            ['file' => $file],
+            false
+        ));
     }
 
     /**
