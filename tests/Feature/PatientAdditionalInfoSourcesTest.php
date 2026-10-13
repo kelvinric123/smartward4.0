@@ -187,8 +187,11 @@ class PatientAdditionalInfoSourcesTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        $this->assertStringContainsString('"name":"Penicillin","status":"Active","severity":"Moderate"', $html);
-        $this->assertStringContainsString('"name":"Peanuts","status":"Active","severity":null', $html);
+        // The list is written into the tab's x-data as JSON.parse('...'), safe inside the attribute's quotes
+        $this->assertSame(1, preg_match("/allergies: JSON\\.parse\\('(.*?)'\\)/", $html, $match));
+        $allergies = json_decode(json_decode('"' . $match[1] . '"'), true);
+        $this->assertContains(['name' => 'Penicillin', 'status' => 'Active', 'severity' => 'Moderate'], $allergies);
+        $this->assertContains(['name' => 'Peanuts', 'status' => 'Active', 'severity' => null], $allergies);
 
         // The editor offers severity as optional
         PatientInfoSources::save(['allergies' => 'manual']);

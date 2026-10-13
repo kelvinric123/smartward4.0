@@ -135,7 +135,7 @@
                     </div>
 
                     <div x-show="activeTab === 'additional'" x-cloak x-data="{
-                                allergies: @json($allergyList)
+                                allergies: @js($allergyList)
                              }">
                         <h3 class="text-lg font-semibold text-gray-800 mb-3">Patient Additional Info</h3>
                         <p class="text-sm text-gray-600 mb-4">

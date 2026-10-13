@@ -221,6 +221,13 @@ class PatientFlowCommandCentreController extends Controller
         $today = Carbon::today();
         $wardData = [];
 
+        // The display settings decide what leaves the server: a column the
+        // command centre hides is left out of the data, not only hidden in the
+        // browser (the public wall display's JSON is readable by anyone at it).
+        $settings = array_merge(PatientFlowCommandCentre::defaultSettings(), $commandCentre->settings ?? []);
+        $showNames = (bool) $settings['show_patient_name'];
+        $showConsultant = (bool) $settings['show_consultant'];
+
         foreach ($commandCentre->wards as $ward) {
             $totalBeds = Bed::where('ward_id', $ward->id)->where('is_active', true)->count();
 
@@ -259,9 +266,9 @@ class PatientFlowCommandCentreController extends Controller
             foreach ($admittingPatients as $p) {
                 $bedDetails[] = [
                     'bed_number' => $p->bed_number ?? '-',
-                    'patient_name' => $p->name,
+                    'patient_name' => $showNames ? $p->name : null,
                     'mrn' => $p->mrn,
-                    'consultant_name' => $p->consultant->name ?? '-',
+                    'consultant_name' => $showConsultant ? ($p->consultant->name ?? '-') : null,
                     'status' => 'Admitting',
                     'status_color' => 'blue',
                     'timestamp' => $p->admitted_at?->format('h:i A') ?? '-',
@@ -276,9 +283,9 @@ class PatientFlowCommandCentreController extends Controller
             foreach ($pendingPatients as $p) {
                 $bedDetails[] = [
                     'bed_number' => $p->bed_number ?? '-',
-                    'patient_name' => $p->name,
+                    'patient_name' => $showNames ? $p->name : null,
                     'mrn' => $p->mrn,
-                    'consultant_name' => $p->consultant->name ?? '-',
+                    'consultant_name' => $showConsultant ? ($p->consultant->name ?? '-') : null,
                     'status' => 'Pending Discharge',
                     'status_color' => 'amber',
                     'timestamp' => $p->pending_discharge_at?->format('h:i A') ?? '-',
@@ -294,9 +301,9 @@ class PatientFlowCommandCentreController extends Controller
             foreach ($dischargedPatients as $p) {
                 $bedDetails[] = [
                     'bed_number' => $p->bed_number ?? '-',
-                    'patient_name' => $p->name,
+                    'patient_name' => $showNames ? $p->name : null,
                     'mrn' => $p->mrn,
-                    'consultant_name' => $p->consultant->name ?? '-',
+                    'consultant_name' => $showConsultant ? ($p->consultant->name ?? '-') : null,
                     'status' => 'Discharged',
                     'status_color' => 'teal',
                     'timestamp' => $p->discharged_at?->format('h:i A') ?? '-',
@@ -311,9 +318,9 @@ class PatientFlowCommandCentreController extends Controller
             foreach ($prebookedPatients as $p) {
                 $bedDetails[] = [
                     'bed_number' => $p->target_bed_number ?? $p->bed_number ?? '-',
-                    'patient_name' => $p->name,
+                    'patient_name' => $showNames ? $p->name : null,
                     'mrn' => $p->mrn,
-                    'consultant_name' => $p->consultant->name ?? '-',
+                    'consultant_name' => $showConsultant ? ($p->consultant->name ?? '-') : null,
                     'status' => 'Prebooked',
                     'status_color' => 'purple',
                     'timestamp' => $p->booked_at?->format('h:i A') ?? '-',
@@ -332,7 +339,7 @@ class PatientFlowCommandCentreController extends Controller
                 'discharged_today' => $dischargedToday,
                 'prebooked' => $prebooked,
                 'occupancy_percent' => $occupancyPercent,
-                'bed_details' => $bedDetails,
+                'bed_details' => $settings['show_bed_details'] ? $bedDetails : [],
             ];
         }
 

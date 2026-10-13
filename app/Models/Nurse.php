@@ -78,6 +78,23 @@ class Nurse extends Model
     }
 
     /**
+     * Find the active nurse with nurse-app credentials signing in as this
+     * username (app username or registration number). Check the password
+     * with verifyAppPassword().
+     */
+    public static function findByAppLogin(string $username): ?self
+    {
+        return static::where('is_active', true)
+            ->whereNotNull('app_username')
+            ->whereNotNull('app_password')
+            ->where(function ($q) use ($username) {
+                $q->where('app_username', $username)
+                    ->orWhere('registration_number', $username);
+            })
+            ->first();
+    }
+
+    /**
      * Verify the given nurse-app password.
      */
     public function verifyAppPassword(string $password): bool

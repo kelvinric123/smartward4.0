@@ -8,9 +8,7 @@
 
     <title>{{ config('app.name', 'Laravel') }} - API Logs Print</title>
 
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
+    {{-- System fonts only: no web font, so it prints on a hospital network with no internet --}}
 
     <!-- Scripts -->
     @vite(['resources/css/app.css', 'resources/js/app.js'])

@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Models\Bed;
 use App\Models\DietType;
 use App\Models\IsolationType;
+use App\Models\Nurse;
 use App\Models\Patient;
 use App\Models\PatientCareProvider;
 use App\Models\PatientMovement;
 use App\Models\SugarReading;
+use App\Models\TerminalDevice;
 use App\Models\VitalSign;
 use App\Models\Ward;
 use App\Models\WardNotification;
@@ -21,9 +23,16 @@ use Illuminate\Http\Request;
  * API for the bedside Patient Information Terminal (patient information terminal/).
  *
  * The terminal is a kiosk bound to one bed. Staff open the terminal's admin
- * settings (passcode protected), point it at this server and pick a ward +
- * bed; the terminal then polls the bed snapshot to show the live patient
- * profile, care team and vitals.
+ * settings (passcode protected), point it at this server, pick a ward + bed
+ * and pair the terminal with that bed with a nurse-app login; the terminal
+ * then polls the bed snapshot to show the live patient profile, care team
+ * and vitals.
+ *
+ * The bed routes run behind AuthenticateTerminalDevice. A paired terminal
+ * gets its own bed only. An unpaired one (built before pairing existed) still
+ * gets data, with the patient's name cut to initials and no MRN, until
+ * TERMINAL_REQUIRE_DEVICE_TOKEN turns it away. The bed picker always shows
+ * initials only.
  */
 class TerminalApiController extends Controller
 {
@@ -64,7 +73,66 @@ class TerminalApiController extends Controller
     }
 
     /**
+     * POST /api/terminal/pair — pair this terminal with a bed.
+     *
+     * A nurse signs in with their nurse-app username (or registration number)
+     * and password on the terminal's admin settings. Returns the terminal's
+     * token, shown once. A terminal that sends its current token while
+     * pairing again (e.g. moving to another bed) has that token revoked.
+     */
+    public function pair(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'username' => 'required|string',
+            'password' => 'required|string',
+            'bed_id' => 'required|integer|exists:beds,id',
+            'device_name' => 'nullable|string|max:100',
+        ]);
+
+        $nurse = Nurse::findByAppLogin($validated['username']);
+
+        if (!$nurse || !$nurse->verifyAppPassword($validated['password'])) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid nurse username or password.',
+            ], 401);
+        }
+
+        $bed = Bed::with('ward')->findOrFail($validated['bed_id']);
+
+        TerminalDevice::findByToken($request->bearerToken())?->revoke();
+
+        [$device, $token] = TerminalDevice::pair($bed, $nurse, $validated['device_name'] ?? null);
+
+        return response()->json([
+            'success' => true,
+            'token' => $token,
+            'device' => [
+                'id' => $device->id,
+                'bed_id' => $bed->id,
+                'bed_number' => $bed->bed_number,
+                'ward_id' => $bed->ward_id,
+                'ward_name' => $bed->ward?->ward_name,
+                'paired_by' => $nurse->name,
+                'paired_at' => $device->created_at?->toIso8601String(),
+            ],
+        ], 201);
+    }
+
+    /**
+     * POST /api/terminal/unpair — the terminal gives up its pairing (e.g.
+     * switched back to demo data).
+     */
+    public function unpair(Request $request): JsonResponse
+    {
+        TerminalDevice::findByToken($request->bearerToken())?->revoke();
+
+        return response()->json(['success' => true]);
+    }
+
+    /**
      * GET /api/terminal/beds?ward_id= — for the bed picker in admin settings.
+     * Runs before the terminal is paired, so names are initials only.
      */
     public function beds(Request $request): JsonResponse
     {
@@ -83,7 +151,7 @@ class TerminalApiController extends Controller
                     'bed_number' => $bed->bed_number,
                     'display_name' => $bed->bed_display_name ?: $bed->bed_number,
                     'status' => $bed->status,
-                    'patient_name' => $patient?->name,
+                    'patient_name' => $patient ? $this->initials($patient->name) : null,
                 ];
             })
             ->values();
@@ -94,10 +162,11 @@ class TerminalApiController extends Controller
     /**
      * GET /api/terminal/beds/{bed}/snapshot — live data for the bound bed.
      */
-    public function snapshot(Bed $bed): JsonResponse
+    public function snapshot(Request $request, Bed $bed): JsonResponse
     {
         $bed->loadMissing('ward');
         $patient = $this->patientForBed($bed);
+        $paired = $this->isPaired($request);
 
         if (!$patient) {
             // Distinguish "your stay has ended" from "this bed was never yours" —
@@ -112,6 +181,7 @@ class TerminalApiController extends Controller
 
             return response()->json([
                 'success' => true,
+                'paired' => $paired,
                 'occupied' => false,
                 'vacancy_reason' => $recentlyDischarged ? 'discharged' : 'vacant',
                 'bed' => [
@@ -121,8 +191,8 @@ class TerminalApiController extends Controller
                     'ward_code' => $bed->ward?->ward_code,
                 ],
                 'discharged_patient' => $recentlyDischarged ? [
-                    'name' => $recentlyDischarged->name,
-                    'first_name' => explode(' ', trim($recentlyDischarged->name))[0] ?? null,
+                    'name' => $paired ? $recentlyDischarged->name : $this->initials($recentlyDischarged->name),
+                    'first_name' => $paired ? (explode(' ', trim($recentlyDischarged->name))[0] ?? null) : null,
                     'discharged_at' => $recentlyDischarged->discharged_at?->toIso8601String(),
                     'discharged_at_label' => $recentlyDischarged->discharged_at?->format('j M Y, H:i'),
                 ] : null,
@@ -173,6 +243,7 @@ class TerminalApiController extends Controller
 
         return response()->json([
             'success' => true,
+            'paired' => $paired,
             'occupied' => true,
             'bed' => [
                 'id' => $bed->id,
@@ -181,10 +252,10 @@ class TerminalApiController extends Controller
                 'ward_code' => $bed->ward?->ward_code,
             ],
             'patient' => [
-                'name' => $patient->name,
+                'name' => $paired ? $patient->name : $this->initials($patient->name),
                 'age' => $patient->age,
                 'gender' => $patient->gender,
-                'mrn' => $patient->mrn,
+                'mrn' => $paired ? $patient->mrn : null,
                 'ward_name' => $patient->ward?->ward_name,
                 'ward_code' => $patient->ward?->ward_code,
                 'bed_number' => $patient->bed_number,
@@ -324,7 +395,7 @@ class TerminalApiController extends Controller
 
         return response()->json([
             'success' => true,
-            'request' => $this->formatRequest($notification),
+            'request' => $this->formatRequest($notification, $this->isPaired($request) ? null : $patient->name),
         ], 201);
     }
 
@@ -332,7 +403,7 @@ class TerminalApiController extends Controller
      * GET /api/terminal/beds/{bed}/requests — this bed's recent smart calls
      * and whether a nurse has responded yet.
      */
-    public function listRequests(Bed $bed): JsonResponse
+    public function listRequests(Request $request, Bed $bed): JsonResponse
     {
         $patient = $this->patientForBed($bed);
 
@@ -340,28 +411,39 @@ class TerminalApiController extends Controller
             return response()->json(['success' => true, 'requests' => []]);
         }
 
+        $maskName = $this->isPaired($request) ? null : $patient->name;
+
         $requests = WardNotification::where('patient_id', $patient->id)
             ->where('type', WardNotification::TYPE_PATIENT_REQUEST)
             ->with('responder:id,name')
             ->orderBy('created_at', 'desc')
             ->limit(20)
             ->get()
-            ->map(fn(WardNotification $n) => $this->formatRequest($n))
+            ->map(fn(WardNotification $n) => $this->formatRequest($n, $maskName))
             ->values();
 
         return response()->json(['success' => true, 'requests' => $requests]);
     }
 
-    private function formatRequest(WardNotification $notification): array
+    /**
+     * $maskName: the patient's name, to cut to initials in the message for
+     * an unpaired terminal (null leaves the message as is).
+     */
+    private function formatRequest(WardNotification $notification, ?string $maskName = null): array
     {
         $notification->loadMissing('responder:id,name');
+
+        $message = $notification->message;
+        if ($maskName && $message) {
+            $message = str_replace($maskName, $this->initials($maskName), $message);
+        }
 
         return [
             'id' => $notification->id,
             'category' => $notification->category,
             'status' => $notification->status,
             'severity' => $notification->severity,
-            'message' => $notification->message,
+            'message' => $message,
             'created_at' => $notification->created_at?->toIso8601String(),
             'created_at_label' => $notification->created_at?->format('H:i'),
             'responded' => $notification->status === WardNotification::STATUS_RESPONDED,
@@ -374,6 +456,29 @@ class TerminalApiController extends Controller
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
+
+    /**
+     * Whether the call came from a terminal paired with this bed (set by
+     * AuthenticateTerminalDevice).
+     */
+    private function isPaired(Request $request): bool
+    {
+        return $request->attributes->get('terminal_device') instanceof TerminalDevice;
+    }
+
+    /**
+     * "Siti Aminah binti Ahmad" -> "S. A. B. A.": what an unpaired terminal
+     * and the bed picker show instead of the name.
+     */
+    private function initials(string $name): string
+    {
+        $words = preg_split('/\s+/u', trim($name), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        return collect($words)
+            ->take(4)
+            ->map(fn(string $w) => mb_strtoupper(mb_substr($w, 0, 1)) . '.')
+            ->implode(' ');
+    }
 
     private function patientForBed(Bed $bed): ?Patient
     {

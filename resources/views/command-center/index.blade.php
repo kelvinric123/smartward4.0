@@ -9,7 +9,8 @@
         </div>
     </x-slot>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    {{-- Bundled Chart.js: the charts below are drawn on DOMContentLoaded, after it has loaded --}}
+    @vite('resources/js/chart.js')
     <script>
         // The live board's auto-refresh comes back quietly: no entry animations or count-up on a wall screen
         try {

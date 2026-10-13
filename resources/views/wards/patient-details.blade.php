@@ -4,9 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Patient Details</title>
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    @vite(['resources/css/app.css', 'resources/js/chart.js', 'resources/js/app.js'])
     <x-theme-style />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -665,7 +664,7 @@
                 @endphp
                 <div x-show="activeTab === 'additional'" x-cloak
                      x-data="{
-                        allergies: @json($allergyList),
+                        allergies: @js($allergyList),
                         severityBadge(severity) {
                             return {
                                 Severe: 'bg-red-600 text-white',
