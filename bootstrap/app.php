@@ -11,6 +11,8 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Security headers on every response (VAPT 2026-10).
+        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
         $middleware->validateCsrfTokens(except: [
             'api/vital-sign/*',
             'api/infusion/*',
