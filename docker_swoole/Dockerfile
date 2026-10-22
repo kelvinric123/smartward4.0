@@ -3,7 +3,7 @@
 # Single Container: PHP-Swoole + MySQL + Redis
 # =============================================================================
 
-FROM php:8.2-cli-alpine3.19
+FROM php:8.2.35-cli-alpine
 
 LABEL maintainer="SmartWard Team"
 LABEL description="Production Laravel Octane with Swoole, MySQL, Redis in single container"
@@ -19,14 +19,23 @@ ARG SWOOLE_VERSION=5.1.1
 ARG MYSQL_ROOT_PASSWORD=smartward_secret
 ARG REDIS_MAXMEMORY=256mb
 
+# Keep MariaDB on 10.11 by adding the Alpine 3.19 repository. The base image moved
+# to Alpine 3.24, which ships MariaDB 11.8; opening an existing 10.11 data directory
+# with 11.8 is a one-way migration, so holding 10.11 leaves the production data
+# directory untouched by the PHP upgrade.
+# Pinned by exact version rather than an "@tag" repository: a tag in /etc/apk/world
+# cannot be resolved without network, and docker-php-ext-install removes its build
+# deps offline, which fails the build with "missing repository tags".
+RUN echo "https://dl-cdn.alpinelinux.org/alpine/v3.19/main" >> /etc/apk/repositories
+
 # Install system dependencies
 RUN apk add --no-cache \
     # Timezone data
     tzdata \
-    # MySQL
-    mariadb \
-    mariadb-client \
-    mariadb-common \
+    # MySQL - held at 10.11.14, matching the existing production data directory
+    mariadb=10.11.14-r0 \
+    mariadb-client=10.11.14-r0 \
+    mariadb-common=10.11.14-r0 \
     # Redis
     redis \
     # Nginx for SSL termination
@@ -85,12 +94,21 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     ldap
 
 # Install Swoole extension
-RUN pecl install swoole-${SWOOLE_VERSION} \
-    && docker-php-ext-enable swoole
+# channel-update first: a fresh base image ships stale channel metadata and
+# pecl install then fails with "No releases available for package .../swoole".
+# Both steps are retried: a slow resolver can exceed pecl's socket timeout and
+# abort the build with "getaddrinfo for pecl.php.net failed: Try again".
+RUN set -eu; \
+    retry() { n=0; until "$@"; do n=$((n+1)); [ "$n" -ge 4 ] && return 1; echo "retry $n: $*"; sleep 5; done; }; \
+    retry pecl channel-update pecl.php.net; \
+    retry pecl install swoole-${SWOOLE_VERSION}; \
+    docker-php-ext-enable swoole
 
-# Install Redis PHP extension
-RUN pecl install redis \
-    && docker-php-ext-enable redis
+# Install Redis PHP extension (retried for the same slow-DNS reason as Swoole)
+RUN set -eu; \
+    retry() { n=0; until "$@"; do n=$((n+1)); [ "$n" -ge 4 ] && return 1; echo "retry $n: $*"; sleep 5; done; }; \
+    retry pecl install redis; \
+    docker-php-ext-enable redis
 
 # Cleanup build dependencies
 RUN apk del $PHPIZE_DEPS linux-headers \
