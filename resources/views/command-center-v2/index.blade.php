@@ -530,9 +530,172 @@
             </article>
         </section>
 
+        {{-- ------ Length of stay: the hospital as a whole, then the wards against it ------ --}}
+        <section class="ccx-section ccx-los">
+            {{-- The hospital: its average stay against the days before, and day by day --}}
+            <article class="ccx-card ccx-loshosp ccx-page" :class="{ 'is-current': tvPage === 'los', 'is-changed': changed.los }" x-show="cfg.los.show">
+                <header>
+                    <h2>Length of stay &middot; hospital</h2>
+                    <span style="display: inline-flex; align-items: center; gap: .75em">
+                        <span class="ccx-muted" x-text="`Discharged in the last ${s.targets.los_days} days`"></span>
+                        <button type="button" class="ccx-toggle" @click="tables.los = !tables.los" x-text="tables.los ? 'Chart' : 'Table'" :aria-pressed="tables.los.toString()"></button>
+                    </span>
+                </header>
+                <div class="ccx-hero">
+                    <span class="num" x-text="dec(s.los.hospital.alos)"></span>
+                    <span class="cap" x-text="`${s.los.hospital.alos === 1 ? 'day' : 'days'} on average · ${fmt(s.los.hospital.stays)} ${s.los.hospital.stays === 1 ? 'stay' : 'stays'}`"></span>
+                </div>
+                <p class="ccx-delta" :class="losTone(s.los.hospital.alos, s.los.hospital.alos_previous)"
+                    x-text="losShift(s.los.hospital.alos, s.los.hospital.alos_previous, `the ${s.targets.los_days} days before`)"></p>
+                <dl class="ccx-minis">
+                    <div><dt>Median stay</dt><dd x-text="days(s.los.hospital.median)"></dd></div>
+                    <div><dt title="Average days in hospital so far of today's inpatients">Inpatients' stay so far</dt><dd x-text="days(s.los.hospital.stay_so_far)"></dd></div>
+                    <div>
+                        <dt x-text="`In ${s.targets.long_stay_days}+ days`"></dt>
+                        <dd><span x-text="fmt(s.los.hospital.long_stays)"></span><small x-text="`of ${fmt(s.los.hospital.inpatients)}`"></small></dd>
+                    </div>
+                </dl>
+                <ul class="ccx-legend ccx-loslegend" style="list-style: none; padding: 0">
+                    <li><span class="ccx-key"></span>Average stay of the day's discharges</li>
+                    <li><span class="ccx-refkey"></span><span x-text="`${s.targets.los_days}-day average`"></span></li>
+                </ul>
+                <div class="ccx-chartbody" x-show="tv || !tables.los">
+                    <div class="ccx-plotwrap" @mouseleave="hover.los = null">
+                        <template x-for="t in losScale.ticks" :key="'l' + t">
+                            <div class="ccx-grid" :class="{ 'is-base': t === 0 }" :style="`bottom: ${t / losScale.max * 100}%`"><span x-text="fmt(t)"></span></div>
+                        </template>
+                        <div class="ccx-cols is-single">
+                            <template x-for="(v, i) in s.los.trend.alos" :key="'lb' + i">
+                                <button type="button" @mouseenter="hover.los = i" @focus="hover.los = i" @blur="hover.los = null"
+                                    :aria-label="`${s.trend.days[i]}: ` + (v === null ? 'no discharges' : `${days(v)} on average, ${s.los.trend.stays[i]} discharged`)">
+                                    <span class="col">
+                                        <span class="cap" x-show="i === s.los.trend.alos.length - 1 && v !== null" x-text="dec(v)"></span>
+                                        <span class="bar" :style="`height: ${(v || 0) / losScale.max * 100}%`"></span>
+                                    </span>
+                                </button>
+                            </template>
+                        </div>
+                        <div class="ccx-ref" x-show="s.los.hospital.alos !== null" :style="`bottom: ${(s.los.hospital.alos || 0) / losScale.max * 100}%`"><span x-text="days(s.los.hospital.alos)"></span></div>
+                        <div class="ccx-tip" x-show="hover.los !== null" x-cloak :style="tipAt(hover.los, s.los.trend.alos.length)">
+                            <template x-if="hover.los !== null">
+                                <div>
+                                    <div class="k" x-text="s.trend.days[hover.los] + (hover.los === s.los.trend.alos.length - 1 ? ' · so far' : '')"></div>
+                                    <template x-if="s.los.trend.alos[hover.los] !== null">
+                                        <div>
+                                            <div><span class="v" x-text="days(s.los.trend.alos[hover.los])"></span> on average</div>
+                                            <div class="k" x-text="`${fmt(s.los.trend.stays[hover.los])} discharged`"></div>
+                                        </div>
+                                    </template>
+                                    <div x-show="s.los.trend.alos[hover.los] === null">No discharges</div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                    <div class="ccx-xaxis"><span x-text="s.trend.labels[0]"></span><span x-text="s.trend.labels[Math.floor(s.trend.labels.length / 2)]"></span><span>Today</span></div>
+                </div>
+                <div class="ccx-tablescroll" x-show="tables.los && !tv" x-cloak>
+                    <table class="ccx-datatable">
+                        <thead><tr><th scope="col">Day</th><th scope="col">Discharged</th><th scope="col">Average stay</th></tr></thead>
+                        <tbody>
+                            <template x-for="(v, i) in s.los.trend.alos" :key="'lt' + i">
+                                <tr><td x-text="s.trend.days[i]"></td><td x-text="fmt(s.los.trend.stays[i])"></td><td x-text="days(v)"></td></tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+                {{-- The same stays by how long they were, the long stays in the second colour --}}
+                <div class="ccx-losbands">
+                    <div class="ccx-losbands-head">
+                        <span>Stays by length</span>
+                        <span class="ccx-legend"><span class="ccx-key is-2"></span><span x-text="`${s.targets.long_stay_days} days or more`"></span></span>
+                    </div>
+                    <div class="ccx-hbars">
+                        <template x-for="band in s.los.bands" :key="band.label">
+                            <div class="ccx-hbar" :class="{ 'is-long': band.long }">
+                                <span class="label" x-text="band.label"></span>
+                                <span class="value"><span x-text="fmt(band.count)"></span><small x-text="pct(band.pct)"></small></span>
+                                <div class="track" aria-hidden="true"><div class="fill" :style="`width: ${losBandMax ? band.count / losBandMax * 100 : 0}%`"></div></div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </article>
+
+            {{-- Each ward against the hospital's average: longest first, paged in TV mode like the ward table --}}
+            <article class="ccx-card ccx-losward ccx-page is-later" :class="{ 'is-current': tvPage === 'los' }" x-show="cfg.los.show">
+                <header>
+                    <h2 x-text="`Length of stay by ward · ${s.targets.los_days} days`"></h2>
+                    <span style="display: inline-flex; flex-wrap: wrap; align-items: center; gap: .4em 1.4em">
+                        <span class="ccx-muted" x-show="!tv">Longest average stay first</span>
+                        <span class="ccx-muted ccx-tickkey"><span class="tick" aria-hidden="true"></span><span x-text="`Hospital average ${days(s.los.hospital.alos)}`"></span></span>
+                        <span class="ccx-pagecount" x-show="tv && tvPage === 'los' && subPages > 1" x-text="`Page ${subPage + 1} of ${subPages}`"></span>
+                    </span>
+                </header>
+                <div class="ccx-tablewrap" x-ref="los">
+                    <table class="ccx-table ccx-lostable">
+                        <thead>
+                            <tr>
+                                <th scope="col">Ward</th>
+                                <th scope="col" :title="`Average stay of the patients the ward discharged in the last ${s.targets.los_days} days, against the ${s.targets.los_days} days before. The line is the hospital's average`">Average stay</th>
+                                <th scope="col" :title="`Median stay of the patients the ward discharged in the last ${s.targets.los_days} days`">Median</th>
+                                <th scope="col" :title="`Patients the ward discharged in the last ${s.targets.los_days} days`">Discharged</th>
+                                <th scope="col" title="Average days in hospital so far of the ward's inpatients now">Stay so far</th>
+                                <th scope="col" :title="`Inpatients in hospital ${s.targets.long_stay_days} days or more`" x-text="`${s.targets.long_stay_days}+ days`"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <template x-for="w in s.los.wards" :key="'l' + w.id">
+                                <tr data-row>
+                                    <td>
+                                        <span class="ccx-losname">
+                                            <a :href="w.url" class="name" :title="w.name" x-text="w.name"></a><span class="ccx-tag" x-show="w.critical_care" title="Critical care ward">CC</span>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="ccx-occ">
+                                            <div class="ccx-meter" aria-hidden="true">
+                                                <span class="fill" :style="`width: ${(w.alos || 0) / losWardMax * 100}%`"></span>
+                                                <span class="tick" x-show="s.los.hospital.alos !== null" :style="`left: ${(s.los.hospital.alos || 0) / losWardMax * 100}%`"></span>
+                                            </div>
+                                            <span class="val">
+                                                <span :class="{ 'ccx-zero': w.alos === null }" x-text="w.alos === null ? '—' : dec(w.alos) + ' d'"></span>
+                                                <span class="ccx-sub-num" :class="losTone(w.alos, w.alos_previous)" x-text="losShift(w.alos, w.alos_previous)"></span>
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td><span :class="{ 'ccx-zero': w.median === null }" x-text="w.median === null ? '—' : dec(w.median) + ' d'"></span></td>
+                                    <td><span :class="{ 'ccx-zero': !w.stays }" x-text="dash(w.stays)"></span></td>
+                                    <td>
+                                        <span :class="{ 'ccx-zero': w.stay_so_far === null }" x-text="w.stay_so_far === null ? '—' : dec(w.stay_so_far) + ' d'"></span>
+                                        <span class="ccx-sub-num" x-show="w.inpatients" x-text="`${w.inpatients} ${w.inpatients === 1 ? 'inpatient' : 'inpatients'}`"></span>
+                                    </td>
+                                    <td><span :class="{ 'ccx-zero': !w.long_stays }" x-text="dash(w.long_stays)"></span></td>
+                                </tr>
+                            </template>
+                            <tr x-show="s.los.wards.length === 0">
+                                <td colspan="6" style="text-align: center; padding: 2em" class="ccx-zero">No active wards yet</td>
+                            </tr>
+                        </tbody>
+                        <tfoot x-show="s.los.wards.length > 1">
+                            <tr>
+                                <td>All wards</td>
+                                <td x-text="s.los.hospital.alos === null ? '—' : dec(s.los.hospital.alos) + ' d'"></td>
+                                <td x-text="s.los.hospital.median === null ? '—' : dec(s.los.hospital.median) + ' d'"></td>
+                                <td x-text="fmt(s.los.hospital.stays)"></td>
+                                <td x-text="s.los.hospital.stay_so_far === null ? '—' : dec(s.los.hospital.stay_so_far) + ' d'"></td>
+                                <td x-text="fmt(s.los.hospital.long_stays)"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </article>
+        </section>
+
         <p class="ccx-foot">
             Occupancy is occupied beds over active beds, against a target of <span x-text="s.targets.occupancy"></span>% or under.
             Admissions and discharges come from the admission log; the midnight census is worked back from today's inpatients.
+            Length of stay runs from the admission to the hospital to the discharge, for the patients discharged in the last <span x-text="s.targets.los_days"></span> days,
+            and counts toward the ward that discharged them; a stay so far is an inpatient's days in hospital up to now.
             Clinical figures are the ones the ward dashboards raise; an EWS counts while its vital signs are under <span x-text="s.targets.obs_hours"></span> h old.
             Alerts count as waiting after <span x-text="s.targets.alert_wait_minutes"></span> min, and response times only include alerts a person answered.
             Nurses are those rostered for each ward's current shift in the AI Nurse Schedule. No patient is named on this screen.
@@ -560,6 +723,7 @@
             const TV_PAGES = [
                 { key: 'wards', label: 'Wards' },
                 { key: 'trends', label: 'Trends' },
+                { key: 'los', label: 'Length of stay' },
                 { key: 'acuity', label: 'Acuity & risk' },
             ];
             // How long each page (or each screenful of a page's rows) stays up, and each page of the attention list
@@ -586,6 +750,7 @@
                 { key: 'kpis', label: 'Headline figures', about: 'The four cards across the top' },
                 { key: 'wards', label: 'Wards', about: 'The ward table', perPage: 'Wards per page', pageSizes: ROWS, seconds: true },
                 { key: 'trends', label: 'Trends', about: 'Inpatients at midnight, admissions and discharges', seconds: true },
+                { key: 'los', label: 'Length of stay', about: 'The hospital\'s average stay day by day, and each ward\'s against it', perPage: 'Wards per page', pageSizes: ROWS, seconds: true },
                 { key: 'acuity', label: 'Acuity & risk', about: 'In TV mode, with each ward\'s share', perPage: 'Wards per page', pageSizes: ROWS, seconds: true },
                 { key: 'attention', label: 'Needs attention', about: 'The list beside the pages', perPage: 'Items per page', pageSizes: [2, 3, 4, 5, 6, 8, 10, 12], seconds: true },
             ];
@@ -605,6 +770,7 @@
                 kpis: { show: true, size: 100 },
                 wards: { show: true, size: 100, perPage: 0, seconds: STEP_SECONDS, hidden: [] },
                 trends: { show: true, size: 100, seconds: STEP_SECONDS },
+                los: { show: true, size: 100, perPage: 0, seconds: STEP_SECONDS },
                 acuity: { show: true, size: 100, perPage: 0, seconds: STEP_SECONDS },
                 attention: { show: true, size: 100, perPage: 0, seconds: FEED_SECONDS },
             });
@@ -651,8 +817,8 @@
                 theme: 'dark',
                 tv: false,
                 changed: {},
-                hover: { census: null, flow: null },
-                tables: { census: false, flow: false },
+                hover: { census: null, flow: null, los: null },
+                tables: { census: false, flow: false, los: false },
                 feedMore: false,
                 // This screen's display settings (partials/settings), and what they allow at the current sizes: how
                 // many rows fit a TV page, and how far the ward table had to shrink to fit its card
@@ -664,7 +830,7 @@
                 sections: SECTIONS,
                 secondsOptions: SECONDS,
                 wardColumns: WARD_COLUMNS,
-                fits: { wards: 0, acuity: 0 },
+                fits: { wards: 0, acuity: 0, los: 0 },
                 wardsFit: 1,
                 // TV mode's pages: the one up, and which screenful of its rows. They turn until someone presses Pause
                 paused: false,
@@ -697,7 +863,7 @@
                     this.$nextTick(() => this.checkFeed());
                     if (window.ResizeObserver) {
                         const resized = new ResizeObserver(() => this.refit());
-                        [this.$refs.feed, this.$refs.wards, this.$refs.matrix].forEach((box) => resized.observe(box));
+                        [this.$refs.feed, this.$refs.wards, this.$refs.matrix, this.$refs.los].forEach((box) => resized.observe(box));
                     }
 
                     // Straight back up to date when the screen is looked at again
@@ -761,6 +927,7 @@
                         flow: (s) => s.flow,
                         quality: (s) => ({ ...s.quality, alerts: { ...s.quality.alerts, oldest: null, median_week: null } }),
                         workforce: (s) => s.workforce,
+                        los: (s) => s.los.hospital,
                     };
                     for (const [key, pick] of Object.entries(cards)) {
                         if (sign(pick(before)) !== sign(pick(after))) flash(key);
@@ -797,7 +964,7 @@
                     this.restartStep();
                     // Once the layout has settled at its new size (the menu takes 200 ms to go)
                     setTimeout(() => {
-                        [this.$refs.wards, this.$refs.matrix, this.$refs.feed].forEach((box) => { box.scrollTop = 0; });
+                        [this.$refs.wards, this.$refs.matrix, this.$refs.los, this.$refs.feed].forEach((box) => { box.scrollTop = 0; });
                         this.refit();
                     }, 300);
                 },
@@ -812,13 +979,13 @@
                 refit() {
                     this.checkFeed();
                     if (this.tv) {
-                        this.fitWards();
+                        this.fitTables();
                         this.goSubPage(this.subPage);
                         this.goFeedPage(this.feedPage);
                     }
                 },
 
-                // TV mode, every second. The wards, trends and acuity take turns, a page whose rows do not all
+                // TV mode, every second. The wards, trends, length of stay and acuity take turns, a page whose rows do not all
                 // fit showing them a screenful at a time; the attention list pages on its own. Pause holds it all
                 rotate() {
                     if (!this.tv || this.paused || this.settingsOpen) return;
@@ -851,11 +1018,11 @@
                     this.stepKey++;
                 },
 
-                // One screenful of the rows on the page up: the ward table's, or the acuity heat table's. As many
-                // as fit, or the number a page set in the display settings
+                // One screenful of the rows on the page up: the ward table's, the length of stay's by ward, or the
+                // acuity heat table's. As many as fit, or the number a page set in the display settings
                 goSubPage(page) {
                     const key = this.tvPage;
-                    const box = { wards: this.$refs.wards, acuity: this.$refs.matrix }[key];
+                    const box = { wards: this.$refs.wards, los: this.$refs.los, acuity: this.$refs.matrix }[key];
                     if (!box || box.offsetParent === null) {
                         this.subPage = 0;
                         this.subPages = 1;
@@ -885,18 +1052,20 @@
                     box.style.setProperty('--ccx-row', Math.floor(view / Math.min(limit || Infinity, this.fits[key])) + 'px');
                     return limit;
                 },
-                // TV mode: a ward table wider than its card, at the sizes and with the columns chosen, is scaled
-                // down until every column fits rather than have the last ones cut off
-                fitWards() {
-                    const box = this.$refs.wards;
+                // TV mode: a ward table (or the length of stay's by ward) wider than its card, at the sizes and with
+                // the columns chosen, is scaled down until every column fits rather than have the last ones cut off
+                fitTables() {
+                    this.wardsFit = this.fitTable(this.$refs.wards);
+                    this.fitTable(this.$refs.los);
+                },
+                fitTable(box) {
                     box.style.removeProperty('--ccx-fit');
-                    this.wardsFit = 1;
-                    if (box.offsetParent === null) return;
+                    if (box.offsetParent === null) return 1;
                     const over = box.querySelector('table').offsetWidth / box.clientWidth;
-                    if (over > 1.005) {
-                        this.wardsFit = Math.floor(100 / over) / 100;
-                        box.style.setProperty('--ccx-fit', this.wardsFit);
-                    }
+                    if (over <= 1.005) return 1;
+                    const fit = Math.floor(100 / over) / 100;
+                    box.style.setProperty('--ccx-fit', fit);
+                    return fit;
                 },
                 goFeedPage(page) {
                     const box = this.$refs.feed;
@@ -1058,13 +1227,19 @@
 
                 // Average stay: shorter than the 30 days before is the better way
                 get alosChange() {
-                    const { alos, alos_previous: before } = this.s.flow;
-                    if (missing(alos) || missing(before)) return '';
-                    const d = Math.round((alos - before) * 10) / 10;
-                    return d === 0 ? 'same as before' : `${d > 0 ? '▲' : '▼'} ${this.dec(Math.abs(d))} d vs previous`;
+                    return this.losShift(this.s.flow.alos, this.s.flow.alos_previous, 'previous');
                 },
                 get alosTone() {
-                    const { alos, alos_previous: before } = this.s.flow;
+                    return this.losTone(this.s.flow.alos, this.s.flow.alos_previous);
+                },
+                // An average stay against the one before it, "vs" what when that is said
+                losShift(alos, before, against = '') {
+                    if (missing(alos) || missing(before)) return '';
+                    const d = Math.round((alos - before) * 10) / 10;
+                    if (d === 0) return against ? 'same as before' : 'no change';
+                    return `${d > 0 ? '▲' : '▼'} ${this.dec(Math.abs(d))} d` + (against ? ` vs ${against}` : '');
+                },
+                losTone(alos, before) {
                     if (missing(alos) || missing(before) || Math.round((alos - before) * 10) === 0) return '';
                     return alos < before ? 'is-down-good' : 'is-up-bad';
                 },
@@ -1080,6 +1255,17 @@
                 },
                 get flowScale() {
                     return scale(Math.max(0, ...this.s.trend.admissions, ...this.s.trend.discharges));
+                },
+                // Whole days up the side, to at least the hospital's average
+                get losScale() {
+                    return scale(Math.max(0, this.s.los.hospital.alos || 0, ...this.s.los.trend.alos.map((v) => v || 0)));
+                },
+                // Where the bars by ward run to: the longest ward's average, or the hospital's, rounded up
+                get losWardMax() {
+                    return scale(Math.max(0, this.s.los.hospital.alos || 0, ...this.s.los.wards.map((w) => w.alos || 0))).max;
+                },
+                get losBandMax() {
+                    return Math.max(0, ...this.s.los.bands.map((band) => band.count));
                 },
                 get acuityMax() {
                     return Math.max(0, ...this.s.acuity.map((row) => row.count));

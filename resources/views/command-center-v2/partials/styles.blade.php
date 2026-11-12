@@ -193,6 +193,34 @@
         .ccx-hbar .fill { height: 100%; border-radius: 0 4px 4px 0; background: var(--accent); transition: width .8s ease; }
         .ccx-foot { margin-top: .5em; font-size: .786em; color: var(--ink-3); line-height: 1.6; }
 
+        /* Length of stay: the hospital's day by day, as single columns under a dashed line at its average, then
+           each ward's as a bar against a tick at the hospital's average */
+        /* The chart takes what height the card has beside the ward table */
+        .ccx-loshosp { display: flex; flex-direction: column; }
+        .ccx-loshosp .ccx-chartbody { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+        .ccx-loshosp .ccx-plotwrap { flex: 1 1 auto; height: auto; min-height: 11em; }
+        .ccx-loshosp > .ccx-delta { margin-top: .4em; }
+        .ccx-losbands { margin-top: 1em; padding-top: .8em; border-top: 1px solid var(--line); }
+        .ccx-losbands-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .3em 1em; margin-bottom: .6em; font-size: .857em; color: var(--ink-2); font-weight: 600; }
+        .ccx-losbands-head .ccx-legend { font-weight: 500; color: var(--ink-3); font-size: 1em; gap: .4em; }
+        .ccx-losbands .ccx-hbars { gap: .45em; }
+        .ccx-losbands .ccx-hbar { grid-template-columns: 8.2em minmax(0, 1fr) 6.2em; align-items: center; gap: .75em; }
+        .ccx-losbands .ccx-hbar .track { grid-column: 2; grid-row: 1; height: .65em; }
+        .ccx-losbands .ccx-hbar .value { grid-column: 3; text-align: right; }
+        .ccx-losbands .ccx-hbar.is-long .fill { background: var(--series-2); }
+        .ccx-loslegend { margin-top: 1em; }
+        .ccx-refkey { width: 1.1em; height: 0; border-top: 1px dashed var(--ink-2); }
+        .ccx-cols.is-single .col { width: min(1.4em, 62%); }
+        .ccx-tickkey { display: inline-flex; align-items: center; gap: .45em; }
+        .ccx-tickkey .tick { width: 2px; height: 1em; border-radius: 1px; background: var(--ink-2); }
+        .ccx-lostable th:nth-child(2), .ccx-lostable td:nth-child(2) { width: 36%; }
+        .ccx-lostable .ccx-occ .ccx-meter { width: auto; flex: 1 1 auto; min-width: 4em; }
+        .ccx-lostable .ccx-occ .val { min-width: 4.2em; }
+        .ccx-losname { display: inline-flex; align-items: center; max-width: 18em; }
+        .ccx-losname .name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+        .ccx-sub-num.is-up-bad { color: var(--delta-bad); }
+        .ccx-sub-num.is-down-good { color: var(--delta-good); }
+
         /* Layout: one column on a phone, the full board on a wall screen. In em, so TV mode's larger type moves them too */
         @container ccx (min-width: 46em) {
             .ccx-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -201,6 +229,9 @@
         @container ccx (min-width: 84em) {
             .ccx-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
             .ccx-trends { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            /* The hospital under the census, the wards under the other two trends */
+            .ccx-los { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .ccx-losward { grid-column: span 2; }
         }
         /* The ward table beside the attention list only once every column fits */
         @container ccx (min-width: 107em) {
@@ -230,13 +261,15 @@
         .ccx.is-tv .ccx-section { margin: 0; }
         /* Four across however large the settings make them, so they stay one row */
         .ccx.is-tv .ccx-kpis { grid-column: 1 / -1; grid-row: 1; gap: .8em; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-        .ccx.is-tv .ccx-mid, .ccx.is-tv .ccx-trends { display: contents; }
+        .ccx.is-tv .ccx-mid, .ccx.is-tv .ccx-trends, .ccx.is-tv .ccx-los { display: contents; }
         .ccx.is-tv .ccx-pager { grid-column: 1 / span 2; grid-row: 2; }
         .ccx.is-tv .ccx-attention { grid-column: 3; grid-row: 2 / span 2; min-height: 0; }
         /* The pages share one place and cross-fade: the one going fades out while the one coming fades and settles in */
         .ccx.is-tv .ccx-wards, .ccx.is-tv .ccx-acuity { grid-column: 1 / span 2; grid-row: 3; }
         .ccx.is-tv .ccx-census { grid-column: 1; grid-row: 3; }
         .ccx.is-tv .ccx-flowchart { grid-column: 2; grid-row: 3; }
+        .ccx.is-tv .ccx-loshosp { grid-column: 1; grid-row: 3; }
+        .ccx.is-tv .ccx-losward { grid-column: 2; grid-row: 3; }
         .ccx.is-tv .ccx-page { min-height: 0; opacity: 0; transform: scale(.985); visibility: hidden; pointer-events: none;
             transition: opacity .6s ease, transform .6s ease, visibility 0s linear .6s; }
         .ccx.is-tv .ccx-page.is-current { opacity: 1; transform: none; visibility: visible; pointer-events: auto;
@@ -258,17 +291,18 @@
         .ccx.is-tv .ccx-rows dd small { margin-left: .25em; }
         /* Wards and attention: page by page, the table's header and totals staying put. The space after
            the last row lets the last page start at the top like the others */
-        .ccx.is-tv .ccx-wards { display: flex; flex-direction: column; }
-        .ccx.is-tv .ccx-wards .ccx-tablewrap { margin: 0 -1.05em -.95em; }
-        .ccx.is-tv .ccx-wards .ccx-tablewrap, .ccx.is-tv .ccx-feedwrap { flex: 1 1 auto; min-height: 0; contain: size; overflow: hidden auto; scrollbar-width: none; }
-        .ccx.is-tv .ccx-wards .ccx-tablewrap::-webkit-scrollbar, .ccx.is-tv .ccx-feedwrap::-webkit-scrollbar { display: none; }
-        .ccx.is-tv .ccx-wards .ccx-tablewrap::after, .ccx.is-tv .ccx-feedwrap::after { content: ""; display: block; position: static; height: 100%; margin: 0; background: none; }
+        .ccx.is-tv .ccx-wards, .ccx.is-tv .ccx-losward { display: flex; flex-direction: column; }
+        .ccx.is-tv .ccx-wards .ccx-tablewrap, .ccx.is-tv .ccx-losward .ccx-tablewrap { margin: 0 -1.05em -.95em; }
+        .ccx.is-tv .ccx-wards .ccx-tablewrap, .ccx.is-tv .ccx-losward .ccx-tablewrap, .ccx.is-tv .ccx-feedwrap { flex: 1 1 auto; min-height: 0; contain: size; overflow: hidden auto; scrollbar-width: none; }
+        .ccx.is-tv .ccx-wards .ccx-tablewrap::-webkit-scrollbar, .ccx.is-tv .ccx-losward .ccx-tablewrap::-webkit-scrollbar, .ccx.is-tv .ccx-feedwrap::-webkit-scrollbar { display: none; }
+        .ccx.is-tv .ccx-wards .ccx-tablewrap::after, .ccx.is-tv .ccx-losward .ccx-tablewrap::after, .ccx.is-tv .ccx-feedwrap::after { content: ""; display: block; position: static; height: 100%; margin: 0; background: none; }
         .ccx.is-tv .ccx-table thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); }
         .ccx.is-tv .ccx-table tfoot td { position: sticky; bottom: 0; z-index: 1; background: var(--surface); }
         .ccx.is-tv .ccx-table tbody tr:hover { background: none; }
         .ccx.is-tv .is-off { visibility: hidden; }
         /* Trends: the two charts across the whole page */
         .ccx.is-tv .ccx-trends > .ccx-card { display: flex; flex-direction: column; }
+        .ccx.is-tv .ccx-loslegend { margin-top: .7em; }
         .ccx.is-tv .ccx-chartbody { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
         .ccx.is-tv .ccx-plotwrap { flex: 1 1 auto; height: auto; min-height: 6em; }
         /* Acuity: a tile each, then every ward's share as a heat table (one hue, darker = a bigger share) */
@@ -302,6 +336,7 @@
         .ccx-wards { font-size: calc(var(--ccx-wards, 1) * 1em); }
         .ccx-attention { font-size: calc(var(--ccx-attention, 1) * 1em); }
         .ccx-census, .ccx-flowchart { font-size: calc(var(--ccx-trends, 1) * 1em); }
+        .ccx-loshosp, .ccx-losward { font-size: calc(var(--ccx-los, 1) * 1em); }
         .ccx-acuity { font-size: calc(var(--ccx-acuity, 1) * 1em); }
         /* Ward table columns left out, by position (WARD_COLUMNS in the script): 2 Occupancy, 3 Free, 4 Prebooked,
            5 To discharge, 6 In / out today, 7 EWS 5+, 8 Care overdue, 9 Vitals 24 h, 10 Alerts, 11 Nurses */
@@ -312,7 +347,11 @@
         .ccx.no-attention .ccx-mid { grid-template-columns: minmax(0, 1fr); }
         /* TV mode: a ward table wider than its card is scaled down until it fits (--ccx-fit), and with a set
            number of rows a page, the rows share the card's height between them (--ccx-row) */
-        .ccx.is-tv .ccx-wards .ccx-table { font-size: calc(var(--ccx-fit, 1) * 1em); }
+        .ccx.is-tv .ccx-wards .ccx-table, .ccx.is-tv .ccx-losward .ccx-table { font-size: calc(var(--ccx-fit, 1) * 1em); }
+        /* The length of stay by ward in its half of the screen: the bars keep their room, the median (on the
+           hospital's card) and the end of a long ward name give way */
+        .ccx.is-tv .ccx-lostable tr > :nth-child(3), .ccx.is-tv .ccx-lostable td:nth-child(5) .ccx-sub-num { display: none; }
+        .ccx.is-tv .ccx-losname { max-width: 11em; }
         .ccx.is-tv tr[data-row] { height: var(--ccx-row, auto); }
         .ccx.is-tv.no-kpis .ccx-body { grid-template-rows: auto minmax(0, 1fr); }
         .ccx.is-tv.no-kpis .ccx-pager { grid-row: 1; }

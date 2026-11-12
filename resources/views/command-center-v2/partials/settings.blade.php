@@ -53,7 +53,7 @@
                 </div>
             </section>
 
-            <p class="ccx-set-lead"><span class="ccx-tv-tag">TV</span> settings are for TV mode, where Wards, Trends and Acuity &amp; risk take turns beside Needs attention.</p>
+            <p class="ccx-set-lead"><span class="ccx-tv-tag">TV</span> settings are for TV mode, where Wards, Trends, Length of stay and Acuity &amp; risk take turns beside Needs attention.</p>
 
             {{-- Each section: whether it shows and its size, and for TV mode its rows and seconds a page --}}
             <template x-for="section in sections" :key="section.key">
@@ -65,7 +65,7 @@
                         </div>
                         <button type="button" role="switch" class="ccx-switch" :aria-checked="cfg[section.key].show.toString()"
                             :disabled="cfg[section.key].show && !canHide(section.key)" @click="toggleSection(section.key)"
-                            :title="cfg[section.key].show && !canHide(section.key) ? 'TV mode needs one of Wards, Trends and Acuity & risk' : ''">
+                            :title="cfg[section.key].show && !canHide(section.key) ? 'TV mode needs one of Wards, Trends, Length of stay and Acuity & risk' : ''">
                             <span class="track" aria-hidden="true"></span><span>Show</span>
                         </button>
                     </div>
