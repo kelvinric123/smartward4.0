@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Bed;
 use App\Models\Hospital;
+use App\Models\Patient;
 use App\Models\Ward;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
@@ -224,6 +225,71 @@ class CompareBedBoardTest extends TestCase
 
         Artisan::call('bedboard:undo', ['record' => $record, '--force' => true]);
         $this->assertStringContainsString('Nothing to undo.', Artisan::output());
+    }
+
+    private function patientIn(Ward $ward, string $bed): Patient
+    {
+        static $n = 0;
+        $n++;
+
+        return Patient::create([
+            'name' => "Patient {$n}", 'mrn' => "MRN-BB{$n}", 'rn' => "RN-BB{$n}", 'ic_passport' => "IC-BB{$n}",
+            'gender' => 'Female', 'phone' => '', 'ward_id' => $ward->id, 'bed_number' => $bed,
+            'status' => Patient::STATUS_ADMITTED, 'is_active' => true, 'admitted_at' => now(),
+        ]);
+    }
+
+    public function test_follow_makes_the_bed_changes_the_list_names_and_undo_takes_them_back(): void
+    {
+        $c4 = Ward::where('ward_code', 'CP-1')->first();
+        $this->patientIn($c4, 'C401-A');
+        Bed::where('bed_number', 'ICU-3')->first()->update(['is_active' => false]);
+        file_put_contents($this->file, json_encode([
+            'wards' => [
+                ['code' => 'WC4', 'match' => ['WARD C4'], 'total' => 3, 'beds_add' => ['C403-A'], 'beds_off' => ['C401-A', 'C402-A', 'ZZ9']],
+                ['code' => 'ICU', 'match' => ['INTENSIVE CARE UNIT'], 'total' => 2, 'beds_add' => ['ICU-3']],
+                ['code' => 'SCN', 'total' => 2, 'create' => ['ward_code' => 'SCN', 'ward_name' => 'SPECIAL CARE NURSERY'], 'beds_add' => ['SCN-1', 'SCN-2']],
+            ],
+        ]));
+        $before = $this->switches();
+
+        [, $output] = $this->compare(['--follow' => true, '--dry-run' => true]);
+        $this->assertStringContainsString("After the changes: 7 beds in the list's wards, the list 7 (match)", $output);
+        $this->assertSame($before, $this->switches());
+
+        [, $output] = $this->compare(['--follow' => true, '--force' => true]);
+        // A bed with a patient in it stays on; one the ward doesn't have is reported
+        $this->assertStringContainsString('bed C401-A has a patient or a booking in it, so it stays on', $output);
+        $this->assertStringContainsString('bed ZZ9, to switch off, is not in CP-1 WARD C4', $output);
+        $this->assertStringContainsString('Beds: 3 added, 1 switched on, 1 switched off; 1 new ward(s).', $output);
+
+        $bed = fn (string $number) => Bed::where('bed_number', $number)->first();
+        $this->assertTrue($bed('C401-A')->is_active);
+        $this->assertFalse($bed('C402-A')->is_active);
+        $this->assertTrue($bed('C403-A')->is_active);
+        $this->assertSame($c4->id, $bed('C403-A')->ward_id);
+        $this->assertTrue($bed('ICU-3')->is_active);
+        $scn = Ward::where('ward_code', 'SCN')->first();
+        $this->assertSame($this->hospital->id, $scn->hospital_id);
+        $this->assertSame(['SCN-1', 'SCN-2'], $scn->beds()->where('is_active', true)->orderBy('bed_number')->pluck('bed_number')->all());
+
+        // Running it again changes nothing: the list's new ward now pairs by its code
+        [, $again] = $this->compare(['--follow' => true, '--dry-run' => true]);
+        $this->assertStringContainsString("SmartWard's wards already follow the list.", $again);
+
+        // Somebody was put in the new C403-A since: undo only switches that bed off
+        $this->patientIn($c4, 'C403-A');
+        $record = $this->records()[0];
+        Artisan::call('bedboard:undo', ['record' => $record, '--force' => true]);
+        $undo = Artisan::output();
+        $this->assertStringContainsString('removed 1 and switched off 1 of the wards/beds --follow added', $undo);
+
+        $this->assertNull(Ward::where('ward_code', 'SCN')->first());
+        $this->assertSame(0, Bed::whereIn('bed_number', ['SCN-1', 'SCN-2'])->count());
+        $this->assertFalse($bed('C403-A')->is_active);
+        $after = $this->switches();
+        unset($after['beds']['LIST-CP-1-C403-A']);
+        $this->assertSame($before, $after);
     }
 
     public function test_follow_leaves_kept_wards_alone(): void
