@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 raw/
 .env
+# GE's copyrighted DLL: get it from GE, never commit it (public repo)
+DinaWin.dll
