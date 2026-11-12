@@ -108,6 +108,14 @@ class EkadTemplateFieldsTest extends TestCase
             ->values()->all();
     }
 
+    /** The SEEKINK template of each paint, in order */
+    private function paintedTemplates(): array
+    {
+        return Http::recorded(fn (HttpRequest $request) => str_ends_with($request->url(), '/batchPaintingByJson'))
+            ->map(fn (array $sent) => $sent[0]['id'])
+            ->values()->all();
+    }
+
     public function test_a_template_nobody_edited_gets_the_default_fields_isolation_included(): void
     {
         $patient = $this->makePatient();
@@ -169,6 +177,69 @@ class EkadTemplateFieldsTest extends TestCase
         $this->assertSame(0, EkadTemplate::count());
     }
 
+    public function test_an_isolation_precaution_paints_the_screen_with_its_isolation_template(): void
+    {
+        // The ICU layout again, each with one precaution's picture
+        $airborne = '2105503882906267648';
+        $contact = '2105503882906267649';
+        foreach (['AI' => 'Airborne Isolation', 'DI' => 'Droplet Isolation'] as $code => $name) {
+            IsolationType::create(['code' => $code, 'name' => $name, 'is_active' => true]);
+        }
+        $this->actingAs($this->user)->putJson(route('ekad.templates.save', self::ICU_TEMPLATE), [
+            'name' => 'ICU 7.5-inch', 'fields' => self::ICU_FIELDS, 'isolation_templates' => ['AI' => $airborne, 'CI' => $contact, 'DI' => ''],
+        ])->assertOk()->assertJsonPath('template.isolation_templates', ['AI' => $airborne, 'CI' => $contact]);
+        $patient = $this->makePatient();
+
+        // Admitted with Contact Isolation: the contact picture's template, with the ICU template's fields
+        $this->actingAs($this->user)->post(route('ward.admit-patient'), [
+            'patient_id' => $patient->id, 'ward_id' => $this->icu->id, 'bed_number' => 'ICU 4',
+        ])->assertSessionHas('success');
+        $this->assertSame([$contact], array_values(array_unique($this->paintedTemplates())));
+        $this->assertSame(array_column(self::ICU_FIELDS, 'key'), array_keys(last($this->paintedData())));
+
+        // The sync preview shows the template the screen is painted with
+        $row = $this->actingAs($this->user)->getJson(route('ekad.sync-preview'))->assertOk()->json('data.0');
+        $this->assertSame([$contact, true, false], [$row['template_id'], $row['template_is_isolation'], $row['template_is_default']]);
+
+        // Each precaution picked in Patient Details repaints with its template; one without its own keeps the screen's
+        $painted = [];
+        foreach (['AI', 'DI', 'CI', 'none'] as $precaution) {
+            $this->actingAs($this->user)->post(route('ward.update-patient-clinical'), [
+                'patient_id' => $patient->id, 'isolation_type' => $precaution,
+            ])->assertSessionHas('success');
+            $painted[$precaution] = [last($this->paintedTemplates()), last($this->paintedData())['iso']];
+        }
+        $this->assertSame([
+            'AI' => [$airborne, 'AIRBORNE ISOLATION'],
+            'DI' => [self::ICU_TEMPLATE, 'DROPLET ISOLATION'],
+            'CI' => [$contact, 'CONTACT ISOLATION'],
+            'none' => [self::ICU_TEMPLATE, '-'],
+        ], $painted);
+
+        // An empty bed is painted with the screen's own template
+        $patient->update(['isolation_type' => 'AI']);
+        $this->actingAs($this->user)->post(route('ward.discharge-patient'), ['patient_id' => $patient->id])
+            ->assertSessionHas('success');
+        $this->assertSame(self::ICU_TEMPLATE, last($this->paintedTemplates()));
+    }
+
+    public function test_isolation_templates_are_checked_before_they_are_saved(): void
+    {
+        $save = fn (array $isolationTemplates) => $this->actingAs($this->user)->putJson(route('ekad.templates.save', self::ICU_TEMPLATE), [
+            'fields' => self::ICU_FIELDS, 'isolation_templates' => $isolationTemplates,
+        ]);
+
+        // A precaution that is not in Isolation Types, an ID SEEKINK could not have, and the template itself
+        $save(['XX' => '2105503882906267648'])->assertUnprocessable()->assertJsonValidationErrors('isolation_templates');
+        $save(['CI' => 'not a template'])->assertUnprocessable()->assertJsonValidationErrors('isolation_templates.CI');
+        $save(['CI' => self::ICU_TEMPLATE])->assertUnprocessable()->assertJsonValidationErrors('isolation_templates.CI');
+        $this->assertSame(0, EkadTemplate::count());
+
+        // None set: the screens keep this template for every precaution
+        $save(['CI' => ''])->assertOk()->assertJsonPath('template.isolation_templates', null);
+        $this->assertSame(self::ICU_TEMPLATE, EkadTemplate::forIsolation(self::ICU_TEMPLATE, 'CI'));
+    }
+
     public function test_the_page_lists_the_templates_and_the_sync_preview_follows_their_fields(): void
     {
         $this->saveIcuFields()->assertOk();
@@ -183,6 +254,8 @@ class EkadTemplateFieldsTest extends TestCase
             ->assertSee('Template Fields');
         $this->assertSame([self::ICU_TEMPLATE], $page->viewData('templates')->pluck('template_id')->all());
         $this->assertContains(['source' => 'isolation', 'label' => 'Isolation'], $page->viewData('templateSources')->all());
+        // Each precaution Patient Details offers can have an isolation template (ISO is C+'s yes/no Isolation)
+        $this->assertSame(['CI', 'ISO'], $page->viewData('isolationTypes')->pluck('code')->all());
 
         $row = $this->actingAs($this->user)->getJson(route('ekad.sync-preview'))->assertOk()->json('data.0');
         $this->assertSame(['bed', 'name', 'iso', 'allergy', 'unit', 'nurse_on_duty', 'title'], array_keys($row['payload']));

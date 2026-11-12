@@ -8,6 +8,11 @@ use Illuminate\Database\Eloquent\Model;
  * A SEEKINK template's fields, as edited on /ekad: each field the template
  * was designed with (its name there, e.g. "bed no") and what SmartWard puts
  * in it. Templates without a row get DEFAULT_FIELDS.
+ *
+ * Its isolation templates are the SEEKINK templates its screens are painted
+ * with instead for a patient with an isolation precaution, each one this
+ * template's layout with that precaution's picture: Isolation Types code =>
+ * template ID. They are sent this template's fields.
  */
 class EkadTemplate extends Model
 {
@@ -15,10 +20,12 @@ class EkadTemplate extends Model
         'template_id',
         'name',
         'fields',
+        'isolation_templates',
     ];
 
     protected $casts = [
         'fields' => 'array',
+        'isolation_templates' => 'array',
     ];
 
     /**
@@ -63,5 +70,24 @@ class EkadTemplate extends Model
         $fields = $templateId ? static::where('template_id', $templateId)->first()?->fields : null;
 
         return $fields ?: self::DEFAULT_FIELDS;
+    }
+
+    /**
+     * The template a screen on $templateId is painted with for a patient with
+     * this isolation precaution (an Isolation Types code): its isolation
+     * template for that precaution, else $templateId itself
+     */
+    public static function forIsolation(string $templateId, ?string $isolationCode): string
+    {
+        if ($isolationCode === null || in_array(strtolower(trim($isolationCode)), ['', 'none'], true)) {
+            return $templateId;
+        }
+
+        $isolationTemplates = array_change_key_case(
+            static::where('template_id', $templateId)->first()?->isolation_templates ?? [],
+            CASE_UPPER
+        );
+
+        return $isolationTemplates[strtoupper(trim($isolationCode))] ?? $templateId;
     }
 }

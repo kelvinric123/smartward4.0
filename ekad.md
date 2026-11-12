@@ -27,6 +27,8 @@ The system must generate the following JSON structure for the SEEKINK API.
 
 `id` is the SEEKINK template the screen is painted with: the screen's own **Template ID** (Bed Mapping on `/ekad`, for screens of another size or another ward's layout), else the Template ID under **Configuration & Login**.
 
+For a patient with an isolation precaution (Patient Details → Isolation Precautions, or as ADT or the C+ sync set it), `id` is that template's **isolation template** for the precaution when one is set under **Templates** (Edit Fields → Isolation templates, `ekad_templates.isolation_templates`). It's the same layout with the precaution's picture built in, e.g. one template for airborne and one for contact. SEEKINK cannot switch a picture by a field's value, so the template is switched instead. The `data` is unchanged: the screen's template's fields. An empty bed, or a precaution without an isolation template, uses the screen's own template.
+
 `data` holds the template's fields. The ones above are the **default fields**, which every template gets until its fields are edited under **Templates** on `/ekad` (`ekad_templates`, `App\Models\EkadTemplate`). There, each field is the name it has in the SEEKINK template, plus what SmartWard puts in it:
 - The patient's data: bed number, MRN, patient name (masked as configured), diet, doctor, nurse on shift, anaesthetist, isolation, allergies (still active), ward, RN, gender, age, admission date.
 - A fixed text.
@@ -103,3 +105,10 @@ Watch for care provider assignments/updates to detect anaesthetist changes.
 *   **Explicit Field Watching**: Only trigger on fields that actually display on the Bed Box
 *   **No Race Conditions**: Database changes happen first, then observers trigger EKAD
 
+## 5. Screen Status (`/ekad`)
+The **Screen Status** panel on `/ekad` reads SEEKINK's own data, with the same login and token as the pushes (`App\Services\EkadScreenStatusService`, `GET /ekad/screen-status`), and matches it to the Bed Mapping by MAC:
+*   **Screens** (`/device/label/list`): online/offline, battery (red at 20% or below, as in the SEEKINK panel), Bluetooth signal in dBm, last report, model and firmware.
+*   **Paint jobs** (`/device/task/list`, newest first): each screen's last paint from the latest 500 jobs, as Publishing / Painted / Failed with SEEKINK's step code (`busi_task_code`, e.g. 113 Executed successfully, 110 Bluetooth connection timed out). **History** reads one screen's last 10 jobs (`labelMac`).
+*   A mapping whose MAC SEEKINK doesn't have shows as **Not in SEEKINK**, and SEEKINK screens no bed is mapped to are listed below the table.
+
+A push's API Response Log only records that SEEKINK accepted the job. The paint job shows whether the screen actually changed.

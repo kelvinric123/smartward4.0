@@ -24,6 +24,7 @@ use App\Http\Controllers\InfusionIntegrationController;
 use App\Http\Controllers\AdtConfigurationController;
 use App\Http\Controllers\EcgController;
 use App\Http\Controllers\EkadController;
+use App\Http\Controllers\EkadScreenStatusController;
 use App\Http\Controllers\ShiftSettingController;
 use App\Http\Controllers\DietTypeController;
 use App\Http\Controllers\IsolationTypeController;
@@ -387,6 +388,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/ekad/sync-preview', [EkadController::class, 'syncPreview'])->name('ekad.sync-preview');
     Route::post('/ekad/sync-selected', [EkadController::class, 'syncSelected'])->name('ekad.sync-selected');
     Route::put('/ekad/templates/{templateId}', [EkadController::class, 'saveTemplate'])->where('templateId', '[A-Za-z0-9_-]{1,64}')->name('ekad.templates.save');
+    Route::get('/ekad/screen-status', [EkadScreenStatusController::class, 'index'])->name('ekad.screen-status');
+    Route::get('/ekad/screen-status/{mac}/paints', [EkadScreenStatusController::class, 'paints'])->where('mac', '[A-Fa-f0-9:-]{12,17}')->name('ekad.screen-status.paints');
 
 
     // ADT Integration Routes
