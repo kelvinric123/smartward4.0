@@ -16,6 +16,7 @@ test-flow interpreter in gateway/cm100/interpreter.py.
 import json
 import os
 import re
+import signal
 import sys
 import threading
 import time
@@ -475,7 +476,7 @@ class GatewayManager(LoggerMixin):
                 self.listener.maybe_report_queue_state()
                 time.sleep(1)
         except KeyboardInterrupt:
-            self.log("Shutdown requested by user")
+            self.log("Shutdown requested (signal)")
         finally:
             self.running = False
             self.listener.stop()
@@ -490,9 +491,17 @@ class GatewayManager(LoggerMixin):
             self.log("Manager stopped")
 
 
+def _graceful_stop(signum, frame):
+    raise KeyboardInterrupt
+
+
 def main():
     settings = load_settings()
     manager = GatewayManager(settings)
+    # systemd stops/restarts the service (and reboots the Pi) with SIGTERM, which
+    # by default kills Python without running `finally` - open profiles would be
+    # lost. Route it through the same graceful path as Ctrl+C so they are flushed.
+    signal.signal(signal.SIGTERM, _graceful_stop)
     manager.run()
 
 
