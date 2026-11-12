@@ -1,0 +1,21 @@
+{
+    "label": "PHMK (formerly PHAK) - hospital's revised Bed Census list, received 2026-11-12",
+    "notes": "The list SmartWard should follow. It gives bed counts only, no bed numbers or statuses. 'match' lists SmartWard ward codes or names that each ward may go by (the C+ sync names, then the DMS bed board codes).",
+    "totals": {
+        "Licensed": 229,
+        "LR/Nursery": 31
+    },
+    "wards": [
+        {"code": "ICU", "group": "Licensed", "total": 18, "match": ["INTENSIVE CARE UNIT (ICU)", "INTENSIVE CARE UNIT"]},
+        {"code": "MW", "group": "Licensed", "total": 41, "match": ["MEDICAL WARD", "MWD"]},
+        {"code": "C4", "group": "Licensed", "total": 26, "match": ["WARD C4", "WC4"]},
+        {"code": "C5", "group": "Licensed", "total": 32, "match": ["WARD C5", "WC5"]},
+        {"code": "C6", "group": "Licensed", "total": 32, "match": ["WARD C6", "WC6"]},
+        {"code": "O&G", "group": "Licensed", "total": 29, "match": ["WARD (OBSTETRIC & GYNAECOLOGY)", "OBSTETRIC & GYNAECOLOGY", "WOG"]},
+        {"code": "SW2", "group": "Licensed", "total": 51, "match": ["SURGICAL WARD 2", "WSUR2"]},
+        {"code": "Labour", "group": "LR/Nursery", "total": 5, "match": ["LABOUR ROOM", "LABOUR WARD", "LR"]},
+        {"code": "Nursery", "group": "LR/Nursery", "total": 20, "match": ["NURSERY WARD", "NURSERY"]},
+        {"code": "SCN", "group": "LR/Nursery", "total": 4, "match": ["SPECIAL CARE NURSERY", "SPECIAL CARE NURSERY (SCN)"]},
+        {"code": "NICU", "group": "LR/Nursery", "total": 2, "match": ["NEONATAL INTENSIVE CARE UNIT", "NEONATAL INTENSIVE CARE UNIT (NICU)"]}
+    ]
+}

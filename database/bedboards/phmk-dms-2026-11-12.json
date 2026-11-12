@@ -1,0 +1,176 @@
+{
+    "label": "PHMK (formerly PHAK) - DMS bed board (dms.ihhmy.com/app/bed-board), printed 12/11/2026 13:52",
+    "notes": "Typed from the printout. Each ward's list scrolls on screen, so the print shows only some rows of the longer wards; 'total' is the ward's own Total Bed figure and is complete. Statuses: M/F occupied (patient sex), A available, AB available but booked, D discharged, DB discharged but booked, OS out of service. 'match' lists SmartWard ward codes or names that this ward may go by.",
+    "totals": {
+        "Licensed": 250,
+        "Brachy & DC": 18
+    },
+    "wards": [
+        {
+            "code": "COEBRAC",
+            "group": "Brachy & DC",
+            "match": ["BRACHYTHERAPY"],
+            "total": 2,
+            "counts": {"A": 2, "AB": 0, "D": 0, "DB": 0, "OS": 0, "M": 0, "F": 0},
+            "beds": {
+                "B321-A": "A", "B321-B": "A"
+            }
+        },
+        {
+            "code": "ICU",
+            "group": "Licensed",
+            "match": ["INTENSIVE CARE UNIT (ICU)", "INTENSIVE CARE UNIT"],
+            "total": 18,
+            "counts": {"A": 1, "AB": 0, "D": 0, "DB": 0, "OS": 0, "M": 13, "F": 4},
+            "beds": {
+                "ICU-A01": "M", "ICU-A02": "M", "ICU-A03": "M", "ICU-A03A": "M", "ICU-A05": "A",
+                "ICU-A06": "M", "ICU-A07": "M", "ICU-A08": "F", "ICU-A09": "M", "ICU-A10": "M",
+                "ICU-A11": "M", "ICU-A12": "F", "ICU-A13": "M", "ICU-A13A": "F", "ICU-A15": "M",
+                "ICU-A16": "F", "ICU-A17": "M", "ICU-A18": "M"
+            }
+        },
+        {
+            "code": "MWD",
+            "group": "Licensed",
+            "match": ["MEDICAL WARD"],
+            "total": 41,
+            "counts": {"A": 0, "AB": 1, "D": 0, "DB": 0, "OS": 3, "M": 21, "F": 16},
+            "beds": {
+                "B421-A": "M", "B421-B": "AB", "B421-C": "M", "B421-D": "M",
+                "B422-A": "F", "B422-B": "F", "B422-C": "F", "B422-D": "F",
+                "B423-A": "M", "B425-A": "F", "B426-A": "M", "B427-A": "F", "B428-A": "M",
+                "B429-A": "OS", "B430-A": "OS",
+                "B431-A": "F", "B431-B": "F", "B432-A": "F", "B432-B": "F",
+                "B433-A": "M", "B433-B": "M", "B435-A": "OS", "B435-B": "F",
+                "B436-A": "F", "B436-B": "F", "B437-A": "M", "B437-B": "M",
+                "B438-A": "M", "B438-B": "M",
+                "B439-A": "M", "B439-B": "M", "B439-C": "M", "B439-D": "M",
+                "B440-A": "F", "B440-B": "F", "B440-C": "M", "B440-D": "M",
+                "B441-A": "M", "B441-B": "F", "B441-C": "M"
+            }
+        },
+        {
+            "code": "WC4",
+            "group": "Licensed",
+            "match": ["WARD C4"],
+            "total": 26,
+            "counts": {"A": 0, "AB": 0, "D": 1, "DB": 0, "OS": 4, "M": 14, "F": 7},
+            "beds": {
+                "C401-A": "M", "C402-A": "M", "C403-A": "M", "C403-B": "OS",
+                "C404-A": "M", "C404-B": "M", "C405-A": "F", "C405-B": "F",
+                "C406-A": "M", "C406-B": "M", "C407-A": "M", "C407-B": "M",
+                "C408-A": "M", "C408-B": "M", "C409-A": "OS", "C409-B": "OS",
+                "C410-A": "F", "C410-B": "D", "C411-A": "OS", "C412-A": "F",
+                "C413-A": "M", "C414-A": "F", "C415-A": "M", "C415-B": "M", "C416-A": "F"
+            }
+        },
+        {
+            "code": "WC5",
+            "group": "Licensed",
+            "match": ["WARD C5"],
+            "total": 32,
+            "counts": {"A": 0, "AB": 1, "D": 0, "DB": 1, "OS": 1, "M": 15, "F": 14},
+            "beds": {
+                "C501-A": "M", "C501-B": "M", "C502-A": "M", "C502-B": "OS",
+                "C503-A": "F", "C503-B": "F", "C504-A": "M", "C504-B": "M",
+                "C505-A": "F", "C505-B": "F", "C506-A": "M", "C507-A": "M",
+                "C508-A": "F", "C509-A": "F", "C510-A": "AB", "C511-A": "F",
+                "C512-A": "F", "C513-A": "F", "C513-B": "F", "C514-A": "M", "C514-B": "M",
+                "C515-A": "F", "C515-B": "F", "C516-A": "M", "C516-B": "DB",
+                "C517-A": "M", "C517-B": "M", "C518-A": "F", "C518-B": "F",
+                "C519-A": "M", "C519-B": "M"
+            }
+        },
+        {
+            "code": "WC6",
+            "group": "Licensed",
+            "match": ["WARD C6"],
+            "total": 32,
+            "counts": {"A": 1, "AB": 0, "D": 0, "DB": 0, "OS": 8, "M": 12, "F": 11},
+            "beds": {
+                "601-A": "OS", "601-B": "OS", "602-A": "OS", "602-B": "OS",
+                "603-A": "F", "603-B": "M", "604-A": "F", "604-B": "F",
+                "605-A": "F", "605-B": "M", "606-A": "M", "607-A": "F",
+                "608-A": "M", "609-A": "F", "610-A": "F", "611-A": "M", "612-A": "F",
+                "613-A": "A", "613-B": "M", "614-A": "M", "614-B": "OS",
+                "615-A": "M", "615-B": "F", "616-A": "M", "616-B": "F",
+                "617-A": "M", "617-B": "M", "618-A": "M", "618-B": "OS",
+                "619-A": "F", "619-B": "OS"
+            }
+        },
+        {
+            "code": "WDB4",
+            "group": "Brachy & DC",
+            "match": ["WARD B4"],
+            "total": 16,
+            "counts": {"A": 0, "AB": 0, "D": 0, "DB": 0, "OS": 16, "M": 0, "F": 0},
+            "beds": {
+                "B401-A": "OS", "B401-B": "OS", "B401-C": "OS", "B401-D": "OS",
+                "B402-A": "OS", "B402-B": "OS", "B402-C": "OS", "B402-D": "OS",
+                "B405-A": "OS", "B405-B": "OS", "B407-A": "OS", "B408-A": "OS",
+                "B409-A": "OS", "B409-B": "OS", "B410-A": "OS", "B410-B": "OS"
+            }
+        },
+        {
+            "code": "WHDU",
+            "group": "Licensed",
+            "match": ["HIGH DEPENDENCY UNIT", "HDU"],
+            "total": 6,
+            "counts": {"A": 0, "AB": 0, "D": 0, "DB": 0, "OS": 6, "M": 0, "F": 0},
+            "beds": {
+                "HDU-2": "OS", "HDU-3A": "OS", "HDU-5": "OS", "HDU-6": "OS", "HDU-7": "OS", "HDU-8": "OS"
+            }
+        },
+        {
+            "code": "WOG",
+            "group": "Licensed",
+            "match": ["WARD (OBSTETRIC & GYNAECOLOGY)", "OBSTETRIC & GYNAECOLOGY"],
+            "total": 28,
+            "counts": {"A": 3, "AB": 2, "D": 0, "DB": 0, "OS": 5, "M": 2, "F": 16},
+            "beds": {
+                "B305-A": "F", "B305-B": "F", "B306-A": "OS", "B307-A": "OS", "B308-A": "OS",
+                "B309-A": "F", "B309-B": "A", "B310-A": "F", "B310-B": "OS",
+                "B311-A": "AB", "B311-B": "A", "B313-A": "F", "B313-B": "F",
+                "B314-A": "F", "B315-A": "OS", "B316-A": "F",
+                "B318-A": "M", "B318-B": "M", "B318-C": "F", "B318-D": "F",
+                "B319-A": "F", "B319-B": "F", "B319-C": "F", "B319-D": "F",
+                "B320-A": "F", "B320-B": "F", "B320-C": "AB"
+            }
+        },
+        {
+            "code": "WSUR1",
+            "group": "Licensed",
+            "match": ["SURGICAL WARD 1"],
+            "total": 16,
+            "counts": {"A": 7, "AB": 2, "D": 0, "DB": 0, "OS": 0, "M": 3, "F": 4},
+            "beds": {
+                "SUR1-A": "AB", "SUR1-B": "F", "SUR1-C": "M", "SUR1-D": "F",
+                "SUR1-E": "A", "SUR1-F": "A", "SUR1-G": "A", "SUR1-H": "M",
+                "SUR1-I": "M", "SUR1-J": "A", "SUR1-K": "A", "SUR1-L": "AB",
+                "SUR1-M": "F", "SUR1-N": "F", "SUR1-O": "A"
+            }
+        },
+        {
+            "code": "WSUR2",
+            "group": "Licensed",
+            "match": ["SURGICAL WARD 2"],
+            "total": 51,
+            "counts": {"A": 0, "AB": 0, "D": 0, "DB": 0, "OS": 4, "M": 23, "F": 24},
+            "beds": {
+                "B322-A": "F", "B322-B": "F", "B322-C": "F", "B322-D": "F",
+                "B323-A": "M", "B323-B": "M", "B323-C": "M", "B323-D": "M",
+                "B324-A": "M", "B324-B": "M", "B324-C": "M", "B324-D": "M",
+                "B325-A": "F", "B326-A": "OS", "B327-A": "M", "B328-A": "M", "B329-A": "M",
+                "B330-A": "M", "B330-B": "M", "B330-C": "M", "B330-D": "M",
+                "B331-A": "F", "B331-B": "F", "B331-C": "OS", "B331-D": "M",
+                "B332-A": "F", "B332-B": "F", "B333-A": "F", "B333-B": "F",
+                "B334-A": "F", "B334-B": "F", "B335-A": "F", "B335-B": "OS",
+                "B336-A": "OS", "B336-B": "M",
+                "B338-A": "F", "B338-B": "F", "B338-C": "F", "B338-D": "F",
+                "B339-A": "M", "B339-B": "M", "B339-C": "F", "B339-D": "F",
+                "B340-A": "M", "B340-B": "M", "B340-C": "M", "B340-D": "M",
+                "B341-A": "F"
+            }
+        }
+    ]
+}
