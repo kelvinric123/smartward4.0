@@ -100,8 +100,57 @@ class DemoPatientSwapTest extends TestCase
             'patients' => DB::table('patients')->orderBy('id')->get()->map(fn ($r) => (array) $r)->all(),
             'beds' => DB::table('beds')->orderBy('id')->get(['id', 'status', 'patient_id', 'is_active'])->map(fn ($r) => (array) $r)->all(),
             'providers' => DB::table('patient_care_providers')->orderBy('id')->get(['id', 'patient_id', 'is_active'])->map(fn ($r) => (array) $r)->all(),
-            'logs' => DB::table('admission_logs')->orderBy('id')->pluck('id')->all(),
+            'logs' => DB::table('admission_logs')->orderBy('id')->get()->map(fn ($r) => (array) $r)->all(),
+            'vitals' => DB::table('vital_signs')->orderBy('id')->pluck('id')->all(),
         ];
+    }
+
+    public function test_history_gives_realistic_stays_and_undo_takes_it_out_before_the_swap(): void
+    {
+        $original = $this->state();
+        Artisan::call('demo:swap', ['--force' => true]);
+        $swapped = $this->state();
+        $swapDischarges = AdmissionLog::where('source', 'demo-swap')->where('action', 'discharge')->pluck('id');
+        $this->assertCount(2, $swapDischarges);
+
+        Artisan::call('demo:history', ['--dry-run' => true, '--days' => 30]);
+        $this->assertStringContainsString('Dry run: nothing changed.', Artisan::output());
+        $this->assertSame($swapped, $this->state());
+
+        Artisan::call('demo:history', ['--force' => true, '--days' => 30, '--seed' => 7]);
+        $this->assertStringContainsString('Made ', Artisan::output());
+
+        // The swap's discharges of the real patients are set aside: today's flow is the demo's
+        $this->assertSame(0, AdmissionLog::whereIn('id', $swapDischarges)->count());
+
+        // Made-up stays: discharged demo patients with an admit and a discharge entry each, a few days long
+        $past = Patient::where('mrn', 'like', 'DEMO%')->where('status', Patient::STATUS_DISCHARGED)->get();
+        $this->assertGreaterThan(0, $past->count());
+        foreach ($past as $p) {
+            $this->assertSame(['admit', 'discharge'], AdmissionLog::where('patient_id', $p->id)->orderBy('action')->pluck('action')->all());
+            $this->assertTrue($p->discharged_at->gt($p->admitted_at));
+            $this->assertTrue($p->discharged_at->lte(now()));
+        }
+        $average = $past->avg(fn ($p) => $p->admitted_at->diffInMinutes($p->discharged_at) / 1440);
+        $this->assertGreaterThan(1, $average);
+        $this->assertLessThan(8, $average);
+
+        // The demo inpatient came in some time ago, and its admit entry says so
+        $inA1 = Patient::where('ward_id', $this->open->id)->where('bed_number', 'A1')->where('is_active', true)->first();
+        $this->assertTrue($inA1->admitted_at->lt(now()));
+        $this->assertEquals($inA1->admitted_at, AdmissionLog::where('patient_id', $inA1->id)->where('action', 'admit')->first()->admitted_at);
+
+        // The swap can't be undone under the history
+        Artisan::call('demo:undo', ['record' => $this->records()[0], '--force' => true]);
+        $this->assertStringContainsString('Undo the demo history first', Artisan::output());
+
+        $history = glob($this->storage . '/app/demo/history-*.json')[0];
+        Artisan::call('demo:undo', ['record' => $history, '--force' => true]);
+        $this->assertStringContainsString('Removed ', Artisan::output());
+        $this->assertSame($swapped, $this->state());
+
+        Artisan::call('demo:undo', ['record' => $this->records()[0], '--force' => true]);
+        $this->assertSame($original, $this->state());
     }
 
     private function records(): array
