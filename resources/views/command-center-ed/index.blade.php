@@ -28,9 +28,8 @@
         }
         .ccx.is-tv.cced .ccx-kpis { grid-template-columns: repeat(var(--cced-cards, 4), minmax(0, 1fr)); }
         .ccx.is-tv.cced .ccx-kpis.is-odd > article:last-of-type { grid-column: auto; }
-        /* Made-up figures say so on their card, or beside their row */
+        /* Settings' data mode says when the figures are made up */
         .cced .ccx-chip.is-demo { color: var(--series-2); border-color: currentColor; background: none; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; padding: .2em .65em; }
-        .cced .ccx-chip.is-demo.is-tag { margin-left: .5em; padding: 0 .45em; font-size: .7em; vertical-align: .1em; }
         /* ED flow today's four rows: two by two in TV mode, where the rows go across */
         .ccx.is-tv.cced .ccx-rows.is-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     </style>
@@ -175,7 +174,7 @@
                 </div>
                 <dl class="ccx-rows is-four">
                     <div>
-                        <dt>Proceed for admission<span class="ccx-chip is-demo is-tag" x-show="pfa.demo" title="Made-up figures: Settings, Data mode">Demo</span></dt>
+                        <dt>Proceed for admission</dt>
                         <dd :title="pfa.waiting ? `Longest wait for a bed ${hm(pfa.waiting_longest)}` : ''">
                             <span x-text="fmt(pfa.today)"></span><small x-text="pfa.waiting ? `${pfa.waiting} waiting for a bed` : (pfa.today ? 'none waiting' : '')"></small>
                         </dd>
@@ -197,8 +196,7 @@
                 <article class="ccx-card" :class="{ 'is-changed': changed.ambulance }">
                     <header>
                         <h2>Ambulance cases today</h2>
-                        <span class="ccx-chip is-demo" x-show="amb.demo" title="Made-up figures: Settings, Data mode">Demo</span>
-                        <span class="ccx-muted" x-show="!amb.demo">Since midnight</span>
+                        <span class="ccx-muted">Since midnight</span>
                     </header>
                     <div class="ccx-pair">
                         <div>
@@ -522,7 +520,7 @@
             Proceed for admission counts today's decisions to admit, and those still in the ED waiting for a ward bed.
             Doctors are each patient's attending doctor. Ambulance cases count the ambulance calls since midnight; the response time
             runs from the call to the crew reaching the patient, which makes the case attended. With Settings' data mode on Demo,
-            that card and Proceed for admission show made-up figures instead, marked Demo. No patient is named on this screen.
+            that card and Proceed for admission show made-up figures instead. No patient is named on this screen.
         </p>
         </div>
 
@@ -1045,7 +1043,7 @@
                 },
                 get dataModeNote() {
                     return this.cfg.data.demo
-                        ? 'Demo: made-up figures, each marked Demo on the board'
+                        ? 'Demo: made-up figures for Ambulance cases today and Proceed for admission'
                         : 'Live: the ambulance calls and decisions to admit recorded today';
                 },
 
