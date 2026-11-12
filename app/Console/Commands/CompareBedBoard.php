@@ -26,7 +26,7 @@ class CompareBedBoard extends Command
                             {--hospital= : Only this hospital\'s wards (id or name)}
                             {--map=* : Pin a board ward to a SmartWard ward, as BOARD=WARD_CODE_OR_NAME (repeatable)}
                             {--status : Also list beds whose status differs (the board is a snapshot, so some drift is normal)}
-                            {--follow : Make the list the master: switch its wards on and every other ward in scope off (asks first)}
+                            {--follow : Make the list the master: switch its wards on and every other ward in scope off, and make the bed changes it names (asks first)}
                             {--keep=* : With --follow, leave this ward as it is (ward code or name, repeatable; "ED" keeps every Emergency ward)}
                             {--dry-run : With --follow, show the changes and stop}
                             {--force : With --follow, apply without asking}';
@@ -94,8 +94,9 @@ class CompareBedBoard extends Command
      * Switches the list's wards on and every other ward in scope off. A ward's beds
      * follow it (Bed::followWard), so the beds of a ward switched off drop out of
      * every count, and come back if it is switched on again. Patients are left as
-     * they are. Bed numbers are not touched: the list's bed counts that still differ
-     * are in the table above.
+     * they are. A list ward can also name beds to add ("beds_add"), beds to switch
+     * off ("beds_off"; never one with a patient or a booking) and, for a ward
+     * SmartWard doesn't have, how to create it ("create": ward_code, ward_name).
      *
      * Before changing anything it saves the wards' and their beds' state to an undo
      * record in storage/app/bedboard, which bedboard:undo puts back.
@@ -129,12 +130,22 @@ class CompareBedBoard extends Command
             $this->line('  Kept as they are (--keep): ' . $keptWards->map(fn (Ward $w) => "{$w->ward_code} {$w->ward_name}")->implode(', '));
         }
 
-        $unmatched = collect($boardWards)->filter(fn ($w) => $matches[$w['code']] === null)->pluck('code');
+        $hospital ??= Hospital::first();
+        $plan = $this->planBeds($boardWards, $matches, $hospital);
+        if ($plan === null) {
+            return self::FAILURE;
+        }
+
+        $unmatched = collect($boardWards)->filter(fn ($w) => $matches[$w['code']] === null && empty($w['create']))->pluck('code');
         if ($unmatched->isNotEmpty()) {
             $this->line('  Not in SmartWard, so nothing to switch on (needs the ward and its bed numbers): ' . $unmatched->implode(', '));
         }
+        foreach ($plan['notes'] as $note) {
+            $this->warn("  {$note}");
+        }
 
-        if ($switchOn->isEmpty() && $switchOff->isEmpty()) {
+        $bedChanges = count($plan['add']) + count($plan['on']) + count($plan['off']);
+        if ($switchOn->isEmpty() && $switchOff->isEmpty() && $plan['newWards'] === [] && $bedChanges === 0) {
             $this->line('  SmartWard\'s wards already follow the list.');
 
             return self::SUCCESS;
@@ -147,14 +158,29 @@ class CompareBedBoard extends Command
             ->groupBy('ward_id')
             ->pluck('n', 'ward_id');
 
-        $this->table(['Change', 'Ward code', 'Name', 'Active beds', 'Patients in beds'], $switchOn->map(fn (Ward $w) => [
+        $wardRows = $switchOn->map(fn (Ward $w) => [
             '<fg=green>switch on</>', $w->ward_code, $w->ward_name, Bed::where('ward_id', $w->id)->where('deactivated_with_ward', true)->count() . ' come back', '-',
         ])->concat($switchOff->map(fn (Ward $w) => [
             '<fg=red>switch off</>', $w->ward_code, $w->ward_name, Bed::where('ward_id', $w->id)->where('is_active', true)->count(), $inBed[$w->id] ?? 0,
-        ]))->values()->all());
+        ]))->concat(collect($plan['newWards'])->map(fn ($n) => [
+            '<fg=green>create</>', $n['ward_code'], $n['ward_name'], count($n['beds']) . ' new', '-',
+        ]))->values()->all();
+        if ($wardRows !== []) {
+            $this->table(['Change', 'Ward code', 'Name', 'Active beds', 'Patients in beds'], $wardRows);
+        }
         if ($inBed->sum() > 0) {
             $this->warn("  {$inBed->sum()} patient(s) stay recorded in the wards switched off, but drop off the dashboards and the Command Center while those wards are off.");
         }
+
+        $bedRows = collect($plan['add'])->map(fn ($a) => [$a['ward']->ward_code, $a['number'], '<fg=green>add</> (new bed, available)'])
+            ->concat(collect($plan['on'])->map(fn ($o) => [$o['ward']->ward_code, $o['bed']->bed_number, '<fg=green>switch on</>']))
+            ->concat(collect($plan['off'])->map(fn ($o) => [$o['ward']->ward_code, $o['bed']->bed_number, '<fg=red>switch off</>']))
+            ->concat(collect($plan['newWards'])->flatMap(fn ($n) => array_map(fn ($b) => [$n['ward_code'], $b, '<fg=green>add</> (new ward)'], $n['beds'])))
+            ->values()->all();
+        if ($bedRows !== []) {
+            $this->table(['Ward', 'Bed', 'Change'], $bedRows);
+        }
+        $this->projection($boardWards, $matches, $switchOn, $plan);
 
         if ($this->option('dry-run')) {
             $this->line('Dry run: nothing changed.');
@@ -167,11 +193,12 @@ class CompareBedBoard extends Command
             return self::SUCCESS;
         }
 
-        $record = $this->saveUndoRecord($board, $hospital, $switchOn->concat($switchOff));
+        $record = $this->saveUndoRecord($board, $hospital, $switchOn->concat($switchOff)
+            ->concat(collect($plan['on'])->pluck('ward'))->concat(collect($plan['off'])->pluck('ward')));
 
         $bedsOff = 0;
         $bedsOn = 0;
-        DB::transaction(function () use ($switchOn, $switchOff, &$bedsOff, &$bedsOn) {
+        DB::transaction(function () use ($switchOn, $switchOff, $plan, $hospital, $record, &$bedsOff, &$bedsOn) {
             foreach ($switchOff as $ward) {
                 $before = Bed::where('ward_id', $ward->id)->where('is_active', true)->count();
                 $ward->update(['is_active' => false]);
@@ -184,14 +211,194 @@ class CompareBedBoard extends Command
                 Bed::followWard($ward);
                 $bedsOn += Bed::where('ward_id', $ward->id)->where('is_active', true)->count() - $before;
             }
+
+            // Beds switched by hand: they no longer follow their ward's own switch
+            $now = now();
+            foreach ($plan['off'] as $off) {
+                DB::table('beds')->where('id', $off['bed']->id)->update(['is_active' => false, 'deactivated_with_ward' => false, 'updated_at' => $now]);
+            }
+            foreach ($plan['on'] as $on) {
+                DB::table('beds')->where('id', $on['bed']->id)->update(['is_active' => true, 'deactivated_with_ward' => false, 'updated_at' => $now]);
+            }
+
+            $created = ['wards' => [], 'beds' => []];
+            foreach ($plan['add'] as $add) {
+                $created['beds'][] = $this->createBed($add['ward'], $add['number']);
+            }
+            foreach ($plan['newWards'] as $new) {
+                $ward = Ward::create([
+                    'hospital_id' => $hospital->id,
+                    'ward_code' => $new['ward_code'],
+                    'ward_name' => $new['ward_name'],
+                    'capacity' => count($new['beds']),
+                    'description' => $new['description'] ?: 'Added by bedboard:compare --follow from ' . basename((string) $this->argument('file')),
+                    'is_active' => true,
+                ]);
+                $created['wards'][] = ['id' => $ward->id, 'ward_code' => $ward->ward_code, 'ward_name' => $ward->ward_name];
+                foreach ($new['beds'] as $number) {
+                    $created['beds'][] = $this->createBed($ward, $number);
+                }
+            }
+
+            // Inside the transaction: if the record can't be written, nothing is changed
+            $this->recordCreated($record, $created);
         });
 
         $this->info("Switched off {$switchOff->count()} ward(s) and {$bedsOff} bed(s) with them; switched on {$switchOn->count()} ward(s) and {$bedsOn} bed(s).");
+        if ($bedChanges > 0 || $plan['newWards'] !== []) {
+            $newBeds = count($plan['add']) + collect($plan['newWards'])->sum(fn ($n) => count($n['beds']));
+            $this->info(sprintf('Beds: %d added, %d switched on, %d switched off; %d new ward(s).', $newBeds, count($plan['on']), count($plan['off']), count($plan['newWards'])));
+        }
         $this->line('Undo record: ' . $this->relative($record));
         $this->line('To put every ward and bed back as it was: php artisan bedboard:undo ' . $this->relative($record) . ' --dry-run, then without --dry-run.');
         $this->line('Switching one ward on again on the Wards page also brings back the beds that went off with it.');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The bed changes a list asks for: per ward, "beds_add" beds made (or switched on
+     * if there but off) and "beds_off" beds switched off, except one with a patient
+     * or a booking in it; a ward SmartWard doesn't have is made from its "create".
+     *
+     * @return array{newWards: list<array>, add: list<array>, on: list<array>, off: list<array>, notes: list<string>}|null
+     */
+    private function planBeds(array $boardWards, array $matches, ?Hospital $hospital): ?array
+    {
+        $plan = ['newWards' => [], 'add' => [], 'on' => [], 'off' => [], 'notes' => []];
+
+        foreach ($boardWards as $boardWard) {
+            $code = $boardWard['code'];
+            $ward = $matches[$code];
+            $add = $boardWard['beds_add'];
+
+            if ($ward === null) {
+                if (empty($boardWard['create'])) {
+                    continue;
+                }
+                $wardCode = trim((string) ($boardWard['create']['ward_code'] ?? ''));
+                $wardName = trim((string) ($boardWard['create']['ward_name'] ?? ''));
+                if ($wardCode === '' || $wardName === '' || $add === []) {
+                    $this->error("{$code}: \"create\" needs a ward_code and a ward_name, and \"beds_add\" its beds.");
+
+                    return null;
+                }
+                if (Ward::where('ward_code', $wardCode)->exists()) {
+                    $this->error("{$code}: a ward with the code {$wardCode} already exists. Pin the list ward to it with --map {$code}={$wardCode}, or change the code in the list.");
+
+                    return null;
+                }
+                if ($hospital === null) {
+                    $this->error("{$code}: there is no hospital to create the ward in.");
+
+                    return null;
+                }
+                $plan['newWards'][] = [
+                    'board' => $code, 'ward_code' => $wardCode, 'ward_name' => $wardName,
+                    'description' => $boardWard['create']['description'] ?? null,
+                    'beds' => array_values(array_unique($add)),
+                ];
+
+                continue;
+            }
+
+            $existing = Bed::where('ward_id', $ward->id)->get()->keyBy(fn (Bed $b) => self::norm($b->bed_number));
+            foreach ($add as $number) {
+                $bed = $existing[self::norm($number)] ?? null;
+                if ($bed === null) {
+                    $plan['add'][] = ['ward' => $ward, 'number' => $number];
+                } elseif (! $bed->is_active) {
+                    $plan['on'][] = ['ward' => $ward, 'bed' => $bed];
+                }
+            }
+
+            foreach ($boardWard['beds_off'] as $number) {
+                $bed = $existing[self::norm($number)] ?? null;
+                if ($bed === null) {
+                    $plan['notes'][] = "{$code}: bed {$number}, to switch off, is not in {$ward->ward_code} {$ward->ward_name}.";
+
+                    continue;
+                }
+                if (! $bed->is_active) {
+                    continue;
+                }
+                $taken = Patient::where('ward_id', $ward->id)
+                    ->where('bed_number', $bed->bed_number)
+                    ->where('is_active', true)
+                    ->whereIn('status', [Patient::STATUS_ADMITTED, Patient::STATUS_PENDING_DISCHARGE, Patient::STATUS_PREBOOK, Patient::STATUS_PREBOOK_PENDING])
+                    ->exists();
+                if ($taken) {
+                    $plan['notes'][] = "{$code}: bed {$bed->bed_number} has a patient or a booking in it, so it stays on. Name another bed in the list, or run again once it is free.";
+
+                    continue;
+                }
+                $plan['off'][] = ['ward' => $ward, 'bed' => $bed];
+            }
+        }
+
+        return $plan;
+    }
+
+    /** SmartWard's beds in the list's wards once the changes are made, against the list. */
+    private function projection(array $boardWards, array $matches, Collection $switchOn, array $plan): void
+    {
+        $count = fn (array $items, Ward $ward) => count(array_filter($items, fn ($i) => $i['ward']->id === $ward->id));
+        $after = 0;
+        $list = 0;
+        $differ = [];
+        foreach ($boardWards as $boardWard) {
+            $ward = $matches[$boardWard['code']];
+            if ($ward) {
+                $n = Bed::where('ward_id', $ward->id)->where('is_active', true)->count()
+                    + ($switchOn->has($ward->id) ? Bed::where('ward_id', $ward->id)->where('deactivated_with_ward', true)->count() : 0)
+                    + $count($plan['add'], $ward) + $count($plan['on'], $ward) - $count($plan['off'], $ward);
+            } else {
+                $new = collect($plan['newWards'])->firstWhere('board', $boardWard['code']);
+                $n = $new ? count($new['beds']) : 0;
+            }
+            if ($n !== $boardWard['total']) {
+                $differ[] = "{$boardWard['code']} {$n} (list {$boardWard['total']})";
+            }
+            $after += $n;
+            $list += $boardWard['total'];
+        }
+
+        $this->line(sprintf('  After the changes: %d beds in the list\'s wards, the list %d%s', $after, $list,
+            $after === $list ? ' <fg=green>(match)</>' : sprintf(' <fg=red>(%+d)</>', $after - $list)));
+        if ($differ !== []) {
+            $this->line('  Still different: ' . implode(', ', $differ));
+        }
+    }
+
+    /** @return array{id: int, ward_id: int, bed_number: string} */
+    private function createBed(Ward $ward, string $number): array
+    {
+        $stem = "LIST-{$ward->ward_code}-{$number}";
+        $bedId = $stem;
+        for ($n = 2; Bed::where('bed_id', $bedId)->exists(); $n++) {
+            $bedId = "{$stem}-{$n}";
+        }
+
+        $bed = Bed::create([
+            'ward_id' => $ward->id,
+            'bed_number' => $number,
+            'bed_id' => $bedId,
+            'bed_display_name' => $number,
+            'status' => 'available',
+            'is_active' => true,
+        ]);
+
+        return ['id' => $bed->id, 'ward_id' => $ward->id, 'bed_number' => $number];
+    }
+
+    private function recordCreated(string $path, array $created): void
+    {
+        $record = json_decode((string) file_get_contents($path), true);
+        $record['created_wards'] = $created['wards'];
+        $record['created_beds'] = $created['beds'];
+        if (file_put_contents($path, json_encode($record, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)) === false) {
+            throw new \RuntimeException("Could not add the new wards and beds to the undo record {$path}, so nothing was changed.");
+        }
     }
 
     /** @return string the record's path */
@@ -261,6 +468,8 @@ class CompareBedBoard extends Command
                 return null;
             }
             $board['wards'][$i]['beds'] = (array) ($ward['beds'] ?? []);
+            $board['wards'][$i]['beds_add'] = array_values(array_map('strval', (array) ($ward['beds_add'] ?? [])));
+            $board['wards'][$i]['beds_off'] = array_values(array_map('strval', (array) ($ward['beds_off'] ?? [])));
             $board['wards'][$i]['total'] = (int) $ward['total'];
         }
 
@@ -392,7 +601,10 @@ class CompareBedBoard extends Command
             $found = count(array_filter($printed, fn ($n) => in_array(self::norm($n), $numbers, true)));
             $diff = $active->count() - $boardWard['total'];
 
-            $ok = $diff === 0 && $found === count($printed) && $inactive === 0 && $ward->is_active;
+            // Beds the list itself switches off are meant to be inactive
+            $listedOff = array_map([self::class, 'norm'], $boardWard['beds_off']);
+            $unexpectedOff = $wardBeds->where('is_active', false)->reject(fn ($b) => in_array(self::norm($b->bed_number), $listedOff, true))->count();
+            $ok = $diff === 0 && $found === count($printed) && $unexpectedOff === 0 && $ward->is_active;
             $rows[] = [
                 $code,
                 $group,

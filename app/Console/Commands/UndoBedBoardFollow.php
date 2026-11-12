@@ -3,16 +3,19 @@
 namespace App\Console\Commands;
 
 use App\Models\Bed;
+use App\Models\Patient;
 use App\Models\Ward;
 use Illuminate\Console\Command;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Puts wards and beds back the way an undo record from `bedboard:compare --follow`
  * saw them before it changed anything: each ward's is_active, and each of their
- * beds' is_active and deactivated_with_ward. Nothing else is touched (patients,
- * bed statuses, names); wards and beds deleted since are skipped, ones added since
- * are left alone.
+ * beds' is_active and deactivated_with_ward. Wards and beds --follow added are
+ * removed, or only switched off if a patient has been in them since. Nothing else
+ * is touched (patients, bed statuses, names); wards and beds deleted since are
+ * skipped, ones added by other means are left alone.
  */
 class UndoBedBoardFollow extends Command
 {
@@ -81,18 +84,30 @@ class UndoBedBoardFollow extends Command
         $bedsOn = count(array_filter($bedChanges, fn ($c) => ($c['is_active'] ?? null) === true));
         $bedsOff = count(array_filter($bedChanges, fn ($c) => ($c['is_active'] ?? null) === false));
 
+        // What --follow made goes again; anything a patient has been put in since is
+        // only switched off, so their record keeps its ward and bed
+        [$remove, $switchOff] = $this->createdToUndo($record);
+
         if ($wardRows) {
             $this->table(['Ward code', 'Name', 'Now', 'Put back to'], $wardRows);
         }
         if ($missingBeds) {
             $this->warn("  {$missingBeds} bed(s) in the record were deleted since; skipped.");
         }
-        if ($wardChanges === [] && $bedChanges === []) {
+        $createdRows = array_merge(
+            array_map(fn ($r) => [$r['kind'], $r['label'], '<fg=red>remove</> (added by --follow)'], $remove),
+            array_map(fn ($r) => [$r['kind'], $r['label'], '<fg=yellow>switch off</> (added by --follow, has had patients since)'], $switchOff),
+        );
+        if ($createdRows !== []) {
+            $this->table(['Added', 'Ward / bed', 'Undo'], $createdRows);
+        }
+        if ($wardChanges === [] && $bedChanges === [] && $createdRows === []) {
             $this->line('Every ward and bed in the record is already as it was. Nothing to undo.');
 
             return self::SUCCESS;
         }
-        $this->line(sprintf('  %d ward(s) and %d bed(s) to put back (%d bed(s) back on, %d off).', count($wardChanges), count($bedChanges), $bedsOn, $bedsOff));
+        $this->line(sprintf('  %d ward(s) and %d bed(s) to put back (%d bed(s) back on, %d off); %d added ward(s)/bed(s) to remove, %d to switch off.',
+            count($wardChanges), count($bedChanges), $bedsOn, $bedsOff, count($remove), count($switchOff)));
 
         if ($this->option('dry-run')) {
             $this->line('Dry run: nothing changed.');
@@ -107,7 +122,8 @@ class UndoBedBoardFollow extends Command
 
         // Straight to the tables: the exact saved values, without the ward's own
         // beds-follow hook second-guessing them
-        DB::transaction(function () use ($wardChanges, $bedChanges) {
+        $removed = 0;
+        DB::transaction(function () use ($wardChanges, $bedChanges, $remove, &$switchOff, &$removed) {
             $now = now();
             foreach ($wardChanges as $id => $active) {
                 DB::table('wards')->where('id', $id)->update(['is_active' => $active, 'updated_at' => $now]);
@@ -115,11 +131,74 @@ class UndoBedBoardFollow extends Command
             foreach ($bedChanges as $id => $change) {
                 DB::table('beds')->where('id', $id)->update($change + ['updated_at' => $now]);
             }
+
+            // Beds first, then wards (a ward's beds go with it: the foreign key cascades)
+            foreach (array_merge(array_filter($remove, fn ($r) => $r['kind'] === 'bed'), array_filter($remove, fn ($r) => $r['kind'] === 'ward')) as $row) {
+                try {
+                    DB::table($row['kind'] === 'bed' ? 'beds' : 'wards')->where('id', $row['id'])->delete();
+                    $removed++;
+                } catch (QueryException $e) {
+                    // Something else points at it now (a dashboard setting, a gateway): switch it off instead
+                    $this->warn("  Could not remove {$row['label']} ({$e->getCode()}), switching it off instead.");
+                    $switchOff[] = $row;
+                }
+            }
+            foreach ($switchOff as $row) {
+                if ($row['kind'] === 'bed') {
+                    DB::table('beds')->where('id', $row['id'])->update(['is_active' => false, 'deactivated_with_ward' => false, 'updated_at' => $now]);
+                } else {
+                    DB::table('wards')->where('id', $row['id'])->update(['is_active' => false, 'updated_at' => $now]);
+                    Bed::followWard(Ward::find($row['id']));
+                }
+            }
         });
 
-        $this->info(sprintf('Put back %d ward(s) and %d bed(s) as they were at %s.', count($wardChanges), count($bedChanges), $record['made_at'] ?? '?'));
+        $this->info(sprintf('Put back %d ward(s) and %d bed(s) as they were at %s; removed %d and switched off %d of the wards/beds --follow added.',
+            count($wardChanges), count($bedChanges), $record['made_at'] ?? '?', $removed, count($switchOff)));
 
         return self::SUCCESS;
+    }
+
+    /**
+     * The wards and beds --follow added, split into those to remove and those to
+     * only switch off because a patient has been in them since.
+     *
+     * @return array{0: list<array>, 1: list<array>}
+     */
+    private function createdToUndo(array $record): array
+    {
+        $remove = [];
+        $switchOff = [];
+        $newWardIds = array_column($record['created_wards'] ?? [], 'id');
+
+        foreach ($record['created_wards'] ?? [] as $was) {
+            $ward = Ward::find($was['id']);
+            if ($ward === null) {
+                continue;
+            }
+            $row = ['kind' => 'ward', 'id' => $ward->id, 'label' => "{$ward->ward_code} {$ward->ward_name}"];
+            if (! Patient::where('ward_id', $ward->id)->exists()) {
+                $remove[] = $row;
+            } elseif ($ward->is_active) {
+                $switchOff[] = $row;
+            }
+        }
+
+        foreach ($record['created_beds'] ?? [] as $was) {
+            $bed = Bed::find($was['id']);
+            // A new ward's beds go, or go off, with it
+            if ($bed === null || in_array($bed->ward_id, $newWardIds, true)) {
+                continue;
+            }
+            $row = ['kind' => 'bed', 'id' => $bed->id, 'label' => ($bed->ward?->ward_code ?? '?') . " {$bed->bed_number}"];
+            if (! Patient::where('ward_id', $bed->ward_id)->where('bed_number', $bed->bed_number)->exists()) {
+                $remove[] = $row;
+            } elseif ($bed->is_active) {
+                $switchOff[] = $row;
+            }
+        }
+
+        return [$remove, $switchOff];
     }
 
     private function listRecords(): int

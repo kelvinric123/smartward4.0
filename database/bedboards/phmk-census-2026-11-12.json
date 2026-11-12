@@ -1,6 +1,6 @@
 {
     "label": "PHMK (formerly PHAK) - hospital's revised Bed Census list, received 2026-11-12",
-    "notes": "The list SmartWard should follow. It gives bed counts only, no bed numbers or statuses. 'match' lists SmartWard ward codes or names that each ward may go by (the C+ sync names, then the DMS bed board codes).",
+    "notes": "The list SmartWard should follow. It gives bed counts only. 'match' lists SmartWard ward codes or names that each ward may go by (the C+ sync names, then the DMS bed board codes). The beds in 'beds_add' (OG-29, NURSERY-15 to 20, SCN-1 to 4, NICU-1 and 2) and the labour rooms in 'beds_off' are placeholders chosen so SmartWard counts the list's 260 beds, until the hospital gives the real bed numbers.",
     "totals": {
         "Licensed": 229,
         "LR/Nursery": 31
@@ -11,11 +11,18 @@
         {"code": "C4", "group": "Licensed", "total": 26, "match": ["WARD C4", "WC4"]},
         {"code": "C5", "group": "Licensed", "total": 32, "match": ["WARD C5", "WC5"]},
         {"code": "C6", "group": "Licensed", "total": 32, "match": ["WARD C6", "WC6"]},
-        {"code": "O&G", "group": "Licensed", "total": 29, "match": ["WARD (OBSTETRIC & GYNAECOLOGY)", "OBSTETRIC & GYNAECOLOGY", "WOG"]},
+        {"code": "O&G", "group": "Licensed", "total": 29, "match": ["WARD (OBSTETRIC & GYNAECOLOGY)", "OBSTETRIC & GYNAECOLOGY", "WOG"],
+            "beds_add": ["OG-29"]},
         {"code": "SW2", "group": "Licensed", "total": 51, "match": ["SURGICAL WARD 2", "WSUR2"]},
-        {"code": "Labour", "group": "LR/Nursery", "total": 5, "match": ["LABOUR ROOM", "LABOUR WARD", "LR"]},
-        {"code": "Nursery", "group": "LR/Nursery", "total": 20, "match": ["NURSERY WARD", "NURSERY"]},
-        {"code": "SCN", "group": "LR/Nursery", "total": 4, "match": ["SPECIAL CARE NURSERY", "SPECIAL CARE NURSERY (SCN)"]},
-        {"code": "NICU", "group": "LR/Nursery", "total": 2, "match": ["NEONATAL INTENSIVE CARE UNIT", "NEONATAL INTENSIVE CARE UNIT (NICU)"]}
+        {"code": "Labour", "group": "LR/Nursery", "total": 5, "match": ["LABOUR ROOM", "LABOUR WARD", "LR"],
+            "beds_off": ["LABOURROOM6", "LABOURROOM7"]},
+        {"code": "Nursery", "group": "LR/Nursery", "total": 20, "match": ["NURSERY WARD", "NURSERY"],
+            "beds_add": ["NURSERY-15", "NURSERY-16", "NURSERY-17", "NURSERY-18", "NURSERY-19", "NURSERY-20"]},
+        {"code": "SCN", "group": "LR/Nursery", "total": 4, "match": ["SPECIAL CARE NURSERY", "SPECIAL CARE NURSERY (SCN)"],
+            "create": {"ward_code": "SCN", "ward_name": "SPECIAL CARE NURSERY (SCN)", "description": "From the hospital's Bed Census list (2026-11-12); placeholder bed numbers until the hospital gives them"},
+            "beds_add": ["SCN-1", "SCN-2", "SCN-3", "SCN-4"]},
+        {"code": "NICU", "group": "LR/Nursery", "total": 2, "match": ["NEONATAL INTENSIVE CARE UNIT", "NEONATAL INTENSIVE CARE UNIT (NICU)"],
+            "create": {"ward_code": "NICU", "ward_name": "NEONATAL INTENSIVE CARE UNIT (NICU)", "description": "From the hospital's Bed Census list (2026-11-12); placeholder bed numbers until the hospital gives them"},
+            "beds_add": ["NICU-1", "NICU-2"]}
     ]
 }
