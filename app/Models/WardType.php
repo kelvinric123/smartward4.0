@@ -17,6 +17,7 @@ class WardType extends Model
         'description',
         'is_critical_care',
         'is_emergency',
+        'is_labour_nursery',
         'sort_order',
         'is_active',
     ];
@@ -24,6 +25,7 @@ class WardType extends Model
     protected $casts = [
         'is_critical_care' => 'boolean',
         'is_emergency' => 'boolean',
+        'is_labour_nursery' => 'boolean',
         'sort_order' => 'integer',
         'is_active' => 'boolean',
     ];

@@ -17,6 +17,22 @@
         .cced .ccx-cols .bar.is-ghost { background: var(--series-2); opacity: .55; }
         .cced .ccx-target { display: inline-flex; align-items: center; gap: .35em; }
         .ccx.is-tv.cced .ccx-docs { display: none; }
+        /* The headline cards: three to five, as Settings shows the ambulance and doctors cards. Two across, a
+           last one on its own taking the row; then all of them across */
+        @container ccx (min-width: 46em) {
+            .cced .ccx-kpis.is-odd > article:last-of-type { grid-column: 1 / -1; }
+        }
+        @container ccx (min-width: 84em) {
+            .cced .ccx-kpis { grid-template-columns: repeat(var(--cced-cards, 4), minmax(0, 1fr)); }
+            .cced .ccx-kpis.is-odd > article:last-of-type { grid-column: auto; }
+        }
+        .ccx.is-tv.cced .ccx-kpis { grid-template-columns: repeat(var(--cced-cards, 4), minmax(0, 1fr)); }
+        .ccx.is-tv.cced .ccx-kpis.is-odd > article:last-of-type { grid-column: auto; }
+        /* Made-up figures say so on their card, or beside their row */
+        .cced .ccx-chip.is-demo { color: var(--series-2); border-color: currentColor; background: none; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; padding: .2em .65em; }
+        .cced .ccx-chip.is-demo.is-tag { margin-left: .5em; padding: 0 .45em; font-size: .7em; vertical-align: .1em; }
+        /* ED flow today's four rows: two by two in TV mode, where the rows go across */
+        .ccx.is-tv.cced .ccx-rows.is-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     </style>
     @endverbatim
 
@@ -48,11 +64,11 @@
 
             <div class="ccx-status" role="status" aria-live="polite">
                 <span class="ccx-pill" :class="'is-' + connection"><span class="dot"></span><span x-text="connectionLabel">Live</span></span>
-                <span class="ccx-updated" x-text="(connection === 'live' ? 'Updated ' : 'Last update ') + s.generated_time + ' · every ' + s.refresh_seconds + ' s'"></span>
+                <span class="ccx-updated" x-text="(connection === 'live' ? 'Updated ' : 'Last update ') + timeOf(s.generated_at, cfg.clock.seconds) + ' · every ' + s.refresh_seconds + ' s'"></span>
             </div>
 
             <div class="ccx-clock" aria-hidden="true">
-                <p class="time"><span x-text="clockTime"></span><span class="sec" x-text="clockSeconds"></span></p>
+                <p class="time"><span x-text="clockTime"></span><span class="sec" x-show="cfg.clock.seconds" x-text="clockSeconds"></span><span class="ampm" x-show="cfg.clock.hour12" x-text="clockMeridiem"></span></p>
                 <p class="date" x-text="clockDate"></p>
             </div>
 
@@ -85,7 +101,7 @@
 
         <div class="ccx-body">
         {{-- ------ The ED at a glance ------ --}}
-        <section class="ccx-section ccx-kpis" aria-label="Key figures" x-show="cfg.kpis.show">
+        <section class="ccx-section ccx-kpis" aria-label="Key figures" x-show="cfg.kpis.show" :class="{ 'is-odd': kpiCards % 2 === 1 }">
             {{-- In the ED now --}}
             <article class="ccx-card" :class="{ 'is-changed': changed.now }">
                 <header>
@@ -157,7 +173,13 @@
                         <p class="ccx-delta" x-text="versus(s.flow.departures_today, s.flow.departures_same_time_yesterday, 'same time yesterday')"></p>
                     </div>
                 </div>
-                <dl class="ccx-rows">
+                <dl class="ccx-rows is-four">
+                    <div>
+                        <dt>Proceed for admission<span class="ccx-chip is-demo is-tag" x-show="pfa.demo" title="Made-up figures: Settings, Data mode">Demo</span></dt>
+                        <dd :title="pfa.waiting ? `Longest wait for a bed ${hm(pfa.waiting_longest)}` : ''">
+                            <span x-text="fmt(pfa.today)"></span><small x-text="pfa.waiting ? `${pfa.waiting} waiting for a bed` : (pfa.today ? 'none waiting' : '')"></small>
+                        </dd>
+                    </div>
                     <div>
                         <dt>Admitted to a ward</dt>
                         <dd><span x-text="fmt(s.flow.admitted)"></span><small x-text="s.flow.admission_rate === null ? '' : pct(s.flow.admission_rate) + ' of those who left'"></small></dd>
@@ -170,7 +192,42 @@
                 </dl>
             </article>
 
+            {{-- Ambulance cases today: the ambulance calls, or made-up ones when Settings' data mode is Demo --}}
+            <template x-if="cfg.ambulance.show">
+                <article class="ccx-card" :class="{ 'is-changed': changed.ambulance }">
+                    <header>
+                        <h2>Ambulance cases today</h2>
+                        <span class="ccx-chip is-demo" x-show="amb.demo" title="Made-up figures: Settings, Data mode">Demo</span>
+                        <span class="ccx-muted" x-show="!amb.demo">Since midnight</span>
+                    </header>
+                    <div class="ccx-pair">
+                        <div>
+                            <p class="lbl">Calls</p>
+                            <p class="num" x-text="fmt(amb.calls)"></p>
+                            <p class="ccx-delta" x-text="versus(amb.calls, amb.calls_same_time_yesterday, 'same time yesterday')"></p>
+                        </div>
+                        <div>
+                            <p class="lbl">Attended</p>
+                            <p class="num" x-text="fmt(amb.attended)"></p>
+                            <p class="ccx-delta" x-text="amb.attended_pct === null ? 'No calls yet' : pct(amb.attended_pct) + ' of calls'"></p>
+                        </div>
+                    </div>
+                    <dl class="ccx-rows">
+                        <div>
+                            <dt>Median response time</dt>
+                            <dd><span x-text="hm(amb.response_median)"></span><small x-show="amb.response_average !== null" x-text="`average ${hm(amb.response_average)}`"></small></dd>
+                        </div>
+                        <div><dt>Longest response</dt><dd x-text="hm(amb.response_longest)"></dd></div>
+                        <div>
+                            <dt>Crew on the way</dt>
+                            <dd><span x-text="fmt(amb.open)"></span><small x-show="amb.cancelled" x-text="`${amb.cancelled} cancelled`"></small></dd>
+                        </div>
+                    </dl>
+                </article>
+            </template>
+
             {{-- Doctors --}}
+            <template x-if="cfg.doctors.show">
             <article class="ccx-card" :class="{ 'is-changed': changed.doctors }">
                 <header>
                     <h2>Doctors</h2>
@@ -201,6 +258,7 @@
                     </div>
                 </template>
             </article>
+            </template>
         </section>
 
         {{-- ------ TV mode: the page up beside the attention list ------ --}}
@@ -314,7 +372,7 @@
                             <span class="ccx-ico" x-html="icon(item.severity)"></span>
                             <div>
                                 <a :href="item.url" class="title"><span class="zone-dot" :class="item.colour ? 'is-' + item.colour : ''" aria-hidden="true"></span><span x-text="item.title"></span></a>
-                                <p class="detail" x-text="item.detail"></p>
+                                <p class="detail" x-text="itemDetail(item)"></p>
                             </div>
                             <span class="sev" x-text="item.minutes === null ? sevLabel(item.severity) : hm(item.minutes)"></span>
                         </li>
@@ -371,7 +429,7 @@
                             </template>
                         </div>
                     </div>
-                    <div class="ccx-xaxis"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:00</span></div>
+                    <div class="ccx-xaxis"><template x-for="h in [0, 6, 12, 18, 23]" :key="'x' + h"><span x-text="hourMark(h)"></span></template></div>
                 </div>
                 <div class="ccx-tablescroll" x-show="tables.hourly && !tv" x-cloak>
                     <table class="ccx-datatable">
@@ -461,7 +519,10 @@
             The zones are the wards of an Emergency ward type (Ward Types). Time in the ED runs from each patient's arrival, C+'s
             census Entry Date for the ED, against a target of <span x-text="hm(s.targets.minutes)"></span> set in Settings.
             Arrivals and departures come from the admission log; a departure that went on to a ward counts as admitted.
-            Doctors are each patient's attending doctor. No patient is named on this screen.
+            Proceed for admission counts today's decisions to admit, and those still in the ED waiting for a ward bed.
+            Doctors are each patient's attending doctor. Ambulance cases count the ambulance calls since midnight; the response time
+            runs from the call to the crew reaching the patient, which makes the case attended. With Settings' data mode on Demo,
+            that card and Proceed for admission show made-up figures instead, marked Demo. No patient is named on this screen.
         </p>
         </div>
 
@@ -506,7 +567,7 @@
             const SECTION_SIZE = { min: 50, max: 200 };
             const ROWS = [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16];
             const SECTIONS = [
-                { key: 'kpis', label: 'Headline figures', about: 'The four cards across the top' },
+                { key: 'kpis', label: 'Headline figures', about: 'The cards across the top' },
                 { key: 'zones', label: 'Zones', about: 'Every ED zone: beds, time in the ED, in and out today', perPage: 'Zones per page', pageSizes: ROWS, seconds: true },
                 { key: 'trends', label: 'Trends', about: 'Arrivals by hour, and arrivals and departures a day', seconds: true },
                 { key: 'time', label: 'Time in ED', about: 'Patients in the ED now, by time since they arrived', seconds: true },
@@ -515,9 +576,21 @@
             // The shared board styles size each section by these variables
             const SIZE_VAR = { kpis: 'kpis', zones: 'wards', trends: 'trends', time: 'acuity', attention: 'attention' };
             const SECONDS = [5, 8, 10, 15, 20, 30, 45, 60, 90, 120];
+            // Headline cards Settings can leave out; the other three always show with the headline figures
+            const CARDS = [
+                { key: 'ambulance', label: 'Ambulance cases today' },
+                { key: 'doctors', label: 'Doctors' },
+            ];
             const defaults = () => ({
                 screen: 'auto',
                 size: 100,
+                // How the board says a time of day: 24-hour or 12-hour with AM/PM, and whether with the seconds
+                clock: { hour12: false, seconds: true },
+                // The data mode of Ambulance cases today and Proceed for admission (demo: made-up figures), which only
+                // its Settings switch changes. Demo to begin with: nothing records ambulance calls or decisions to admit yet
+                data: { demo: true },
+                ambulance: { show: true },
+                doctors: { show: true },
                 kpis: { show: true, size: 100 },
                 zones: { show: true, size: 100, perPage: 0, seconds: STEP_SECONDS },
                 trends: { show: true, size: 100, seconds: STEP_SECONDS },
@@ -530,6 +603,11 @@
                 const whole = (value, { min, max }, fallback) => (Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : fallback);
                 if (SCREENS.some((screen) => screen.key === saved.screen)) cfg.screen = saved.screen;
                 cfg.size = whole(saved.size, SIZE, cfg.size);
+                const flag = (from, to, key) => { if (from && typeof from[key] === 'boolean') to[key] = from[key]; };
+                flag(saved.clock, cfg.clock, 'hour12');
+                flag(saved.clock, cfg.clock, 'seconds');
+                flag(saved.data, cfg.data, 'demo');
+                CARDS.forEach((card) => flag(saved[card.key], cfg[card.key], 'show'));
                 SECTIONS.forEach((section) => {
                     const from = saved[section.key] || {};
                     const to = cfg[section.key];
@@ -575,6 +653,7 @@
                 screenPx: { width: 0, height: 0 },
                 screens: SCREENS,
                 sections: SECTIONS,
+                cards: CARDS,
                 secondsOptions: SECONDS,
                 fits: { zones: 0 },
                 zonesFit: 1,
@@ -672,7 +751,8 @@
                     const cards = {
                         now: (s) => ({ patients: s.now.patients, occupied: s.now.occupied, waiting: s.now.waiting, free: s.now.free }),
                         time: (s) => ({ within: s.now.within_target, over: s.now.over_target, target: s.targets.minutes }),
-                        flow: (s) => s.flow,
+                        flow: (s) => [s.flow, this.admissionOf(s)],
+                        ambulance: (s) => this.ambulanceOf(s),
                         doctors: (s) => s.doctors,
                     };
                     for (const [key, pick] of Object.entries(cards)) {
@@ -911,7 +991,7 @@
                 get boardStyle() {
                     const { cfg } = this;
                     const preset = SCREENS.find((screen) => screen.key === cfg.screen);
-                    const vars = [`--ccx-size: ${cfg.size / 100}`, ...SECTIONS.map((section) => `--ccx-${SIZE_VAR[section.key]}: ${cfg[section.key].size / 100}`)];
+                    const vars = [`--ccx-size: ${cfg.size / 100}`, `--cced-cards: ${this.kpiCards}`, ...SECTIONS.map((section) => `--ccx-${SIZE_VAR[section.key]}: ${cfg[section.key].size / 100}`)];
                     if (preset && preset.height) vars.push(`--ccx-base: ${(preset.height * TEXT_RATIO / this.dpr).toFixed(2)}px`);
                     return vars.join('; ');
                 },
@@ -946,11 +1026,51 @@
                 get connectionLabel() {
                     return { live: 'Live', retrying: 'Reconnecting…', 'signed-out': 'Signed out' }[this.connection];
                 },
+                // ------ Ambulance cases today and Proceed for admission: as recorded, or made-up figures in the
+                // Demo data mode ------
+                ambulanceOf(s) {
+                    return (this.cfg.data.demo ? s.ambulance_demo : s.ambulance) || {};
+                },
+                get amb() {
+                    return this.ambulanceOf(this.s);
+                },
+                admissionOf(s) {
+                    return (this.cfg.data.demo ? s.admission_demo : s.admission) || {};
+                },
+                get pfa() {
+                    return this.admissionOf(this.s);
+                },
+                get kpiCards() {
+                    return 3 + CARDS.filter((card) => this.cfg[card.key].show).length;
+                },
+                get dataModeNote() {
+                    return this.cfg.data.demo
+                        ? 'Demo: made-up figures, each marked Demo on the board'
+                        : 'Live: the ambulance calls and decisions to admit recorded today';
+                },
+
+                // ------ Times of day, in the time format of the settings: 24-hour or 12-hour with AM/PM, and
+                // the seconds or not ------
+                timeOf(when, seconds = false) {
+                    const at = when instanceof Date ? when : new Date(when);
+                    if (!when || Number.isNaN(at.getTime())) return DASH;
+                    const h = at.getHours();
+                    const rest = ':' + String(at.getMinutes()).padStart(2, '0') + (seconds ? ':' + String(at.getSeconds()).padStart(2, '0') : '');
+                    return this.cfg.clock.hour12 ? `${h % 12 || 12}${rest} ${h < 12 ? 'AM' : 'PM'}` : String(h).padStart(2, '0') + rest;
+                },
                 get clockTime() {
-                    return String(this.now.getHours()).padStart(2, '0') + ':' + String(this.now.getMinutes()).padStart(2, '0');
+                    const h = this.now.getHours();
+                    return (this.cfg.clock.hour12 ? String(h % 12 || 12) : String(h).padStart(2, '0')) + ':' + String(this.now.getMinutes()).padStart(2, '0');
                 },
                 get clockSeconds() {
                     return ':' + String(this.now.getSeconds()).padStart(2, '0');
+                },
+                get clockMeridiem() {
+                    return this.now.getHours() < 12 ? 'AM' : 'PM';
+                },
+                // A patient's "since" time in their attention item, said in this format
+                itemDetail(item) {
+                    return item.since && item.since_label ? item.detail.replace(item.since_label, this.timeOf(item.since)) : item.detail;
                 },
                 get clockDate() {
                     return this.now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
@@ -976,8 +1096,14 @@
                     const x = this.band(i, n);
                     return `left: ${x}%; transform: translateX(${x < 30 ? '-8%' : x > 70 ? '-92%' : '-50%'})`;
                 },
+                // An hour of the day on the charts: "14:00–14:59", or "2:00–2:59 PM"
                 hourLabel(h) {
-                    return String(h).padStart(2, '0') + ':00–' + String(h).padStart(2, '0') + ':59';
+                    if (!this.cfg.clock.hour12) return String(h).padStart(2, '0') + ':00–' + String(h).padStart(2, '0') + ':59';
+                    return `${h % 12 || 12}:00–${h % 12 || 12}:59 ${h < 12 ? 'AM' : 'PM'}`;
+                },
+                // The chart's axis: "06:00", or "6 AM"
+                hourMark(h) {
+                    return this.cfg.clock.hour12 ? `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}` : String(h).padStart(2, '0') + ':00';
                 },
 
                 icon(severity) {

@@ -16,6 +16,7 @@ ENV TZ=Asia/Kuala_Lumpur
 
 # Build arguments
 ARG SWOOLE_VERSION=5.1.1
+ARG PHPREDIS_VERSION=6.3.0
 ARG MYSQL_ROOT_PASSWORD=smartward_secret
 ARG REDIS_MAXMEMORY=256mb
 
@@ -93,22 +94,21 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     sockets \
     ldap
 
-# Install Swoole extension
-# channel-update first: a fresh base image ships stale channel metadata and
-# pecl install then fails with "No releases available for package .../swoole".
-# Both steps are retried: a slow resolver can exceed pecl's socket timeout and
-# abort the build with "getaddrinfo for pecl.php.net failed: Try again".
-RUN set -eu; \
-    retry() { n=0; until "$@"; do n=$((n+1)); [ "$n" -ge 4 ] && return 1; echo "retry $n: $*"; sleep 5; done; }; \
-    retry pecl channel-update pecl.php.net; \
-    retry pecl install swoole-${SWOOLE_VERSION}; \
-    docker-php-ext-enable swoole
-
-# Install Redis PHP extension (retried for the same slow-DNS reason as Swoole)
-RUN set -eu; \
-    retry() { n=0; until "$@"; do n=$((n+1)); [ "$n" -ge 4 ] && return 1; echo "retry $n: $*"; sleep 5; done; }; \
-    retry pecl install redis; \
-    docker-php-ext-enable redis
+# Install Swoole and the Redis extension from their GitHub release tarballs.
+# pecl.php.net is not reachable from the hospital network - DNS resolves, but
+# port 443 gives "No route to host" - and a fresh base image also ships stale
+# pecl channel metadata. Building from source removes both problems and pins
+# the versions the previous image shipped (swoole 5.1.1, phpredis 6.3.0).
+RUN set -eux; \
+    mkdir -p /tmp/ext; \
+    curl -fsSL -o /tmp/ext/swoole.tar.gz "https://github.com/swoole/swoole-src/archive/refs/tags/v${SWOOLE_VERSION}.tar.gz"; \
+    curl -fsSL -o /tmp/ext/redis.tar.gz "https://github.com/phpredis/phpredis/archive/refs/tags/${PHPREDIS_VERSION}.tar.gz"; \
+    tar -xzf /tmp/ext/swoole.tar.gz -C /tmp/ext; \
+    tar -xzf /tmp/ext/redis.tar.gz -C /tmp/ext; \
+    cd /tmp/ext/swoole-src-${SWOOLE_VERSION} && phpize && ./configure && make -j"$(nproc)" && make install; \
+    cd /tmp/ext/phpredis-${PHPREDIS_VERSION} && phpize && ./configure && make -j"$(nproc)" && make install; \
+    docker-php-ext-enable swoole redis; \
+    rm -rf /tmp/ext
 
 # Cleanup build dependencies
 RUN apk del $PHPIZE_DEPS linux-headers \

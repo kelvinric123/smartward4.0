@@ -64,6 +64,7 @@
         .ccx-clock { text-align: right; }
         .ccx-clock .time { font-size: 2.3em; font-weight: 650; line-height: 1; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
         .ccx-clock .sec { font-size: .5em; color: var(--ink-3); margin-left: .08em; }
+        .ccx-clock .ampm { font-size: .45em; font-weight: 600; color: var(--ink-2); margin-left: .3em; letter-spacing: .02em; }
         .ccx-clock .date { font-size: .857em; color: var(--ink-2); margin-top: .35em; }
         .ccx-actions { display: flex; flex-wrap: wrap; gap: .5em; }
         .ccx-btn { display: inline-flex; align-items: center; gap: .45em; height: 2.45em; padding: 0 .9em; border-radius: 9px; background: var(--surface); border: 1px solid var(--line); color: var(--ink-1); font: inherit; font-size: .857em; font-weight: 600; cursor: pointer; white-space: nowrap; }
@@ -94,6 +95,14 @@
         .ccx-meter .tick { position: absolute; top: -.35em; bottom: -.35em; width: 2px; margin-left: -1px; background: var(--ink-2); border-radius: 1px; }
         .ccx-meter.is-warning { --m: var(--warning); } .ccx-meter.is-serious { --m: var(--serious); } .ccx-meter.is-critical { --m: var(--critical); }
         .ccx-meter-legend { display: flex; justify-content: space-between; gap: .5em; font-size: .786em; color: var(--ink-3); }
+        /* Bed occupancy's sections (General ward & critical, Labour room & nursery), each with its own meter */
+        .ccx-occgroups { display: grid; gap: .9em; margin-bottom: .7em; }
+        .ccx-occgroup .lbl { font-size: .857em; font-weight: 600; color: var(--ink-2); }
+        .ccx-occgroup .lbl .beds { font-weight: 500; color: var(--ink-3); }
+        .ccx-occgroup .row { display: flex; align-items: baseline; flex-wrap: wrap; gap: .1em .6em; margin-top: .1em; }
+        .ccx-occgroup .num { font-size: 2.4em; font-weight: 650; line-height: 1.05; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+        .ccx-occgroup .cap { font-size: .857em; color: var(--ink-2); }
+        .ccx-occgroup .ccx-meter { height: .5em; margin: .5em 0 0; }
         .ccx-minis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5em; margin-top: 1em; padding-top: .9em; border-top: 1px solid var(--line); }
         .ccx-minis dt { font-size: .786em; color: var(--ink-3); }
         .ccx-minis dd { font-size: 1.5em; font-weight: 650; line-height: 1.2; }
@@ -282,6 +291,9 @@
         .ccx.is-tv .ccx-hero .num { font-size: 3.1em; }
         .ccx.is-tv .ccx-hero .num.is-mid, .ccx.is-tv .ccx-pair .num { font-size: 2.5em; }
         .ccx.is-tv .ccx-meter { margin: .75em 0 .35em; }
+        .ccx.is-tv .ccx-occgroups { gap: .55em; margin-bottom: .5em; }
+        .ccx.is-tv .ccx-occgroup .num { font-size: 2em; }
+        .ccx.is-tv .ccx-occgroup .ccx-meter { margin: .35em 0 0; }
         .ccx.is-tv .ccx-minis { margin-top: .7em; padding-top: .6em; }
         .ccx.is-tv .ccx-minis dd { font-size: 1.3em; }
         .ccx.is-tv .ccx-rows { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .55em .9em; margin-top: .7em; padding-top: .65em; }

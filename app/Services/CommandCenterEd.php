@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\AdmissionLog;
+use App\Models\AmbulanceCall;
 use App\Models\Bed;
 use App\Models\Consultant;
 use App\Models\Hospital;
@@ -11,6 +12,7 @@ use App\Models\PatientCareProvider;
 use App\Models\Ward;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -24,7 +26,13 @@ use Illuminate\Support\Str;
  *    the hospital's time-in-ED target (hospitals.ed_target_minutes);
  *  - flow today: arrivals (admit entries in an ED zone) and departures
  *    (discharge entries from one), split into admitted to a ward (to_ward_id)
- *    and gone home, and how long those who left had been in the ED;
+ *    and gone home, and how long those who left had been in the ED; and
+ *    proceed for admission, the decisions to admit (proceed_admission_at)
+ *    and those still in the ED waiting for a ward bed, or made-up ones
+ *    (admission_demo) for showing the board;
+ *  - ambulance cases today: calls (ambulance_calls), the cases attended and
+ *    how fast the crews reached the patient, or the same card from made-up
+ *    calls (ambulance_demo) for showing the board;
  *  - doctors: patients per attending doctor;
  *  - trends: arrivals by hour, today against yesterday, and arrivals and
  *    departures a day for TREND_DAYS days;
@@ -79,10 +87,12 @@ final class CommandCenterEd
             ->get();
         $zoneIds = $zones->modelKeys();
 
+        // Until its migration has run there is no proceed-for-admission time to read, rather than the board failing
+        $admissionsRecorded = Schema::hasColumn('patients', 'proceed_admission_at');
         $patients = Patient::whereIn('ward_id', $zoneIds)
             ->where('is_active', true)
             ->whereIn('status', self::IN_ED)
-            ->get(['id', 'ward_id', 'bed_number', 'admitted_at', 'consultant_id']);
+            ->get(['id', 'ward_id', 'bed_number', 'admitted_at', 'consultant_id', ...($admissionsRecorded ? ['proceed_admission_at'] : [])]);
         $doctors = self::doctors($patients);
         $patients->each(function (Patient $patient) use ($now, $doctors) {
             $patient->setAttribute('minutes', $patient->admitted_at ? max(0, (int) $patient->admitted_at->diffInMinutes($now)) : null);
@@ -123,6 +133,10 @@ final class CommandCenterEd
             ],
             'now' => $current,
             'flow' => $flow,
+            'admission' => self::proceedForAdmission($patients, $now, $admissionsRecorded),
+            'admission_demo' => self::proceedForAdmissionDemo($now),
+            'ambulance' => self::ambulance($now),
+            'ambulance_demo' => self::ambulanceDemo($now),
             'doctors' => self::doctorRows($patients, $target),
             'buckets' => self::buckets($patients, $target),
             'zones' => $rows->all(),
@@ -288,6 +302,187 @@ final class CommandCenterEd
         ];
     }
 
+    // -- ambulance cases today -------------------------------------------------
+
+    /** Ambulance calls since midnight, from the ambulance_calls table. */
+    private static function ambulance(CarbonInterface $now): array
+    {
+        // Until the table's migration has run, the card says no calls rather than the board failing
+        if (! Schema::hasTable('ambulance_calls')) {
+            return self::ambulanceFigures(collect(), 0) + ['demo' => false];
+        }
+
+        $midnight = $now->copy()->startOfDay();
+        $sameTimeYesterday = $now->copy()->subDay();
+        $calls = AmbulanceCall::where('called_at', '>=', $midnight->copy()->subDay())
+            ->where('called_at', '<=', $now)
+            ->get(['id', 'called_at', 'arrived_at', 'cancelled_at']);
+
+        $today = $calls->filter(fn (AmbulanceCall $call) => $call->called_at->gte($midnight))->map(fn (AmbulanceCall $call) => [
+            'called' => $call->called_at,
+            'arrived' => $call->arrived_at && $call->arrived_at->lte($now) ? $call->arrived_at : null,
+            'cancelled' => $call->cancelled_at && $call->cancelled_at->lte($now) ? $call->cancelled_at : null,
+        ])->values();
+        $yesterday = $calls->filter(fn (AmbulanceCall $call) => $call->called_at->lt($midnight) && $call->called_at->lte($sameTimeYesterday))->count();
+
+        return self::ambulanceFigures($today, $yesterday) + ['demo' => false];
+    }
+
+    /**
+     * The ambulance card from made-up calls, for showing the board. The same
+     * calls all day (they follow from the date), adding up as the day goes on:
+     * a call counts once its time has come, and is attended once its crew's
+     * response time has passed.
+     */
+    public static function ambulanceDemo(CarbonInterface $now): array
+    {
+        $midnight = $now->copy()->startOfDay();
+        $today = self::demoCalls($midnight)
+            ->filter(fn (array $call) => $call['called']->lte($now))
+            ->map(fn (array $call) => [
+                'called' => $call['called'],
+                'arrived' => ! $call['cancels'] && $call['arrives']->lte($now) ? $call['arrives'] : null,
+                'cancelled' => $call['cancels'] && $call['arrives']->lte($now) ? $call['arrives'] : null,
+            ])->values();
+        $yesterday = self::demoCalls($midnight->copy()->subDay())
+            ->filter(fn (array $call) => $call['called']->lte($now->copy()->subDay()))
+            ->count();
+
+        return self::ambulanceFigures($today, $yesterday) + ['demo' => true];
+    }
+
+    /** A day's made-up calls: busier by day than by night, most crews there within 7 to 20 minutes. */
+    private static function demoCalls(CarbonInterface $day): Collection
+    {
+        $random = self::demoRandom('ambulance-demo', $day);
+        $hours = [2, 1.5, 1, 1, 1, 1.5, 2.5, 4, 5, 5.5, 5.5, 5, 4.5, 4.5, 4.5, 5, 5.5, 6, 6, 5.5, 5, 4, 3, 2.5];
+
+        return collect(range(1, 14 + (int) floor($random('count') * 11)))->map(function (int $i) use ($day, $random, $hours) {
+            $called = self::demoMoment($day, $random, $hours, $i);
+            $minutes = 7 + 13 * $random("response.{$i}") ** 1.6 + ($random("far.{$i}") < 0.1 ? 12 : 0);
+
+            return [
+                'called' => $called,
+                'arrives' => $called->copy()->addSeconds((int) round($minutes * 60)),
+                'cancels' => $random("cancel.{$i}") < 0.06,
+            ];
+        })->sortBy('called')->values();
+    }
+
+    /**
+     * What the card shows, from today's calls so far ([called, arrived, cancelled]
+     * each), and how many had come in by this time yesterday.
+     */
+    private static function ambulanceFigures(Collection $calls, int $sameTimeYesterday): array
+    {
+        $attended = $calls->filter(fn (array $call) => $call['arrived'] !== null);
+        $cancelled = $calls->filter(fn (array $call) => $call['arrived'] === null && $call['cancelled'] !== null)->count();
+        $responses = $attended
+            ->map(fn (array $call) => (int) round(max(0, $call['arrived']->getTimestamp() - $call['called']->getTimestamp()) / 60))
+            ->sort()->values();
+
+        return [
+            'calls' => $calls->count(),
+            'calls_same_time_yesterday' => $sameTimeYesterday,
+            'attended' => $attended->count(),
+            'attended_pct' => $calls->count() ? round($attended->count() / $calls->count() * 100, 1) : null,
+            'open' => $calls->count() - $attended->count() - $cancelled,
+            'cancelled' => $cancelled,
+            'response_median' => self::median($responses),
+            'response_average' => $responses->count() ? round($responses->avg(), 1) : null,
+            'response_longest' => $responses->max(),
+        ];
+    }
+
+    /** Steady made-up numbers from 0 to 1, the same for the same day and the same question. */
+    private static function demoRandom(string $topic, CarbonInterface $day): \Closure
+    {
+        $date = $day->format('Y-m-d');
+
+        return fn (string $what) => (crc32("{$topic}|{$date}|{$what}") % 100000) / 100000;
+    }
+
+    /** A made-up moment of the day, its hour drawn by $hours' weights. */
+    private static function demoMoment(CarbonInterface $day, \Closure $random, array $hours, int $i): CarbonInterface
+    {
+        $pick = $random("hour.{$i}") * array_sum($hours);
+        $hour = 0;
+        while ($hour < 23 && $pick >= $hours[$hour]) {
+            $pick -= $hours[$hour++];
+        }
+
+        return $day->copy()->setTime($hour, (int) floor($random("minute.{$i}") * 60), (int) floor($random("second.{$i}") * 60));
+    }
+
+    // -- proceed for admission -------------------------------------------------
+
+    /**
+     * Proceed for admission: the decisions to admit today (proceed_admission_at,
+     * whether or not the patient has since gone to the ward), and the patients
+     * still in the ED waiting for a ward bed, decided during their stay.
+     */
+    private static function proceedForAdmission(Collection $patients, CarbonInterface $now, bool $recorded): array
+    {
+        if (! $recorded) {
+            return self::admissionFigures(0, 0, collect()) + ['demo' => false];
+        }
+
+        $midnight = $now->copy()->startOfDay();
+        $decided = fn (CarbonInterface $from, CarbonInterface $to) => Patient::whereBetween('proceed_admission_at', [$from, $to])->count();
+        $waiting = $patients
+            ->filter(fn (Patient $patient) => $patient->proceed_admission_at
+                && $patient->proceed_admission_at->lte($now)
+                && (! $patient->admitted_at || $patient->proceed_admission_at->gte($patient->admitted_at)))
+            ->map(fn (Patient $patient) => (int) round(($now->getTimestamp() - $patient->proceed_admission_at->getTimestamp()) / 60))
+            ->values();
+
+        return self::admissionFigures($decided($midnight, $now), $decided($midnight->copy()->subDay(), $now->copy()->subDay()), $waiting) + ['demo' => false];
+    }
+
+    /**
+     * Proceed for admission from made-up decisions, for showing the board, like
+     * ambulanceDemo(): the same all day, adding up as it goes, each patient
+     * waiting for a bed until their made-up wait is over.
+     */
+    public static function proceedForAdmissionDemo(CarbonInterface $now): array
+    {
+        $midnight = $now->copy()->startOfDay();
+        $today = self::demoAdmissions($midnight)->filter(fn (array $decision) => $decision['decided']->lte($now));
+        $yesterday = self::demoAdmissions($midnight->copy()->subDay());
+        $waiting = $today->concat($yesterday)
+            ->filter(fn (array $decision) => $decision['decided']->lte($now) && $decision['moves']->gt($now))
+            ->map(fn (array $decision) => (int) round(($now->getTimestamp() - $decision['decided']->getTimestamp()) / 60))
+            ->values();
+        $sameTimeYesterday = $yesterday->filter(fn (array $decision) => $decision['decided']->lte($now->copy()->subDay()))->count();
+
+        return self::admissionFigures($today->count(), $sameTimeYesterday, $waiting) + ['demo' => true];
+    }
+
+    /** A day's made-up decisions to admit: most by day, each waiting half an hour to four hours for a bed. */
+    private static function demoAdmissions(CarbonInterface $day): Collection
+    {
+        $random = self::demoRandom('admission-demo', $day);
+        $hours = [1.5, 1.5, 1, 1, 1, 1, 1.5, 2, 3, 4, 4.5, 5, 5, 5, 5, 5, 5, 5.5, 5.5, 5, 4.5, 4, 3, 2];
+
+        return collect(range(1, 6 + (int) floor($random('count') * 7)))->map(function (int $i) use ($day, $random, $hours) {
+            $decided = self::demoMoment($day, $random, $hours, $i);
+
+            return ['decided' => $decided, 'moves' => $decided->copy()->addMinutes(30 + (int) round(210 * $random("wait.{$i}") ** 1.5))];
+        })->sortBy('decided')->values();
+    }
+
+    /** What the row shows: today's decisions, as many by this time yesterday, and the minutes each still in the ED has waited. */
+    private static function admissionFigures(int $today, int $sameTimeYesterday, Collection $waitingMinutes): array
+    {
+        return [
+            'today' => $today,
+            'same_time_yesterday' => $sameTimeYesterday,
+            'waiting' => $waitingMinutes->count(),
+            'waiting_median' => self::median($waitingMinutes),
+            'waiting_longest' => $waitingMinutes->max(),
+        ];
+    }
+
     // -- doctors ---------------------------------------------------------------
 
     /** Each patient's attending doctor: their active attending care provider, else their consultant. */
@@ -349,6 +544,9 @@ final class CommandCenterEd
                 'detail' => 'In the ED ' . self::duration($patient->minutes) . ', since ' . $patient->admitted_at->format('H:i')
                     . ($patient->admitted_at->isToday() ? '' : ' ' . $patient->admitted_at->format('j M'))
                     . ' · ' . ($patient->doctor ?: 'no doctor assigned'),
+                // The "since" time in the detail, and when it was, so the board can say it in its own time format
+                'since_label' => $patient->admitted_at->format('H:i'),
+                'since' => $patient->admitted_at->toIso8601String(),
                 'url' => $zone['url'] ?? null,
             ]);
         }
@@ -363,6 +561,8 @@ final class CommandCenterEd
                 'colour' => $zone['colour'],
                 'title' => $zone['short'] . ' is full',
                 'detail' => "{$zone['occupied']} of {$zone['beds']} beds taken" . ($zone['closed'] ? " · {$zone['closed']} closed" : ''),
+                'since_label' => null,
+                'since' => null,
                 'url' => $zone['url'],
             ]);
         }

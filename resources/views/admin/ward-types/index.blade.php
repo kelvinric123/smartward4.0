@@ -85,6 +85,8 @@
                                         <th class="px-3 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                                             Emergency</th>
                                         <th class="px-3 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                                            Labour &amp; Nursery</th>
+                                        <th class="px-3 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                                             Status</th>
                                         <th class="px-3 py-3 text-right text-xs font-bold text-gray-700 uppercase tracking-wider">
                                             Actions</th>
@@ -140,6 +142,16 @@
                                                     <span class="text-gray-400">No</span>
                                                 @endif
                                             </td>
+                                            <td class="px-3 py-3 whitespace-nowrap text-sm">
+                                                @if ($wardType->is_labour_nursery)
+                                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-pink-100 text-pink-800"
+                                                        title="Command Center V2's bed occupancy counts wards of this type under Labour room & nursery">
+                                                        Yes
+                                                    </span>
+                                                @else
+                                                    <span class="text-gray-400">No</span>
+                                                @endif
+                                            </td>
                                             <td class="px-3 py-3 whitespace-nowrap">
                                                 <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full {{ $wardType->is_active ? 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-800 border border-green-200' : 'bg-gradient-to-r from-red-100 to-pink-100 text-red-800 border border-red-200' }}">
                                                     {{ $wardType->is_active ? 'Active' : 'Inactive' }}
@@ -185,7 +197,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="8" class="px-6 py-12 text-center">
+                                            <td colspan="9" class="px-6 py-12 text-center">
                                                 <div class="flex flex-col items-center">
                                                     <svg class="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

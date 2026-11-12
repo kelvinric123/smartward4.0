@@ -28,11 +28,11 @@
 
             <div class="ccx-status" role="status" aria-live="polite">
                 <span class="ccx-pill" :class="'is-' + connection"><span class="dot"></span><span x-text="connectionLabel">Live</span></span>
-                <span class="ccx-updated" x-text="(connection === 'live' ? 'Updated ' : 'Last update ') + s.generated_time + ' · every ' + s.refresh_seconds + ' s'"></span>
+                <span class="ccx-updated" x-text="(connection === 'live' ? 'Updated ' : 'Last update ') + timeOf(s.generated_at, cfg.clock.seconds) + ' · every ' + s.refresh_seconds + ' s'"></span>
             </div>
 
             <div class="ccx-clock" aria-hidden="true">
-                <p class="time"><span x-text="clockTime"></span><span class="sec" x-text="clockSeconds"></span></p>
+                <p class="time"><span x-text="clockTime"></span><span class="sec" x-show="cfg.clock.seconds" x-text="clockSeconds"></span><span class="ampm" x-show="cfg.clock.hour12" x-text="clockMeridiem"></span></p>
                 <p class="date" x-text="clockDate"></p>
             </div>
 
@@ -75,16 +75,28 @@
                         <span x-text="capacityLabel(s.capacity.status)"></span>
                     </span>
                 </header>
-                <div class="ccx-hero">
-                    <span class="num" x-text="s.capacity.occupancy === null ? '—' : dec(s.capacity.occupancy) + '%'"></span>
-                    <span class="cap" x-text="`${fmt(s.capacity.occupied)} of ${fmt(s.capacity.beds)} beds occupied`"></span>
+                {{-- Its two sections: the Labour Room & Nursery ward types' wards, and every other ward --}}
+                <div class="ccx-occgroups">
+                    <template x-for="g in s.capacity.groups" :key="g.key">
+                        <div class="ccx-occgroup">
+                            <p class="lbl"><span x-text="g.label"></span> <span class="beds" x-text="`(${fmt(g.beds)} beds)`"></span></p>
+                            <div class="row">
+                                <span class="num" x-text="g.occupancy === null ? '—' : dec(g.occupancy) + '%'"></span>
+                                <span class="cap" x-text="g.beds ? `${fmt(g.occupied)} occupied · ${fmt(g.free)} free` : 'No wards marked yet'"
+                                    :title="g.beds ? '' : 'Mark their ward types Labour Room & Nursery on the Ward Types page'"></span>
+                            </div>
+                            <div class="ccx-meter" :class="'is-' + (g.status || 'good')" role="img"
+                                :aria-label="`${g.label}: occupancy ${dec(g.occupancy)}% against a target of ${s.targets.occupancy}%`">
+                                <span class="fill" :style="`width: ${Math.min(100, g.occupancy || 0)}%`"></span>
+                                <span class="tick" :style="`left: ${s.targets.occupancy}%`"></span>
+                            </div>
+                        </div>
+                    </template>
                 </div>
-                <div class="ccx-meter" :class="'is-' + (s.capacity.status || 'good')" role="img"
-                    :aria-label="`Occupancy ${dec(s.capacity.occupancy)}% against a target of ${s.targets.occupancy}%`">
-                    <span class="fill" :style="`width: ${Math.min(100, s.capacity.occupancy || 0)}%`"></span>
-                    <span class="tick" :style="`left: ${s.targets.occupancy}%`"></span>
+                <div class="ccx-meter-legend">
+                    <span x-text="`All wards ${s.capacity.occupancy === null ? '—' : dec(s.capacity.occupancy) + '%'} · ${fmt(s.capacity.occupied)} of ${fmt(s.capacity.beds)} beds`"></span>
+                    <span x-text="`Target ${s.targets.occupancy}% or under`"></span>
                 </div>
-                <div class="ccx-meter-legend"><span>0%</span><span x-text="`Target ${s.targets.occupancy}% or under`"></span><span>100%</span></div>
                 <dl class="ccx-minis">
                     <div><dt>Free beds</dt><dd x-text="fmt(s.capacity.free)"></dd></div>
                     <div><dt>Prebooked</dt><dd x-text="fmt(s.capacity.incoming)"></dd></div>
@@ -693,6 +705,7 @@
 
         <p class="ccx-foot">
             Occupancy is occupied beds over active beds, against a target of <span x-text="s.targets.occupancy"></span>% or under.
+            Labour room &amp; nursery is the wards of a ward type marked so on the Ward Types page; every other ward is General ward &amp; critical.
             Admissions and discharges come from the admission log; the midnight census is worked back from today's inpatients.
             Length of stay runs from the admission to the hospital to the discharge, for the patients discharged in the last <span x-text="s.targets.los_days"></span> days,
             and counts toward the ward that discharged them; a stay so far is an inpatient's days in hospital up to now.
@@ -767,6 +780,8 @@
             const defaults = () => ({
                 screen: 'auto',
                 size: 100,
+                // How the board says a time of day: 24-hour or 12-hour with AM/PM, and whether with the seconds
+                clock: { hour12: false, seconds: true },
                 kpis: { show: true, size: 100 },
                 wards: { show: true, size: 100, perPage: 0, seconds: STEP_SECONDS, hidden: [] },
                 trends: { show: true, size: 100, seconds: STEP_SECONDS },
@@ -781,6 +796,7 @@
                 const whole = (value, { min, max }, fallback) => (Number.isFinite(value) ? Math.min(max, Math.max(min, Math.round(value))) : fallback);
                 if (SCREENS.some((screen) => screen.key === saved.screen)) cfg.screen = saved.screen;
                 cfg.size = whole(saved.size, SIZE, cfg.size);
+                ['hour12', 'seconds'].forEach((key) => { if (saved.clock && typeof saved.clock[key] === 'boolean') cfg.clock[key] = saved.clock[key]; });
                 SECTIONS.forEach((section) => {
                     const from = saved[section.key] || {};
                     const to = cfg[section.key];
@@ -1215,11 +1231,23 @@
                 get connectionLabel() {
                     return { live: 'Live', retrying: 'Reconnecting…', 'signed-out': 'Signed out' }[this.connection];
                 },
+                // Times of day, in the time format of the settings: 24-hour or 12-hour with AM/PM, and the seconds or not
+                timeOf(when, seconds = false) {
+                    const at = when instanceof Date ? when : new Date(when);
+                    if (!when || Number.isNaN(at.getTime())) return DASH;
+                    const h = at.getHours();
+                    const rest = ':' + String(at.getMinutes()).padStart(2, '0') + (seconds ? ':' + String(at.getSeconds()).padStart(2, '0') : '');
+                    return this.cfg.clock.hour12 ? `${h % 12 || 12}${rest} ${h < 12 ? 'AM' : 'PM'}` : String(h).padStart(2, '0') + rest;
+                },
                 get clockTime() {
-                    return String(this.now.getHours()).padStart(2, '0') + ':' + String(this.now.getMinutes()).padStart(2, '0');
+                    const h = this.now.getHours();
+                    return (this.cfg.clock.hour12 ? String(h % 12 || 12) : String(h).padStart(2, '0')) + ':' + String(this.now.getMinutes()).padStart(2, '0');
                 },
                 get clockSeconds() {
                     return ':' + String(this.now.getSeconds()).padStart(2, '0');
+                },
+                get clockMeridiem() {
+                    return this.now.getHours() < 12 ? 'AM' : 'PM';
                 },
                 get clockDate() {
                     return this.now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });

@@ -46,6 +46,7 @@ class WardTypeController extends Controller
         $validated['code'] = strtoupper(trim($validated['code']));
         $validated['is_critical_care'] = $request->boolean('is_critical_care');
         $validated['is_emergency'] = $request->boolean('is_emergency');
+        $validated['is_labour_nursery'] = $request->boolean('is_labour_nursery');
         $validated['sort_order'] = $validated['sort_order'] ?? ((int) WardType::max('sort_order') + 1);
         $validated['is_active'] = true;
 
@@ -75,6 +76,7 @@ class WardTypeController extends Controller
         $validated['code'] = strtoupper(trim($validated['code']));
         $validated['is_critical_care'] = $request->boolean('is_critical_care', $wardType->is_critical_care);
         $validated['is_emergency'] = $request->boolean('is_emergency', $wardType->is_emergency);
+        $validated['is_labour_nursery'] = $request->boolean('is_labour_nursery', $wardType->is_labour_nursery);
         $validated['sort_order'] = $validated['sort_order'] ?? $wardType->sort_order;
 
         $wardType->update($validated);
@@ -129,6 +131,7 @@ class WardTypeController extends Controller
             'description' => 'nullable|string|max:255',
             'is_critical_care' => 'nullable|boolean',
             'is_emergency' => 'nullable|boolean',
+            'is_labour_nursery' => 'nullable|boolean',
             'sort_order' => 'nullable|integer|min:0',
         ], [
             'code.unique' => $hospitalId

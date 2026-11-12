@@ -53,6 +53,8 @@
                 </div>
             </section>
 
+            @include('command-center-v2.partials.settings-time', ['id' => 'ccx', 'about' => 'The clock and the update time'])
+
             <p class="ccx-set-lead"><span class="ccx-tv-tag">TV</span> settings are for TV mode, where Wards, Trends, Length of stay and Acuity &amp; risk take turns beside Needs attention.</p>
 
             {{-- Each section: whether it shows and its size, and for TV mode its rows and seconds a page --}}

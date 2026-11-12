@@ -232,6 +232,10 @@ class CommandCenterV2Test extends TestCase
             'wards' => 3, 'beds' => 11, 'occupied' => 6, 'free' => 3, 'reserved' => 1, 'maintenance' => 1,
             'occupancy' => 54.5, 'status' => 'good', 'incoming' => 1, 'pending_discharge' => 1,
             'critical_care' => ['wards' => 1, 'beds' => 2, 'occupied' => 2, 'free' => 0, 'ventilated' => 0],
+            'groups' => [
+                ['key' => 'general', 'label' => 'General ward & critical', 'wards' => 3, 'beds' => 11, 'occupied' => 6, 'free' => 3, 'occupancy' => 54.5, 'status' => 'good'],
+                ['key' => 'labour_nursery', 'label' => 'Labour room & nursery', 'wards' => 0, 'beds' => 0, 'occupied' => 0, 'free' => 0, 'occupancy' => null, 'status' => null],
+            ],
         ], $capacity);
 
         $wards = collect($this->summary()['wards'])->keyBy('code');
@@ -239,6 +243,40 @@ class CommandCenterV2Test extends TestCase
         $this->assertEquals(['occupancy' => 60.0, 'occupancy_status' => 'good', 'free' => 1, 'maintenance' => 1], array_intersect_key($wards['MW1'], array_flip(['occupancy', 'occupancy_status', 'free', 'maintenance'])));
         $this->assertSame(route('critical-care.dashboard', ['ward_id' => $this->icu->id]), $wards['ICU1']['url']);
         $this->assertSame(route('ward.dashboard', ['ward_id' => $this->medical->id]), $wards['MW1']['url']);
+    }
+
+    public function test_bed_occupancy_splits_the_labour_room_and_nursery_wards_from_the_rest(): void
+    {
+        $labourType = WardType::create(['code' => 'LRN', 'name' => 'Maternity', 'is_active' => true]);
+        $labour = $this->ward('LR1', 'Labour Room', $labourType, ['LR01' => 'available', 'LR02' => 'available']);
+        $this->ward('NUR', 'Nursery', $labourType, ['NUR01' => 'available', 'NUR02' => 'available']);
+        $this->admit($labour, 'LR01', 'Farah Aziz', now()->subHours(3));
+
+        // Not marked yet: every ward is General ward & critical
+        [$general, $nursery] = $this->summary()['capacity']['groups'];
+        $this->assertSame([5, 15, 0], [$general['wards'], $general['beds'], $nursery['beds']]);
+
+        // Marked on the Ward Types page
+        $this->actingAs($this->admin)->put(route('ward-types.update', $labourType), ['code' => 'LRN', 'name' => 'Maternity', 'is_labour_nursery' => '1'])
+            ->assertRedirect(route('ward-types.index'));
+        $this->assertTrue($labourType->fresh()->is_labour_nursery);
+
+        $capacity = $this->summary()['capacity'];
+        [$general, $nursery] = $capacity['groups'];
+        $this->assertSame(['general', 3, 11, 6, 3], [$general['key'], $general['wards'], $general['beds'], $general['occupied'], $general['free']]);
+        $this->assertSame(['labour_nursery', 'Labour room & nursery', 2, 4, 1, 3], [$nursery['key'], $nursery['label'], $nursery['wards'], $nursery['beds'], $nursery['occupied'], $nursery['free']]);
+        $this->assertEquals(25, $nursery['occupancy']);
+        // The hospital's figures are still every ward's
+        $this->assertSame([15, 7], [$capacity['beds'], $capacity['occupied']]);
+        $this->assertSame('labour_nursery', collect($this->summary()['wards'])->firstWhere('code', 'NUR')['occupancy_group']);
+
+        // A form without the field keeps the saved choice; the lists say which types and wards are marked
+        $this->actingAs($this->admin)->put(route('ward-types.update', $labourType), ['code' => 'LRN', 'name' => 'Maternity']);
+        $this->assertTrue($labourType->fresh()->is_labour_nursery);
+        $this->actingAs($this->admin)->get(route('ward-types.edit', $labourType))->assertOk()->assertSee('Labour Room &amp; Nursery', false);
+        $this->actingAs($this->admin)->get(route('ward-types.index'))->assertOk()->assertSee('Labour &amp; Nursery', false);
+        $this->actingAs($this->admin)->get(route('wards.index'))->assertOk()->assertSee('Labour &amp; nursery', false);
+        $this->actingAs($this->admin)->get(route('command-center-v2.index'))->assertOk()->assertSee('ccx-occgroups', false);
     }
 
     public function test_the_hospital_filling_up_is_raised_above_target_and_again_near_full(): void

@@ -26,7 +26,8 @@ use Illuminate\Support\Str;
  * (CommandCenterEd).
  *
  * Four areas, hospital-wide and per ward:
- *  - capacity: beds by status, and occupancy against OCCUPANCY_TARGET;
+ *  - capacity: beds by status, and occupancy against OCCUPANCY_TARGET, for
+ *    the hospital and for each of OCCUPANCY_GROUPS;
  *  - patient flow: today's admissions and discharges from the admission log,
  *    the share discharged by noon and the average length of stay, which
  *    lengthOfStay() breaks down by day and by ward;
@@ -44,6 +45,16 @@ final class CommandCenterSummary
     /** Bed occupancy (%) to stay at or under; at OCCUPANCY_CRITICAL a ward or the hospital is all but full. */
     public const OCCUPANCY_TARGET = 85;
     public const OCCUPANCY_CRITICAL = 95;
+
+    /**
+     * The bed occupancy card's sections. A ward is in Labour room & nursery when
+     * its ward type is marked so (Ward Types), and in General ward & critical
+     * otherwise, a ward without a type included.
+     */
+    public const OCCUPANCY_GROUPS = [
+        'general' => 'General ward & critical',
+        'labour_nursery' => 'Labour room & nursery',
+    ];
 
     /** The daily trends run this many days, today included. */
     public const TREND_DAYS = 14;
@@ -169,6 +180,7 @@ final class CommandCenterSummary
             'code' => $ward->ward_code,
             'type' => $live['type'],
             'critical_care' => $live['critical_care'],
+            'occupancy_group' => $ward->wardType?->is_labour_nursery ? 'labour_nursery' : 'general',
             'url' => $live['dashboard_url'],
             'beds' => $beds->count(),
             'occupied' => $live['occupied'],
@@ -228,6 +240,22 @@ final class CommandCenterSummary
                 'free' => $criticalCare->sum('free'),
                 'ventilated' => $criticalCare->sum('ventilated'),
             ],
+            // The card's two sections: the wards of a Labour Room & Nursery type, and all the others
+            'groups' => collect(self::OCCUPANCY_GROUPS)->map(function (string $label, string $key) use ($rows) {
+                $group = $rows->where('occupancy_group', $key);
+                $occupancy = self::percent($group->sum('occupied'), $group->sum('beds'));
+
+                return [
+                    'key' => $key,
+                    'label' => $label,
+                    'wards' => $group->count(),
+                    'beds' => $group->sum('beds'),
+                    'occupied' => $group->sum('occupied'),
+                    'free' => $group->sum('free'),
+                    'occupancy' => $occupancy,
+                    'status' => self::occupancyStatus($occupancy),
+                ];
+            })->values()->all(),
         ];
     }
 

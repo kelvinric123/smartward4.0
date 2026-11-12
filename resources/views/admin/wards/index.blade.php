@@ -64,6 +64,10 @@
                                                     <span class="ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800"
                                                         title="Counted on Command Center V2 (ED)">Emergency</span>
                                                 @endif
+                                                @if ($ward->wardType->is_labour_nursery)
+                                                    <span class="ml-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-pink-100 text-pink-800"
+                                                        title="Counted under Labour room & nursery in Command Center V2's bed occupancy">Labour &amp; nursery</span>
+                                                @endif
                                             @else
                                                 <span class="text-gray-400">-</span>
                                             @endif

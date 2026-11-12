@@ -104,6 +104,29 @@
                         </div>
 
                         <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700">Labour Room &amp; Nursery</label>
+                            <div class="mt-2 flex items-center gap-4">
+                                <label class="inline-flex items-center">
+                                    <input type="radio" name="is_labour_nursery" value="0"
+                                        {{ !old('is_labour_nursery', $wardType->is_labour_nursery) ? 'checked' : '' }}
+                                        class="form-radio text-blue-600 focus:ring-blue-500">
+                                    <span class="ml-2 text-gray-700">No</span>
+                                </label>
+                                <label class="inline-flex items-center">
+                                    <input type="radio" name="is_labour_nursery" value="1"
+                                        {{ old('is_labour_nursery', $wardType->is_labour_nursery) ? 'checked' : '' }}
+                                        class="form-radio text-blue-600 focus:ring-blue-500">
+                                    <span class="ml-2 text-gray-700">Yes</span>
+                                </label>
+                            </div>
+                            <p class="mt-1 text-xs text-gray-500">Command Center V2's bed occupancy counts wards of this type under Labour room
+                                &amp; nursery, and every other ward under General ward &amp; critical.</p>
+                            @error('is_labour_nursery')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
+                        </div>
+
+                        <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-2">Clinical Indicator</label>
                             <p class="text-xs text-gray-500 mb-3">Select one or more scoring scales for this ward type.
                                 Manage the list on the Clinical Indicator tab.</p>

@@ -73,6 +73,28 @@
                 </div>
             </section>
 
+            @include('command-center-v2.partials.settings-time', ['id' => 'cced', 'about' => 'The clock, the update time, the times patients arrived and the hours on the charts'])
+
+            {{-- Data mode: what Ambulance cases today and Proceed for admission show, the recorded figures (Live) or
+                 made-up ones (Demo). Only this switch changes it: nothing else on the system turns this board's demo on or off --}}
+            <section class="ccx-set-group" aria-labelledby="cced-set-data">
+                <div class="ccx-set-title">
+                    <div>
+                        <h3 id="cced-set-data">Data mode</h3>
+                        <p class="ccx-set-about">For Ambulance cases today, and Proceed for admission in ED flow today. Demo is made-up figures for showing the board, and only this switch changes it.</p>
+                    </div>
+                    <span class="ccx-chip" :class="{ 'is-demo': cfg.data.demo }" x-text="cfg.data.demo ? 'Showing demo' : 'Showing live'"></span>
+                </div>
+                <div class="ccx-set-row">
+                    <span class="lbl" id="cced-set-data-mode">Mode</span>
+                    <div class="ccx-seg" role="radiogroup" aria-labelledby="cced-set-data-mode">
+                        <button type="button" role="radio" :aria-checked="(!cfg.data.demo).toString()" @click="cfg.data.demo = false">Live</button>
+                        <button type="button" role="radio" :aria-checked="cfg.data.demo.toString()" @click="cfg.data.demo = true">Demo</button>
+                    </div>
+                </div>
+                <p class="ccx-set-hint" :class="{ 'is-warn': cfg.data.demo }" x-text="dataModeNote"></p>
+            </section>
+
             <p class="ccx-set-lead"><span class="ccx-tv-tag">TV</span> settings are for TV mode, where Zones, Trends and Time in ED take turns beside Needs attention.</p>
 
             {{-- Each section: whether it shows and its size, and for TV mode its rows and seconds a page --}}
@@ -98,6 +120,19 @@
                                 <button type="button" class="ccx-step" @click="nudgeSection(section.key, 10)" :disabled="cfg[section.key].size >= 200" :aria-label="section.label + ' bigger'">+</button>
                             </div>
                         </div>
+                        <template x-if="section.key === 'kpis'">
+                            <div>
+                                <template x-for="card in cards" :key="card.key">
+                                    <div class="ccx-set-row">
+                                        <span class="lbl" :id="'cced-set-card-' + card.key" x-text="card.label"></span>
+                                        <button type="button" role="switch" class="ccx-switch" :aria-checked="cfg[card.key].show.toString()"
+                                            :aria-labelledby="'cced-set-card-' + card.key" @click="cfg[card.key].show = !cfg[card.key].show">
+                                            <span class="track" aria-hidden="true"></span><span>Show</span>
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
                         <p class="ccx-set-hint is-warn" x-show="section.key === 'zones' && zonesFitNote" x-text="zonesFitNote"></p>
                         <template x-if="section.perPage">
                             <div>

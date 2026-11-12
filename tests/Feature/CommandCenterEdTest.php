@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\AdmissionLog;
+use App\Models\AmbulanceCall;
 use App\Models\Bed;
 use App\Models\Hospital;
 use App\Models\Patient;
@@ -241,6 +242,110 @@ class CommandCenterEdTest extends TestCase
         $page = $this->actingAs($this->admin)->get(route('command-center-ed.index'))->assertOk();
         $this->assertStringNotContainsString('Nurul Huda', $page->getContent());
         $this->assertStringNotContainsString('Nurul Huda', json_encode($board));
+
+        // The arrival time in the detail, and the instant, for the board's own time format
+        $this->assertSame('07:20', $longest['since_label']);
+        $this->assertStringContainsString('since 07:20', $longest['detail']);
+        $this->assertTrue(Carbon::parse($longest['since'])->equalTo(now()->subMinutes(400)));
+        $this->assertNull($full['since']);
+    }
+
+    public function test_proceed_for_admission_counts_todays_decisions_and_those_waiting_in_the_ed_for_a_bed(): void
+    {
+        $this->arrive($this->red, 'RED01', 200)->update(['proceed_admission_at' => now()->subMinutes(60)]);
+        $this->arrive($this->yellow, 'YELLOW01', 100)->update(['proceed_admission_at' => now()->subMinutes(30)]);
+        // Decided during an earlier stay: neither today's nor waiting now
+        $this->arrive($this->yellow, 'YELLOW02', 40)->update(['proceed_admission_at' => now()->subDays(3)]);
+        $this->arrive($this->waiting, 'SEAT01', 20);
+        // Decided this morning and gone on to the ward since
+        $this->arrive($this->medical, 'MW01', 120)->update(['proceed_admission_at' => now()->subMinutes(180)]);
+        // Yesterday, by this time and after it
+        $this->arrive($this->medical, 'MW02', 2000)->update(['proceed_admission_at' => now()->subDay()->subHours(4)]);
+        $this->left($this->waiting, now()->subDay()->subHours(2), now()->subDay()->addHour());
+        Patient::latest('id')->first()->update(['proceed_admission_at' => now()->subDay()->addMinutes(30)]);
+
+        $admission = $this->board()['admission'];
+        $this->assertFalse($admission['demo']);
+        $this->assertSame(3, $admission['today']);
+        $this->assertSame(1, $admission['same_time_yesterday']);
+        $this->assertSame(2, $admission['waiting']);
+        $this->assertSame(45, $admission['waiting_median']);
+        $this->assertSame(60, $admission['waiting_longest']);
+
+        $demo = $this->board()['admission_demo'];
+        $this->assertTrue($demo['demo']);
+        $this->assertSame($demo, CommandCenterEd::proceedForAdmissionDemo(now()));
+        $this->assertSame($demo['today'], CommandCenterEd::proceedForAdmissionDemo(now()->addDay())['same_time_yesterday']);
+        $this->assertGreaterThanOrEqual($demo['today'], CommandCenterEd::proceedForAdmissionDemo(now()->endOfDay())['today']);
+    }
+
+    public function test_ambulance_cases_today_count_the_calls_the_cases_attended_and_the_response_times(): void
+    {
+        $call = fn (string $called, ?string $arrived = null, ?string $cancelled = null) => AmbulanceCall::create([
+            'called_at' => Carbon::parse($called), 'arrived_at' => $arrived ? Carbon::parse($arrived) : null,
+            'cancelled_at' => $cancelled ? Carbon::parse($cancelled) : null,
+        ]);
+        $call('2026-09-29 08:00', '2026-09-29 08:06');          // 6 min
+        $call('2026-09-29 10:00', '2026-09-29 10:20');          // 20 min
+        $call('2026-09-29 13:00', '2026-09-29 13:10');          // 10 min
+        $call('2026-09-29 12:00', null, '2026-09-29 12:05');    // called off
+        $call('2026-09-29 13:50');                              // the crew on the way
+        $call('2026-09-29 13:55', '2026-09-29 14:05');          // not there yet at 14:00
+        $call('2026-09-29 15:00', '2026-09-29 15:10');          // later than now
+        $call('2026-09-28 11:00', '2026-09-28 11:12');          // yesterday, by this time
+        $call('2026-09-28 16:00', '2026-09-28 16:12');          // yesterday, after it
+
+        $ambulance = $this->board()['ambulance'];
+        $this->assertFalse($ambulance['demo']);
+        $this->assertSame(6, $ambulance['calls']);
+        $this->assertSame(1, $ambulance['calls_same_time_yesterday']);
+        $this->assertSame(3, $ambulance['attended']);
+        $this->assertEquals(50, $ambulance['attended_pct']);
+        $this->assertSame([2, 1], [$ambulance['open'], $ambulance['cancelled']]);
+        $this->assertSame(10, $ambulance['response_median']);
+        $this->assertEquals(12, $ambulance['response_average']);
+        $this->assertSame(20, $ambulance['response_longest']);
+
+        // The Demo data mode is the board's own choice: its made-up figures leave the calls alone
+        $this->assertTrue($this->board()['ambulance_demo']['demo']);
+        $this->assertSame(9, AmbulanceCall::count());
+    }
+
+    public function test_demo_ambulance_figures_are_steady_and_add_up_through_the_day(): void
+    {
+        $afternoon = CommandCenterEd::ambulanceDemo(Carbon::parse('2026-09-29 14:00'));
+        $this->assertSame($afternoon, CommandCenterEd::ambulanceDemo(Carbon::parse('2026-09-29 14:00')));
+        $this->assertTrue($afternoon['demo']);
+        $this->assertSame($afternoon['calls'], $afternoon['attended'] + $afternoon['open'] + $afternoon['cancelled']);
+        $this->assertGreaterThan(0, $afternoon['calls']);
+        $this->assertGreaterThanOrEqual(7, $afternoon['response_median']);
+
+        $night = CommandCenterEd::ambulanceDemo(Carbon::parse('2026-09-29 23:59:59'));
+        $this->assertGreaterThanOrEqual($afternoon['calls'], $night['calls']);
+        $this->assertSame(0, CommandCenterEd::ambulanceDemo(Carbon::parse('2026-09-29 00:00:00'))['calls']);
+        $this->assertSame($afternoon['calls'], CommandCenterEd::ambulanceDemo(Carbon::parse('2026-09-30 14:00'))['calls_same_time_yesterday']);
+
+        // Without ambulance calls the live card counts none
+        $this->assertSame(0, $this->board()['ambulance']['calls']);
+        $this->assertNull($this->board()['ambulance']['response_median']);
+    }
+
+    public function test_the_settings_offer_the_cards_the_time_format_and_the_data_mode(): void
+    {
+        $this->actingAs($this->admin)->get(route('command-center-ed.index'))
+            ->assertOk()
+            ->assertSee('Ambulance cases today')
+            ->assertSee('Time format')
+            ->assertSee('12-hour (AM/PM)')
+            ->assertSee('Data mode')
+            ->assertSee('Proceed for admission')
+            ->assertSee("{ key: 'doctors', label: 'Doctors' }", false);
+
+        $this->actingAs($this->admin)->get(route('command-center-v2.index'))
+            ->assertOk()
+            ->assertSee('Time format')
+            ->assertSee('12-hour (AM/PM)')
+            ->assertDontSee('Data mode');
     }
 
     public function test_the_target_is_set_in_settings_for_every_screen(): void
