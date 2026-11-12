@@ -8,6 +8,8 @@
         
         $hospital = \App\Models\Hospital::first();
         $logoUrl = $hospital && $hospital->navbar_logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->navbar_logo_path) : ($hospital && $hospital->logo_path ? \Illuminate\Support\Facades\Storage::url($hospital->logo_path) : asset('phkl_new.png'));
+        // The logo opens the slideshow unless the hospital's Slideshow page switches that off
+        $slideshowOn = $hospital ? $hospital->slideshowEnabled() : true;
     @endphp
     <style>
         @keyframes pulse-subtle {
@@ -479,7 +481,11 @@
                     <a href="{{ route('ward.dashboard', request()->query()) }}"
                         onclick="window.location.reload(); return false;" title="Click to refresh"
                         class="inline-flex items-center group">
+                        @if ($slideshowOn)
                         <img src="{{ $logoUrl }}" alt="Hospital Logo" class="h-10 w-auto mr-3 cursor-pointer hover:opacity-80 transition-opacity" onclick="event.preventDefault(); event.stopPropagation(); window.dispatchEvent(new CustomEvent('open-slideshow-modal'))" title="View Slideshow">
+                        @else
+                        <img src="{{ $logoUrl }}" alt="Hospital Logo" class="h-10 w-auto mr-3">
+                        @endif
                         <h2
                             class="font-bold text-xl text-white leading-tight transition-colors cursor-pointer">
                             Ward Dashboard
@@ -2827,6 +2833,7 @@
         </div>
     </div>
 
+    @if ($slideshowOn)
     <!-- Slideshow Modal -->
     <div x-data="{ open: false }" 
          x-init="$watch('open', value => window.dispatchEvent(new CustomEvent(value ? 'pause-timer' : 'resume-timer')))"
@@ -2863,6 +2870,8 @@
             </div>
         </div>
     </div>
+
+    @endif
 
     <!-- Settings Modal -->
     <div x-data="{

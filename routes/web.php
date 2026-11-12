@@ -92,6 +92,7 @@ Route::middleware('auth')->group(function () {
     // Slideshow Management Routes
     Route::get('hospitals/{hospital}/slideshows', [\App\Http\Controllers\SlideshowController::class, 'index'])->name('hospitals.slideshows.index');
     Route::post('hospitals/{hospital}/slideshows', [\App\Http\Controllers\SlideshowController::class, 'store'])->name('hospitals.slideshows.store');
+    Route::put('hospitals/{hospital}/slideshows/settings', [\App\Http\Controllers\SlideshowController::class, 'updateSettings'])->name('hospitals.slideshows.settings');
     Route::delete('hospitals/{hospital}/slideshows/{slideshow}', [\App\Http\Controllers\SlideshowController::class, 'destroy'])->name('hospitals.slideshows.destroy');
 
     Route::resource('specialties', SpecialtyController::class)->except(['show']);

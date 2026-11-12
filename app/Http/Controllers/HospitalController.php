@@ -86,6 +86,9 @@ class HospitalController extends Controller implements HasMiddleware
             'theme_secondary_color' => ['sometimes', 'required', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'menu' => 'sometimes|array',
             'menu.*' => 'boolean',
+            // The bottom bar's text; leaving both empty goes back to "PHKL Smart Ward 4.0"
+            'footer_highlight' => 'sometimes|nullable|string|max:40',
+            'footer_text' => 'sometimes|nullable|string|max:80',
         ], [
             'theme_primary_color.regex' => 'Choose the primary colour as a hex code such as #2563eb.',
             'theme_secondary_color.regex' => 'Choose the secondary colour as a hex code such as #06b6d4.',
@@ -108,6 +111,17 @@ class HospitalController extends Controller implements HasMiddleware
         } else {
             // The colours only change as a pair
             unset($validated['theme_primary_color'], $validated['theme_secondary_color']);
+        }
+
+        $hasFooterColumns = Hospital::hasDisplaySettings();
+        foreach (['footer_highlight', 'footer_text'] as $field) {
+            if (! $hasFooterColumns) {
+                // A server that hasn't migrated yet keeps the default text and still saves the rest
+                unset($validated[$field]);
+            } elseif (array_key_exists($field, $validated)) {
+                $value = trim((string) $validated[$field]);
+                $validated[$field] = $value === '' ? null : $value;
+            }
         }
 
         if (isset($validated['menu'])) {

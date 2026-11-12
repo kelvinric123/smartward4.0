@@ -100,7 +100,7 @@
             {{-- Footer --}}
             <div class="mt-8 text-center">
                 <div class="flex items-center justify-center space-x-2 text-slate-500">
-                    <span class="text-xs">PHKL Smart Ward 4.0</span>
+                    <span class="text-xs">{{ trim(implode(' ', (\App\Models\Hospital::first() ?? new \App\Models\Hospital)->footerParts())) }}</span>
                     <span class="text-slate-600">•</span>
                     <span class="text-xs">Developed by</span>
                     <img src="{{ asset('logo_qmed.png') }}" alt="Qmed" class="h-4 w-auto opacity-50">

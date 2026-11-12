@@ -113,7 +113,7 @@
                     selectedIndex: 0,
                     playing: true,
                     intervalId: null,
-                    delay: 10000, // 10 seconds per slide
+                    delay: {{ (int) ($seconds ?? 10) * 1000 }}, // seconds per slide, set on the hospital's Slideshow page
                     touchStartX: 0,
                     touchEndX: 0,
                     slides: @json($allSlides),

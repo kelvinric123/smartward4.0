@@ -3,7 +3,8 @@
     use App\Support\NavigationMenu;
 
     // Open the tab whose fields failed validation, else the one asked for in the URL
-    $themeErrors = collect($errors->keys())->contains(fn ($key) => str_starts_with($key, 'theme_') || str_starts_with($key, 'menu'));
+    $themeErrors = collect($errors->keys())->contains(fn ($key) => str_starts_with($key, 'theme_') || str_starts_with($key, 'menu') || str_starts_with($key, 'footer_'));
+    [$footerHighlight, $footerText] = $hospital->footerParts();
     $initialTab = $themeErrors ? 'theme' : ($errors->any() ? 'details' : (request('tab') === 'theme' ? 'theme' : 'details'));
 
     $oldMenu = old('menu');
@@ -42,6 +43,17 @@
         menu: @js($menuState),
         alwaysShown: @js(NavigationMenu::ALWAYS_SHOWN),
         entries: @js($previewEntries),
+        footerHighlight: @js((string) old('footer_highlight', $footerHighlight)),
+        footerText: @js((string) old('footer_text', $footerText)),
+        footerDefaults: { highlight: @js(\App\Models\Hospital::DEFAULT_FOOTER_HIGHLIGHT), text: @js(\App\Models\Hospital::DEFAULT_FOOTER_TEXT) },
+        /* Both parts empty shows the default text, as the bottom bar does */
+        get footerShown() {
+            const highlight = this.footerHighlight.trim(), text = this.footerText.trim();
+            return highlight || text ? [highlight, text] : [this.footerDefaults.highlight, this.footerDefaults.text];
+        },
+        get footerIsDefault() {
+            return this.footerShown[0] === this.footerDefaults.highlight && this.footerShown[1] === this.footerDefaults.text;
+        },
         showTab(tab) {
             this.tab = tab;
             const url = new URL(window.location);
@@ -270,6 +282,8 @@
                                     <span>The menu text is white and may be hard to read on these colours. A darker shade keeps it legible.</span>
                                 </div>
                             </section>
+
+                            @include('admin.hospitals.partials.footer-settings')
 
                             <!-- Sidebar menu -->
                             <section class="rounded-2xl border border-brand-100 bg-white/90 p-6 shadow-lg backdrop-blur-sm sm:p-8">
