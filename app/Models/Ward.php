@@ -29,6 +29,18 @@ class Ward extends Model
         'cplus_synced_at' => 'datetime',
     ];
 
+    protected static function booted(): void
+    {
+        // The ward's beds follow it: out of use while it is deactivated, back when it
+        // is activated again (Bed::followWard). Deleting a ward deletes its beds (the
+        // beds.ward_id foreign key cascades).
+        static::updated(function (Ward $ward) {
+            if ($ward->wasChanged('is_active')) {
+                Bed::followWard($ward);
+            }
+        });
+    }
+
     public function hospital()
     {
         return $this->belongsTo(Hospital::class);

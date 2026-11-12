@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Facades\Schema;
 
 class Bed extends Model
 {
@@ -31,8 +32,63 @@ class Bed extends Model
 
     protected $casts = [
         'is_active' => 'boolean',
+        'deactivated_with_ward' => 'boolean',
         'cplus_synced_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        // A bed made in, or moved into, a deactivated ward is out of use with it; one the
+        // ward took out of use comes back when it moves to an active ward
+        static::saving(function (Bed $bed) {
+            if (($bed->exists && ! $bed->isDirty('ward_id')) || ! self::followsWards()) {
+                return;
+            }
+
+            $wardActive = Ward::whereKey($bed->ward_id)->value('is_active');
+            if ($wardActive === null) {
+                return;
+            }
+
+            if (! $wardActive && $bed->is_active) {
+                $bed->is_active = false;
+                $bed->deactivated_with_ward = true;
+            } elseif ($wardActive && $bed->deactivated_with_ward) {
+                $bed->is_active = true;
+                $bed->deactivated_with_ward = false;
+            }
+        });
+    }
+
+    /**
+     * Whether beds follow their ward's active state. A server that hasn't run the
+     * migration adding deactivated_with_ward keeps the old behaviour: beds stay as
+     * they are whatever their ward does.
+     */
+    public static function followsWards(): bool
+    {
+        return Schema::hasColumn((new static)->getTable(), 'deactivated_with_ward');
+    }
+
+    /**
+     * Bring a ward's beds in line with it, after it was deactivated or activated:
+     * deactivating takes its active beds out of use, marked deactivated_with_ward;
+     * activating brings back only those, not beds deactivated on their own.
+     *
+     * @return int the beds changed
+     */
+    public static function followWard(Ward $ward): int
+    {
+        if (! self::followsWards()) {
+            return 0;
+        }
+
+        $beds = static::where('ward_id', $ward->id);
+
+        return $ward->is_active
+            ? $beds->where('deactivated_with_ward', true)->update(['is_active' => true, 'deactivated_with_ward' => false])
+            : $beds->where('is_active', true)->update(['is_active' => false, 'deactivated_with_ward' => true]);
+    }
 
     public function ward()
     {

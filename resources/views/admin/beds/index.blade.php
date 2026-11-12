@@ -58,13 +58,21 @@
                             </thead>
                             <tbody class="bg-white divide-y divide-blue-50">
                                 @forelse ($beds as $bed)
-                                    <tr class="hover:bg-blue-50 transition-colors">
+                                    @php
+                                        $wardInactive = $bed->ward && ! $bed->ward->is_active;
+                                    @endphp
+                                    <tr class="{{ $bed->is_active ? 'hover:bg-blue-50' : 'bg-gray-50 hover:bg-gray-100' }} transition-colors">
                                         <td class="px-6 py-4">
                                             <span class="font-semibold text-gray-800">{{ $bed->bed_id }}</span>
                                             <span class="block text-xs text-gray-500">{{ $bed->bed_number }}</span>
                                         </td>
                                         <td class="px-6 py-4 text-gray-600 text-sm">{{ $bed->bed_display_name }}</td>
-                                        <td class="px-6 py-4 text-gray-600 text-sm">{{ $bed->ward->ward_name ?? '-' }}</td>
+                                        <td class="px-6 py-4 text-gray-600 text-sm">
+                                            {{ $bed->ward->ward_name ?? '-' }}
+                                            @if ($wardInactive)
+                                                <span class="block text-xs font-medium text-red-600">Ward deactivated</span>
+                                            @endif
+                                        </td>
                                         <td class="px-6 py-4 text-gray-600 text-sm">{{ $bed->section ? 'Section ' . $bed->section : '-' }}</td>
                                         <td class="px-6 py-4 whitespace-nowrap">
                                             @php
@@ -78,6 +86,10 @@
                                             <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full border {{ $statusColors[$bed->status] ?? 'bg-gray-100 text-gray-800' }}">
                                                 {{ ucfirst($bed->status) }}
                                             </span>
+                                            @unless ($bed->is_active)
+                                                <span class="ml-1 px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full border bg-gray-200 text-gray-700 border-gray-300"
+                                                    title="{{ $bed->deactivated_with_ward ? 'Out of use with its ward' : 'Deactivated' }}">Inactive</span>
+                                            @endunless
                                         </td>
                                         <td class="px-6 py-4 text-gray-600 text-sm">{{ $bed->patient->name ?? '-' }}</td>
                                         <td class="px-6 py-4 text-gray-600 text-sm">{{ $bed->nurse->name ?? '-' }}</td>
@@ -136,7 +148,11 @@
                                                                 </svg>
                                                                 <span>
                                                                     <span class="block font-medium">{{ $bed->is_active ? 'Deactivate' : 'Activate' }}</span>
-                                                                    <span class="block text-xs text-gray-500">{{ $bed->is_active ? 'Hide this bed from use' : 'Put this bed back in use' }}</span>
+                                                                    @if (! $bed->is_active && $wardInactive)
+                                                                        <span class="block text-xs text-red-600">Its ward is deactivated: activate the ward to bring its beds back</span>
+                                                                    @else
+                                                                        <span class="block text-xs text-gray-500">{{ $bed->is_active ? 'Hide this bed from use' : 'Put this bed back in use' }}</span>
+                                                                    @endif
                                                                 </span>
                                                             </button>
                                                         </form>

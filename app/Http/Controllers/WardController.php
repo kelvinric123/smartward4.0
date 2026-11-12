@@ -68,9 +68,21 @@ class WardController extends Controller
 
     public function deactivate(Ward $ward)
     {
+        // Its beds follow it (see Ward::booted): say how many went with it
+        $activeBefore = $ward->beds()->where('is_active', true)->count();
         $ward->update(['is_active' => !$ward->is_active]);
+        $bedsChanged = abs($ward->beds()->where('is_active', true)->count() - $activeBefore);
+
         $status = $ward->is_active ? 'activated' : 'deactivated';
-        return redirect()->route('wards.index')->with('success', "Ward {$status} successfully.");
+        $message = "Ward {$status} successfully.";
+        if ($bedsChanged > 0) {
+            $beds = $bedsChanged === 1 ? '1 bed' : "{$bedsChanged} beds";
+            $message .= $ward->is_active
+                ? " {$beds} in it " . ($bedsChanged === 1 ? 'is' : 'are') . ' back in use.'
+                : " {$beds} in it " . ($bedsChanged === 1 ? 'was' : 'were') . ' deactivated with it.';
+        }
+
+        return redirect()->route('wards.index')->with('success', $message);
     }
 
     /**

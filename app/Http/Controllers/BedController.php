@@ -134,9 +134,22 @@ class BedController extends Controller
 
     public function deactivate(Bed $bed)
     {
-        $bed->update(['is_active' => !$bed->is_active]);
+        // A deactivated ward's beds are out of use with it, and come back when the ward does
+        if (!$bed->is_active && $bed->ward && !$bed->ward->is_active && Bed::followsWards()) {
+            $label = $bed->bed_display_name ?: $bed->bed_number;
+
+            return back()->with('error', "Bed {$label} is in {$bed->ward->ward_name}, which is deactivated. "
+                . 'Activate the ward on the Wards page to bring its beds back.');
+        }
+
+        $changes = ['is_active' => !$bed->is_active];
+        if (Bed::followsWards()) {
+            // Switched by hand, so it no longer follows the ward's own switch
+            $changes['deactivated_with_ward'] = false;
+        }
+        $bed->update($changes);
         $status = $bed->is_active ? 'activated' : 'deactivated';
-        return redirect()->route('beds.index')->with('success', "Bed {$status} successfully.");
+        return back()->with('success', "Bed {$status} successfully.");
     }
 
     /**
