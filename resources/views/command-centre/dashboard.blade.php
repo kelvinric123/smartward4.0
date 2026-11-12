@@ -138,7 +138,7 @@
 </main>
 
 <footer class="flex-shrink-0 bg-slate-900 border-t border-slate-800 px-4 py-1.5 flex items-center justify-between">
-    <span class="text-[10px] text-slate-600">PHKL Smart Ward 4.0</span>
+    <span class="text-[10px] text-slate-600">{{ trim(implode(' ', (\App\Models\Hospital::first() ?? new \App\Models\Hospital)->footerParts())) }}</span>
     <div class="flex items-center gap-1.5"><span class="text-[10px] text-slate-600">Developed by</span><img src="{{ asset('logo_qmed.png') }}" alt="Qmed" class="h-3 w-auto opacity-40"></div>
 </footer>
 </div>

@@ -16,6 +16,18 @@
 //
 //   Patient chart (orders, I/O, doses, infusions, alerts, stay timeline):
 //   see src/api/patient.js.
+//   GET   {BASE_URL}/api/nurse/handovers
+//         resp:  { from_shift, to_shift, patients: [...], nurses,
+//                  suggested_receivers, outgoing: [...], incoming: [...] }
+//         Scoped per shift following the ward roster: `patients` are the
+//         ones this nurse hands over (current shift, or the shift that just
+//         ended), `outgoing` what they sent for that shift change and
+//         `incoming` handovers into their current or upcoming shift.
+//   POST  {BASE_URL}/api/nurse/handovers
+//         body:  { to_nurse_id?, items: [{ patient_id, condition_status,
+//                  patient_condition, nursing_plan }] }
+//   POST  {BASE_URL}/api/nurse/handovers/receive   body: { ids: [...] }
+//         (both POSTs respond with the refreshed handover state)
 //
 //   POST  {BASE_URL}/api/nurse/logout
 //   POST  {BASE_URL}/api/nurse/ping
@@ -108,6 +120,24 @@ export async function loginNurse({ username, password }) {
 
 export async function fetchNurseDashboard(token) {
   return apiFetch('/api/nurse/dashboard', { token });
+}
+
+export async function fetchHandovers() {
+  return apiFetch('/api/nurse/handovers');
+}
+
+export async function postHandovers({ toNurseId, items }) {
+  return apiFetch('/api/nurse/handovers', {
+    method: 'POST',
+    body: { to_nurse_id: toNurseId ?? null, items },
+  });
+}
+
+export async function postReceiveHandovers(ids) {
+  return apiFetch('/api/nurse/handovers/receive', {
+    method: 'POST',
+    body: { ids },
+  });
 }
 
 export async function logout(token) {

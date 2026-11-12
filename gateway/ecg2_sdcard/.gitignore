@@ -1,0 +1,10 @@
+listener/data/
+listener/__pycache__/
+listener/src/__pycache__/
+tests/__pycache__/
+__pycache__/
+listener/.env
+# Filled in on the SD card only (holds the API password until setup runs)
+setup.conf
+SETUP_RESULT.txt
+SETUP_LOG.txt

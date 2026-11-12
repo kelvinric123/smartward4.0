@@ -1,0 +1,2 @@
+# Serial access for the DINAMAP V100 host port (USB-serial adapter -> rear DB15).
+pyserial>=3.5

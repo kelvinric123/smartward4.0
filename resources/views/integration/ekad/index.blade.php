@@ -396,6 +396,8 @@
                 </div>
             </div>
 
+            @include('integration.ekad.partials.screen-status')
+
             <!-- Templates: the fields of each SEEKINK template -->
             <div class="bg-white/90 backdrop-blur-sm overflow-hidden shadow-lg rounded-2xl border border-indigo-100">
                 <div class="p-6 border-b border-indigo-100 bg-gradient-to-r from-violet-50 to-indigo-50">
@@ -450,6 +452,12 @@
                                                     :title="field.key + ' ← ' + sourceLabel(field)" x-text="field.key"></span>
                                             </template>
                                             <span x-show="!row.saved" class="self-center text-xs text-gray-400">default fields</span>
+                                        </div>
+                                        <!-- Painted instead for a patient with that isolation precaution -->
+                                        <div x-show="isolationTemplateLabels(row).length" class="mt-1.5 space-y-0.5">
+                                            <template x-for="label in isolationTemplateLabels(row)" :key="label">
+                                                <div class="text-xs text-amber-700" x-text="label"></div>
+                                            </template>
                                         </div>
                                     </td>
                                     <td class="px-4 py-3 text-right whitespace-nowrap align-top">
@@ -1033,7 +1041,9 @@
                                                             <div x-text="item.mac_address"></div>
                                                             <div class="text-xs text-gray-400">
                                                                 <span x-text="item.template_id || '-'"></span><span
-                                                                    x-show="item.template_is_default" class="font-sans"> (default)</span>
+                                                                    x-show="item.template_is_default" class="font-sans"> (default)</span><span
+                                                                    x-show="item.template_is_isolation" class="font-sans text-amber-600"
+                                                                    title="The isolation template for this patient's isolation precaution"> (isolation)</span>
                                                             </div>
                                                         </td>
                                                         <td class="px-3 py-4 whitespace-nowrap">
@@ -1272,6 +1282,25 @@
                                 class="mt-2 text-sm font-medium text-violet-600 hover:text-violet-800">+ Add field</button>
                         </div>
 
+                        <!-- Isolation templates: this layout with a precaution's picture, painted for a patient with that precaution -->
+                        <div class="rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                            <div class="text-sm font-medium text-gray-700">Isolation templates</div>
+                            <p class="mt-0.5 text-xs text-gray-500">For a patient with an isolation precaution (Patient Details), the
+                                screen is painted with another SEEKINK template instead: this layout with that precaution's picture. It
+                                is sent the same fields. Leave blank to keep this template.</p>
+                            <div class="mt-2 space-y-1.5">
+                                <template x-for="type in isolationTypes" :key="type.code">
+                                    <label class="flex items-center justify-between gap-3">
+                                        <span class="min-w-0 truncate text-sm text-gray-700" x-text="type.name"></span>
+                                        <input type="text" x-model="fieldsForm.isolation_templates[type.code]" maxlength="64"
+                                            class="w-56 shrink-0 rounded-md border-gray-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 py-1 text-sm font-mono"
+                                            placeholder="Template ID">
+                                    </label>
+                                </template>
+                            </div>
+                            <p x-show="isolationTypes.length === 0" class="mt-1 text-xs text-gray-400">No active Isolation Types</p>
+                        </div>
+
                         <p class="text-xs text-gray-400">Field names must match the SEEKINK template exactly (e.g. "bed no",
                             "isolation_type"). An empty bed shows its bed number and ward, "Vacant" as the MRN and "-" in the
                             other fields. Screens get the new fields on their next update; use Sync EKAD to repaint them now.</p>
@@ -1331,8 +1360,10 @@
                 templates: @json($templates),
                 templateSources: @json($templateSources),
                 defaultFields: @json($defaultFields),
+                // Isolation Types, each of which can paint a template's screens with a template of its own
+                isolationTypes: @json($isolationTypes),
                 showFieldsModal: false,
-                fieldsForm: { isNew: true, template_id: '', name: '', fields: [] },
+                fieldsForm: { isNew: true, template_id: '', name: '', fields: [], isolation_templates: {} },
                 fieldUid: 0,
                 savingFields: false,
                 syncingAll: false,
@@ -1419,7 +1450,9 @@
                         id: id, name: '', saved: false, fields: this.defaultFields, screens: 0, isDefault: id === this.defaultTemplateId,
                     };
                     if (this.defaultTemplateId) add(this.defaultTemplateId);
-                    this.templates.forEach(t => Object.assign(add(t.template_id), { name: t.name || '', saved: true, fields: t.fields }));
+                    this.templates.forEach(t => Object.assign(add(t.template_id), {
+                        name: t.name || '', saved: true, fields: t.fields, isolation_templates: t.isolation_templates || {},
+                    }));
                     this.bedMappings.forEach(m => {
                         const id = m.template_id || this.defaultTemplateId;
                         if (id) add(id).screens++;
@@ -1447,8 +1480,15 @@
                         template_id: templateId || '',
                         name: saved?.name || '',
                         fields: this.copyFields(saved ? saved.fields : this.defaultFields),
+                        isolation_templates: { ...(saved?.isolation_templates || {}) },
                     };
                     this.showFieldsModal = true;
+                },
+
+                // A template's isolation templates as "Airborne Isolation 2105…" labels, for its row
+                isolationTemplateLabels(row) {
+                    return Object.entries(row.isolation_templates || {}).map(([code, id]) =>
+                        (this.isolationTypes.find(t => t.code === code)?.name || code) + ' → ' + id);
                 },
 
                 moveField(index, step) {
@@ -1468,6 +1508,11 @@
                     if (keys.some(key => key === '')) return 'Every field needs its name from the SEEKINK template.';
                     if (new Set(keys).size !== keys.length) return 'Each field name can only be used once.';
                     if (form.fields.some(f => !f.source)) return 'Choose what each field shows.';
+                    const isolationIds = Object.values(form.isolation_templates).map(id => (id || '').trim()).filter(Boolean);
+                    if (isolationIds.some(id => !/^[A-Za-z0-9_-]{1,64}$/.test(id))) {
+                        return 'An isolation template ID can only have letters, digits, - and _.';
+                    }
+                    if (isolationIds.includes(form.template_id.trim())) return 'An isolation template must be another template than this one.';
                     return '';
                 },
 
@@ -1484,7 +1529,9 @@
                             },
                             body: JSON.stringify({
                                 name: form.name.trim() || null,
-                                fields: form.fields.map(f => ({ key: f.key.trim(), source: f.source, value: f.source === 'text' ? f.value : null }))
+                                fields: form.fields.map(f => ({ key: f.key.trim(), source: f.source, value: f.source === 'text' ? f.value : null })),
+                                isolation_templates: Object.fromEntries(Object.entries(form.isolation_templates)
+                                    .map(([code, id]) => [code, (id || '').trim()]).filter(([, id]) => id)),
                             })
                         });
                         const data = await response.json();

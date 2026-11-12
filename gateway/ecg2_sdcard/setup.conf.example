@@ -1,0 +1,18 @@
+# ECG USB gateway - first-boot settings (copy to setup.conf on the SD card).
+# The Pi reads this on first boot and sets itself up; no SSH needed.
+# Notepad is fine. After a successful setup the Pi blanks API_PASS here.
+
+# SmartWard API - for PHKL use port 88: port 80 redirects to the HTTPS domain.
+SERVER_URL=http://10.21.20.114:88/api/v1
+PASSPHRASE=qmedno1
+
+# The API user created on /vital-sign-integration -> API Users.
+# The gateway registers with it, and the server binds it to the new gateway.
+API_USER=
+API_PASS=
+
+# Ward of the TC35 (PHKL: 3 = D7, 6 = D6, 7 = D5, 8 = D4, 9 = D3). Blank = unassigned.
+WARD_ID=
+
+# Size of the USB stick the TC35 sees (MB).
+USB_SIZE_MB=4096

@@ -52,8 +52,9 @@
                 :class="hideNav ? 'fixed bottom-0 left-0 right-0 z-50' : ''">
                 <div class="w-full px-4 sm:px-6 lg:px-8">
                     <div class="flex items-center justify-between">
+                        @php([$footerHighlight, $footerText] = ($hospital ?? new \App\Models\Hospital)->footerParts())
                         <div class="text-sm text-gray-600">
-                            <span class="font-semibold text-brand-600">PHKL</span> Smart Ward 4.0
+                            <span class="font-semibold text-brand-600">{{ $footerHighlight }}</span> {{ $footerText }}
                         </div>
                         <div class="flex items-center space-x-2">
                             <span class="text-xs text-gray-500">Developed by</span>

@@ -1,0 +1,19 @@
+[Unit]
+Description=ECG USB drive - presents the drive image to the TC35 as a USB stick
+Documentation=file:///opt/ecg-usb/ecg2_sdcard.md
+After=local-fs.target systemd-modules-load.service sys-kernel-config.mount
+Wants=systemd-modules-load.service
+Before=ecg-usb-gateway.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/ecg-usb/usb_gadget.sh up /var/lib/ecg-usb/ecg-usb.env
+# Shutdown/stop = the stick is unplugged from the TC35.
+ExecStop=/opt/ecg-usb/usb_gadget.sh down /var/lib/ecg-usb/ecg-usb.env
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ecg-usb-gadget
+
+[Install]
+WantedBy=multi-user.target

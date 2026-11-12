@@ -395,10 +395,27 @@ class EkadService
             ];
         }
 
-        // Generate payload using the extracted method, in this screen's template's fields
+        // Generate payload using the extracted method, in this screen's template's fields, and paint
+        // it with the template for the patient's isolation precaution
         $data = $this->getPatientInfoPayload($patient, $bed, $overrides, $mapping->template_id);
 
-        return $this->pushToBed($mapping->mac_address, $data, $bed->id, $patient->id, $eventType, $mapping->template_id);
+        return $this->pushToBed($mapping->mac_address, $data, $bed->id, $patient->id, $eventType, $this->paintTemplateFor($mapping->template_id, $patient));
+    }
+
+    /**
+     * The template a screen is painted with: its own (Bed Mapping), else the one
+     * under Configuration & Login, or for a patient with an isolation precaution
+     * that template's isolation template for it (Templates on /ekad), which
+     * carries the precaution's picture and gets the same fields
+     */
+    public function paintTemplateFor(?string $screenTemplateId, ?Patient $patient): ?string
+    {
+        $templateId = $screenTemplateId ?: $this->config->template_id;
+        if (! $templateId || ! $patient) {
+            return $templateId;
+        }
+
+        return EkadTemplate::forIsolation($templateId, $patient->isolation_type);
     }
 
     /**

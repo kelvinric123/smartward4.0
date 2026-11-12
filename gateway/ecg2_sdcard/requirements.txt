@@ -1,0 +1,4 @@
+# The gateway runs on the Python standard library only (Raspberry Pi OS Lite
+# ships python3), so a Pi without internet needs nothing from pip.
+# Optional, local development: loads listener/.env
+python-dotenv>=1.0.0

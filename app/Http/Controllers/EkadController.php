@@ -7,6 +7,7 @@ use App\Models\EkadBedMapping;
 use App\Models\EkadResponseLog;
 use App\Models\EkadTemplate;
 use App\Models\Bed;
+use App\Models\IsolationType;
 use App\Models\Ward;
 use App\Services\EkadService;
 use Illuminate\Http\Request;
@@ -44,29 +45,44 @@ class EkadController extends Controller
             ->get();
 
         // Templates whose fields have been edited; the rest get the default fields
-        $templates = EkadTemplate::orderBy('name')->orderBy('template_id')->get(['template_id', 'name', 'fields']);
+        $templates = EkadTemplate::orderBy('name')->orderBy('template_id')->get(['template_id', 'name', 'fields', 'isolation_templates']);
         $templateSources = collect(EkadTemplate::SOURCES)
             ->map(fn (string $label, string $source) => ['source' => $source, 'label' => $label])
             ->values();
         $defaultFields = EkadTemplate::DEFAULT_FIELDS;
+        // The precautions Patient Details offers, each of which can paint with a template of its own
+        $isolationTypes = IsolationType::where('is_active', true)->orderBy('name')->get(['code', 'name']);
 
-        return view('integration.ekad.index', compact('config', 'wards', 'bedMappings', 'templates', 'templateSources', 'defaultFields'));
+        return view('integration.ekad.index', compact('config', 'wards', 'bedMappings', 'templates', 'templateSources', 'defaultFields', 'isolationTypes'));
     }
 
     /**
      * Save a SEEKINK template's fields: the field names the template was
-     * designed with, and what SmartWard puts in each (EkadTemplate::SOURCES)
+     * designed with, and what SmartWard puts in each (EkadTemplate::SOURCES);
+     * and its isolation templates, the template painted instead for each
+     * isolation precaution (blank ones dropped)
      */
     public function saveTemplate(Request $request, string $templateId)
     {
+        $isolationCodes = IsolationType::pluck('code')->map(fn (string $code) => strtoupper($code))->all();
+
         $validated = $request->validate([
             'name' => 'nullable|string|max:100',
             'fields' => 'required|array|min:1|max:40',
             'fields.*.key' => 'required|string|max:64|distinct',
             'fields.*.source' => ['required', 'string', Rule::in(array_keys(EkadTemplate::SOURCES))],
             'fields.*.value' => 'nullable|string|max:255',
+            // Isolation Types code => SEEKINK template ID
+            'isolation_templates' => ['nullable', 'array', function (string $attribute, $map, \Closure $fail) use ($isolationCodes) {
+                if (is_array($map) && array_diff(array_map(fn ($code) => strtoupper((string) $code), array_keys($map)), $isolationCodes)) {
+                    $fail('An isolation template is set for a precaution that is not in Isolation Types.');
+                }
+            }],
+            'isolation_templates.*' => ['nullable', 'string', 'regex:/^[A-Za-z0-9_-]{1,64}$/', "not_in:{$templateId}"],
         ], [
             'fields.*.key.distinct' => 'Each field name can only be used once.',
+            'isolation_templates.*.regex' => 'An isolation template ID can only have letters, digits, - and _.',
+            'isolation_templates.*.not_in' => 'An isolation template must be another template than this one.',
         ]);
 
         $template = EkadTemplate::updateOrCreate(['template_id' => $templateId], [
@@ -76,12 +92,16 @@ class EkadController extends Controller
                     + ($field['source'] === 'text' ? ['value' => (string) ($field['value'] ?? '')] : []))
                 ->values()
                 ->all(),
+            'isolation_templates' => collect($validated['isolation_templates'] ?? [])
+                ->map(fn ($isolationTemplateId) => trim((string) $isolationTemplateId))
+                ->filter(fn (string $isolationTemplateId) => $isolationTemplateId !== '')
+                ->all() ?: null,
         ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Fields saved for template ' . ($template->name ?: $template->template_id),
-            'template' => $template->only(['template_id', 'name', 'fields']),
+            'template' => $template->only(['template_id', 'name', 'fields', 'isolation_templates']),
         ]);
     }
 
@@ -685,6 +705,9 @@ class EkadController extends Controller
             $payload = $service->getBedPayload($bed, $mapping->template_id);
             $patient = $bed->patient;
             $occupied = $patient && $patient->is_active && $patient->isAdmitted();
+            // The template it is painted with: the screen's, or its isolation template for the patient's precaution
+            $screenTemplateId = $mapping->templateIdOr($config?->template_id);
+            $paintTemplateId = $occupied ? $service->paintTemplateFor($mapping->template_id, $patient) : $screenTemplateId;
 
             return [
                 'mapping_id' => $mapping->id,
@@ -692,8 +715,9 @@ class EkadController extends Controller
                 'bed_id' => $bed->id,
                 'bed_number' => $bed->bed_number, // Normalized in payload but kept raw here for display if needed
                 'mac_address' => $mapping->mac_address,
-                'template_id' => $mapping->templateIdOr($config?->template_id),
-                'template_is_default' => $mapping->template_id === null,
+                'template_id' => $paintTemplateId,
+                'template_is_default' => $mapping->template_id === null && $paintTemplateId === $screenTemplateId,
+                'template_is_isolation' => $paintTemplateId !== $screenTemplateId,
                 'payload' => $payload,
                 'patient' => $occupied ? $service->displayName($patient) : '-',
                 'status' => $occupied ? 'Occupied' : 'Vacant',

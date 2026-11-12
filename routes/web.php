@@ -24,6 +24,7 @@ use App\Http\Controllers\InfusionIntegrationController;
 use App\Http\Controllers\AdtConfigurationController;
 use App\Http\Controllers\EcgController;
 use App\Http\Controllers\EkadController;
+use App\Http\Controllers\EkadScreenStatusController;
 use App\Http\Controllers\ShiftSettingController;
 use App\Http\Controllers\DietTypeController;
 use App\Http\Controllers\IsolationTypeController;
@@ -91,6 +92,7 @@ Route::middleware('auth')->group(function () {
     // Slideshow Management Routes
     Route::get('hospitals/{hospital}/slideshows', [\App\Http\Controllers\SlideshowController::class, 'index'])->name('hospitals.slideshows.index');
     Route::post('hospitals/{hospital}/slideshows', [\App\Http\Controllers\SlideshowController::class, 'store'])->name('hospitals.slideshows.store');
+    Route::put('hospitals/{hospital}/slideshows/settings', [\App\Http\Controllers\SlideshowController::class, 'updateSettings'])->name('hospitals.slideshows.settings');
     Route::delete('hospitals/{hospital}/slideshows/{slideshow}', [\App\Http\Controllers\SlideshowController::class, 'destroy'])->name('hospitals.slideshows.destroy');
 
     Route::resource('specialties', SpecialtyController::class)->except(['show']);
@@ -387,6 +389,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/ekad/sync-preview', [EkadController::class, 'syncPreview'])->name('ekad.sync-preview');
     Route::post('/ekad/sync-selected', [EkadController::class, 'syncSelected'])->name('ekad.sync-selected');
     Route::put('/ekad/templates/{templateId}', [EkadController::class, 'saveTemplate'])->where('templateId', '[A-Za-z0-9_-]{1,64}')->name('ekad.templates.save');
+    Route::get('/ekad/screen-status', [EkadScreenStatusController::class, 'index'])->name('ekad.screen-status');
+    Route::get('/ekad/screen-status/{mac}/paints', [EkadScreenStatusController::class, 'paints'])->where('mac', '[A-Fa-f0-9:-]{12,17}')->name('ekad.screen-status.paints');
 
 
     // ADT Integration Routes
@@ -537,6 +541,9 @@ Route::prefix('api/nurse')->group(function () {
     Route::post('/requests/{rosterRequest}/respond', [\App\Http\Controllers\NurseAppRosterController::class, 'respondRequest']);
     Route::get('/team', [\App\Http\Controllers\NurseAppRosterController::class, 'team']);
     Route::post('/notifications/{notification}/respond', [\App\Http\Controllers\NurseAppPatientController::class, 'respondNotification']);
+    Route::get('/handovers', [\App\Http\Controllers\NurseAppApiController::class, 'handovers']);
+    Route::post('/handovers', [\App\Http\Controllers\NurseAppApiController::class, 'submitHandovers']);
+    Route::post('/handovers/receive', [\App\Http\Controllers\NurseAppApiController::class, 'receiveHandovers']);
 });
 
 // API Routes for the bedside Patient Information Terminal (no CSRF). The setup
