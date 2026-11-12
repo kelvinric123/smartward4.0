@@ -83,7 +83,7 @@
                             <div class="row">
                                 <span class="num" x-text="g.occupancy === null ? '—' : dec(g.occupancy) + '%'"></span>
                                 <span class="cap" x-text="g.beds ? `${fmt(g.occupied)} occupied · ${fmt(g.free)} free` : 'No wards marked yet'"
-                                    :title="g.beds ? '' : 'Mark their ward types Labour Room & Nursery on the Ward Types page'"></span>
+                                    :title="g.beds ? '' : 'Give the labour room and nursery wards the Labour Room & Nursery ward type, on each ward\'s Edit page'"></span>
                             </div>
                             <div class="ccx-meter" :class="'is-' + (g.status || 'good')" role="img"
                                 :aria-label="`${g.label}: occupancy ${dec(g.occupancy)}% against a target of ${s.targets.occupancy}%`">

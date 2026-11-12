@@ -247,7 +247,7 @@ class CommandCenterV2Test extends TestCase
 
     public function test_bed_occupancy_splits_the_labour_room_and_nursery_wards_from_the_rest(): void
     {
-        $labourType = WardType::create(['code' => 'LRN', 'name' => 'Maternity', 'is_active' => true]);
+        $labourType = WardType::create(['code' => 'MAT', 'name' => 'Maternity', 'is_active' => true]);
         $labour = $this->ward('LR1', 'Labour Room', $labourType, ['LR01' => 'available', 'LR02' => 'available']);
         $this->ward('NUR', 'Nursery', $labourType, ['NUR01' => 'available', 'NUR02' => 'available']);
         $this->admit($labour, 'LR01', 'Farah Aziz', now()->subHours(3));
@@ -257,7 +257,7 @@ class CommandCenterV2Test extends TestCase
         $this->assertSame([5, 15, 0], [$general['wards'], $general['beds'], $nursery['beds']]);
 
         // Marked on the Ward Types page
-        $this->actingAs($this->admin)->put(route('ward-types.update', $labourType), ['code' => 'LRN', 'name' => 'Maternity', 'is_labour_nursery' => '1'])
+        $this->actingAs($this->admin)->put(route('ward-types.update', $labourType), ['code' => 'MAT', 'name' => 'Maternity', 'is_labour_nursery' => '1'])
             ->assertRedirect(route('ward-types.index'));
         $this->assertTrue($labourType->fresh()->is_labour_nursery);
 
@@ -271,12 +271,35 @@ class CommandCenterV2Test extends TestCase
         $this->assertSame('labour_nursery', collect($this->summary()['wards'])->firstWhere('code', 'NUR')['occupancy_group']);
 
         // A form without the field keeps the saved choice; the lists say which types and wards are marked
-        $this->actingAs($this->admin)->put(route('ward-types.update', $labourType), ['code' => 'LRN', 'name' => 'Maternity']);
+        $this->actingAs($this->admin)->put(route('ward-types.update', $labourType), ['code' => 'MAT', 'name' => 'Maternity']);
         $this->assertTrue($labourType->fresh()->is_labour_nursery);
         $this->actingAs($this->admin)->get(route('ward-types.edit', $labourType))->assertOk()->assertSee('Labour Room &amp; Nursery', false);
         $this->actingAs($this->admin)->get(route('ward-types.index'))->assertOk()->assertSee('Labour &amp; Nursery', false);
         $this->actingAs($this->admin)->get(route('wards.index'))->assertOk()->assertSee('Labour &amp; nursery', false);
         $this->actingAs($this->admin)->get(route('command-center-v2.index'))->assertOk()->assertSee('ccx-occgroups', false);
+    }
+
+    public function test_a_ready_made_labour_room_and_nursery_ward_type_is_offered_on_the_ward_page(): void
+    {
+        $type = WardType::whereNull('hospital_id')->where('code', 'LRN')->firstOrFail();
+        $this->assertSame('Labour Room & Nursery', $type->name);
+        $this->assertTrue($type->is_labour_nursery);
+        $this->assertTrue($type->is_active);
+
+        $this->actingAs($this->admin)->get(route('wards.edit', $this->surgical))
+            ->assertOk()
+            ->assertSee('<option value="' . $type->id . '"', false)
+            ->assertSee('Labour Room &amp; Nursery (system)', false);
+
+        // Given to a ward, the ward moves into Labour room & nursery
+        $this->actingAs($this->admin)->put(route('wards.update', $this->surgical), [
+            'hospital_id' => $this->hospital->id, 'ward_code' => 'SW1', 'ward_name' => 'Surgical Ward 1', 'ward_type_id' => $type->id, 'capacity' => 4,
+        ])->assertSessionHasNoErrors();
+        $this->assertSame($type->id, $this->surgical->fresh()->ward_type_id);
+
+        [$general, $nursery] = $this->summary()['capacity']['groups'];
+        $this->assertSame([2, 7], [$general['wards'], $general['beds']]);
+        $this->assertSame([1, 4, 1], [$nursery['wards'], $nursery['beds'], $nursery['occupied']]);
     }
 
     public function test_the_hospital_filling_up_is_raised_above_target_and_again_near_full(): void

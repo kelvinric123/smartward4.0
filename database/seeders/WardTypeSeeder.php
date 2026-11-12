@@ -23,6 +23,7 @@ class WardTypeSeeder extends Seeder
             ['code' => 'ICU', 'name' => 'ICU', 'is_critical_care' => true],
             ['code' => 'HDU', 'name' => 'HDU', 'is_critical_care' => true],
             ['code' => 'EDOB', 'name' => 'ED Observation Bay', 'is_emergency' => true],
+            ['code' => 'LRN', 'name' => 'Labour Room & Nursery', 'is_labour_nursery' => true],
         ];
 
         foreach ($wardTypes as $index => $wardType) {
@@ -32,6 +33,7 @@ class WardTypeSeeder extends Seeder
                     'name' => $wardType['name'],
                     'is_critical_care' => $wardType['is_critical_care'] ?? false,
                     'is_emergency' => $wardType['is_emergency'] ?? false,
+                    'is_labour_nursery' => $wardType['is_labour_nursery'] ?? false,
                     'sort_order' => $index + 1,
                     'is_active' => true,
                 ]
