@@ -297,6 +297,59 @@ class CommandCenterV2Test extends TestCase
         $this->assertSame([2, 2, 2, 2, 2, 2, 3, 4, 4, 5, 5, 5, 6, 6], $trend['census']);
     }
 
+    public function test_length_of_stay_for_the_hospital_day_by_day_and_ward_by_ward(): void
+    {
+        // A ward with no discharges: first by name, last by length of stay
+        $annex = $this->ward('AW1', 'Annex Ward', WardType::where('code', 'GEN')->first(), ['AW01' => 'available']);
+        // Four days and two (the admission only on the record) today; six days yesterday; ten days in the thirty days before
+        $this->discharged($this->medical, '2026-09-22 10:30:00', '2026-09-26 10:30:00');
+        $this->discharged($this->icu, '2026-09-24 13:00:00', '2026-09-26 13:00:00', logged: false);
+        $this->discharged($this->surgical, '2026-09-19 09:00:00', '2026-09-25 09:00:00');
+        $this->discharged($this->medical, '2026-08-07 12:00:00', '2026-08-17 12:00:00');
+
+        $summary = $this->summary();
+        $los = $summary['los'];
+
+        $this->assertSame(7, $summary['targets']['long_stay_days']);
+        // In so far: 3 and 2 days in the ICU, 5.5 h, 10 days and 20 min on the medical ward, 5 days on the surgical
+        $this->assertEquals([
+            'alos' => 4.0, 'alos_previous' => 10.0, 'median' => 4.0, 'stays' => 3,
+            'inpatients' => 6, 'stay_so_far' => 3.4, 'long_stays' => 1,
+        ], $los['hospital']);
+
+        // The thirty days' stays by length, the long ones from seven days
+        $this->assertEquals([
+            ['label' => 'Under a day', 'count' => 0, 'pct' => 0.0, 'long' => false],
+            ['label' => '1–2 days', 'count' => 1, 'pct' => 33.3, 'long' => false],
+            ['label' => '3–6 days', 'count' => 2, 'pct' => 66.7, 'long' => false],
+            ['label' => '7–13 days', 'count' => 0, 'pct' => 0.0, 'long' => true],
+            ['label' => '14 days or more', 'count' => 0, 'pct' => 0.0, 'long' => true],
+        ], $los['bands']);
+
+        // Per day across the trend: yesterday's six days, today's four and two
+        $this->assertSame(array_fill(0, 12, null), array_slice($los['trend']['alos'], 0, 12));
+        $this->assertEquals([6.0, 3.0], array_slice($los['trend']['alos'], 12));
+        $this->assertSame([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2], $los['trend']['stays']);
+
+        // Longest average stay first, the ward with none last
+        $this->assertSame(['SW1', 'MW1', 'ICU1', 'AW1'], array_column($los['wards'], 'code'));
+        $wards = collect($los['wards'])->keyBy('code');
+        $figures = fn (array $ward) => array_diff_key($ward, array_flip(['id', 'name', 'code', 'critical_care', 'url']));
+        $this->assertEquals(['alos' => 4.0, 'alos_previous' => 10.0, 'median' => 4.0, 'stays' => 1, 'inpatients' => 3, 'stay_so_far' => 3.4, 'long_stays' => 1], $figures($wards['MW1']));
+        $this->assertEquals(['alos' => 2.0, 'alos_previous' => null, 'median' => 2.0, 'stays' => 1, 'inpatients' => 2, 'stay_so_far' => 2.5, 'long_stays' => 0], $figures($wards['ICU1']));
+        $this->assertEquals(['alos' => 6.0, 'alos_previous' => null, 'median' => 6.0, 'stays' => 1, 'inpatients' => 1, 'stay_so_far' => 5.0, 'long_stays' => 0], $figures($wards['SW1']));
+        $this->assertEquals(['alos' => null, 'alos_previous' => null, 'median' => null, 'stays' => 0, 'inpatients' => 0, 'stay_so_far' => null, 'long_stays' => 0], $figures($wards['AW1']));
+        $this->assertTrue($wards['ICU1']['critical_care']);
+        $this->assertSame(route('ward.dashboard', ['ward_id' => $annex->id]), $wards['AW1']['url']);
+
+        // Its own page in TV mode's turn, with a section in the display settings
+        $this->actingAs($this->admin)->get(route('command-center-v2.index'))
+            ->assertSee("{ key: 'los', label: 'Length of stay' }", false)
+            ->assertSee("los: { show: true, size: 100, perPage: 0, seconds: STEP_SECONDS }", false)
+            ->assertSee('Length of stay &middot; hospital', false)
+            ->assertSee('x-ref="los"', false);
+    }
+
     public function test_quality_takes_the_ward_dashboards_flags_vital_signs_and_alert_response(): void
     {
         $nurseUser = User::factory()->create(['role' => User::ROLE_NURSE]);

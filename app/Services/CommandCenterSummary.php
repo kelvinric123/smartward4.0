@@ -28,7 +28,8 @@ use Illuminate\Support\Str;
  * Four areas, hospital-wide and per ward:
  *  - capacity: beds by status, and occupancy against OCCUPANCY_TARGET;
  *  - patient flow: today's admissions and discharges from the admission log,
- *    the share discharged by noon and the average length of stay;
+ *    the share discharged by noon and the average length of stay, which
+ *    lengthOfStay() breaks down by day and by ward;
  *  - quality and safety: the flags CommandCenterLive raises from the ward
  *    dashboards' own sources, vital signs in the last day and ward alerts;
  *  - workforce: the nurses on each ward's current shift in the AI Nurse
@@ -49,6 +50,21 @@ final class CommandCenterSummary
 
     /** Average length of stay covers the patients discharged in this many days, against the same span before. */
     public const LOS_DAYS = 30;
+
+    /** An inpatient in hospital this many days or more is a long stay. */
+    public const LONG_STAY_DAYS = 7;
+
+    /**
+     * The hospital's stays by length, in whole days stayed: label => [fewest, most],
+     * most null for no limit. The bands from LONG_STAY_DAYS on are its long stays.
+     */
+    public const STAY_BANDS = [
+        'Under a day' => [0, 0],
+        '1–2 days' => [1, 2],
+        '3–6 days' => [3, 6],
+        '7–13 days' => [7, 13],
+        '14 days or more' => [14, null],
+    ];
 
     /** A discharge "by noon" is one before this hour. */
     public const NOON_HOUR = 12;
@@ -123,6 +139,7 @@ final class CommandCenterSummary
                 'alert_wait_minutes' => self::ALERT_WAIT_MINUTES,
                 'noon_hour' => self::NOON_HOUR,
                 'los_days' => self::LOS_DAYS,
+                'long_stay_days' => self::LONG_STAY_DAYS,
                 'obs_hours' => CommandCenterLive::EWS_CURRENT_HOURS,
             ],
             'capacity' => $capacity,
@@ -134,6 +151,7 @@ final class CommandCenterSummary
             'attention' => $attention->take(self::ATTENTION_LIMIT)->map(fn (array $item) => array_diff_key($item, ['weight' => 0]))->values()->all(),
             'attention_total' => $attention->count(),
             'trend' => $flow['trend'],
+            'los' => self::lengthOfStay($flow['stays'], $inpatients, $rows, $flow['trend']['dates'], $now),
         ];
     }
 
@@ -253,9 +271,10 @@ final class CommandCenterSummary
         $admittedToday = $between($admits, $midnight, PHP_INT_MAX);
         $dischargedToday = $between($discharges, $midnight, PHP_INT_MAX);
         $recent = $discharges->filter(fn (array $log) => $log['at'] > $losSplit);
-        $stays = self::stayLengths($between($discharges, $losStart->getTimestamp(), PHP_INT_MAX));
+        // Every stay read, so the length of stay's day-by-day trend has its days too
+        $stays = self::stayLengths($discharges);
         $recentStays = $stays->filter(fn (array $stay) => $stay['at'] > $losSplit)->pluck('days');
-        $earlierStays = $stays->filter(fn (array $stay) => $stay['at'] <= $losSplit)->pluck('days');
+        $earlierStays = $stays->filter(fn (array $stay) => $stay['at'] >= $losStart->getTimestamp() && $stay['at'] <= $losSplit)->pluck('days');
 
         $trend = ['dates' => [], 'labels' => [], 'days' => [], 'census' => [], 'admissions' => [], 'discharges' => []];
         $admitsPerDay = $admits->countBy(fn (array $log) => date('Y-m-d', $log['at']));
@@ -287,11 +306,84 @@ final class CommandCenterSummary
                 'discharged_by_noon_pct' => self::percent($byNoon($dischargedToday), $dischargedToday->count()),
                 'discharged_by_noon_pct_period' => self::percent($byNoon($recent), $recent->count()),
                 'discharges_period' => $recent->count(),
-                'alos' => $recentStays->isEmpty() ? null : round($recentStays->avg(), 1),
-                'alos_previous' => $earlierStays->isEmpty() ? null : round($earlierStays->avg(), 1),
+                'alos' => self::average($recentStays),
+                'alos_previous' => self::average($earlierStays),
                 'alos_stays' => $recentStays->count(),
             ],
             'trend' => $trend,
+            'stays' => $stays,
+        ];
+    }
+
+    /**
+     * Length of stay, for the hospital as a whole and then ward by ward: how
+     * long the patients discharged in the last LOS_DAYS stayed, against the
+     * LOS_DAYS before; the same day by day across the trend; and how long
+     * today's inpatients have been in so far, with how many are long stays;
+     * and the hospital's stays by length, in STAY_BANDS. A stay runs from the admission to the hospital, so a transfer does not
+     * restart it, and counts toward the ward that discharged the patient.
+     * The wards come longest average stay first, those with no discharges last.
+     *
+     * @param  Collection<int, array{ward_id: int, at: int, days: float}>  $stays
+     * @param  list<string>  $dates  the trend's days
+     */
+    private static function lengthOfStay(Collection $stays, EloquentCollection $inpatients, Collection $rows, array $dates, CarbonInterface $now): array
+    {
+        $split = $now->copy()->subDays(self::LOS_DAYS)->getTimestamp();
+        $from = $now->copy()->subDays(self::LOS_DAYS * 2)->getTimestamp();
+        $recent = $stays->filter(fn (array $stay) => $stay['at'] > $split);
+        $earlier = $stays->filter(fn (array $stay) => $stay['at'] >= $from && $stay['at'] <= $split);
+        // Today's inpatients, and the days each has been in (none without a sound admission time)
+        $inFor = $inpatients->map(fn (Patient $patient) => [
+            'ward_id' => (int) $patient->ward_id,
+            'days' => $patient->admitted_at && $patient->admitted_at->lte($now) ? ($now->getTimestamp() - $patient->admitted_at->getTimestamp()) / 86400 : null,
+        ])->toBase();
+
+        $figures = function (Collection $recent, Collection $earlier, Collection $inFor) {
+            $inDays = $inFor->pluck('days')->filter(fn ($days) => $days !== null);
+
+            return [
+                'alos' => self::average($recent->pluck('days')),
+                'alos_previous' => self::average($earlier->pluck('days')),
+                'median' => self::median($recent->pluck('days')),
+                'stays' => $recent->count(),
+                'inpatients' => $inFor->count(),
+                'stay_so_far' => self::average($inDays),
+                'long_stays' => $inDays->filter(fn ($days) => $days >= self::LONG_STAY_DAYS)->count(),
+            ];
+        };
+
+        $perDay = $stays->groupBy(fn (array $stay) => date('Y-m-d', $stay['at']));
+        $wholeDays = $recent->map(fn (array $stay) => (int) floor($stay['days']));
+        $bands = collect(self::STAY_BANDS)->map(function (array $range, string $label) use ($wholeDays) {
+            [$fewest, $most] = $range;
+            $count = $wholeDays->filter(fn (int $days) => $days >= $fewest && ($most === null || $days <= $most))->count();
+
+            return ['label' => $label, 'count' => $count, 'pct' => self::percent($count, $wholeDays->count()), 'long' => $fewest >= self::LONG_STAY_DAYS];
+        });
+        $recentByWard = $recent->groupBy('ward_id');
+        $earlierByWard = $earlier->groupBy('ward_id');
+        $inByWard = $inFor->groupBy('ward_id');
+
+        $wards = $rows->map(fn (array $row) => [
+            'id' => $row['id'],
+            'name' => $row['name'],
+            'code' => $row['code'],
+            'critical_care' => $row['critical_care'],
+            'url' => $row['url'],
+        ] + $figures($recentByWard->get($row['id'], collect()), $earlierByWard->get($row['id'], collect()), $inByWard->get($row['id'], collect())));
+
+        return [
+            'hospital' => $figures($recent, $earlier, $inFor),
+            'bands' => $bands->values()->all(),
+            'trend' => [
+                'alos' => array_map(fn (string $date) => isset($perDay[$date]) ? self::average($perDay[$date]->pluck('days')) : null, $dates),
+                'stays' => array_map(fn (string $date) => isset($perDay[$date]) ? $perDay[$date]->count() : 0, $dates),
+            ],
+            'wards' => $wards
+                ->sort(fn (array $a, array $b) => [$a['alos'] === null, -($a['alos'] ?? 0), $a['name']] <=> [$b['alos'] === null, -($b['alos'] ?? 0), $b['name']])
+                ->values()
+                ->all(),
         ];
     }
 
@@ -300,8 +392,8 @@ final class CommandCenterSummary
      * before the discharge, or failing a logged one the admission time on
      * their record, while that is still the stay's.
      *
-     * @param  Collection<int, array{patient_id: ?int, at: int}>  $discharges
-     * @return Collection<int, array{at: int, days: float}>
+     * @param  Collection<int, array{patient_id: ?int, ward_id: int, at: int}>  $discharges
+     * @return Collection<int, array{ward_id: int, at: int, days: float}>
      */
     private static function stayLengths(Collection $discharges): Collection
     {
@@ -328,7 +420,7 @@ final class CommandCenterSummary
             $recorded = $onRecord[$discharge['patient_id']] ?? null;
             $start = $before ? max($before) : ($recorded !== null && $recorded <= $discharge['at'] ? $recorded : null);
 
-            return $start === null ? null : ['at' => $discharge['at'], 'days' => ($discharge['at'] - $start) / 86400];
+            return $start === null ? null : ['ward_id' => $discharge['ward_id'], 'at' => $discharge['at'], 'days' => ($discharge['at'] - $start) / 86400];
         })->filter()->values();
     }
 
@@ -678,6 +770,11 @@ final class CommandCenterSummary
     private static function percent(int|float $count, int|float $of): ?float
     {
         return $of > 0 ? round($count / $of * 100, 1) : null;
+    }
+
+    private static function average(Collection $values): ?float
+    {
+        return $values->isEmpty() ? null : round($values->avg(), 1);
     }
 
     private static function median(Collection $values): ?float
