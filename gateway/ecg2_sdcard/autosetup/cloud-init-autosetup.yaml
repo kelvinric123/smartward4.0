@@ -1,0 +1,33 @@
+# Appended to the SD card's user-data (boot partition, written by Raspberry Pi
+# Imager) so the Pi sets itself up on first boot - see autosetup.sh.
+# If the card has booted before, change instance-id in meta-data too, or
+# cloud-init will not run this again.
+
+# SmartWard ECG USB gateway: first-boot setup from /boot/firmware/ecg2_sdcard
+write_files:
+- path: /etc/systemd/system/ecg-usb-autosetup.service
+  content: |
+    [Unit]
+    Description=ECG USB gateway first-boot setup (from the SD card's ecg2_sdcard folder)
+    After=network-online.target cloud-final.service
+    Wants=network-online.target
+    ConditionPathExists=/boot/firmware/ecg2_sdcard/autosetup/autosetup.sh
+
+    [Service]
+    Type=oneshot
+    ExecStart=/bin/bash /boot/firmware/ecg2_sdcard/autosetup/autosetup.sh
+    TimeoutStartSec=1800
+- path: /etc/systemd/system/ecg-usb-autosetup.timer
+  content: |
+    [Unit]
+    Description=Retry the ECG USB gateway first-boot setup every 3 minutes until done
+
+    [Timer]
+    OnBootSec=60
+    OnUnitActiveSec=180
+
+    [Install]
+    WantedBy=timers.target
+runcmd:
+- [systemctl, daemon-reload]
+- [systemctl, enable, --now, ecg-usb-autosetup.timer]

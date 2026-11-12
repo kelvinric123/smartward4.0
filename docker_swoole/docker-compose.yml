@@ -95,7 +95,7 @@ services:
       ADT_PORT: "3000"
 
       # ECG upload server - manual web-UI uploads/deletes are forwarded here
-      # because this container's /app/ecg/store mount is read-only
+      # (the ECG listener container owns those files)
       ECG_UPLOAD_URL: "http://ecg:3050"
       ECG_UPLOAD_USERNAME: "${ECG_USERNAME:-admin}"
       ECG_UPLOAD_PASSWORD: "${ECG_PASSWORD:-admin123}"
@@ -112,8 +112,9 @@ services:
       - smartward_storage:/app/storage
       # Optional: mount logs for debugging
       - smartward_logs:/var/log
-      # ECG files - shared with ECG container (Laravel reads from ecg/store)
-      - ecg_data:/app/ecg/store:ro
+      # ECG files - shared with ECG container. Writable: ECG gateways POST
+      # recordings to /api/v1/ecg, which saves them here.
+      - ecg_data:/app/ecg/store
       # Map host's CA certificates into the container
       - ./conf/ssl_linux/phklsmartward.cer:/usr/local/share/ca-certificates/IntermediateCA.crt:ro
       - ./conf/ssl_linux/phklsmartward.cer:/usr/local/share/ca-certificates/phklsmartward.crt:ro

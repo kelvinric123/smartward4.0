@@ -1,0 +1,38 @@
+[Unit]
+Description=ECG USB gateway (TC35 USB-drive store-and-forward to SmartWard)
+Documentation=file:///opt/ecg-usb/ecg2_sdcard.md
+# Capturing must not wait for Wi-Fi: the outbox holds ECGs until the uplink is back.
+After=local-fs.target ecg-usb-gadget.service
+Wants=ecg-usb-gadget.service network-online.target
+
+[Service]
+Type=simple
+# Root: it loop-mounts the drive image read-only to read the TC35's files and
+# replugs the USB gadget for cleanup.
+User=root
+
+# All configuration (creds, paths, tuning) comes from this file so it is the
+# single source of truth and lives on writable storage, not in the code image.
+EnvironmentFile=/var/lib/ecg-usb/ecg-usb.env
+Environment=PYTHONUNBUFFERED=1
+
+WorkingDirectory=/opt/ecg-usb/listener
+ExecStart=/usr/bin/python3 main.py
+
+# Self-heal: always come back after a crash or a power blip.
+Restart=always
+RestartSec=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ecg-usb
+
+# The service's mounts live in its own namespace: if it dies mid-scan the
+# kernel drops the mount (and its loop device) instead of leaving it behind.
+PrivateMounts=yes
+PrivateTmp=yes
+ProtectHome=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target
