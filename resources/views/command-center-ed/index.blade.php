@@ -28,8 +28,6 @@
         }
         .ccx.is-tv.cced .ccx-kpis { grid-template-columns: repeat(var(--cced-cards, 4), minmax(0, 1fr)); }
         .ccx.is-tv.cced .ccx-kpis.is-odd > article:last-of-type { grid-column: auto; }
-        /* Settings' data mode says when the figures are made up */
-        .cced .ccx-chip.is-demo { color: var(--series-2); border-color: currentColor; background: none; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; padding: .2em .65em; }
         /* ED flow today's four rows: two by two in TV mode, where the rows go across */
         .ccx.is-tv.cced .ccx-rows.is-four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     </style>

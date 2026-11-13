@@ -6,6 +6,7 @@ use App\Models\Hospital;
 use App\Models\User;
 use App\Models\WardDashboardSetting;
 use App\Services\CommandCenterSummary;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 
@@ -13,6 +14,10 @@ use Illuminate\Support\Facades\Storage;
  * Command Center V2: the executive summary of every ward for the management
  * screen in the command centre. The page draws the first figures and asks
  * data() for fresh ones every CommandCenterSummary::REFRESH_SECONDS.
+ *
+ * Each screen picks its data mode in its Settings: the recorded figures
+ * (Live), or made-up ones for showing the board (Demo, data?demo=1). The page
+ * comes with both first figures, so it can draw either straight away.
  */
 class CommandCenterV2Controller extends Controller
 {
@@ -27,15 +32,16 @@ class CommandCenterV2Controller extends Controller
             'hospital' => $hospital,
             'logoUrl' => $logo ? Storage::url($logo) : asset('phkl_new.png'),
             'snapshot' => CommandCenterSummary::build($this->ewsSystem()),
+            'demoSnapshot' => CommandCenterSummary::build($this->ewsSystem(), demo: true),
         ]);
     }
 
-    public function data()
+    public function data(Request $request)
     {
         $this->authorizeViewer();
 
         return response()
-            ->json(CommandCenterSummary::build($this->ewsSystem()))
+            ->json(CommandCenterSummary::build($this->ewsSystem(), $request->boolean('demo')))
             ->header('Cache-Control', 'no-store');
     }
 

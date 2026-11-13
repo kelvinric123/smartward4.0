@@ -55,6 +55,8 @@
 
             @include('command-center-v2.partials.settings-time', ['id' => 'ccx', 'about' => 'The clock and the update time'])
 
+            @include('command-center-v2.partials.settings-data', ['id' => 'ccx', 'about' => 'For every card, the ward table and the pages in TV mode. Demo is made-up figures for showing the board, the same all day, and only this switch changes it.'])
+
             <p class="ccx-set-lead"><span class="ccx-tv-tag">TV</span> settings are for TV mode, where Wards, Trends, Length of stay and Acuity &amp; risk take turns beside Needs attention.</p>
 
             {{-- Each section: whether it shows and its size, and for TV mode its rows and seconds a page --}}

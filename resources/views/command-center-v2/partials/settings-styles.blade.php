@@ -10,6 +10,8 @@
     }
     .ccx-settings[open] { display: flex; }
     .ccx-settings::backdrop { background: rgba(0, 0, 0, .25); }
+    /* The data mode says when the figures are made up */
+    .ccx-settings .ccx-chip.is-demo { color: var(--series-2); border-color: currentColor; background: none; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; padding: .2em .65em; }
     .ccx-set-panel { display: flex; flex-direction: column; width: 100%; min-height: 0; }
     .ccx-set-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1em; padding: 1.1em 1.25em 1em; border-bottom: 1px solid var(--line); }
     .ccx .ccx-set-head h2 { font-size: 1.3em; font-weight: 700; letter-spacing: -.01em; text-transform: none; color: var(--ink-1); }

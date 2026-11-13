@@ -546,6 +546,79 @@ class CommandCenterV2Test extends TestCase
         $this->actingAs($this->admin)->get(route('command-center-v2.index'))->assertOk();
     }
 
+    public function test_demo_mode_makes_up_the_day_on_the_hospitals_own_wards_and_beds(): void
+    {
+        $beds = fn (string $prefix, int $count) => collect(range(1, $count))->mapWithKeys(fn (int $i) => [sprintf('%s%03d', $prefix, $i) => 'available'])->all();
+        $this->ward('GW2', 'General Ward 2', WardType::where('code', 'GEN')->firstOrFail(), $beds('GW', 89));
+        $labour = WardType::whereNull('hospital_id')->where('code', 'LRN')->firstOrFail();
+        $this->ward('LR1', 'Labour Room', $labour, $beds('LR', 10));
+        $this->ward('NUR', 'Nursery', $labour, $beds('NU', 20));
+        $demo = fn () => $this->actingAs($this->admin)->getJson(route('command-center-v2.data', ['demo' => 1]))->assertOk()->json();
+
+        $board = $demo();
+        $this->assertTrue($board['demo']);
+
+        // General ward & critical about 98% of its 100 beds, Labour room & nursery about 70% of its 30
+        [$general, $nursery] = $board['capacity']['groups'];
+        $this->assertSame([4, 100], [$general['wards'], $general['beds']]);
+        $this->assertContains($general['occupied'], [97, 98, 99]);
+        $this->assertSame([2, 30, 21], [$nursery['wards'], $nursery['beds'], $nursery['occupied']]);
+        $this->assertEquals(70, $nursery['occupancy']);
+
+        // The hospital's own wards, each with its beds all accounted for
+        $wards = collect($board['wards'])->keyBy('code');
+        $this->assertSame(['GW2', 'ICU1', 'LR1', 'MW1', 'NUR', 'SW1'], $wards->keys()->sort()->values()->all());
+        $this->assertSame(89, $wards['GW2']['beds']);
+        foreach ($wards as $ward) {
+            $this->assertSame($ward['beds'], $ward['occupied'] + $ward['free'] + $ward['reserved'] + $ward['maintenance']);
+            $this->assertSame($ward['occupied'], $ward['inpatients']);
+            $this->assertLessThanOrEqual($ward['obs_due'], $ward['obs_done']);
+        }
+        $this->assertTrue($wards['ICU1']['critical_care']);
+        $this->assertSame('PM', $wards['GW2']['staffing']['shift']);
+
+        // The day so far: the cards, the ward table and the trend agree
+        $this->assertGreaterThan(0, $board['flow']['admissions_today']);
+        $this->assertGreaterThan(0, $board['flow']['discharges_today']);
+        $this->assertSame($board['flow']['admissions_today'], $wards->sum('admissions_today'));
+        $this->assertSame($board['flow']['discharges_today'], $wards->sum('discharges_today'));
+        $this->assertSame($board['flow']['admissions_today'], last($board['trend']['admissions']));
+        $this->assertSame($board['capacity']['occupied'], last($board['trend']['census']));
+        $this->assertSame($board['capacity']['occupied'], $board['quality']['inpatients']);
+        $this->assertSame($board['los']['hospital']['stays'], array_sum(array_column($board['los']['bands'], 'count')));
+        $this->assertSame($board['los']['hospital']['alos'], $board['flow']['alos']);
+
+        // The same all day: asked again it is the same, and by the evening only the day's flow has grown
+        $this->assertSame($board, $demo());
+        $this->travelTo(Carbon::parse('2026-09-26 21:00:00'));
+        $evening = $demo();
+        $this->assertSame($board['capacity']['groups'], $evening['capacity']['groups']);
+        $this->assertGreaterThan($board['flow']['admissions_today'], $evening['flow']['admissions_today']);
+        // The next day is another
+        $this->travelTo(Carbon::parse('2026-09-27 14:30:00'));
+        $this->assertNotSame(array_column($board['wards'], 'occupied'), array_column($demo()['wards'], 'occupied'));
+
+        // Nothing is saved, and Live is still the wards' own figures
+        $this->assertSame(7, Patient::count());
+        $live = $this->summary();
+        $this->assertFalse($live['demo']);
+        $this->assertSame(6, $live['capacity']['occupied']);
+    }
+
+    public function test_the_page_brings_both_data_modes_and_each_screen_picks_one_in_its_settings(): void
+    {
+        $response = $this->actingAs($this->admin)->get(route('command-center-v2.index'))
+            ->assertOk()
+            ->assertSee('id="ccv2-demo-snapshot"', false)
+            ->assertSeeInOrder(['Time format', 'Data mode', 'Showing demo'])
+            // Live unless the screen is switched to Demo
+            ->assertSee('data: { demo: false }', false);
+
+        $this->assertFalse($response->viewData('snapshot')['demo']);
+        $this->assertSame(6, $response->viewData('snapshot')['quality']['inpatients']);
+        $this->assertTrue($response->viewData('demoSnapshot')['demo']);
+    }
+
     public function test_the_sidebar_links_it_and_a_hospital_can_hide_it(): void
     {
         $link = 'href="' . route('command-center-v2.index') . '"';

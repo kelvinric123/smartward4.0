@@ -10,6 +10,7 @@ use App\Models\Hospital;
 use App\Models\Patient;
 use App\Models\PatientCareProvider;
 use App\Models\Ward;
+use App\Support\DemoDay;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
@@ -354,11 +355,11 @@ final class CommandCenterEd
     /** A day's made-up calls: busier by day than by night, most crews there within 7 to 20 minutes. */
     private static function demoCalls(CarbonInterface $day): Collection
     {
-        $random = self::demoRandom('ambulance-demo', $day);
+        $random = DemoDay::random('ambulance-demo', $day);
         $hours = [2, 1.5, 1, 1, 1, 1.5, 2.5, 4, 5, 5.5, 5.5, 5, 4.5, 4.5, 4.5, 5, 5.5, 6, 6, 5.5, 5, 4, 3, 2.5];
 
         return collect(range(1, 14 + (int) floor($random('count') * 11)))->map(function (int $i) use ($day, $random, $hours) {
-            $called = self::demoMoment($day, $random, $hours, $i);
+            $called = DemoDay::moment($day, $random, $hours, $i);
             $minutes = 7 + 13 * $random("response.{$i}") ** 1.6 + ($random("far.{$i}") < 0.1 ? 12 : 0);
 
             return [
@@ -392,26 +393,6 @@ final class CommandCenterEd
             'response_average' => $responses->count() ? round($responses->avg(), 1) : null,
             'response_longest' => $responses->max(),
         ];
-    }
-
-    /** Steady made-up numbers from 0 to 1, the same for the same day and the same question. */
-    private static function demoRandom(string $topic, CarbonInterface $day): \Closure
-    {
-        $date = $day->format('Y-m-d');
-
-        return fn (string $what) => (crc32("{$topic}|{$date}|{$what}") % 100000) / 100000;
-    }
-
-    /** A made-up moment of the day, its hour drawn by $hours' weights. */
-    private static function demoMoment(CarbonInterface $day, \Closure $random, array $hours, int $i): CarbonInterface
-    {
-        $pick = $random("hour.{$i}") * array_sum($hours);
-        $hour = 0;
-        while ($hour < 23 && $pick >= $hours[$hour]) {
-            $pick -= $hours[$hour++];
-        }
-
-        return $day->copy()->setTime($hour, (int) floor($random("minute.{$i}") * 60), (int) floor($random("second.{$i}") * 60));
     }
 
     // -- proceed for admission -------------------------------------------------
@@ -461,11 +442,11 @@ final class CommandCenterEd
     /** A day's made-up decisions to admit: most by day, each waiting half an hour to four hours for a bed. */
     private static function demoAdmissions(CarbonInterface $day): Collection
     {
-        $random = self::demoRandom('admission-demo', $day);
+        $random = DemoDay::random('admission-demo', $day);
         $hours = [1.5, 1.5, 1, 1, 1, 1, 1.5, 2, 3, 4, 4.5, 5, 5, 5, 5, 5, 5, 5.5, 5.5, 5, 4.5, 4, 3, 2];
 
         return collect(range(1, 6 + (int) floor($random('count') * 7)))->map(function (int $i) use ($day, $random, $hours) {
-            $decided = self::demoMoment($day, $random, $hours, $i);
+            $decided = DemoDay::moment($day, $random, $hours, $i);
 
             return ['decided' => $decided, 'moves' => $decided->copy()->addMinutes(30 + (int) round(210 * $random("wait.{$i}") ** 1.5))];
         })->sortBy('decided')->values();

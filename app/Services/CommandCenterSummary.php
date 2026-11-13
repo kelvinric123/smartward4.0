@@ -14,8 +14,10 @@ use App\Services\NurseScheduling\RosterRules;
 use App\Services\NurseScheduling\RosterSlot;
 use App\Services\NurseScheduling\WardShifts;
 use App\Support\ClinicalIndicatorReadings;
+use App\Support\DemoDay;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -95,6 +97,17 @@ final class CommandCenterSummary
     /** Within a severity, the attention list runs in this order of topic. */
     public const TOPICS = ['capacity', 'alerts', 'escalation', 'ews', 'staffing', 'overdue', 'observations'];
 
+    /**
+     * The demo's bed occupancy (%) for each of OCCUPANCY_GROUPS, a point either
+     * way from day to day, and how far (in points) a ward may be from it.
+     */
+    public const DEMO_OCCUPANCY = ['general' => 98, 'labour_nursery' => 70];
+    private const DEMO_OCCUPANCY_SPREAD = ['general' => 6, 'labour_nursery' => 30];
+
+    /** The demo's admissions by hour of the day, and its discharges, mostly late morning to afternoon. */
+    private const DEMO_ADMIT_HOURS = [1, 0.8, 0.6, 0.5, 0.5, 0.6, 1, 1.5, 2.5, 3.5, 4, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4.5, 4, 3.5, 3, 2.5, 2, 1.5];
+    private const DEMO_DISCHARGE_HOURS = [0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.5, 1.5, 3, 4.5, 5.5, 6, 6, 5.5, 5, 4, 3, 2, 1.2, 0.8, 0.5, 0.3, 0.2];
+
     private const ACTIVE = [Patient::STATUS_ADMITTED, Patient::STATUS_PENDING_DISCHARGE];
 
     /** The acuity and risk measures, in the order shown: key => [label, short label] */
@@ -108,12 +121,20 @@ final class CommandCenterSummary
 
     /**
      * @param  string  $ewsSystem  the EWS the viewer's ward dashboard scores with
+     * @param  bool  $demo  made-up figures for showing the board (demo()) instead of the recorded ones
      */
-    public static function build(string $ewsSystem = 'ews_ihh'): array
+    public static function build(string $ewsSystem = 'ews_ihh', bool $demo = false): array
     {
         $now = now();
         // The ED's zones (Emergency ward types) have their own board, Command Center V2 (ED)
         $wards = Ward::where('is_active', true)->notEmergency()->orderBy('ward_name')->get();
+
+        return $demo ? self::demo($wards, $now) : self::live($wards, $ewsSystem, $now);
+    }
+
+    /** The board from the wards' records. */
+    private static function live(EloquentCollection $wards, string $ewsSystem, CarbonInterface $now): array
+    {
         // Also loads each ward's type and active beds, which the rest reuses
         $live = CommandCenterLive::build($wards, $ewsSystem);
         $wardIds = $wards->modelKeys();
@@ -133,17 +154,48 @@ final class CommandCenterSummary
         $rows = collect($live['wards'])->map(fn (array $row) => self::wardRow(
             $row, $wardsById[$row['id']], $flow, $observed, $alerts['wards'], $staffing, $risks->get($row['id'], self::riskCounts(collect()))
         ));
+        [$capacity, $attention, $rows] = self::overview($rows);
 
+        return self::snapshot(
+            now: $now,
+            demo: false,
+            capacity: $capacity,
+            flow: $flow['summary'],
+            quality: self::quality($rows, $live, $alerts, $attention),
+            rows: $rows,
+            acuity: self::acuity(self::riskCounts($inpatients) + ['ventilated' => $rows->sum('ventilated'), 'transfusing' => $rows->sum('transfusing')], $inpatients->count()),
+            attention: $attention,
+            trend: $flow['trend'],
+            los: self::lengthOfStay($flow['stays'], $inpatients, $rows, $flow['trend']['dates'], $now),
+        );
+    }
+
+    /**
+     * From the wards' lines: the beds, the list management should look at
+     * first, and each ward's status, the worst on that list for it.
+     *
+     * @return array{0: array, 1: Collection, 2: Collection}
+     */
+    private static function overview(Collection $rows): array
+    {
         $capacity = self::capacity($rows);
         $attention = self::attention($rows, $capacity);
         $rows = $rows->map(fn (array $row) => $row + [
             'status' => self::worst($attention->where('ward_id', $row['id'])->pluck('severity')),
         ]);
 
+        return [$capacity, $attention, $rows];
+    }
+
+    /** What the screen is sent, live or demo alike. */
+    private static function snapshot(CarbonInterface $now, bool $demo, array $capacity, array $flow, array $quality, Collection $rows,
+        array $acuity, Collection $attention, array $trend, array $los): array
+    {
         return [
             'generated_at' => $now->toIso8601String(),
             'generated_time' => $now->format('H:i:s'),
             'refresh_seconds' => self::REFRESH_SECONDS,
+            'demo' => $demo,
             'targets' => [
                 'occupancy' => self::OCCUPANCY_TARGET,
                 'occupancy_critical' => self::OCCUPANCY_CRITICAL,
@@ -154,16 +206,22 @@ final class CommandCenterSummary
                 'obs_hours' => CommandCenterLive::EWS_CURRENT_HOURS,
             ],
             'capacity' => $capacity,
-            'flow' => $flow['summary'],
-            'quality' => self::quality($rows, $live, $alerts, $attention),
+            'flow' => $flow,
+            'quality' => $quality,
             'workforce' => self::workforce($rows),
-            'acuity' => self::acuity($inpatients, $rows),
+            'acuity' => $acuity,
             'wards' => $rows->values()->all(),
             'attention' => $attention->take(self::ATTENTION_LIMIT)->map(fn (array $item) => array_diff_key($item, ['weight' => 0]))->values()->all(),
             'attention_total' => $attention->count(),
-            'trend' => $flow['trend'],
-            'los' => self::lengthOfStay($flow['stays'], $inpatients, $rows, $flow['trend']['dates'], $now),
+            'trend' => $trend,
+            'los' => $los,
         ];
+    }
+
+    /** Which of OCCUPANCY_GROUPS a ward's beds count toward. */
+    private static function occupancyGroup(Ward $ward): string
+    {
+        return $ward->wardType?->is_labour_nursery ? 'labour_nursery' : 'general';
     }
 
     /** One ward's line: beds, flow, clinical flags, acuity, alerts and staffing. */
@@ -180,7 +238,7 @@ final class CommandCenterSummary
             'code' => $ward->ward_code,
             'type' => $live['type'],
             'critical_care' => $live['critical_care'],
-            'occupancy_group' => $ward->wardType?->is_labour_nursery ? 'labour_nursery' : 'general',
+            'occupancy_group' => self::occupancyGroup($ward),
             'url' => $live['dashboard_url'],
             'beds' => $beds->count(),
             'occupied' => $live['occupied'],
@@ -304,23 +362,14 @@ final class CommandCenterSummary
         $recentStays = $stays->filter(fn (array $stay) => $stay['at'] > $losSplit)->pluck('days');
         $earlierStays = $stays->filter(fn (array $stay) => $stay['at'] >= $losStart->getTimestamp() && $stay['at'] <= $losSplit)->pluck('days');
 
-        $trend = ['dates' => [], 'labels' => [], 'days' => [], 'census' => [], 'admissions' => [], 'discharges' => []];
         $admitsPerDay = $admits->countBy(fn (array $log) => date('Y-m-d', $log['at']));
         $dischargesPerDay = $discharges->countBy(fn (array $log) => date('Y-m-d', $log['at']));
-        for ($offset = 0; $offset < self::TREND_DAYS; $offset++) {
-            $day = $trendStart->copy()->addDays($offset);
-            $trend['dates'][] = $day->toDateString();
-            $trend['labels'][] = $day->format('j M');
-            $trend['days'][] = $day->format('D j M');
-            $trend['admissions'][] = $admitsPerDay[$day->toDateString()] ?? 0;
-            $trend['discharges'][] = $dischargesPerDay[$day->toDateString()] ?? 0;
-        }
-        $census = [self::TREND_DAYS - 1 => $inpatients];
-        for ($i = self::TREND_DAYS - 2; $i >= 0; $i--) {
-            $census[$i] = $census[$i + 1] - $trend['admissions'][$i + 1] + $trend['discharges'][$i + 1];
-        }
-        ksort($census);
-        $trend['census'] = array_map(fn (int $count) => max(0, $count), array_values($census));
+        $trend = self::trend(
+            $now,
+            fn (string $date) => $admitsPerDay[$date] ?? 0,
+            fn (string $date) => $dischargesPerDay[$date] ?? 0,
+            $inpatients,
+        );
 
         return [
             'admissions_today' => $admittedToday->countBy('ward_id')->all(),
@@ -341,6 +390,36 @@ final class CommandCenterSummary
             'trend' => $trend,
             'stays' => $stays,
         ];
+    }
+
+    /**
+     * The daily trend: TREND_DAYS to today, each day's admissions and
+     * discharges, and the inpatients at each midnight worked back from the
+     * inpatients now (see flow()).
+     *
+     * @param  \Closure(string): int  $admissions  a day's admissions, by its date
+     * @param  \Closure(string): int  $discharges  a day's discharges, by its date
+     */
+    private static function trend(CarbonInterface $now, \Closure $admissions, \Closure $discharges, int $inpatients): array
+    {
+        $start = $now->copy()->startOfDay()->subDays(self::TREND_DAYS - 1);
+        $trend = ['dates' => [], 'labels' => [], 'days' => [], 'census' => [], 'admissions' => [], 'discharges' => []];
+        for ($offset = 0; $offset < self::TREND_DAYS; $offset++) {
+            $day = $start->copy()->addDays($offset);
+            $trend['dates'][] = $day->toDateString();
+            $trend['labels'][] = $day->format('j M');
+            $trend['days'][] = $day->format('D j M');
+            $trend['admissions'][] = $admissions($day->toDateString());
+            $trend['discharges'][] = $discharges($day->toDateString());
+        }
+        $census = [self::TREND_DAYS - 1 => $inpatients];
+        for ($i = self::TREND_DAYS - 2; $i >= 0; $i--) {
+            $census[$i] = $census[$i + 1] - $trend['admissions'][$i + 1] + $trend['discharges'][$i + 1];
+        }
+        ksort($census);
+        $trend['census'] = array_map(fn (int $count) => max(0, $count), array_values($census));
+
+        return $trend;
     }
 
     /**
@@ -648,17 +727,19 @@ final class CommandCenterSummary
         ];
     }
 
-    /** Share of inpatients carrying each kind of acuity or risk; each ward's line has its own counts. */
-    private static function acuity(EloquentCollection $inpatients, Collection $rows): array
+    /**
+     * Share of inpatients carrying each kind of acuity or risk; each ward's line has its own counts.
+     *
+     * @param  array<string, int>  $counts  the inpatients with each of ACUITY
+     */
+    private static function acuity(array $counts, int $inpatients): array
     {
-        $counts = self::riskCounts($inpatients) + ['ventilated' => $rows->sum('ventilated'), 'transfusing' => $rows->sum('transfusing')];
-
         return collect(self::ACUITY)->map(fn (array $labels, string $key) => [
             'key' => $key,
             'label' => $labels[0],
             'short' => $labels[1],
             'count' => $counts[$key],
-            'pct' => self::percent($counts[$key], $inpatients->count()),
+            'pct' => self::percent($counts[$key], $inpatients),
         ])->values()->all();
     }
 
@@ -777,6 +858,374 @@ final class CommandCenterSummary
             ->sort(fn (array $a, array $b) => [$severity[$a['severity']], $topic[$a['topic']], -$a['weight'], $a['title']]
                 <=> [$severity[$b['severity']], $topic[$b['topic']], -$b['weight'], $b['title']])
             ->values();
+    }
+
+    // -- demo ------------------------------------------------------------------
+
+    /**
+     * The board from made-up figures, for showing it (the screen's data mode in
+     * Settings). The hospital's own wards and beds, with patients, flow,
+     * clinical flags and nurses that follow from the date: nothing is saved,
+     * and every screen shows the same demo all day. The beds are as full as
+     * DEMO_OCCUPANCY all day; admissions and discharges add up as the day goes
+     * on; the clinical flags and alerts change from hour to hour.
+     */
+    private static function demo(EloquentCollection $wards, CarbonInterface $now): array
+    {
+        $wards->load(['wardType', 'beds' => fn ($query) => $query->where('is_active', true)]);
+        $today = $now->copy()->startOfDay();
+        $day = DemoDay::random('ccv2-demo', $today);
+        $hour = DemoDay::random('ccv2-demo-hour-' . $now->format('G'), $today);
+
+        $occupied = self::demoOccupied($wards, $today);
+        $rows = $wards->map(fn (Ward $ward) => self::demoWardRow($ward, $occupied[$ward->id], $now))->toBase();
+        [$capacity, $attention, $rows] = self::overview($rows);
+
+        // Today's admissions and discharges so far, and each day's before
+        $perDay = fn (string $kind, string $todays) => fn (string $date) => $date === $today->toDateString()
+            ? $rows->sum($todays)
+            : $wards->sum(fn (Ward $ward) => self::demoCount($ward, Carbon::parse($date), $kind));
+        $trend = self::trend($now, $perDay('admit', 'admissions_today'), $perDay('discharge', 'discharges_today'), $rows->sum('inpatients'));
+        $los = self::demoLengthOfStay($wards, $rows, $trend, $now);
+
+        $soFar = fn (string $kind, CarbonInterface $on, CarbonInterface $by, ?int $beforeHour = null) => $wards->sum(fn (Ward $ward) => self::demoTimes($ward, $on, $kind)
+            ->filter(fn (CarbonInterface $at) => $at->lte($by) && ($beforeHour === null || $at->hour < $beforeHour))
+            ->count());
+        $discharged = $rows->sum('discharges_today');
+        $byNoon = $soFar('discharge', $today, $now, self::NOON_HOUR);
+
+        // The ward dashboards' own concerns: a patient can have more than one
+        $fluid = $rows->sum(fn (array $row) => (int) floor($hour("fluid.{$row['id']}") ** 2 * (1 + $row['inpatients'] / 25)));
+        $concerned = $rows->sum(fn (array $row) => min($row['inpatients'],
+            $row['ews_urgent'] + $row['ews_warning'] + max(0, $row['escalations'] - $row['ews_urgent']) + $row['overdue_care']));
+        $answered = (int) round(($now->getTimestamp() - $today->getTimestamp()) / 3600 * (2 + 1.5 * $day('answered')));
+        $alerts = [
+            'wards' => [],
+            'pending' => $rows->sum('alerts'),
+            'urgent' => $rows->sum('alerts_urgent'),
+            'waiting' => $rows->sum('alerts_waiting'),
+            'waiting_urgent' => $rows->sum('alerts_waiting_urgent'),
+            'oldest' => $rows->max('alerts_oldest'),
+            'answered_today' => $answered,
+            'median_today' => $answered ? round(3 + 5 * $hour('alerts-median'), 1) : null,
+            'median_week' => round(4 + 3 * $day('alerts-median-week'), 1),
+        ];
+        $live = [
+            'attention_total' => min($rows->sum('inpatients'), $concerned + $fluid),
+            'stats' => [
+                'assessments_overdue' => $rows->sum(fn (array $row) => (int) ceil($row['overdue_care'] * 0.7)),
+                'doses_overdue' => $rows->sum(fn (array $row) => (int) ceil($row['overdue_care'] * 0.5)),
+                'fluid_alerts' => $fluid,
+            ],
+        ];
+
+        return self::snapshot(
+            now: $now,
+            demo: true,
+            capacity: $capacity,
+            flow: [
+                'admissions_today' => $rows->sum('admissions_today'),
+                'admissions_same_time_yesterday' => $soFar('admit', $today->copy()->subDay(), $now->copy()->subDay()),
+                'discharges_today' => $discharged,
+                'discharges_same_time_yesterday' => $soFar('discharge', $today->copy()->subDay(), $now->copy()->subDay()),
+                'discharged_by_noon' => $byNoon,
+                'discharged_by_noon_pct' => self::percent($byNoon, $discharged),
+                'discharged_by_noon_pct_period' => round(30 + 8 * $day('by-noon'), 1),
+                'discharges_period' => $los['hospital']['stays'],
+                'alos' => $los['hospital']['alos'],
+                'alos_previous' => $los['hospital']['alos_previous'],
+                'alos_stays' => $los['hospital']['stays'],
+            ],
+            quality: self::quality($rows, $live, $alerts, $attention),
+            rows: $rows,
+            acuity: self::acuity(collect(array_keys(self::ACUITY))->mapWithKeys(fn (string $key) => [$key => $rows->sum($key)])->all(), $rows->sum('inpatients')),
+            attention: $attention,
+            trend: $trend,
+            los: $los,
+        );
+    }
+
+    /**
+     * The demo's occupied beds, ward id => beds: each section about its
+     * DEMO_OCCUPANCY, each ward near its section's figure, then evened out to
+     * it a bed at a time (one more where most are free, one fewer where fewest are).
+     *
+     * @return array<int, int>
+     */
+    private static function demoOccupied(EloquentCollection $wards, CarbonInterface $today): array
+    {
+        $random = DemoDay::random('ccv2-demo', $today);
+        $occupied = $wards->mapWithKeys(fn (Ward $ward) => [$ward->id => 0])->all();
+
+        foreach (array_keys(self::OCCUPANCY_GROUPS) as $group) {
+            $beds = $wards->filter(fn (Ward $ward) => self::occupancyGroup($ward) === $group && $ward->beds->isNotEmpty())
+                ->mapWithKeys(fn (Ward $ward) => [$ward->id => $ward->beds->count()])
+                ->all();
+            if ($beds === []) {
+                continue;
+            }
+            $share = self::DEMO_OCCUPANCY[$group] / 100;
+            $spread = self::DEMO_OCCUPANCY_SPREAD[$group] / 100;
+            $target = (int) round(array_sum($beds) * min(1, $share + (2 * $random("occupancy.{$group}") - 1) / 100));
+
+            $taken = [];
+            foreach ($beds as $id => $count) {
+                $taken[$id] = max(0, min($count, (int) round($count * ($share + $spread * ($random("ward.{$id}") - 0.5)))));
+            }
+            while (array_sum($taken) < $target) {
+                $id = collect($taken)->filter(fn (int $n, int $id) => $n < $beds[$id])
+                    ->sortByDesc(fn (int $n, int $id) => ($beds[$id] - $n) / $beds[$id])->keys()->first();
+                $taken[$id]++;
+            }
+            while (array_sum($taken) > $target) {
+                $id = collect($taken)->filter(fn (int $n) => $n > 0)
+                    ->sortByDesc(fn (int $n, int $id) => $n / $beds[$id])->keys()->first();
+                $taken[$id]--;
+            }
+            $occupied = array_replace($occupied, $taken);
+        }
+
+        return $occupied;
+    }
+
+    /** One ward's line from made-up figures, as wardRow() has it. */
+    private static function demoWardRow(Ward $ward, int $occupied, CarbonInterface $now): array
+    {
+        $id = $ward->id;
+        $today = $now->copy()->startOfDay();
+        $day = DemoDay::random('ccv2-demo', $today);
+        $hour = DemoDay::random('ccv2-demo-hour-' . $now->format('G'), $today);
+        $beds = $ward->beds->count();
+        $criticalCare = (bool) $ward->wardType?->is_critical_care;
+        $group = self::occupancyGroup($ward);
+        // Clinical flags are commonest in critical care, rarest in the labour room and nursery
+        $acuity = $criticalCare ? 1.6 : ($group === 'labour_nursery' ? 0.4 : 1);
+        // Up to about one per $per patients this hour, fewer the higher $power; and a day's share of the patients
+        $some = fn (string $what, float $per, float $power = 1) => min($occupied, (int) floor($hour("{$what}.{$id}") ** $power * (1 + $occupied / $per)));
+        $share = fn (string $what, float $least, float $most) => (int) round($occupied * ($least + ($most - $least) * $day("{$what}.{$id}")));
+
+        // The beds no one is in: most free, a few reserved or in maintenance
+        $reserved = $maintenance = 0;
+        for ($bed = 1; $bed <= $beds - $occupied; $bed++) {
+            $pick = $day("bed.{$id}.{$bed}");
+            if ($pick < 0.1) {
+                $reserved++;
+            } elseif ($pick < 0.14) {
+                $maintenance++;
+            }
+        }
+
+        $admitted = self::demoTimes($ward, $today, 'admit')->filter(fn (CarbonInterface $at) => $at->lte($now));
+        $discharged = self::demoTimes($ward, $today, 'discharge')->filter(fn (CarbonInterface $at) => $at->lte($now));
+        // Those admitted within OBS_GRACE_MINUTES are not due their vital signs yet
+        $settling = $admitted->filter(fn (CarbonInterface $at) => $at->gt($now->copy()->subMinutes(self::OBS_GRACE_MINUTES)))->count();
+        $obsDue = max(0, $occupied - $settling);
+        $obsDone = max(0, $obsDue - $some('unobserved', 10, 2));
+        $ewsUrgent = $some('ews-urgent', 14 / $acuity, 1.5);
+
+        $pending = $some('alerts', 16 / $acuity, 1.3);
+        $alerts = collect($pending > 0 ? range(1, $pending) : [])->map(fn (int $i) => [
+            'urgent' => $hour("alert.{$id}.{$i}.urgent") < 0.2,
+            'minutes' => (int) round(40 * $hour("alert.{$id}.{$i}.age") ** 2.2),
+        ]);
+        $late = $alerts->where('minutes', '>', self::ALERT_WAIT_MINUTES);
+        $occupancy = self::percent($occupied, $beds);
+
+        return [
+            'id' => $id,
+            'name' => $ward->ward_name,
+            'code' => $ward->ward_code,
+            'type' => $ward->wardType?->name,
+            'critical_care' => $criticalCare,
+            'occupancy_group' => $group,
+            'url' => $criticalCare ? route('critical-care.dashboard', ['ward_id' => $id]) : route('ward.dashboard', ['ward_id' => $id]),
+            'beds' => $beds,
+            'occupied' => $occupied,
+            'free' => $beds - $occupied - $reserved - $maintenance,
+            'reserved' => $reserved,
+            'maintenance' => $maintenance,
+            'occupancy' => $occupancy,
+            'occupancy_status' => self::occupancyStatus($occupancy),
+            'inpatients' => $occupied,
+            'incoming' => (int) floor($day("incoming.{$id}") * (1 + $beds / 15)),
+            'pending_discharge' => $some('pending-discharge', 10),
+            'admissions_today' => $admitted->count(),
+            'discharges_today' => $discharged->count(),
+            'ews_urgent' => $ewsUrgent,
+            'ews_warning' => min($occupied - $ewsUrgent, $some('ews-warning', 7 / $acuity)),
+            'escalations' => $criticalCare ? $some('escalation', 6) : 0,
+            'ventilated' => $criticalCare ? $share('ventilated', 0.35, 0.6) : 0,
+            'transfusing' => $some('transfusing', 20, 2),
+            'high_acuity' => $criticalCare ? $share('high-acuity', 0.6, 0.9) : $share('high-acuity', 0.03, 0.15),
+            'high_fall' => $group === 'labour_nursery' ? $share('high-fall', 0, 0.05) : $share('high-fall', 0.1, 0.25),
+            'isolation' => $share('isolation', 0.02, 0.08),
+            'overdue_care' => $some('overdue', 12 / $acuity, 1.5),
+            'obs_due' => $obsDue,
+            'obs_done' => $obsDone,
+            'obs_pct' => self::percent($obsDone, $obsDue),
+            'alerts' => $alerts->count(),
+            'alerts_urgent' => $alerts->where('urgent', true)->count(),
+            'alerts_waiting' => $late->count(),
+            'alerts_waiting_urgent' => $late->where('urgent', true)->count(),
+            'alerts_oldest' => $alerts->max('minutes'),
+            'staffing' => self::demoStaffing($ward, $occupied, $now),
+        ];
+    }
+
+    /**
+     * The demo's nurses on the ward's current shift: about its minimum
+     * staffing (the AI Nurse Schedule's roster rules), now and then one short.
+     */
+    private static function demoStaffing(Ward $ward, int $patients, CarbonInterface $now): ?array
+    {
+        $slot = RosterSlot::current($ward->id, $now);
+        if ($slot === null) {
+            return null;
+        }
+        $minimum = RosterRules::forWard($ward)->minStaff[$slot['code']] ?? 0;
+        $pick = DemoDay::random('ccv2-demo', $now->copy()->startOfDay())("staff.{$ward->id}.{$slot['code']}");
+        $onDuty = max(min(1, $patients), $minimum + match (true) {
+            $pick < 0.1 => -1,
+            $pick < 0.55 => 0,
+            $pick < 0.9 => 1,
+            default => 2,
+        });
+
+        return [
+            'shift' => $slot['code'],
+            'shift_name' => $slot['name'],
+            'shift_time' => $slot['time'],
+            'on_duty' => $onDuty,
+            'minimum' => $minimum,
+            'patients' => $patients,
+            'ratio' => $onDuty > 0 ? round($patients / $onDuty, 1) : null,
+            'status' => $onDuty < $minimum ? 'serious' : 'good',
+        ];
+    }
+
+    /** A ward's average stay in the demo, in days: by its kind, and its own a little either way, the same every day. */
+    private static function demoAlos(Ward $ward): float
+    {
+        $kind = match (true) {
+            (bool) $ward->wardType?->is_critical_care => 5.5,
+            self::occupancyGroup($ward) === 'labour_nursery' => 2.4,
+            default => 3.6,
+        };
+
+        return $kind * (0.8 + 0.4 * DemoDay::random('ccv2-demo')("alos.{$ward->id}"));
+    }
+
+    /**
+     * How many patients a ward admits on a day in the demo (kind "admit"), or
+     * discharges (kind "discharge"): as many as it admitted the day before, so
+     * its beds stay about as full and the midnight census stays near the beds.
+     */
+    private static function demoCount(Ward $ward, CarbonInterface $day, string $kind): int
+    {
+        $day = $kind === 'discharge' ? $day->copy()->subDay() : $day;
+        $random = DemoDay::random('ccv2-demo', $day);
+        $perDay = $ward->beds->count() * self::DEMO_OCCUPANCY[self::occupancyGroup($ward)] / 100 / self::demoAlos($ward);
+
+        return (int) round($perDay * (0.95 + 0.1 * $random('busy')) * (0.85 + 0.3 * $random("admit.{$ward->id}")));
+    }
+
+    /**
+     * The times of day of a ward's demo admissions or discharges on a day.
+     *
+     * @return Collection<int, CarbonInterface>
+     */
+    private static function demoTimes(Ward $ward, CarbonInterface $day, string $kind): Collection
+    {
+        $count = self::demoCount($ward, $day, $kind);
+        $random = DemoDay::random('ccv2-demo', $day);
+        $hours = $kind === 'admit' ? self::DEMO_ADMIT_HOURS : self::DEMO_DISCHARGE_HOURS;
+
+        return collect($count > 0 ? range(1, $count) : [])
+            ->map(fn (int $i) => DemoDay::moment($day, $random, $hours, "{$kind}.{$ward->id}.{$i}"));
+    }
+
+    /**
+     * Length of stay in the demo, as lengthOfStay() has it: each ward's
+     * stays about its demoAlos(), as many as it discharged in the last LOS_DAYS,
+     * and the hospital's from the wards', weighted by their stays (and by
+     * their inpatients for the stays so far). The stays by length fall away
+     * as they get longer, as stays do.
+     */
+    private static function demoLengthOfStay(EloquentCollection $wards, Collection $rows, array $trend, CarbonInterface $now): array
+    {
+        $today = $now->copy()->startOfDay();
+        $day = DemoDay::random('ccv2-demo', $today);
+        $rowsById = $rows->keyBy('id');
+
+        $wardFigures = $wards->map(function (Ward $ward) use ($rowsById, $day, $today) {
+            $row = $rowsById[$ward->id];
+            $alos = self::demoAlos($ward);
+            $stays = $row['discharges_today'];
+            for ($back = 1; $back < self::LOS_DAYS; $back++) {
+                $stays += self::demoCount($ward, $today->copy()->subDays($back), 'discharge');
+            }
+            $inpatients = $row['inpatients'];
+            $about = fn (string $what, float $least, float $most) => round($alos * ($least + ($most - $least) * $day("{$what}.{$ward->id}")), 1);
+
+            return [
+                'id' => $row['id'],
+                'name' => $row['name'],
+                'code' => $row['code'],
+                'critical_care' => $row['critical_care'],
+                'url' => $row['url'],
+                'alos' => $stays ? $about('los', 0.93, 1.07) : null,
+                'alos_previous' => $stays ? $about('los-previous', 0.9, 1.1) : null,
+                'median' => $stays ? $about('los-median', 0.7, 0.8) : null,
+                'stays' => $stays,
+                'inpatients' => $inpatients,
+                'stay_so_far' => $inpatients ? $about('so-far', 0.85, 1.15) : null,
+                'long_stays' => (int) round($inpatients * exp(-self::LONG_STAY_DAYS / $alos) * (0.7 + 0.6 * $day("long-stays.{$ward->id}"))),
+            ];
+        })->toBase();
+
+        $weighted = function (string $key, string $by) use ($wardFigures): ?float {
+            $known = $wardFigures->filter(fn (array $ward) => $ward[$key] !== null);
+            $weight = $known->sum($by);
+
+            return $weight > 0 ? round($known->sum(fn (array $ward) => $ward[$key] * $ward[$by]) / $weight, 1) : null;
+        };
+        $hospital = [
+            'alos' => $weighted('alos', 'stays'),
+            'alos_previous' => $weighted('alos_previous', 'stays'),
+            'median' => $weighted('median', 'stays'),
+            'stays' => $wardFigures->sum('stays'),
+            'inpatients' => $wardFigures->sum('inpatients'),
+            'stay_so_far' => $weighted('stay_so_far', 'inpatients'),
+            'long_stays' => $wardFigures->sum('long_stays'),
+        ];
+
+        // A stay's whole days fall away as they get longer: the share at d days or more is e^(-d / the average stay)
+        $mean = $hospital['alos'] ?: 1;
+        $counts = array_map(fn (array $range) => (int) round($hospital['stays']
+            * (exp(-$range[0] / $mean) - ($range[1] === null ? 0 : exp(-($range[1] + 1) / $mean)))), self::STAY_BANDS);
+        // Rounding's odd stay or two goes to the biggest band, so the bands add up to the stays
+        $counts[array_search(max($counts), $counts, true)] += $hospital['stays'] - array_sum($counts);
+        $bands = collect($counts)->map(fn (int $count, string $label) => [
+            'label' => $label,
+            'count' => $count,
+            'pct' => self::percent($count, $hospital['stays']),
+            'long' => self::STAY_BANDS[$label][0] >= self::LONG_STAY_DAYS,
+        ]);
+
+        return [
+            'hospital' => $hospital,
+            'bands' => $bands->values()->all(),
+            'trend' => [
+                'alos' => array_map(fn (string $date, int $stays) => $stays && $hospital['alos'] !== null
+                    ? round($hospital['alos'] * (0.85 + 0.3 * DemoDay::random('ccv2-demo', Carbon::parse($date))('los')), 1)
+                    : null, $trend['dates'], $trend['discharges']),
+                'stays' => $trend['discharges'],
+            ],
+            'wards' => $wardFigures
+                ->sort(fn (array $a, array $b) => [$a['alos'] === null, -($a['alos'] ?? 0), $a['name']] <=> [$b['alos'] === null, -($b['alos'] ?? 0), $b['name']])
+                ->values()
+                ->all(),
+        ];
     }
 
     private static function occupancyStatus(?float $occupancy): ?string

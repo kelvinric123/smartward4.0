@@ -341,11 +341,13 @@ class CommandCenterEdTest extends TestCase
             ->assertSee('Proceed for admission')
             ->assertSee("{ key: 'doctors', label: 'Doctors' }", false);
 
+        // V2 has the same time format, and a data mode of its own
         $this->actingAs($this->admin)->get(route('command-center-v2.index'))
             ->assertOk()
             ->assertSee('Time format')
             ->assertSee('12-hour (AM/PM)')
-            ->assertDontSee('Data mode');
+            ->assertSee('Data mode')
+            ->assertDontSee('Proceed for admission');
     }
 
     public function test_the_target_is_set_in_settings_for_every_screen(): void

@@ -719,6 +719,7 @@
     </div>
 
     <script type="application/json" id="ccv2-snapshot">@json($snapshot)</script>
+    <script type="application/json" id="ccv2-demo-snapshot">@json($demoSnapshot)</script>
 
     @verbatim
     <script>
@@ -782,6 +783,8 @@
                 size: 100,
                 // How the board says a time of day: 24-hour or 12-hour with AM/PM, and whether with the seconds
                 clock: { hour12: false, seconds: true },
+                // The recorded figures (Live), or made-up ones for showing the board (Demo)
+                data: { demo: false },
                 kpis: { show: true, size: 100 },
                 wards: { show: true, size: 100, perPage: 0, seconds: STEP_SECONDS, hidden: [] },
                 trends: { show: true, size: 100, seconds: STEP_SECONDS },
@@ -797,6 +800,7 @@
                 if (SCREENS.some((screen) => screen.key === saved.screen)) cfg.screen = saved.screen;
                 cfg.size = whole(saved.size, SIZE, cfg.size);
                 ['hour12', 'seconds'].forEach((key) => { if (saved.clock && typeof saved.clock[key] === 'boolean') cfg.clock[key] = saved.clock[key]; });
+                if (saved.data && typeof saved.data.demo === 'boolean') cfg.data.demo = saved.data.demo;
                 SECTIONS.forEach((section) => {
                     const from = saved[section.key] || {};
                     const to = cfg[section.key];
@@ -826,6 +830,8 @@
                 url: null,
                 connection: 'live',
                 loading: false,
+                // The data mode changed while figures were on their way: ask again for the mode now chosen
+                reload: false,
                 lastOk: Date.now(),
                 now: new Date(),
                 cycle: 0,
@@ -865,7 +871,10 @@
                     try { this.theme = localStorage.getItem('ccv2Theme') === 'light' ? 'light' : 'dark'; } catch (e) {}
                     try { this.tv = localStorage.getItem('ccv2Tv') === 'on'; } catch (e) {}
                     try { this.cfg = readSettings(JSON.parse(localStorage.getItem(SETTINGS_KEY))); } catch (e) {}
+                    // The page brings the first figures of both data modes, so a screen in Demo starts in it
+                    if (this.cfg.data.demo) this.s = JSON.parse(document.getElementById('ccv2-demo-snapshot').textContent);
                     this.$watch('cfg', () => this.settingsChanged());
+                    this.$watch('cfg.data.demo', () => this.load());
                     // The display scaling or zoom changing moves a screen preset's size in CSS pixels
                     this.measureScreen();
                     window.addEventListener('resize', () => this.measureScreen());
@@ -899,12 +908,18 @@
                 },
 
                 async load() {
-                    if (this.loading || this.connection === 'signed-out') return;
+                    if (this.connection === 'signed-out') return;
+                    if (this.loading) {
+                        this.reload = true;
+                        return;
+                    }
                     // Nobody is looking: wait for the next round rather than ask the server
                     if (document.visibilityState === 'hidden') return this.schedule();
                     this.loading = true;
+                    this.reload = false;
+                    const demo = this.cfg.data.demo;
                     try {
-                        const response = await fetch(this.url, {
+                        const response = await fetch(this.url + (demo ? '?demo=1' : ''), {
                             headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                             credentials: 'same-origin',
                             cache: 'no-store',
@@ -915,8 +930,11 @@
                         }
                         if (!response.ok) throw new Error('HTTP ' + response.status);
                         const next = await response.json();
-                        this.markChanges(this.s, next);
-                        this.s = next;
+                        if (demo === this.cfg.data.demo) {
+                            // From live to demo or back, everything changes: no point lighting it all up
+                            if (!!this.s.demo === demo) this.markChanges(this.s, next);
+                            this.s = next;
+                        }
                         this.connection = 'live';
                         this.lastOk = Date.now();
                         this.$nextTick(() => this.refit());
@@ -924,7 +942,10 @@
                         this.connection = 'retrying';
                     } finally {
                         this.loading = false;
-                        if (this.connection !== 'signed-out') this.schedule();
+                        if (this.connection !== 'signed-out') {
+                            if (this.reload || demo !== this.cfg.data.demo) this.load();
+                            else this.schedule();
+                        }
                     }
                 },
 
@@ -1230,6 +1251,11 @@
 
                 get connectionLabel() {
                     return { live: 'Live', retrying: 'Reconnecting…', 'signed-out': 'Signed out' }[this.connection];
+                },
+                get dataModeNote() {
+                    return this.cfg.data.demo
+                        ? 'Demo: made-up patients, flow, alerts and nurses on the hospital\'s own wards and beds, the same all day'
+                        : 'Live: the figures recorded on the wards';
                 },
                 // Times of day, in the time format of the settings: 24-hour or 12-hour with AM/PM, and the seconds or not
                 timeOf(when, seconds = false) {
